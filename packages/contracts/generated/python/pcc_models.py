@@ -466,11 +466,23 @@ class Subject(BaseModel):
 
 
 class ExtensionContainer(
-    RootModel[dict[constr(pattern=r'^[a-z0-9]+(\.[a-z0-9_-]+)*$'), dict[str, Any]]]
+    RootModel[
+        dict[
+            constr(
+                pattern=r'^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?){2,}$'
+            ),
+            dict[str, Any],
+        ]
+    ]
 ):
-    root: dict[constr(pattern=r'^[a-z0-9]+(\.[a-z0-9_-]+)*$'), dict[str, Any]] = Field(
+    root: dict[
+        constr(
+            pattern=r'^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?){2,}$'
+        ),
+        dict[str, Any],
+    ] = Field(
         ...,
-        description='Controlled extension container. Keys must use reverse-domain qualified namespaces (e.g., net.siteborne.verification.v1, com.example.specialized.v1).',
+        description='Controlled extension container. Keys must use reverse-domain qualified namespaces with at least three DNS-safe labels (e.g., net.siteborne.verification.v1, com.example.custom-metrics.v1). Underscores, leading/trailing hyphens, empty labels, and uppercase are forbidden.',
     )
 
 

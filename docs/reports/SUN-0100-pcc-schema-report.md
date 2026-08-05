@@ -87,7 +87,7 @@ Key design decisions:
 Computed from `schemas/proof-carrying-context.schema.json`:
 
 ```
-sha256:9a79d68d182ac70eb4e162b81685bea2dfc35f43fe1d57da3cfd34771ca7a1f7
+sha256:0d648d9c7828b685f5060c1a82fb56624d9b23d8b89ad1e976b972af055c5a5f
 ```
 
 _(Frozen at acceptance time)_
@@ -99,21 +99,23 @@ _(Frozen at acceptance time)_
 
 ## Test Counts
 
-| Category               | Count   |
-| ---------------------- | ------- |
-| Structural validity    | 8       |
-| Semantic invariants    | 12      |
-| Canonicalization       | 3       |
-| Signing/verification   | 2       |
-| Zod runtime types      | 7       |
-| Fixture validation     | 14      |
-| **Total (pcc-schema)** | **44**  |
-| Policy tests           | 22      |
-| Pricing tests          | 19      |
-| Contracts tests        | 9       |
-| Test-fixtures tests    | 9       |
-| Edge-api tests         | 5       |
-| **Total (monorepo)**   | **108** |
+| Category                  | Count   |
+| ------------------------- | ------- |
+| Structural validity       | 8       |
+| Semantic invariants       | 12      |
+| Canonicalization          | 3       |
+| Signing/verification      | 2       |
+| Zod runtime types         | 7       |
+| Fixture validation        | 14      |
+| Extension namespace       | 7       |
+| **Total (pcc-schema TS)** | **51**  |
+| Python Hypothesis         | 12      |
+| Policy tests              | 22      |
+| Pricing tests             | 19      |
+| Contracts tests           | 9       |
+| Test-fixtures tests       | 9       |
+| Edge-api tests            | 5       |
+| **Total (monorepo)**      | **120** |
 
 ## Commands
 
@@ -122,10 +124,20 @@ pnpm format:check
 pnpm lint
 pnpm typecheck
 pnpm test
+pnpm pcc:generate
+pnpm pcc:generate:check
 pnpm governance:validate
 pnpm state:validate
 pnpm tasks:validate
 pnpm check
+```
+
+Python validation:
+
+```bash
+python -m pytest packages/contracts/generated/python/
+python -m mypy --strict packages/contracts/generated/python/pcc_models.py
+python -m pytest packages/pcc-schema/tests/python/ -v
 ```
 
 Python validation:
@@ -160,7 +172,12 @@ python -m mypy --strict packages/contracts/generated/python/pcc_models.py
 
 ## Git Status
 
-Working tree clean after formatting. Ready for commit.
+Git repository initialized with commit history:
+
+- `bab19d0` - chore(foundation): establish SITEBORNE monorepo and governance
+  (includes SUN-0001 and SUN-0100 work)
+
+Working tree clean after formatting.
 
 ## Recommended Conventional Commit
 
@@ -168,16 +185,56 @@ Working tree clean after formatting. Ready for commit.
 feat(pcc): freeze proof-carrying context v1 contract
 ```
 
+## Extension Namespace Grammar
+
+The `extensions` container uses reverse-domain qualified namespaces with strict
+validation:
+
+**Pattern:**
+`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?){2,}$`
+
+**Requirements:**
+
+- At least three DNS-safe labels (e.g., `net.siteborne.verification.v1`)
+- Lowercase ASCII only
+- No underscores
+- No leading or trailing hyphens
+- No empty labels
+- Each label max 63 characters
+- Total length bounded
+
+**Valid examples:**
+
+- `net.siteborne.verification.v1`
+- `net.siteborne.company-evidence.v1`
+- `com.example.custom-metrics.v1`
+
+**Invalid examples:**
+
+- `foo` (unqualified)
+- `verification.v1` (only two labels)
+- `net._siteborne.v1` (underscore)
+- `net.-siteborne.v1` (leading hyphen)
+- `net.siteborne-.v1` (trailing hyphen)
+- `NET.SITEBORNE.V1` (uppercase)
+- `net..siteborne.v1` (empty label)
+
+Extensions must not:
+
+- Override core PCC fields
+- Change `verification.decision`
+- Remove deterministic failures
+- Alter core semantics of contract, claims, evidence, completeness, provenance,
+  verification, or receipt
+
 ## Remaining Risks
 
 1. `canonical-json` npm package may not fully implement RFC 8785 edge cases
-   (numbers, Unicode). Mitigation: cross-language fixture tests.
-2. Python canonicalization library choice not yet finalized in test suite.
-   Mitigation: add explicit Python canonicalization test before production.
-3. Property-based testing (fast-check/hypothesis) is listed but not yet
-   exhaustively implemented. Mitigation: add in follow-up increment.
-4. Python model drift check script not yet implemented. Mitigation: add in
-   SUN-0101.
+   (numbers, Unicode). Mitigation: cross-language fixture tests with 18 RFC 8785
+   reference vectors.
+2. Property-based testing (fast-check/hypothesis) coverage can be expanded in
+   follow-up increments.
+3. Python model drift check script integration in SUN-0101.
 
 ## Recommended Next Task
 

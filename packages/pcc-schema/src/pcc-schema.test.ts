@@ -241,6 +241,73 @@ describe('pcc-schema - normative v1.0.0', () => {
       expect(result.valid).toBe(true);
     });
 
+    it('accepts valid reverse-domain qualified extensions', () => {
+      const validNamespaces = [
+        'net.siteborne.verification.v1',
+        'com.example.custom-metrics.v1',
+        'org.test.namespace.v2',
+        'io.github.user.project.v1',
+      ];
+      for (const ns of validNamespaces) {
+        const doc = makeValidDocument({ extensions: { [ns]: { foo: 'bar' } } });
+        const result = validateSchema(doc);
+        expect(result.valid).toBe(true);
+      }
+    });
+
+    it('rejects unqualified extension keys (less than 3 labels)', () => {
+      const invalidNamespaces = ['foo', 'verification', 'siteborne.verification', 'net.siteborne'];
+      for (const ns of invalidNamespaces) {
+        const doc = makeValidDocument({ extensions: { [ns]: { foo: 'bar' } } });
+        const result = validateSchema(doc);
+        expect(result.valid).toBe(false);
+        expect(
+          result.errors.some(
+            (e) => e.includes('extensions') || e.includes('unknown') || e.includes('pattern')
+          )
+        ).toBe(true);
+      }
+    });
+
+    it('rejects extensions with underscores', () => {
+      const doc = makeValidDocument({ extensions: { 'net._siteborne.v1': { foo: 'bar' } } });
+      const result = validateSchema(doc);
+      expect(result.valid).toBe(false);
+    });
+
+    it('rejects extensions with leading/trailing hyphens', () => {
+      const invalidNamespaces = [
+        'net.-siteborne.v1',
+        'net.siteborne-.v1',
+        '-net.siteborne.v1',
+        'net.siteborne.v1-',
+      ];
+      for (const ns of invalidNamespaces) {
+        const doc = makeValidDocument({ extensions: { [ns]: { foo: 'bar' } } });
+        const result = validateSchema(doc);
+        expect(result.valid).toBe(false);
+      }
+    });
+
+    it('rejects extensions with uppercase', () => {
+      const doc = makeValidDocument({ extensions: { 'NET.SITEBORNE.V1': { foo: 'bar' } } });
+      const result = validateSchema(doc);
+      expect(result.valid).toBe(false);
+    });
+
+    it('rejects extensions with empty labels', () => {
+      const doc = makeValidDocument({ extensions: { 'net..siteborne.v1': { foo: 'bar' } } });
+      const result = validateSchema(doc);
+      expect(result.valid).toBe(false);
+    });
+
+    it('rejects extensions with labels exceeding 63 chars', () => {
+      const longLabel = 'a'.repeat(64);
+      const doc = makeValidDocument({ extensions: { [`net.${longLabel}.v1`]: { foo: 'bar' } } });
+      const result = validateSchema(doc);
+      expect(result.valid).toBe(false);
+    });
+
     it('rejects malformed hash', () => {
       const doc = makeValidDocument({
         receipt: { ...(makeValidDocument().receipt as any), output_hash: 'invalid' },

@@ -426,7 +426,7 @@ tasks:
       - 'docs/decisions/0007-pcc-canonicalization-and-signing.md'
     next_action: 'Define input/output schemas for all 4 services'
     blocker: null
-    commit_ref: 'pending'
+    commit_ref: 'bab19d0'
 
   - id: 'SUN-0101'
     title: 'Define input/output schemas for all services (Phase 3b)'

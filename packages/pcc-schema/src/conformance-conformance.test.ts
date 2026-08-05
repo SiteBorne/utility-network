@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect } from 'vitest';
 import { canonicalize, loadCanonicalJson, hashCanonical } from './index';
 import * as fs from 'fs';
