@@ -102,6 +102,10 @@ export function validateSchema(data: unknown): { valid: boolean; errors: string[
     minimum?: number;
     maximum?: number;
     $ref?: string;
+    maxProperties?: number;
+    propertyNames?: SchemaObject;
+    minLength?: number;
+    maxLength?: number;
   }
 
   function validateObject(obj: unknown, schema: SchemaObject, path = 'root'): void {
@@ -111,6 +115,15 @@ export function validateSchema(data: unknown): { valid: boolean; errors: string[
     }
 
     const objRecord = obj as Record<string, unknown>;
+
+    // Check maxProperties
+    if (schema.maxProperties !== undefined && typeof schema.maxProperties === 'number') {
+      const keyCount = Object.keys(objRecord).length;
+      if (keyCount > schema.maxProperties) {
+        errors.push(`${path}: too many properties (max ${schema.maxProperties})`);
+        // Don't return - continue validation to catch other errors
+      }
+    }
 
     if (schema.required) {
       for (const req of schema.required) {
@@ -127,14 +140,46 @@ export function validateSchema(data: unknown): { valid: boolean; errors: string[
         ...(schema.required || []),
       ]);
 
+      // propertyNames allows additional keys matching the schema
+      const propertyNamesSchema = schema.propertyNames as SchemaObject | undefined;
+
       // patternProperties allows additional keys matching patterns
       const patternSchemas = schema.patternProperties as Record<string, unknown> | undefined;
 
       for (const key of Object.keys(objRecord)) {
         if (!allowedKeys.has(key) && key !== 'extensions') {
-          // Check if key matches any patternProperty
+          // Check if key matches propertyNames
           let matched = false;
-          if (patternSchemas) {
+          if (propertyNamesSchema) {
+            // Validate the key against propertyNames schema
+            if (propertyNamesSchema.pattern) {
+              if (new RegExp(propertyNamesSchema.pattern).test(key)) {
+                if (
+                  propertyNamesSchema.minLength !== undefined &&
+                  key.length < propertyNamesSchema.minLength
+                ) {
+                  errors.push(
+                    `${path}.${key}: property name too short (min ${propertyNamesSchema.minLength})`
+                  );
+                  matched = true;
+                } else if (
+                  propertyNamesSchema.maxLength !== undefined &&
+                  key.length > propertyNamesSchema.maxLength
+                ) {
+                  errors.push(
+                    `${path}.${key}: property name too long (max ${propertyNamesSchema.maxLength})`
+                  );
+                  matched = true;
+                } else {
+                  // Validate against pattern schema if provided
+                  // For now, we just allow it since propertyNames doesn't have a value schema
+                  matched = true;
+                }
+              }
+            }
+          }
+          // Check if key matches any patternProperty
+          if (!matched && patternSchemas) {
             for (const [pattern, patternSchema] of Object.entries(patternSchemas)) {
               if (new RegExp(pattern).test(key)) {
                 // Validate against pattern schema

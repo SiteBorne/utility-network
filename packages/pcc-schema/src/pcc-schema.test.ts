@@ -308,6 +308,65 @@ describe('pcc-schema - normative v1.0.0', () => {
       expect(result.valid).toBe(false);
     });
 
+    it('accepts extensions at max total length (253 chars)', () => {
+      // 253 chars total: 63 + 1 + 63 + 1 + 63 + 1 + 61 = 253
+      const ns = `${'a'.repeat(63)}.${'b'.repeat(63)}.${'c'.repeat(63)}.${'d'.repeat(61)}`;
+      expect(ns.length).toBe(253);
+      const doc = makeValidDocument({ extensions: { [ns]: { foo: 'bar' } } });
+      const result = validateSchema(doc);
+      expect(result.valid).toBe(true);
+    });
+
+    it('rejects extensions exceeding max total length (254 chars)', () => {
+      const ns = `${'a'.repeat(63)}.${'b'.repeat(63)}.${'c'.repeat(63)}.${'d'.repeat(62)}`;
+      expect(ns.length).toBe(254);
+      const doc = makeValidDocument({ extensions: { [ns]: { foo: 'bar' } } });
+      const result = validateSchema(doc);
+      expect(result.valid).toBe(false);
+      expect(
+        result.errors.some(
+          (e) => e.includes('too long') || e.includes('maxLength') || e.includes('253')
+        )
+      ).toBe(true);
+    });
+
+    it('rejects extensions with single 64-character label', () => {
+      const longLabel = 'a'.repeat(64);
+      const doc = makeValidDocument({ extensions: { [`net.${longLabel}.v1`]: { foo: 'bar' } } });
+      const result = validateSchema(doc);
+      expect(result.valid).toBe(false);
+    });
+
+    it('rejects many short labels exceeding total maxLength', () => {
+      // 10 labels of 25 chars each = 250 + 9 dots = 259 > 253
+      const labels = Array(10).fill('x'.repeat(25));
+      const ns = labels.join('.');
+      expect(ns.length).toBeGreaterThan(253);
+      const doc = makeValidDocument({ extensions: { [ns]: { foo: 'bar' } } });
+      const result = validateSchema(doc);
+      expect(result.valid).toBe(false);
+    });
+
+    it('rejects more than 10 extensions (maxProperties)', () => {
+      const extensions: Record<string, unknown> = {};
+      for (let i = 0; i < 11; i++) {
+        extensions[`net.siteborne.ext${i}.v1`] = { foo: 'bar' };
+      }
+      const doc = makeValidDocument({ extensions });
+      const result = validateSchema(doc);
+      expect(result.valid).toBe(false);
+    });
+
+    it('accepts 10 extensions (maxProperties boundary)', () => {
+      const extensions: Record<string, unknown> = {};
+      for (let i = 0; i < 10; i++) {
+        extensions[`net.siteborne.ext${i}.v1`] = { foo: 'bar' };
+      }
+      const doc = makeValidDocument({ extensions });
+      const result = validateSchema(doc);
+      expect(result.valid).toBe(true);
+    });
+
     it('rejects malformed hash', () => {
       const doc = makeValidDocument({
         receipt: { ...(makeValidDocument().receipt as any), output_hash: 'invalid' },

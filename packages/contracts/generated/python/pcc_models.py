@@ -469,20 +469,25 @@ class ExtensionContainer(
     RootModel[
         dict[
             constr(
-                pattern=r'^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?){2,}$'
+                pattern=r'^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?){2,}$',
+                min_length=5,
+                max_length=253,
             ),
-            dict[str, Any],
+            Any,
         ]
     ]
 ):
     root: dict[
         constr(
-            pattern=r'^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?){2,}$'
+            pattern=r'^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?){2,}$',
+            min_length=5,
+            max_length=253,
         ),
-        dict[str, Any],
+        Any,
     ] = Field(
         ...,
-        description='Controlled extension container. Keys must use reverse-domain qualified namespaces with at least three DNS-safe labels (e.g., net.siteborne.verification.v1, com.example.custom-metrics.v1). Underscores, leading/trailing hyphens, empty labels, and uppercase are forbidden.',
+        description='Controlled extension container. Keys must use reverse-domain qualified namespaces with at least three DNS-safe labels (e.g., net.siteborne.verification.v1, com.example.custom-metrics.v1). Underscores, leading/trailing hyphens, empty labels, and uppercase are forbidden. Maximum 10 extensions. Maximum total namespace key length: 253 characters.',
+        max_length=0,
     )
 
 

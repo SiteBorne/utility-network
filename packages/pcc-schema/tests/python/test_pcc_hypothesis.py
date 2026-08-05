@@ -389,15 +389,16 @@ class TestAlterationRejection:
     """Test that altered payloads are rejected."""
 
     @given(
-        st.text(alphabet='0123456789abcdef', min_size=64, max_size=64).map(lambda s: f'sha256:{s}'),
-        st.text(alphabet='0123456789abcdef', min_size=64, max_size=64).map(lambda s: f'sha256:{s}'),
+        st.tuples(
+            st.text(alphabet='0123456789abcdef', min_size=64, max_size=64).map(lambda s: f'sha256:{s}'),
+            st.text(alphabet='0123456789abcdef', min_size=64, max_size=64).map(lambda s: f'sha256:{s}'),
+        ).filter(lambda t: t[0] != t[1]),
         st.text(alphabet='0123456789abcdef', min_size=64, max_size=64).map(lambda s: f'sha256:{s}'),
     )
     @settings(max_examples=20)
-    def test_altered_output_hash_rejected(self, hash1: str, hash2: str, hash3: str):
+    def test_altered_output_hash_rejected(self, hashes: tuple, hash3: str):
         """Altering output_hash should change the canonical preimage."""
-        assume = lambda cond: None if cond else pytest.skip("hashes equal")
-        assume(hash1 != hash2)
+        hash1, hash2 = hashes
         
         preimage1 = {
             "signature_context": "SITEBORNE-PCC-RECEIPT-V1",
@@ -415,14 +416,15 @@ class TestAlterationRejection:
         assert canon1 != canon2, "Altered output_hash must change preimage"
 
     @given(
-        st.text(alphabet='0123456789abcdef', min_size=64, max_size=64).map(lambda s: f'sha256:{s}'),
-        st.text(alphabet='0123456789abcdef', min_size=64, max_size=64).map(lambda s: f'sha256:{s}'),
+        st.tuples(
+            st.text(alphabet='0123456789abcdef', min_size=64, max_size=64).map(lambda s: f'sha256:{s}'),
+            st.text(alphabet='0123456789abcdef', min_size=64, max_size=64).map(lambda s: f'sha256:{s}'),
+        ).filter(lambda t: t[0] != t[1]),
     )
     @settings(max_examples=20)
-    def test_altered_policy_hash_rejected(self, hash1: str, hash2: str):
+    def test_altered_policy_hash_rejected(self, hashes: tuple):
         """Altering policy_hash should change the canonical preimage."""
-        assume = lambda cond: None if cond else pytest.skip("hashes equal")
-        assume(hash1 != hash2)
+        hash1, hash2 = hashes
         
         preimage1 = {
             "signature_context": "SITEBORNE-PCC-RECEIPT-V1",

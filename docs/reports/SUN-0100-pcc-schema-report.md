@@ -87,7 +87,7 @@ Key design decisions:
 Computed from `schemas/proof-carrying-context.schema.json`:
 
 ```
-sha256:0d648d9c7828b685f5060c1a82fb56624d9b23d8b89ad1e976b972af055c5a5f
+sha256:09a4c6dc77928613b497847c15db6b8035d7a1aae1bee086153eca7964ad3107
 ```
 
 _(Frozen at acceptance time)_
@@ -188,12 +188,12 @@ feat(pcc): freeze proof-carrying context v1 contract
 ## Extension Namespace Grammar
 
 The `extensions` container uses reverse-domain qualified namespaces with strict
-validation:
+validation enforced via JSON Schema `propertyNames`:
 
 **Pattern:**
 `^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?){2,}$`
 
-**Requirements:**
+**Constraints:**
 
 - At least three DNS-safe labels (e.g., `net.siteborne.verification.v1`)
 - Lowercase ASCII only
@@ -201,7 +201,8 @@ validation:
 - No leading or trailing hyphens
 - No empty labels
 - Each label max 63 characters
-- Total length bounded
+- **Total namespace key max length: 253 characters**
+- Maximum 10 extensions (`maxProperties: 10`)
 
 **Valid examples:**
 
@@ -218,6 +219,22 @@ validation:
 - `net.siteborne-.v1` (trailing hyphen)
 - `NET.SITEBORNE.V1` (uppercase)
 - `net..siteborne.v1` (empty label)
+- Any namespace key > 253 characters
+- More than 10 extensions
+
+**Boundary test results:**
+
+- ✅ Valid 253-character qualified namespace passes
+- ✅ 254-character namespace fails
+- ✅ 10 valid extensions pass
+- ✅ 11 extensions fails (maxProperties)
+- ✅ Single 64-character label fails (per-label max 63)
+- ✅ Many short labels exceeding total 253 fails
+- ✅ Unqualified names fail
+- ✅ Uppercase names fail
+- ✅ Underscores fail
+- ✅ Empty labels fail
+- ✅ Leading/trailing hyphens fail
 
 Extensions must not:
 

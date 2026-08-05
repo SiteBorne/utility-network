@@ -94,7 +94,7 @@ frozen_decisions:
 pcc_schema:
   status: 'normative'
   version: '1.0.0'
-  sha256: '345ba43338193b44e6c7f6bd2b1eb347f5cbcfb19e54a4193798a2abe8e3e374'
+  sha256: '09a4c6dc77928613b497847c15db6b8035d7a1aae1bee086153eca7964ad3107'
   canonicalization: 'RFC8785-JCS'
   signature_algorithm: 'Ed25519'
   extension_namespace: 'reverse-domain-qualified'

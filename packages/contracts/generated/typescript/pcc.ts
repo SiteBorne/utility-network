@@ -164,7 +164,8 @@ export interface Transformation {
  * Controlled extension container. Keys must use reverse-domain qualified namespaces with at
  * least three DNS-safe labels (e.g., net.siteborne.verification.v1,
  * com.example.custom-metrics.v1). Underscores, leading/trailing hyphens, empty labels, and
- * uppercase are forbidden.
+ * uppercase are forbidden. Maximum 10 extensions. Maximum total namespace key length: 253
+ * characters.
  */
 export interface ExtensionContainer {}
 
