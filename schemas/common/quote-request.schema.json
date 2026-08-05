@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://siteborne.net/schemas/common/quote-request.schema.json",
+  "title": "Quote Request",
+  "description": "Request for a price quote for a service execution. Used for pre-authorization and cost estimation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "request_id",
+    "service_id",
+    "service_version",
+    "input_hash",
+    "input_schema_hash",
+    "output_schema_hash",
+    "requested_pricing_scheme"
+  ],
+  "properties": {
+    "request_id": {
+      "type": "string",
+      "description": "Unique quote request identifier.",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$|^[0-9A-HJKMNP-TV-Z]{26}$",
+      "maxLength": 36
+    },
+    "service_id": {
+      "type": "string",
+      "description": "Canonical service identifier.",
+      "pattern": "^[a-z0-9_]+\\.[a-z0-9_]+\\.v[0-9]+$",
+      "enum": [
+        "company_evidence_graph.v1",
+        "web_context_verified.v1",
+        "document_evidence_json.v1",
+        "verify_agent_output.v1"
+      ]
+    },
+    "service_version": {
+      "type": "string",
+      "description": "Explicit service version.",
+      "pattern": "^v[0-9]+(\\.[0-9]+)*$",
+      "enum": ["v1"]
+    },
+    "input_hash": {
+      "type": "string",
+      "description": "SHA-256 hash of the canonicalized input payload that will be executed.",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "input_schema_hash": {
+      "type": "string",
+      "description": "SHA-256 hash of the input schema that validates the input.",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "output_schema_hash": {
+      "type": "string",
+      "description": "SHA-256 hash of the output schema that will validate the result.",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "requested_pricing_scheme": {
+      "type": "string",
+      "description": "Pricing scheme requested for the quote.",
+      "enum": ["exact", "upto"]
+    },
+    "maximum_authorized_price": {
+      "$ref": "https://siteborne.net/schemas/common/money.schema.json",
+      "description": "Maximum price the requester authorizes. Required for 'upto' scheme; optional for 'exact'."
+    },
+    "requested_freshness_seconds": {
+      "type": "integer",
+      "description": "Requested freshness for the execution.",
+      "minimum": 0,
+      "maximum": 2592000
+    },
+    "requested_execution_mode": {
+      "type": "string",
+      "description": "Preferred execution mode.",
+      "enum": ["sync", "async"],
+      "default": "sync"
+    },
+    "idempotency_key": {
+      "type": "string",
+      "description": "Idempotency key for quote deduplication.",
+      "minLength": 16,
+      "maxLength": 128,
+      "pattern": "^[a-zA-Z0-9_-]+$"
+    }
+  },
+  "if": {
+    "properties": {
+      "requested_pricing_scheme": { "const": "upto" }
+    }
+  },
+  "then": {
+    "required": ["maximum_authorized_price"]
+  },
+  "examples": [
+    {
+      "request_id": "01h9k3v7-4b2c-4d8e-9f1a-2b3c4d5e6f7a",
+      "service_id": "company_evidence_graph.v1",
+      "service_version": "v1",
+      "input_hash": "sha256:abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+      "input_schema_hash": "sha256:fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321",
+      "output_schema_hash": "sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcd",
+      "requested_pricing_scheme": "exact"
+    }
+  ]
+}

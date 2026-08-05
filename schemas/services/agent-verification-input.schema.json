@@ -1,0 +1,163 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://siteborne.net/schemas/services/agent-verification-input.schema.json",
+  "title": "Agent Output Verification Input",
+  "description": "Input schema for verify_agent_output.v1 service. Supports standard and independent reproduction modes.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["verification_contract", "candidate_output", "required_schema", "verification_mode"],
+  "properties": {
+    "verification_contract": {
+      "type": "object",
+      "description": "Contract specifying what to verify.",
+      "additionalProperties": false,
+      "required": ["claims", "deterministic_requirements"],
+      "properties": {
+        "claims": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["claim_id", "predicate", "expected_value"],
+            "properties": {
+              "claim_id": { "type": "string", "maxLength": 64 },
+              "predicate": {
+                "type": "string",
+                "enum": [
+                  "equals",
+                  "contains",
+                  "matches",
+                  "greater_than",
+                  "less_than",
+                  "exists",
+                  "not_exists"
+                ]
+              },
+              "expected_value": {
+                "type": ["string", "number", "boolean", "object", "array", "null"]
+              },
+              "tolerance": { "type": "number", "minimum": 0 },
+              "materiality": {
+                "type": "string",
+                "enum": ["material", "supporting", "contextual"],
+                "default": "material"
+              }
+            }
+          },
+          "maxItems": 50
+        },
+        "deterministic_requirements": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["requirement_id", "check"],
+            "properties": {
+              "requirement_id": { "type": "string", "maxLength": 64 },
+              "check": {
+                "type": "string",
+                "enum": [
+                  "schema_valid",
+                  "hash_match",
+                  "signature_valid",
+                  "evidence_resolves",
+                  "no_pii",
+                  "no_secrets"
+                ]
+              },
+              "parameters": { "type": "object", "additionalProperties": true }
+            }
+          },
+          "maxItems": 30
+        }
+      }
+    },
+    "candidate_output": {
+      "type": "object",
+      "description": "The agent output to verify. Cannot modify verifier policy.",
+      "additionalProperties": true,
+      "maxProperties": 200,
+      "maxDepth": 10
+    },
+    "supplied_evidence": {
+      "type": "array",
+      "description": "Evidence items supplied with the candidate output.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["evidence_id", "content", "content_hash"],
+        "properties": {
+          "evidence_id": { "type": "string", "maxLength": 64 },
+          "content": { "type": "object", "additionalProperties": true },
+          "content_hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+          "source_uri": { "type": "string", "format": "uri", "maxLength": 2048 },
+          "retrieved_at": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,6})?Z$"
+          }
+        }
+      },
+      "maxItems": 20
+    },
+    "required_schema": {
+      "type": "object",
+      "description": "Required output schema (JSON Schema) that candidate must conform to.",
+      "additionalProperties": true
+    },
+    "minimum_score": {
+      "type": "number",
+      "description": "Minimum verification score [0, 1].",
+      "minimum": 0,
+      "maximum": 1,
+      "default": 0.7
+    },
+    "verification_mode": {
+      "type": "string",
+      "enum": ["standard", "independent_reproduction"],
+      "description": "Verification mode."
+    },
+    "allowed_evidence_sources": {
+      "type": "array",
+      "items": { "type": "string", "format": "uri", "maxLength": 2048 },
+      "maxItems": 10,
+      "description": "Allowed evidence source domains/URIs."
+    },
+    "freshness_requirements": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "evidence_max_age_seconds": { "type": "integer", "minimum": 0, "maximum": 2592000 },
+        "schema_max_age_seconds": { "type": "integer", "minimum": 0, "maximum": 2592000 }
+      }
+    },
+    "maximum_authorized_price": {
+      "$ref": "https://siteborne.net/schemas/common/money.schema.json"
+    }
+  },
+  "examples": [
+    {
+      "verification_contract": {
+        "claims": [
+          {
+            "claim_id": "claim_1",
+            "predicate": "equals",
+            "expected_value": "Acme Corp",
+            "materiality": "material"
+          }
+        ],
+        "deterministic_requirements": [
+          { "requirement_id": "req_1", "check": "schema_valid" },
+          { "requirement_id": "req_2", "check": "evidence_resolves" }
+        ]
+      },
+      "candidate_output": { "company": "Acme Corp", "confidence": 0.95 },
+      "required_schema": {
+        "type": "object",
+        "properties": { "company": { "type": "string" } },
+        "required": ["company"]
+      },
+      "verification_mode": "standard",
+      "maximum_authorized_price": { "amount": "0.019", "currency": "USD" }
+    }
+  ]
+}

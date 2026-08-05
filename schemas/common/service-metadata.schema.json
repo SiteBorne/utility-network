@@ -1,0 +1,228 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://siteborne.net/schemas/common/service-metadata.schema.json",
+  "title": "Service Metadata",
+  "description": "Machine-readable service metadata for discovery, pricing, and capability advertisement.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "service_id",
+    "service_version",
+    "title",
+    "description",
+    "capabilities",
+    "input_schema_uri",
+    "input_schema_hash",
+    "output_schema_uri",
+    "output_schema_hash",
+    "pcc_version",
+    "pricing_schemes",
+    "base_price",
+    "maximum_price",
+    "execution_mode",
+    "maximum_input_bytes",
+    "expected_latency_class",
+    "authorization_classification",
+    "promotion_state",
+    "production_enabled",
+    "declared_limitations",
+    "protocols",
+    "updated_at"
+  ],
+  "properties": {
+    "service_id": {
+      "type": "string",
+      "description": "Canonical service identifier.",
+      "pattern": "^[a-z0-9_]+\\.[a-z0-9_]+\\.v[0-9]+$"
+    },
+    "service_version": {
+      "type": "string",
+      "description": "Service schema version.",
+      "pattern": "^v[0-9]+(\\.[0-9]+)*$"
+    },
+    "title": {
+      "type": "string",
+      "description": "Human-readable service title.",
+      "maxLength": 128
+    },
+    "description": {
+      "type": "string",
+      "description": "Literal capability description. No promotional language.",
+      "maxLength": 1024
+    },
+    "capabilities": {
+      "type": "array",
+      "items": { "type": "string", "maxLength": 64 },
+      "maxItems": 20,
+      "description": "List of capability identifiers."
+    },
+    "input_schema_uri": {
+      "type": "string",
+      "description": "URI to the input schema (relative or absolute).",
+      "format": "uri-reference"
+    },
+    "input_schema_hash": {
+      "type": "string",
+      "description": "SHA-256 hash of the canonical input schema.",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "output_schema_uri": {
+      "type": "string",
+      "description": "URI to the output schema (relative or absolute).",
+      "format": "uri-reference"
+    },
+    "output_schema_hash": {
+      "type": "string",
+      "description": "SHA-256 hash of the canonical output schema.",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "pcc_version": {
+      "type": "string",
+      "description": "PCC version this service conforms to.",
+      "pattern": "^1\\.0\\.0$"
+    },
+    "pricing_schemes": {
+      "type": "array",
+      "items": { "type": "string", "enum": ["exact", "upto"] },
+      "minItems": 1,
+      "maxItems": 2,
+      "uniqueItems": true
+    },
+    "base_price": {
+      "$ref": "https://siteborne.net/schemas/common/money.schema.json",
+      "description": "Base price for the service (exact scheme)."
+    },
+    "maximum_price": {
+      "$ref": "https://siteborne.net/schemas/common/money.schema.json",
+      "description": "Maximum authorized price (upto scheme)."
+    },
+    "execution_mode": {
+      "type": "string",
+      "description": "Supported execution modes.",
+      "enum": ["sync", "async", "both"]
+    },
+    "maximum_input_bytes": {
+      "type": "integer",
+      "description": "Maximum input payload size in bytes.",
+      "minimum": 0,
+      "maximum": 10485760
+    },
+    "expected_latency_class": {
+      "type": "string",
+      "description": "Expected latency class for sync execution.",
+      "enum": ["fast", "standard", "slow", "variable"]
+    },
+    "authorization_classification": {
+      "type": "string",
+      "description": "Required authorization level.",
+      "enum": ["public", "buyer_authorized", "restricted"]
+    },
+    "promotion_state": {
+      "type": "string",
+      "description": "Service promotion state per governance.",
+      "enum": [
+        "draft",
+        "case_supported",
+        "multi_case_supported",
+        "verified_pattern",
+        "executable_candidate",
+        "executable_verified",
+        "retired",
+        "tombstoned"
+      ]
+    },
+    "production_enabled": {
+      "type": "boolean",
+      "description": "Whether the service is production-enabled. Must be false for SUN-0101.",
+      "const": false
+    },
+    "declared_limitations": {
+      "type": "array",
+      "items": { "type": "string", "maxLength": 256 },
+      "maxItems": 20,
+      "description": "Explicit declared limitations."
+    },
+    "protocols": {
+      "type": "object",
+      "description": "Protocol support status. Values: 'planned', 'scaffolded', 'tested', 'enabled', 'not_enabled'.",
+      "additionalProperties": false,
+      "properties": {
+        "x402": {
+          "type": "string",
+          "enum": ["planned", "scaffolded", "tested", "enabled", "not_enabled"]
+        },
+        "mcp": {
+          "type": "string",
+          "enum": ["planned", "scaffolded", "tested", "enabled", "not_enabled"]
+        },
+        "a2a": {
+          "type": "string",
+          "enum": ["planned", "scaffolded", "tested", "enabled", "not_enabled"]
+        },
+        "nevermined": {
+          "type": "string",
+          "enum": ["planned", "scaffolded", "tested", "enabled", "not_enabled"]
+        },
+        "agentverse": {
+          "type": "string",
+          "enum": ["planned", "scaffolded", "tested", "enabled", "not_enabled"]
+        },
+        "coinbase_bazaar": {
+          "type": "string",
+          "enum": ["planned", "scaffolded", "tested", "enabled", "not_enabled"]
+        },
+        "mcp_registry": {
+          "type": "string",
+          "enum": ["planned", "scaffolded", "tested", "enabled", "not_enabled"]
+        }
+      },
+      "required": [
+        "x402",
+        "mcp",
+        "a2a",
+        "nevermined",
+        "agentverse",
+        "coinbase_bazaar",
+        "mcp_registry"
+      ]
+    },
+    "updated_at": {
+      "type": "string",
+      "description": "Metadata last updated timestamp (RFC 3339 UTC).",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,6})?Z$"
+    }
+  },
+  "examples": [
+    {
+      "service_id": "company_evidence_graph.v1",
+      "service_version": "v1",
+      "title": "Company Evidence Graph",
+      "description": "Retrieves public company evidence including SEC filings, website observations, and regulatory mentions.",
+      "capabilities": ["identity_resolution", "sec_submissions", "xbrl_facts", "website_evidence"],
+      "input_schema_uri": "../services/company-evidence-input.schema.json",
+      "input_schema_hash": "sha256:abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+      "output_schema_uri": "../services/company-evidence-output.schema.json",
+      "output_schema_hash": "sha256:fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321",
+      "pcc_version": "1.0.0",
+      "pricing_schemes": ["exact"],
+      "base_price": { "amount": "0.039", "currency": "USD" },
+      "execution_mode": "sync",
+      "maximum_input_bytes": 102400,
+      "expected_latency_class": "standard",
+      "authorization_classification": "public",
+      "promotion_state": "executable_candidate",
+      "production_enabled": false,
+      "declared_limitations": ["no real-time market data", "cache-only for SEC filings"],
+      "protocols": {
+        "x402": "planned",
+        "mcp": "planned",
+        "a2a": "planned",
+        "nevermined": "planned",
+        "agentverse": "planned",
+        "coinbase_bazaar": "planned",
+        "mcp_registry": "planned"
+      },
+      "updated_at": "2026-08-05T10:00:00Z"
+    }
+  ]
+}

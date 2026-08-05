@@ -1,0 +1,123 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://siteborne.net/schemas/common/request-envelope.schema.json",
+  "title": "Service Request Envelope",
+  "description": "Common request envelope for all SITEBORNE service invocations. Wraps service-specific input payload.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["request_id", "service_id", "service_version", "input"],
+  "properties": {
+    "request_id": {
+      "type": "string",
+      "description": "Unique request identifier. Must be a valid UUID v4 or ULID.",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$|^[0-9A-HJKMNP-TV-Z]{26}$",
+      "maxLength": 36
+    },
+    "service_id": {
+      "type": "string",
+      "description": "Canonical service identifier. Must match the target service schema.",
+      "pattern": "^[a-z0-9_]+\\.[a-z0-9_]+\\.v[0-9]+$",
+      "enum": [
+        "company_evidence_graph.v1",
+        "web_context_verified.v1",
+        "document_evidence_json.v1",
+        "verify_agent_output.v1"
+      ]
+    },
+    "service_version": {
+      "type": "string",
+      "description": "Explicit service version. Must match the service schema version.",
+      "pattern": "^v[0-9]+(\\.[0-9]+)*$",
+      "enum": ["v1"]
+    },
+    "response_schema_version": {
+      "type": "string",
+      "description": "Expected output schema version. Allows forward-compatible evolution.",
+      "pattern": "^v[0-9]+(\\.[0-9]+)*$",
+      "enum": ["v1"]
+    },
+    "idempotency_key": {
+      "type": "string",
+      "description": "Client-generated idempotency key for exactly-once semantics. Required for paid operations.",
+      "minLength": 16,
+      "maxLength": 128,
+      "pattern": "^[a-zA-Z0-9_-]+$"
+    },
+    "freshness_seconds": {
+      "type": "integer",
+      "description": "Maximum acceptable age of cached data in seconds. 0 = no cache. Bounded to prevent stale data.",
+      "minimum": 0,
+      "maximum": 2592000
+    },
+    "minimum_verification_score": {
+      "type": "number",
+      "description": "Minimum PCC verification score required for the result to be accepted. Range [0, 1].",
+      "minimum": 0,
+      "maximum": 1,
+      "default": 0.7
+    },
+    "maximum_authorized_price": {
+      "$ref": "https://siteborne.net/schemas/common/money.schema.json",
+      "description": "Maximum price the caller authorizes for this request. Required for paid services."
+    },
+    "buyer_metadata": {
+      "type": "object",
+      "description": "Optional buyer-provided metadata that cannot alter execution policy, pricing, or security constraints.",
+      "additionalProperties": false,
+      "maxProperties": 10,
+      "properties": {
+        "reference": {
+          "type": "string",
+          "description": "Buyer's internal reference.",
+          "maxLength": 256
+        },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string", "maxLength": 64 },
+          "maxItems": 20
+        }
+      }
+    },
+    "input": {
+      "type": "object",
+      "description": "Service-specific input payload. Schema determined by service_id.",
+      "additionalProperties": true
+    },
+    "extensions": {
+      "type": "object",
+      "description": "Reverse-domain qualified extensions per PCC 1.0.0 rules.",
+      "additionalProperties": false,
+      "propertyNames": {
+        "type": "string",
+        "minLength": 5,
+        "maxLength": 253,
+        "pattern": "^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?){2,}$"
+      }
+    }
+  },
+  "if": {
+    "properties": {
+      "service_id": { "const": "company_evidence_graph.v1" }
+    }
+  },
+  "then": {
+    "properties": {
+      "input": {
+        "$ref": "https://siteborne.net/schemas/services/company-evidence-input.schema.json"
+      }
+    }
+  },
+  "examples": [
+    {
+      "request_id": "01h9k3v7-4b2c-4d8e-9f1a-2b3c4d5e6f7a",
+      "service_id": "company_evidence_graph.v1",
+      "service_version": "v1",
+      "response_schema_version": "v1",
+      "idempotency_key": "idem_abc123xyz",
+      "freshness_seconds": 86400,
+      "minimum_verification_score": 0.7,
+      "maximum_authorized_price": { "amount": "0.039", "currency": "USD" },
+      "input": { "company_name": "Acme Corp" }
+    }
+  ]
+}
