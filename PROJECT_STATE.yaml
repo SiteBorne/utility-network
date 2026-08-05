@@ -10,7 +10,7 @@ source_directive:
 execution:
   mode: 'serial'
   active_mutation_tasks: 1
-  current_increment: 'SUN-0100'
+  current_increment: 'SUN-0101'
   current_phase: 'phase_3_contracts'
 
 implemented:
@@ -91,4 +91,13 @@ frozen_decisions:
     target_gross_margin: '0.70'
     minimum_accepted_margin: '0.60'
 
-last_updated: '2026-08-05T14:25:00Z'
+pcc_schema:
+  status: 'normative'
+  version: '1.0.0'
+  sha256: '3e6b7d3a425884cb481f3e7dc08262beeb6b9a150561c838f4f8e7e5642965a8'
+  canonicalization: 'RFC8785-JCS'
+  signature_algorithm: 'Ed25519'
+  extension_namespace: 'reverse-domain-qualified'
+  drift_check: 'enabled'
+
+last_updated: '2026-08-05T16:35:00Z'

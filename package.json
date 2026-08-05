@@ -14,11 +14,12 @@
     "governance:validate": "tsx scripts/validate-governance.ts",
     "state:validate": "tsx scripts/validate-state.ts",
     "tasks:validate": "tsx scripts/validate-tasks.ts",
-    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm governance:validate && pnpm state:validate && pnpm tasks:validate",
+    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm python:test:pcc && pnpm governance:validate && pnpm state:validate && pnpm tasks:validate",
     "python:install": "cd services/modal-worker && python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'",
     "python:lint": "cd services/modal-worker && .venv/bin/ruff .",
     "python:typecheck": "cd services/modal-worker && .venv/bin/mypy .",
-    "python:test": "cd services/modal-worker && .venv/bin/python -m pytest"
+    "python:test": "cd services/modal-worker && .venv/bin/python -m pytest",
+    "python:test:pcc": "cd packages/pcc-schema && ../../.venv/bin/python -m pytest tests/python/ -v"
   },
   "devDependencies": {
     "turbo": "^2.0.0",
