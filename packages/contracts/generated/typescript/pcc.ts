@@ -6,138 +6,158 @@
  * passes.
  */
 export interface Pcc {
-    claims:       Claim[];
-    completeness: Completeness;
-    contract:     Contract;
-    evidence:     EvidenceItem[];
-    extensions?:  ExtensionContainer;
-    job_id:       string;
-    pcc_version:  PccVersion;
-    provenance:   Provenance;
-    receipt:      Receipt;
-    subject:      Subject;
-    verification: Verification;
+  claims: Claim[];
+  completeness: Completeness;
+  contract: Contract;
+  evidence: EvidenceItem[];
+  extensions?: ExtensionContainer;
+  job_id: string;
+  pcc_version: PccVersion;
+  provenance: Provenance;
+  receipt: Receipt;
+  subject: Subject;
+  verification: Verification;
 }
 
 export interface Claim {
-    claim_id:            string;
-    confidence:          number;
-    evidence_ids:        string[];
-    materiality:         Materiality;
-    predicate:           string;
-    value:               unknown[] | boolean | number | { [key: string]: unknown } | null | string;
-    verification_status: VerificationStatus;
+  claim_id: string;
+  confidence: number;
+  evidence_ids: string[];
+  materiality: Materiality;
+  predicate: string;
+  value: unknown[] | boolean | number | { [key: string]: unknown } | null | string;
+  verification_status: VerificationStatus;
 }
 
 /**
  * Claim materiality classification
  */
-export type Materiality = "material" | "supporting" | "contextual";
+export type Materiality = 'material' | 'supporting' | 'contextual';
 
 /**
  * Claim verification status
  */
-export type VerificationStatus = "verified" | "unsupported" | "disputed" | "pending";
+export type VerificationStatus = 'verified' | 'unsupported' | 'disputed' | 'pending';
 
 export interface Completeness {
-    missing_fields:     string[];
-    populated_fields:   number;
-    requested_fields:   number;
-    score:              number;
-    stale_fields:       string[];
-    supported_fields:   number;
-    unsupported_fields: string[];
-    vector:             CompletenessVectorEntry[];
+  missing_fields: string[];
+  populated_fields: number;
+  requested_fields: number;
+  score: number;
+  stale_fields: string[];
+  supported_fields: number;
+  unsupported_fields: string[];
+  vector: CompletenessVectorEntry[];
 }
 
 export interface CompletenessVectorEntry {
-    dimension: string;
-    populated: number;
-    requested: number;
-    score:     number;
-    supported: number;
+  dimension: string;
+  populated: number;
+  requested: number;
+  score: number;
+  supported: number;
 }
 
 export interface Contract {
-    currency:                  Currency;
-    expires_at:                string;
-    freshness_seconds:         number;
-    idempotency_key:           string;
-    input_hash:                string;
-    input_schema_hash:         string;
-    issued_at:                 string;
-    maximum_authorized_price?: string;
-    minimum_quality:           number;
-    mode:                      ContractMode;
-    network?:                  Network;
-    output_schema_hash:        string;
-    price?:                    string;
-    quote_id:                  string;
-    service_id:                ServiceID;
-    service_version:           string;
+  currency: Currency;
+  expires_at: string;
+  freshness_seconds: number;
+  idempotency_key: string;
+  input_hash: string;
+  input_schema_hash: string;
+  issued_at: string;
+  maximum_authorized_price?: string;
+  minimum_quality: number;
+  mode: ContractMode;
+  network?: Network;
+  output_schema_hash: string;
+  price?: string;
+  quote_id: string;
+  service_id: ServiceID;
+  service_version: string;
 }
 
 /**
  * Permitted currencies
  */
-export type Currency = "USD" | "USDC";
+export type Currency = 'USD' | 'USDC';
 
 /**
  * Contract mode determines required fields
  */
-export type ContractMode = "paid" | "benchmark" | "offline_verification";
+export type ContractMode = 'paid' | 'benchmark' | 'offline_verification';
 
-export type Network = "base" | "base-testnet";
+export type Network = 'base' | 'base-testnet';
 
 /**
  * Service identifier
  */
-export type ServiceID = "company_evidence_graph.v1" | "web_context_verified.v1" | "document_evidence_json.v1" | "verify_agent_output.v1";
+export type ServiceID =
+  | 'company_evidence_graph.v1'
+  | 'web_context_verified.v1'
+  | 'document_evidence_json.v1'
+  | 'verify_agent_output.v1';
 
 export interface EvidenceItem {
-    accessibility_status:         AccessibilityStatus;
-    authorization_classification: AuthorizationClassification;
-    content_hash:                 string;
-    evidence_id:                  string;
-    freshness_status:             FreshnessStatus;
-    locator:                      Locator;
-    media_type:                   string;
-    retrieved_at:                 string;
-    source_timestamp?:            string;
-    source_uri:                   string;
-    transformation_history:       Transformation[];
+  accessibility_status: AccessibilityStatus;
+  authorization_classification: AuthorizationClassification;
+  content_hash: string;
+  evidence_id: string;
+  freshness_status: FreshnessStatus;
+  locator: Locator;
+  media_type: string;
+  retrieved_at: string;
+  source_timestamp?: string;
+  source_uri: string;
+  transformation_history: Transformation[];
 }
 
 /**
  * Evidence accessibility status
  */
-export type AccessibilityStatus = "accessible" | "unavailable" | "restricted" | "requires_authorization";
+export type AccessibilityStatus =
+  | 'accessible'
+  | 'unavailable'
+  | 'restricted'
+  | 'requires_authorization';
 
 /**
  * Evidence authorization classification
  */
-export type AuthorizationClassification = "public" | "buyer_authorized" | "restricted" | "confidential";
+export type AuthorizationClassification =
+  | 'public'
+  | 'buyer_authorized'
+  | 'restricted'
+  | 'confidential';
 
 /**
  * Evidence freshness status
  */
-export type FreshnessStatus = "fresh" | "stale" | "unknown";
+export type FreshnessStatus = 'fresh' | 'stale' | 'unknown';
 
 export interface Locator {
-    type:  LocatorType;
-    value: string;
+  type: LocatorType;
+  value: string;
 }
 
 /**
  * Evidence locator type
  */
-export type LocatorType = "json_pointer" | "xpath" | "css_selector" | "text_quote" | "page_region" | "byte_range" | "database_record" | "artifact_pointer";
+export type LocatorType =
+  | 'json_pointer'
+  | 'xpath'
+  | 'css_selector'
+  | 'text_quote'
+  | 'page_region'
+  | 'byte_range'
+  | 'database_record'
+  | 'artifact_pointer';
 
 export interface Transformation {
-    parameters?:  { [key: string]: unknown };
-    timestamp:    string;
-    tool_version: string;
-    type:         string;
+  parameters?: { [key: string]: unknown };
+  timestamp: string;
+  tool_version: string;
+  type: string;
 }
 
 /**
@@ -146,131 +166,130 @@ export interface Transformation {
  * com.example.custom-metrics.v1). Underscores, leading/trailing hyphens, empty labels, and
  * uppercase are forbidden.
  */
-export interface ExtensionContainer {
-}
+export interface ExtensionContainer {}
 
 /**
  * PCC specification version
  */
-export type PccVersion = "1.0.0";
+export type PccVersion = '1.0.0';
 
 export interface Provenance {
-    cache_provenance:      CacheProvenance;
-    execution_environment: ExecutionEnvironment;
-    models:                Model[];
-    /**
-     * Policy name to version mapping
-     */
-    policy_versions: { [key: string]: string };
-    providers:       Provider[];
-    routes:          ProvenanceRoute[];
-    /**
-     * Component name to version mapping
-     */
-    software_versions: { [key: string]: string };
-    /**
-     * Tool name to version mapping
-     */
-    tools:               { [key: string]: string };
-    transformations:     Transformation[];
-    verification_routes: ProvenanceRoute[];
+  cache_provenance: CacheProvenance;
+  execution_environment: ExecutionEnvironment;
+  models: Model[];
+  /**
+   * Policy name to version mapping
+   */
+  policy_versions: { [key: string]: string };
+  providers: Provider[];
+  routes: ProvenanceRoute[];
+  /**
+   * Component name to version mapping
+   */
+  software_versions: { [key: string]: string };
+  /**
+   * Tool name to version mapping
+   */
+  tools: { [key: string]: string };
+  transformations: Transformation[];
+  verification_routes: ProvenanceRoute[];
 }
 
 export interface CacheProvenance {
-    cache_key?: string;
-    enabled:    boolean;
-    hit:        boolean;
-    stored_at?: string;
+  cache_key?: string;
+  enabled: boolean;
+  hit: boolean;
+  stored_at?: string;
 }
 
 export interface ExecutionEnvironment {
-    container_image?: string;
-    platform:         string;
-    runtime:          string;
-    version:          string;
+  container_image?: string;
+  platform: string;
+  runtime: string;
+  version: string;
 }
 
 export interface Model {
-    name:     string;
-    provider: string;
-    version:  string;
+  name: string;
+  provider: string;
+  version: string;
 }
 
 export interface Provider {
-    capabilities: string[];
-    name:         string;
-    version:      string;
+  capabilities: string[];
+  name: string;
+  version: string;
 }
 
 export interface ProvenanceRoute {
-    model_name?:    string;
-    model_version?: string;
-    parameters?:    { [key: string]: unknown };
-    provider:       string;
-    type:           Type;
-    version:        string;
+  model_name?: string;
+  model_version?: string;
+  parameters?: { [key: string]: unknown };
+  provider: string;
+  type: Type;
+  version: string;
 }
 
-export type Type = "cache" | "direct" | "deterministic" | "model" | "hybrid";
+export type Type = 'cache' | 'direct' | 'deterministic' | 'model' | 'hybrid';
 
 export interface Receipt {
-    canonicalization_algorithm: CanonicalizationAlgorithm;
-    output_hash:                string;
-    policy_hash:                string;
-    schema_hash:                string;
-    signature:                  string;
-    signature_algorithm:        SignatureAlgorithm;
-    signed_at:                  string;
-    signing_key_id:             string;
+  canonicalization_algorithm: CanonicalizationAlgorithm;
+  output_hash: string;
+  policy_hash: string;
+  schema_hash: string;
+  signature: string;
+  signature_algorithm: SignatureAlgorithm;
+  signed_at: string;
+  signing_key_id: string;
 }
 
 /**
  * Canonicalization algorithm
  */
-export type CanonicalizationAlgorithm = "RFC8785-JCS";
+export type CanonicalizationAlgorithm = 'RFC8785-JCS';
 
 /**
  * Signature algorithm
  */
-export type SignatureAlgorithm = "Ed25519";
+export type SignatureAlgorithm = 'Ed25519';
 
 export interface Subject {
-    canonical_name: string;
-    identifiers?:   { [key: string]: string };
-    type:           SubjectType;
+  canonical_name: string;
+  identifiers?: { [key: string]: string };
+  type: SubjectType;
 }
 
 /**
  * Subject type
  */
-export type SubjectType = "organization" | "person" | "document" | "webpage" | "other";
+export type SubjectType = 'organization' | 'person' | 'document' | 'webpage' | 'other';
 
 export interface Verification {
-    completeness:              number;
-    cross_source_agreement:    number;
-    decision:                  VerificationDecision;
-    deterministic_failures:    string[];
-    evidence_accessibility:    number;
-    failed_requirements:       string[];
-    freshness:                 number;
-    material_claims_supported: boolean;
-    policy:                    string;
-    prompt_injection_result:   PromptInjectionResult;
-    provenance_valid:          boolean;
-    schema_valid:              boolean;
-    score:                     number;
-    verifier_versions:         { [key: string]: string };
+  completeness: number;
+  cross_source_agreement: number;
+  decision: VerificationDecision;
+  deterministic_failures: string[];
+  evidence_accessibility: number;
+  failed_requirements: string[];
+  freshness: number;
+  material_claims_supported: boolean;
+  policy: string;
+  prompt_injection_result: PromptInjectionResult;
+  provenance_valid: boolean;
+  schema_valid: boolean;
+  score: number;
+  verifier_versions: { [key: string]: string };
 }
 
 /**
  * Verification decision
  */
-export type VerificationDecision = "pass" | "conditional" | "fail" | "quarantined";
+export type VerificationDecision = 'pass' | 'conditional' | 'fail' | 'quarantined';
 
 export interface PromptInjectionResult {
-    checked:  boolean;
-    details?: string;
-    result:   Result;
+  checked: boolean;
+  details?: string;
+  result: Result;
 }
 
-export type Result = "clean" | "suspected" | "confirmed";
+export type Result = 'clean' | 'suspected' | 'confirmed';
