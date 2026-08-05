@@ -1,0 +1,13 @@
+{
+  "name": "@siteborne/protocol-x402",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Planned for future increment - not implemented in SUN-0001",
+  "x-status": "planned",
+  "scripts": {
+    "lint": "echo 'No lint script - package not implemented' && exit 0",
+    "typecheck": "echo 'No typecheck - package not implemented' && exit 0",
+    "test": "echo 'No tests - package not implemented' && exit 0"
+  },
+  "devDependencies": {}
+}

@@ -1,0 +1,97 @@
+version: '1.0.0'
+description: 'Risk limits and safety boundaries for SITEBORNE Utility Network'
+financial_limits:
+  max_job_price_usd: 10.00
+  max_daily_revenue_usd: 1000.00
+  max_monthly_provider_spend_usd: 5000.00
+  max_refund_reserve_usd: 100.00
+  target_gross_margin: 0.70
+  minimum_accepted_margin: 0.60
+  price_change_per_experiment_pct: 20
+  max_price_usd_per_service:
+    company_evidence_graph: 0.039
+    web_context_verified_direct: 0.009
+    web_context_verified_rendered: 0.029
+    document_evidence_json_native: 0.012
+    document_evidence_json_ocr: 0.019
+    document_evidence_json_table: 0.029
+    document_evidence_json_max_job: 0.19
+    verify_agent_output_standard: 0.019
+    verify_agent_output_reproduction: 0.049
+
+operational_limits:
+  max_concurrent_heavy_jobs: 3
+  max_request_size_bytes: 1048576
+  max_response_size_bytes: 5242880
+  max_document_size_bytes: 10485760
+  max_document_pages: 10
+  job_timeout_seconds: 120
+  heavy_job_timeout_seconds: 300
+  verification_timeout_seconds: 60
+  payment_verification_timeout_seconds: 30
+  settlement_timeout_seconds: 60
+  idempotency_lock_ttl_seconds: 300
+  cache_ttl_max_seconds: 86400
+
+rate_limits:
+  free_endpoints_rps: 10
+  paid_endpoints_rps: 5
+  quote_endpoints_rps: 20
+  health_endpoints_rps: 50
+  per_wallet_daily_jobs: 100
+  per_wallet_hourly_jobs: 20
+  per_ip_hourly_requests: 1000
+
+provider_limits:
+  max_concurrent_requests_per_provider: 10
+  provider_timeout_seconds: 30
+  max_retries: 3
+  retry_backoff_base_ms: 1000
+  circuit_breaker_threshold: 5
+  circuit_breaker_window_seconds: 60
+  circuit_breaker_cooldown_seconds: 300
+
+security_limits:
+  max_redirects: 5
+  max_html_size_bytes: 5242880
+  max_pdf_pages_for_render: 10
+  blocked_domains: []
+  blocked_ip_ranges:
+    - '10.0.0.0/8'
+    - '172.16.0.0/12'
+    - '192.168.0.0/16'
+    - '169.254.0.0/16'
+    - '127.0.0.0/8'
+    - '::1/128'
+    - 'fe80::/10'
+  allow_private_ips: false
+  allow_metadata_service: false
+  max_schema_depth: 10
+  max_schema_properties: 100
+  max_array_items: 1000
+
+alert_thresholds:
+  immediate:
+    - security_incident
+    - payment_replay_detected
+    - seller_wallet_anomaly
+    - provider_terms_changed
+    - quota_overage_risk
+    - unsupported_claim_delivered
+  daily: false
+  weekly:
+    - revenue
+    - paid_external_wallets
+    - repeat_wallets
+    - gross_margin
+    - service_conversion
+    - provider_failures
+    - quota_remaining
+    - experiments
+    - recommended_operator_decisions
+
+automatic_change_limits:
+  metadata_changes_per_24_hours: 1
+  service_schema_changes: 'human_approval_required'
+  new_provider_activation: 'human_approval_required'
+  spending_limit_change: 'human_approval_required'

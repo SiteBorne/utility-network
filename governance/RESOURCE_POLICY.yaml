@@ -1,0 +1,85 @@
+version: '1.0.0'
+description: 'Resource allocation and routing policy for SITEBORNE Utility Network'
+routing_priority:
+  - priority: 1
+    name: 'Authorized Public Cache'
+    description: 'Valid reusable public cache entries with declared freshness'
+    cost_multiplier: 0.0
+  - priority: 2
+    name: 'Deterministic Local Processing'
+    description: 'Pure functions, normalization, canonicalization'
+    cost_multiplier: 0.0
+  - priority: 3
+    name: 'Authoritative Public API'
+    description: 'SEC EDGAR, OpenAlex, Crossref, Federal Register'
+    cost_multiplier: 0.0
+  - priority: 4
+    name: 'Cloudflare Free Allocation'
+    description: 'Workers requests, Workers AI, Browser Run, Queues, KV, D1'
+    cost_multiplier: 0.1
+  - priority: 5
+    name: 'Voyage Initial Allowance'
+    description: 'First 200M reranking tokens free'
+    cost_multiplier: 0.0
+  - priority: 6
+    name: 'Modal Monthly Allowance'
+    description: '$30/month recurring compute credit'
+    cost_multiplier: 0.0
+  - priority: 7
+    name: 'Approved Startup Credits'
+    description: 'Cloudflare, Google, AWS, Microsoft startup credits'
+    cost_multiplier: 0.25
+  - priority: 8
+    name: 'Authorized Paid Route'
+    description: 'Paid capacity explicitly approved by pricing policy'
+    cost_multiplier: 1.0
+  - priority: 9
+    name: 'Reject or Requote'
+    description: 'No viable route within budget'
+    cost_multiplier: null
+
+scarcity_multipliers:
+  - threshold: 75
+    multiplier: 0.10
+  - threshold: 50
+    multiplier: 0.25
+  - threshold: 25
+    multiplier: 0.60
+  - threshold: 10
+    multiplier: 1.00
+  - threshold: 0
+    multiplier: 2.00
+
+failure_risk_multipliers:
+  - provider_reliability: '> 99%'
+    multiplier: 1.0
+  - provider_reliability: '95-99%'
+    multiplier: 1.2
+  - provider_reliability: '90-95%'
+    multiplier: 1.5
+  - provider_reliability: '< 90%'
+    multiplier: 2.0
+
+pricing_formula:
+  expected_cost: 'resource_replacement_cost + verification_cost + facilitator_cost + expected_retry_cost + refund_reserve + storage_cost'
+  minimum_price: 'expected_cost / (1 - target_margin)'
+  target_gross_margin: 0.70
+  minimum_accepted_margin: 0.60
+
+quotas:
+  cloudflare_workers_requests_daily: 100000
+  cloudflare_workers_ai_neurons_daily: 10000
+  cloudflare_browser_run_minutes_daily: 10
+  cloudflare_queues_operations_daily: 10000
+  cloudflare_d1_reads_daily: 5000000
+  cloudflare_d1_writes_daily: 100000
+  cloudflare_d1_storage_gb: 5
+  cloudflare_kv_operations_daily: 100000
+  cloudflare_r2_operations_daily: 1000000
+  modal_monthly_credit_usd: 30
+  voyage_rerank_tokens_monthly: 200000000
+  cdp_facilitator_transactions_monthly_free: 1000
+  cdp_facilitator_cost_per_transaction_usd: 0.001
+
+paid_overflow_enabled: false
+paid_overflow_requires_operator_approval: true

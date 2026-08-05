@@ -1,0 +1,115 @@
+version: '1.0.0'
+description: 'Promotion ladder for rules, providers, services, and market hypotheses'
+states:
+  - id: DRAFT
+    name: 'Draft'
+    description: 'Initial proposal, not yet tested'
+    controls_money: false
+    controls_providers: false
+    controls_marketplace_metadata: false
+    requirements: []
+
+  - id: CASE_SUPPORTED
+    name: 'Case Supported'
+    description: 'Single successful execution or test case'
+    controls_money: false
+    controls_providers: false
+    controls_marketplace_metadata: false
+    requirements:
+      - 'At least one passing fixture test'
+      - 'Decision record created'
+
+  - id: MULTI_CASE_SUPPORTED
+    name: 'Multi-Case Supported'
+    description: 'Multiple independent successful cases'
+    controls_money: false
+    controls_providers: false
+    controls_marketplace_metadata: false
+    requirements:
+      - 'At least 3 passing fixture tests with different inputs'
+      - 'No critical failures in test runs'
+      - 'Evidence count >= 3'
+
+  - id: VERIFIED_PATTERN
+    name: 'Verified Pattern'
+    description: 'Consistent behavior across varied conditions'
+    controls_money: false
+    controls_providers: false
+    controls_marketplace_metadata: false
+    requirements:
+      - 'Passes property-based testing'
+      - 'Passes chaos testing for relevant failure modes'
+      - 'Evidence count >= 10'
+      - 'Promotion state recorded in knowledge graph'
+
+  - id: EXECUTABLE_CANDIDATE
+    name: 'Executable Candidate'
+    description: 'Ready for production execution with monitoring'
+    controls_money: false
+    controls_providers: false
+    controls_marketplace_metadata: true
+    requirements:
+      - 'Rubric score >= 80'
+      - 'All hard gates pass'
+      - 'Load test passes at 1x expected traffic'
+      - 'Security scan passes'
+      - 'Decision record with rubric score and assumptions'
+
+  - id: EXECUTABLE_VERIFIED
+    name: 'Executable Verified'
+    description: 'Production-ready, autonomously controllable'
+    controls_money: true
+    controls_providers: true
+    controls_marketplace_metadata: true
+    requirements:
+      - 'Rubric score >= 85'
+      - 'All hard gates pass'
+      - 'Load test passes at 3x expected traffic'
+      - 'Adversarial test passes'
+      - 'Zero critical security findings'
+      - 'At least 100 successful production executions'
+      - 'Decision record with evidence references'
+
+  - id: RETIRED
+    name: 'Retired'
+    description: 'Superseded or deprecated, no longer active'
+    controls_money: false
+    controls_providers: false
+    controls_marketplace_metadata: false
+    requirements:
+      - 'Migration path documented'
+      - 'Deprecation notice published'
+
+  - id: TOMBSTONED
+    name: 'Tombstoned'
+    description: 'Permanently removed, must never be reactivated'
+    controls_money: false
+    controls_providers: false
+    controls_marketplace_metadata: false
+    requirements:
+      - 'Security or compliance violation'
+      - 'Hard gate failure that cannot be remediated'
+      - 'Explicit operator decision recorded'
+
+transition_rules:
+  - from: DRAFT
+    to: CASE_SUPPORTED
+    requires: 'single_case_evidence'
+  - from: CASE_SUPPORTED
+    to: MULTI_CASE_SUPPORTED
+    requires: 'multi_case_evidence'
+  - from: MULTI_CASE_SUPPORTED
+    to: VERIFIED_PATTERN
+    requires: 'pattern_verification'
+  - from: VERIFIED_PATTERN
+    to: EXECUTABLE_CANDIDATE
+    requires: 'rubric_80_plus_and_hard_gates'
+  - from: EXECUTABLE_CANDIDATE
+    to: EXECUTABLE_VERIFIED
+    requires: 'production_verification'
+  - from: EXECUTABLE_VERIFIED
+    to: RETIRED
+    requires: 'operator_decision'
+  - from: RETIRED
+    to: TOMBSTONED
+    requires: 'security_violation_or_hard_gate_failure'

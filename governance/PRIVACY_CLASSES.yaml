@@ -1,0 +1,104 @@
+version: '1.0.0'
+description: 'Privacy classification for data handled by SITEBORNE Utility Network'
+classes:
+  - id: public_data
+    name: 'Public Data'
+    description: 'Information published in public sources, no access restrictions'
+    examples:
+      - 'SEC filings (EDGAR)'
+      - 'Public company websites'
+      - 'OpenAlex publication metadata'
+      - 'Crossref DOI metadata'
+      - 'Federal Register notices'
+      - 'Public GitHub repository metadata'
+    handling:
+      cacheable: true
+      cache_ttl_seconds: 86400
+      loggable: true
+      storable_indefinitely: true
+      purchasable_without_consent: true
+      transformed_output_allowed: true
+
+  - id: buyer_provided_public
+    name: 'Buyer-Provided Public References'
+    description: 'URLs or document references provided by buyer, claimed to be public'
+    examples:
+      - 'Buyer-supplied company website URL'
+      - 'Buyer-supplied public PDF URL'
+    handling:
+      cacheable: true
+      cache_ttl_seconds: 86400
+      loggable: true
+      storable_indefinitely: true
+      purchasable_without_consent: true
+      transformed_output_allowed: true
+      verification_required: true
+
+  - id: buyer_provided_authorized
+    name: 'Buyer-Provided Authorized Documents'
+    description: 'Documents uploaded by buyer with explicit authorization'
+    examples:
+      - 'PDF uploaded via document_evidence_json'
+      - 'Images uploaded for OCR'
+    handling:
+      cacheable: false
+      cache_ttl_seconds: 3600
+      loggable: false
+      storable_indefinitely: false
+      purchasable_without_consent: false
+      transformed_output_allowed: true
+      ttl_seconds: 86400
+      encryption_at_rest: true
+      access_logging: true
+
+  - id: operational_metadata
+    name: 'Operational Metadata'
+    description: 'Job IDs, timing, routing decisions, performance metrics'
+    examples:
+      - 'Job IDs and timestamps'
+      - 'Provider routing decisions'
+      - 'Latency measurements'
+      - 'Completeness scores'
+    handling:
+      cacheable: true
+      cache_ttl_seconds: 2592000
+      loggable: true
+      storable_indefinitely: true
+      purchasable_without_consent: true
+      transformed_output_allowed: true
+
+  - id: payment_metadata
+    name: 'Payment Metadata'
+    description: 'Wallet addresses, amounts, settlement status'
+    examples:
+      - 'Buyer wallet address'
+      - 'Payment amount and token'
+      - 'Settlement transaction hash'
+    handling:
+      cacheable: true
+      cache_ttl_seconds: 2592000
+      loggable: false
+      storable_indefinitely: true
+      purchasable_without_consent: false
+      transformed_output_allowed: false
+      encryption_at_rest: true
+      access_logging: true
+
+  - id: secrets
+    name: 'Secrets'
+    description: 'API keys, private keys, credentials'
+    examples:
+      - 'CDP API keys'
+      - 'Modal tokens'
+      - 'Provider API keys'
+      - 'Wallet private keys'
+    handling:
+      cacheable: false
+      cache_ttl_seconds: 0
+      loggable: false
+      storable_indefinitely: false
+      purchasable_without_consent: false
+      transformed_output_allowed: false
+      encryption_at_rest: true
+      access_logging: true
+      rotation_required: true

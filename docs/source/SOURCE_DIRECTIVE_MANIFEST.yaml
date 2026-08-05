@@ -1,0 +1,15 @@
+document:
+  name: 'SITEBORNE Utility Network Ultimate Production Build Directive'
+  status: 'immutable_source'
+  version: '1.0'
+  path: 'docs/source/SITEBORNE_UTILITY_NETWORK_MASTER_DIRECTIVE.md'
+  sha256: '03ccdebd57ab228502606c7fabdac57443267e66ab85bb6497a22dcd8f1f3af4'
+  recorded_at: '2026-08-05T10:09:47Z'
+
+authority:
+  precedence:
+    - 'security_and_legal_constraints'
+    - 'immutable_source_directive'
+    - 'accepted_architecture_decisions'
+    - 'current_increment_prompt'
+    - 'implementation_details'

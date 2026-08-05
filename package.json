@@ -1,0 +1,41 @@
+{
+  "name": "siteborne-utility-network",
+  "version": "0.0.0",
+  "private": true,
+  "description": "SITEBORNE Utility Network - Machine-native utility network for autonomous agents",
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "test": "vitest run",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "governance:validate": "tsx scripts/validate-governance.ts",
+    "state:validate": "tsx scripts/validate-state.ts",
+    "tasks:validate": "tsx scripts/validate-tasks.ts",
+    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm governance:validate && pnpm state:validate && pnpm tasks:validate",
+    "python:install": "cd services/modal-worker && python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'",
+    "python:lint": "cd services/modal-worker && .venv/bin/ruff .",
+    "python:typecheck": "cd services/modal-worker && .venv/bin/mypy .",
+    "python:test": "cd services/modal-worker && .venv/bin/python -m pytest"
+  },
+  "devDependencies": {
+    "turbo": "^2.0.0",
+    "typescript": "^5.5.0",
+    "tsx": "^4.16.0",
+    "vitest": "^2.0.0",
+    "@types/node": "^22.0.0",
+    "eslint": "^9.0.0",
+    "@eslint/js": "^9.0.0",
+    "typescript-eslint": "^8.0.0",
+    "prettier": "^3.3.0",
+    "yaml": "^2.5.0",
+    "zod": "^3.23.0"
+  },
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "packageManager": "pnpm@9.0.0"
+}

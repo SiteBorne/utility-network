@@ -1,0 +1,63 @@
+version: '1.0.0'
+description: 'Hard gates that reject any solution regardless of rubric score'
+gates:
+  - id: machine_callable
+    name: 'Machine Callable'
+    description: 'Service can be invoked programmatically without human intervention'
+    required: true
+    check: 'API accepts JSON input, returns JSON output, no OAuth/interactive auth'
+  - id: machine_payable
+    name: 'Machine Payable'
+    description: 'Payment can be completed autonomously'
+    required: true
+    check: 'Supports x402 exact/upto, no manual checkout or API key provisioning'
+  - id: bounded_input
+    name: 'Bounded Input'
+    description: 'Input schema has explicit size and complexity limits'
+    required: true
+    check: 'Maximum payload size, field count, and nesting depth enforced'
+  - id: bounded_output
+    name: 'Bounded Output'
+    description: 'Output schema has explicit size limits'
+    required: true
+    check: 'Maximum response size, pagination or truncation for large results'
+  - id: acceptance_tests_defined
+    name: 'Acceptance Tests Defined'
+    description: 'Clear pass/fail criteria for service correctness'
+    required: true
+    check: 'Contract tests, schema validation, fixture suites exist'
+  - id: commercial_use_permitted
+    name: 'Commercial Use Permitted'
+    description: 'Provider terms allow commercial automated use'
+    required: true
+    check: 'Terms manifest shows commercial_use_allowed: true'
+  - id: automated_access_permitted
+    name: 'Automated Access Permitted'
+    description: 'Provider terms allow programmatic access'
+    required: true
+    check: 'Terms manifest shows automated_access_allowed: true'
+  - id: raw_account_resale
+    name: 'Raw Account Resale'
+    description: 'Must not resell raw provider accounts or credentials'
+    required: true
+    check: 'No API keys, credentials, or account access in output'
+  - id: quota_circumvention
+    name: 'Quota Circumvention'
+    description: 'Must not circumvent provider quotas or limits'
+    required: true
+    check: 'No multi-accounting, IP rotation, or credential sharing'
+  - id: secret_exposure
+    name: 'Secret Exposure'
+    description: 'Must not expose secrets in logs, responses, or artifacts'
+    required: true
+    check: 'Secret scanning passes, no credentials in output schemas'
+  - id: unbounded_backend_spend
+    name: 'Unbounded Backend Spend'
+    description: 'No execution path can incur unlimited backend costs'
+    required: true
+    check: 'Cost guard enforces per-job maximum, quota reserves required'
+  - id: verification_available
+    name: 'Verification Available'
+    description: 'Result correctness can be independently verified'
+    required: true
+    check: 'Verification mesh runs on every paid result, receipt signed'

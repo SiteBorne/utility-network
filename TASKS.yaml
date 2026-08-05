@@ -1,0 +1,678 @@
+version: '1.0.0'
+last_updated: '2026-08-05T10:09:47Z'
+tasks:
+  # Phase 0: Establish Source of Truth
+  - id: 'SUN-0001'
+    title: 'Create governance files and decision records'
+    phase: 'phase_0_establish_source_of_truth'
+    state: 'accepted'
+    owner_agent: 'architect'
+    dependencies: []
+    rubric_target: 0
+    acceptance_tests:
+      - 'RUBRIC.yaml exists and valid (weights sum to 100)'
+      - 'HARD_GATES.yaml exists and valid (all 11 required gates present)'
+      - 'PROMOTION_STATES.yaml exists and valid (8 states, valid transitions)'
+      - 'RESOURCE_POLICY.yaml exists and valid (pricing formula correct)'
+      - 'MARKET_INTEGRITY.yaml exists and valid (7 forbidden practices)'
+      - 'PRIVACY_CLASSES.yaml exists and valid (6 classes)'
+      - 'RISK_LIMITS.yaml exists and valid (financial/operational/security limits)'
+      - '0001-product-and-domain-identity.md exists with front matter'
+      - '0002-proof-carrying-context-boundary.md exists with front matter'
+      - '0003-serial-execution-model.md exists with front matter'
+      - '0004-replacement-cost-pricing.md exists with front matter'
+      - '0005-external-dependency-ordering.md exists with front matter'
+      - 'SOURCE_DIRECTIVE_MANIFEST.yaml has correct SHA-256'
+    evidence:
+      - 'governance/RUBRIC.yaml'
+      - 'governance/HARD_GATES.yaml'
+      - 'governance/PROMOTION_STATES.yaml'
+      - 'governance/RESOURCE_POLICY.yaml'
+      - 'governance/MARKET_INTEGRITY.yaml'
+      - 'governance/PRIVACY_CLASSES.yaml'
+      - 'governance/RISK_LIMITS.yaml'
+      - 'docs/decisions/0001-product-and-domain-identity.md'
+      - 'docs/decisions/0002-proof-carrying-context-boundary.md'
+      - 'docs/decisions/0003-serial-execution-model.md'
+      - 'docs/decisions/0004-replacement-cost-pricing.md'
+      - 'docs/decisions/0005-external-dependency-ordering.md'
+      - 'docs/source/SOURCE_DIRECTIVE_MANIFEST.yaml'
+    next_action: 'Run governance validation and complete SUN-0001'
+    blocker: null
+    commit_ref: null
+
+  - id: 'SUN-0002'
+    title: 'Create monorepo foundation and validation commands'
+    phase: 'phase_0_establish_source_of_truth'
+    state: 'accepted'
+    owner_agent: 'architect'
+    dependencies:
+      - 'SUN-0001'
+    rubric_target: 0
+    acceptance_tests:
+      - 'pnpm install succeeds and generates pnpm-lock.yaml'
+      - 'pnpm format:check passes'
+      - 'pnpm lint passes (ESLint flat config)'
+      - 'pnpm typecheck passes (tsc --noEmit all packages)'
+      - 'pnpm test passes (Vitest, all packages)'
+      - 'pnpm governance:validate passes (rubric, hard gates, promotion, resource, privacy, risk)'
+      - 'pnpm state:validate passes (PROJECT_STATE.yaml structure)'
+      - 'pnpm tasks:validate passes (TASKS.yaml structure, one active task)'
+      - 'pnpm check passes (all above)'
+      - 'Python: ruff, mypy, pytest pass in services/modal-worker'
+      - 'GitHub Actions CI workflow file exists'
+    evidence:
+      - 'pnpm-lock.yaml'
+      - 'package.json (all workspace packages)'
+      - 'eslint.config.js, .prettierrc, turbo.json, tsconfig.base.json, vitest.config.ts'
+      - '.github/workflows/ci.yml'
+      - 'packages/contracts, pcc-schema, pricing, policy, test-fixtures'
+      - 'apps/edge-api, network-site, docs'
+      - 'services/modal-worker'
+      - 'scripts/validate-governance.ts, validate-state.ts, validate-tasks.ts'
+    next_action: 'SUN-0100: Develop PCC normative schema draft validation'
+    blocker: null
+    commit_ref: null
+
+  # Phase 1: Domain and Identity (blocked_external)
+  - id: 'SUN-0006'
+    title: 'Add siteborne.net to Cloudflare'
+    phase: 'phase_1_domain_and_identity'
+    state: 'blocked_external'
+    owner_agent: 'operator'
+    dependencies:
+      - 'SUN-0002'
+    rubric_target: 0
+    acceptance_tests:
+      - 'siteborne.net added to Cloudflare'
+      - 'Cloudflare nameservers assigned'
+    evidence: []
+    next_action: 'Safely migrate IONOS nameservers'
+    blocker: 'Requires operator action at Cloudflare'
+    commit_ref: null
+
+  - id: 'SUN-0007'
+    title: 'Safely migrate IONOS nameservers'
+    phase: 'phase_1_domain_and_identity'
+    state: 'blocked_external'
+    owner_agent: 'operator'
+    dependencies:
+      - 'SUN-0006'
+    rubric_target: 0
+    acceptance_tests:
+      - 'DNSSEC disabled at IONOS if enabled'
+      - 'Nameservers changed to Cloudflare'
+      - 'Cloudflare authoritative confirmed'
+      - 'DNSSEC enabled in Cloudflare'
+      - 'DS record added at IONOS'
+    evidence: []
+    next_action: 'Preserve mail DNS records'
+    blocker: 'Requires operator action at IONOS'
+    commit_ref: null
+
+  - id: 'SUN-0008'
+    title: 'Preserve mail DNS records'
+    phase: 'phase_1_domain_and_identity'
+    state: 'blocked_external'
+    owner_agent: 'operator'
+    dependencies:
+      - 'SUN-0007'
+    rubric_target: 0
+    acceptance_tests:
+      - 'All IONOS mail records recreated in Cloudflare'
+      - 'DKIM CNAME records preserved'
+      - 'ops@siteborne.net, security@siteborne.net, startups@siteborne.net, legal@siteborne.net created'
+    evidence: []
+    next_action: 'Deploy static placeholder'
+    blocker: 'Requires operator action at Cloudflare'
+    commit_ref: null
+
+  - id: 'SUN-0009'
+    title: 'Deploy static placeholder'
+    phase: 'phase_1_domain_and_identity'
+    state: 'blocked_external'
+    owner_agent: 'architect'
+    dependencies:
+      - 'SUN-0008'
+    rubric_target: 0
+    acceptance_tests:
+      - 'GET https://siteborne.net/ returns 200'
+      - 'GET https://utility.siteborne.net/ returns 200'
+    evidence: []
+    next_action: 'Enable strict TLS and DNSSEC'
+    blocker: 'Requires Cloudflare configuration'
+    commit_ref: null
+
+  - id: 'SUN-0010'
+    title: 'Enable strict TLS and DNSSEC'
+    phase: 'phase_1_domain_and_identity'
+    state: 'blocked_external'
+    owner_agent: 'architect'
+    dependencies:
+      - 'SUN-0009'
+    rubric_target: 0
+    acceptance_tests:
+      - 'Strict TLS enabled'
+      - 'DNSSEC enabled after propagation'
+      - 'security.txt published'
+    evidence: []
+    next_action: 'Publish policies'
+    blocker: 'Requires Cloudflare configuration'
+    commit_ref: null
+
+  - id: 'SUN-0011'
+    title: 'Publish privacy, acceptable-use, and refund policies'
+    phase: 'phase_1_domain_and_identity'
+    state: 'blocked_external'
+    owner_agent: 'architect'
+    dependencies:
+      - 'SUN-0010'
+    rubric_target: 0
+    acceptance_tests:
+      - 'Privacy policy published'
+      - 'Acceptable use policy published'
+      - 'Refund policy published'
+    evidence: []
+    next_action: 'Create dedicated seller wallet'
+    blocker: 'Requires Cloudflare Pages/Workers deployment'
+    commit_ref: null
+
+  - id: 'SUN-0012'
+    title: 'Create dedicated seller wallet'
+    phase: 'phase_1_domain_and_identity'
+    state: 'blocked_external'
+    owner_agent: 'operator'
+    dependencies:
+      - 'SUN-0011'
+    rubric_target: 0
+    acceptance_tests:
+      - 'Seller wallet created and funded on Base'
+      - 'Wallet separation documented (seller, testing, provider-expense, treasury, profit)'
+      - 'Testing wallet created separately'
+    evidence: []
+    next_action: 'Begin Phase 2 monorepo implementation'
+    blocker: 'Requires operator action for wallet creation'
+    commit_ref: null
+
+  # Phase 2: Monorepo (credential-independent continuation)
+  - id: 'SUN-0013'
+    title: 'Implement contracts package (shared types)'
+    phase: 'phase_2_monorepo'
+    state: 'pending'
+    owner_agent: 'architect'
+    dependencies:
+      - 'SUN-0002'
+    rubric_target: 0
+    acceptance_tests:
+      - 'packages/contracts exports: HealthResponse, ReadinessResponse, ServiceError, PromotionState, RubricEvaluation, TaskRecord, DecisionRecord'
+      - 'Zod schemas validate correctly'
+      - 'TypeScript types generated'
+      - 'Unit tests pass'
+    evidence: []
+    next_action: 'Implement pcc-schema package'
+    blocker: null
+    commit_ref: null
+
+  - id: 'SUN-0014'
+    title: 'Implement pcc-schema package (foundation)'
+    phase: 'phase_2_monorepo'
+    state: 'pending'
+    owner_agent: 'architect'
+    dependencies:
+      - 'SUN-0013'
+    rubric_target: 0
+    acceptance_tests:
+      - "PCC_VERSION = '1.0.0' exported"
+      - 'Semantic field inventory exported'
+      - 'COMPATIBILITY_POLICY, CANONICALIZATION_POLICY, SIGNING_POLICY exported'
+      - 'Pre-normative draft schema exists with pre_normative: true marker'
+      - 'Policy markdown files exist (COMPATIBILITY.md, CANONICALIZATION.md, SIGNING.md)'
+      - 'Tests verify pre-normative marker present'
+    evidence: []
+    next_action: 'Implement pricing package'
+    blocker: null
+    commit_ref: null
+
+  - id: 'SUN-0015'
+    title: 'Implement pricing package (decimal-safe)'
+    phase: 'phase_2_monorepo'
+    state: 'pending'
+    owner_agent: 'architect'
+    dependencies:
+      - 'SUN-0014'
+    rubric_target: 0
+    acceptance_tests:
+      - 'microUSD integer arithmetic functions'
+      - 'computeExpectedCost, computeMinimumPrice, computeMargin'
+      - 'Margin rational {numerator, denominator} representation'
+      - 'Monotonicity tests: increasing cost never decreases price'
+      - 'Margin boundary enforcement tests'
+      - 'Price change limit validation (20%)'
+      - 'All tests pass with Vitest'
+    evidence: []
+    next_action: 'Implement policy package'
+    blocker: null
+    commit_ref: null
+
+  - id: 'SUN-0016'
+    title: 'Implement policy package (hard gates, promotion, privacy)'
+    phase: 'phase_2_monorepo'
+    state: 'pending'
+    owner_agent: 'architect'
+    dependencies:
+      - 'SUN-0015'
+    rubric_target: 0
+    acceptance_tests:
+      - 'evaluateHardGates: all 11 required gates checked, unknown gates fail closed'
+      - 'PromotionTransitionMachine: valid transitions pass, invalid fail, TOMBSTONED terminal, RETIRED cannot return to production'
+      - 'isProductionEligible: only EXECUTABLE_VERIFIED returns true'
+      - 'PublicDataOnlyPrivacy: rejects sensitive data classifications'
+      - 'All tests pass'
+    evidence: []
+    next_action: 'Implement test-fixtures foundation'
+    blocker: null
+    commit_ref: null
+
+  - id: 'SUN-0017'
+    title: 'Implement test-fixtures foundation'
+    phase: 'phase_2_monorepo'
+    state: 'pending'
+    owner_agent: 'architect'
+    dependencies:
+      - 'SUN-0016'
+    rubric_target: 0
+    acceptance_tests:
+      - 'Valid/invalid promotion sequences'
+      - 'Valid/invalid task records'
+      - 'Valid/invalid decision records'
+      - 'Sample provider manifests (valid/invalid)'
+      - 'Used by governance validation tests'
+    evidence: []
+    next_action: 'Implement edge-api foundation'
+    blocker: null
+    commit_ref: null
+
+  - id: 'SUN-0018'
+    title: 'Implement apps/edge-api foundation (Hono, /health, /ready)'
+    phase: 'phase_2_monorepo'
+    state: 'pending'
+    owner_agent: 'architect'
+    dependencies:
+      - 'SUN-0013'
+    rubric_target: 0
+    acceptance_tests:
+      - 'Hono app compiles with TypeScript strict'
+      - "GET /health returns { status: 'ok', timestamp }"
+      - "GET /ready returns { status: 'not_ready', phase: 'foundation', production_services_enabled: false, reason: string }"
+      - 'Responses typed with contracts package types'
+      - 'Vitest tests: schema validation, response shape'
+      - 'No D1/R2/Queues/x402/MCP/A2A/Nevermined dependencies'
+    evidence: []
+    next_action: 'Implement apps/network-site and apps/docs'
+    blocker: null
+    commit_ref: null
+
+  - id: 'SUN-0019'
+    title: 'Implement apps/network-site (machine-first static)'
+    phase: 'phase_2_monorepo'
+    state: 'pending'
+    owner_agent: 'architect'
+    dependencies:
+      - 'SUN-0018'
+    rubric_target: 0
+    acceptance_tests:
+      - 'Static index.html served'
+      - 'Identifies: SITEBORNE Utility Network, siteborne.net, utility.siteborne.net, Proof-Carrying Context, 4 service IDs'
+      - 'Status: preproduction foundation'
+      - 'No claims of live payment endpoints or registry entries'
+    evidence: []
+    next_action: 'Implement apps/docs shell'
+    blocker: null
+    commit_ref: null
+
+  - id: 'SUN-0020'
+    title: 'Implement apps/docs documentation shell'
+    phase: 'phase_2_monorepo'
+    state: 'pending'
+    owner_agent: 'architect'
+    dependencies:
+      - 'SUN-0019'
+    rubric_target: 0
+    acceptance_tests:
+      - 'Navigation for: Architecture, Decisions, Governance, Contracts, Security, Operations, Marketplace Integrity, Source Directive'
+      - 'Markdown-based, no heavy framework'
+    evidence: []
+    next_action: 'Implement services/modal-worker foundation'
+    blocker: null
+    commit_ref: null
+
+  - id: 'SUN-0021'
+    title: 'Implement services/modal-worker foundation (Python)'
+    phase: 'phase_2_monorepo'
+    state: 'pending'
+    owner_agent: 'architect'
+    dependencies:
+      - 'SUN-0020'
+    rubric_target: 0
+    acceptance_tests:
+      - 'src/modal_worker/health.py with Pydantic model'
+      - 'src/modal_worker/config.py with validation'
+      - 'pytest tests for health/config'
+      - 'ruff and mypy strict pass'
+      - 'No OCR/Docling/document-processing dependencies'
+      - 'README.md explains Modal deployment not configured'
+    evidence: []
+    next_action: 'Create placeholder packages and repository controls'
+    blocker: null
+    commit_ref: null
+
+  - id: 'SUN-0022'
+    title: 'Create placeholder packages and repository controls'
+    phase: 'phase_2_monorepo'
+    state: 'pending'
+    owner_agent: 'architect'
+    dependencies:
+      - 'SUN-0021'
+    rubric_target: 0
+    acceptance_tests:
+      - 'Placeholder packages: provider-adapters, verification, knowledge-graph, protocol-x402, protocol-mcp, protocol-a2a, protocol-nevermined, telemetry (package.json with x-status: planned)'
+      - '.gitignore, .editorconfig, .npmrc, README.md, LICENSE, SECURITY.md, CONTRIBUTING.md, CODE_OF_CONDUCT.md exist'
+      - 'Root pnpm-workspace.yaml, turbo.json, tsconfig.base.json valid'
+      - 'GitHub Actions CI workflow runs install → format:check → lint → typecheck → test → governance:validate → state:validate → tasks:validate'
+    evidence: []
+    next_action: 'Run full validation suite (pnpm check)'
+    blocker: null
+    commit_ref: null
+
+  - id: 'SUN-0023'
+    title: 'Run full validation and complete SUN-0002'
+    phase: 'phase_2_monorepo'
+    state: 'superseded'
+    owner_agent: 'architect'
+    dependencies:
+      - 'SUN-0022'
+    rubric_target: 0
+    acceptance_tests:
+      - 'pnpm install && pnpm check exits 0'
+      - 'Python validation passes (ruff, mypy, pytest in services/modal-worker)'
+      - 'docs/reports/SUN-0001-foundation-report.md created with evidence'
+    evidence: []
+    next_action: 'Superseded by SUN-0002 acceptance'
+    blocker: null
+    commit_ref: null
+
+  # Next phase tasks (planned)
+  - id: 'SUN-0100'
+    title: 'Develop PCC normative schema draft validation (Phase 3a)'
+    phase: 'phase_3_contracts'
+    state: 'accepted'
+    owner_agent: 'architect'
+    dependencies:
+      - 'SUN-0002'
+    rubric_target: 85
+    acceptance_tests:
+      - 'Complete PCC JSON Schema drafted in packages/pcc-schema'
+      - 'TypeScript and Python models generated from schema'
+      - 'Schema compatibility tests pass (additive only)'
+      - 'Property-based tests for arbitrary valid inputs'
+      - 'Pre-normative marker removed, version frozen to 1.0.0'
+    evidence:
+      - 'schemas/proof-carrying-context.schema.json'
+      - 'packages/pcc-schema/src/index.ts'
+      - 'packages/contracts/generated/typescript/pcc.ts'
+      - 'packages/contracts/generated/python/pcc_models.py'
+      - 'packages/pcc-schema/tests/fixtures/index.ts'
+      - 'docs/decisions/0006-pcc-normative-schema.md'
+      - 'docs/decisions/0007-pcc-canonicalization-and-signing.md'
+    next_action: 'Define input/output schemas for all 4 services'
+    blocker: null
+    commit_ref: 'pending'
+
+  - id: 'SUN-0101'
+    title: 'Define input/output schemas for all services (Phase 3b)'
+    phase: 'phase_3_contracts'
+    state: 'active'
+    owner_agent: 'architect'
+    dependencies:
+      - 'SUN-0100'
+    rubric_target: 85
+    acceptance_tests:
+      - 'company-evidence-input.schema.json, web-context-input.schema.json, document-evidence-input.schema.json, verification-input.schema.json'
+      - 'Output schemas, error schemas, quote schema, receipt schema'
+      - 'OpenAPI drift test passes'
+    evidence: []
+    next_action: 'Freeze contracts version 1.0.0'
+    blocker: null
+    commit_ref: null
+
+  - id: 'SUN-0102'
+    title: 'Freeze contracts version 1.0.0 (Phase 3c)'
+    phase: 'phase_3_contracts'
+    state: 'pending'
+    owner_agent: 'architect'
+    dependencies:
+      - 'SUN-0101'
+    rubric_target: 85
+    acceptance_tests:
+      - 'All schemas versioned 1.0.0'
+      - 'No breaking changes without version bump enforced'
+      - 'Compatibility tests enforce schema stability'
+    evidence: []
+    next_action: 'Begin Phase 4 control plane'
+    blocker: null
+    commit_ref: null
+
+  # Phase 4+ tasks abbreviated
+  - id: 'SUN-0200'
+    title: 'Build control plane (Hono Worker, routing, D1, R2, Queues, idempotency)'
+    phase: 'phase_4_control_plane'
+    state: 'pending'
+    owner_agent: 'architect'
+    dependencies:
+      - 'SUN-0102'
+    rubric_target: 85
+    acceptance_tests:
+      - 'Hono Worker compiles and runs'
+      - 'D1 migrations apply successfully'
+      - 'R2 bindings work'
+      - 'Queue producers/consumers work'
+      - 'Idempotency locks prevent duplicate execution'
+    evidence: []
+    next_action: 'Build public-data adapters'
+    blocker: 'Requires Cloudflare account (blocked_external)'
+    commit_ref: null
+
+  - id: 'SUN-0300'
+    title: 'Build public-data adapters (SEC, web, GitHub, Federal Register)'
+    phase: 'phase_5_adapters'
+    state: 'pending'
+    owner_agent: 'architect'
+    dependencies:
+      - 'SUN-0200'
+    rubric_target: 85
+    acceptance_tests:
+      - 'SEC submissions adapter returns typed data'
+      - 'SEC company facts adapter returns XBRL data'
+      - 'Direct webpage fetch works'
+      - 'GitHub metadata adapter works'
+    evidence: []
+    next_action: 'Build Modal worker'
+    blocker: 'Requires Modal token (blocked_external)'
+    commit_ref: null
+
+  - id: 'SUN-0400'
+    title: 'Build Modal worker (Docling, OCR, PDF processing)'
+    phase: 'phase_6_modal_worker'
+    state: 'pending'
+    owner_agent: 'architect'
+    dependencies:
+      - 'SUN-0300'
+    rubric_target: 85
+    acceptance_tests:
+      - 'Modal app deploys successfully'
+      - 'Docling processes PDF to JSON'
+      - 'OCR extracts text from images'
+      - 'Table extraction works'
+    evidence: []
+    next_action: 'Build verification mesh'
+    blocker: 'Requires Modal deployment'
+    commit_ref: null
+
+  - id: 'SUN-0500'
+    title: 'Build verification mesh (9 verifiers + receipt signer)'
+    phase: 'phase_7_verification'
+    state: 'pending'
+    owner_agent: 'architect'
+    dependencies:
+      - 'SUN-0400'
+    rubric_target: 85
+    acceptance_tests:
+      - 'SchemaVerifier validates PCC schema'
+      - 'EvidenceAccessibilityVerifier checks sources'
+      - 'ClaimEvidenceAlignmentVerifier validates claims'
+      - 'ReceiptSigner produces Ed25519 signatures'
+    evidence: []
+    next_action: 'Implement 4 services'
+    blocker: null
+    commit_ref: null
+
+  - id: 'SUN-0600'
+    title: 'Implement 4 services (company_evidence_graph → web_context_verified → verify_agent_output → document_evidence_json)'
+    phase: 'phase_8_services'
+    state: 'pending'
+    owner_agent: 'architect'
+    dependencies:
+      - 'SUN-0500'
+    rubric_target: 85
+    acceptance_tests:
+      - 'company_evidence_graph.v1 passes rubric >= 85'
+      - 'web_context_verified.v1 passes rubric >= 85'
+      - 'verify_agent_output.v1 passes rubric >= 85'
+      - 'document_evidence_json.v1 passes rubric >= 85'
+    evidence: []
+    next_action: 'Implement x402 payments'
+    blocker: 'Requires CDP credentials (blocked_external)'
+    commit_ref: null
+
+  - id: 'SUN-0700'
+    title: 'Implement x402 payments (exact + upto, CDP facilitator, Bazaar extension)'
+    phase: 'phase_9_x402'
+    state: 'pending'
+    owner_agent: 'architect'
+    dependencies:
+      - 'SUN-0600'
+    rubric_target: 85
+    acceptance_tests:
+      - 'Exact payment flow works end-to-end'
+      - 'Upto payment flow works end-to-end'
+      - 'CDP facilitator verify/settle works'
+      - 'Bazaar discovery metadata included'
+      - 'Replay attacks rejected'
+    evidence: []
+    next_action: 'Implement MCP and A2A'
+    blocker: 'Requires CDP credentials (blocked_external)'
+    commit_ref: null
+
+  - id: 'SUN-0800'
+    title: 'Implement MCP (remote server + npm shim) and A2A (signed Agent Card)'
+    phase: 'phase_10_mcp_a2a'
+    state: 'pending'
+    owner_agent: 'architect'
+    dependencies:
+      - 'SUN-0700'
+    rubric_target: 85
+    acceptance_tests:
+      - 'MCP remote server responds to tools/list'
+      - 'MCP tools invoke correctly'
+      - 'npm shim package publishes'
+      - 'A2A Agent Card validates and is signed'
+      - 'Agent Card served at /.well-known/agent-card.json'
+    evidence: []
+    next_action: 'Implement Nevermined'
+    blocker: 'Requires Nevermined credentials (blocked_external)'
+    commit_ref: null
+
+  - id: 'SUN-0900'
+    title: 'Implement Nevermined (pay-as-you-go plans, no free trials until first paid)'
+    phase: 'phase_11_nevermined'
+    state: 'pending'
+    owner_agent: 'architect'
+    dependencies:
+      - 'SUN-0800'
+    rubric_target: 85
+    acceptance_tests:
+      - 'Pay-as-you-go plans created for all 4 services'
+      - 'Entitlement validation works'
+      - 'Callback verification works'
+      - 'Free live trials disabled'
+    evidence: []
+    next_action: 'Security release gate'
+    blocker: 'Requires Nevermined credentials (blocked_external)'
+    commit_ref: null
+
+  - id: 'SUN-1000'
+    title: 'Security release gate (Semgrep, ESLint, Ruff, mypy, OSV-Scanner, Trivy, Gitleaks, Schemathesis, property, payment, chaos, load)'
+    phase: 'phase_12_security_gate'
+    state: 'pending'
+    owner_agent: 'architect'
+    dependencies:
+      - 'SUN-0900'
+    rubric_target: 85
+    acceptance_tests:
+      - 'Semgrep passes with no critical findings'
+      - 'ESLint passes'
+      - 'Ruff passes'
+      - 'mypy strict passes'
+      - 'OSV-Scanner finds no critical vulnerabilities'
+      - 'Trivy passes'
+      - 'Gitleaks finds no secrets'
+      - 'Schemathesis passes'
+      - 'Property tests pass'
+      - 'Payment suite passes'
+      - 'Chaos suite passes'
+      - 'Load suite passes'
+    evidence: []
+    next_action: 'Public registry launch'
+    blocker: null
+    commit_ref: null
+
+  - id: 'SUN-1100'
+    title: 'Public registry launch (MCP Registry, Agentverse, Nevermined, npm, GitHub, A2A, OpenAPI, catalog, benchmark, health)'
+    phase: 'phase_13_registry_launch'
+    state: 'pending'
+    owner_agent: 'architect'
+    dependencies:
+      - 'SUN-1000'
+    rubric_target: 85
+    acceptance_tests:
+      - 'MCP Registry entry visible'
+      - 'Agentverse registration visible'
+      - 'Nevermined plans visible'
+      - 'npm package published'
+      - 'A2A Agent Card valid'
+      - 'OpenAPI document accessible'
+      - 'Public catalog endpoint works'
+      - 'Benchmark endpoint works'
+      - 'Health endpoint works'
+    evidence: []
+    next_action: 'Wait for first unknown paid transaction'
+    blocker: 'Requires registry accounts (blocked_external)'
+    commit_ref: null
+
+  - id: 'SUN-1200'
+    title: 'First unknown paid transaction (Level 3 launch success)'
+    phase: 'phase_14_first_sale'
+    state: 'pending'
+    owner_agent: 'operator'
+    dependencies:
+      - 'SUN-1100'
+    rubric_target: 85
+    acceptance_tests:
+      - 'Unknown external wallet pays via x402'
+      - 'Result passes verification'
+      - 'Payment settles via CDP'
+      - 'No prior coordination'
+    evidence: []
+    next_action: 'Coinbase Bazaar optimization'
+    blocker: 'Market demand (cannot be forced)'
+    commit_ref: null

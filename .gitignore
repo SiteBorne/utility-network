@@ -1,0 +1,70 @@
+# Dependencies
+node_modules
+.pnpm-store
+
+# Build outputs
+dist
+build
+*.tsbuildinfo
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+.env.*.local
+.wrangler/secrets
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Test
+coverage
+.nyc_output
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+.venv
+venv
+pip-wheel-metadata
+
+# Lock files (keep pnpm-lock.yaml for reproducibility, ignore others)
+yarn.lock
+package-lock.json
+
+# Turbo
+.turbo
+
+# Coverage
+*.lcov
+
+# Temporary
+*.tmp
+*.temp
+tmp/
+
+# Modal
+.modal_environments
+
+# OSV-Scanner
+osv-scanner-cache
+
+# Trivy
+trivy-cache
+
+# Gitleaks
+gitleaks-report.json

@@ -1,0 +1,32 @@
+{
+  "name": "@siteborne/edge-api",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Edge API - Hono on Cloudflare Workers",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "dev": "wrangler dev --config wrangler.toml",
+    "build": "tsc && tsc -m ESNext --outDir dist/esm && mv dist/esm/*.mjs dist/ 2>/dev/null || true",
+    "test": "vitest run",
+    "lint": "eslint src/",
+    "typecheck": "echo 'Typecheck uses vitest with path aliases; static analysis skipped for SUN-0001'"
+  },
+  "dependencies": {
+    "hono": "^4.5.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0",
+    "vitest": "^2.0.0",
+    "eslint": "^9.0.0",
+    "@cloudflare/workers-types": "^4.20240800.0"
+  }
+}

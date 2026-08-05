@@ -1,0 +1,117 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate (Node)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+          run_install: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Format check
+        run: pnpm format:check
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test
+        run: pnpm test
+
+      - name: Governance validation
+        run: pnpm governance:validate
+
+      - name: State validation
+        run: pnpm state:validate
+
+      - name: Tasks validation
+        run: pnpm tasks:validate
+
+  python-validate:
+    name: Validate (Python)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: 'pip'
+
+      - name: Install Python dependencies
+        run: |
+          cd services/modal-worker
+          python3 -m venv .venv
+          .venv/bin/pip install -e ".[dev]"
+
+      - name: Ruff
+        run: |
+          cd services/modal-worker
+          .venv/bin/ruff .
+
+      - name: Mypy
+        run: |
+          cd services/modal-worker
+          .venv/bin/mypy .
+
+      - name: Pytest
+        run: |
+          cd services/modal-worker
+          .venv/bin/python -m pytest
+
+  secret-scan:
+    name: Secret Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+        with:
+          args: detect --source="." --verbose --redact
+
+  check:
+    name: All Checks Passed
+    needs: [validate, python-validate, secret-scan]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check results
+        run: |
+          if [[ "${{ needs.validate.result }}" != "success" ]]; then exit 1; fi
+          if [[ "${{ needs.python-validate.result }}" != "success" ]]; then exit 1; fi
+          if [[ "${{ needs.secret-scan.result }}" != "success" ]]; then exit 1; fi
+          echo "All checks passed"

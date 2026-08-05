@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SITEBORNE Utility Network</title>
+    <style>
+      body {
+        font-family:
+          system-ui,
+          -apple-system,
+          sans-serif;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 2rem;
+        line-height: 1.6;
+      }
+      .status {
+        background: #fef3c7;
+        border: 1px solid #f59e0b;
+        border-radius: 4px;
+        padding: 1rem;
+        margin: 1rem 0;
+      }
+      .service {
+        background: #f3f4f6;
+        padding: 0.5rem;
+        margin: 0.25rem 0;
+        border-radius: 4px;
+        font-family: monospace;
+      }
+      code {
+        background: #f3f4f6;
+        padding: 0.125rem 0.25rem;
+        border-radius: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>SITEBORNE Utility Network</h1>
+
+    <div class="status">
+      <strong>Status:</strong> Preproduction Foundation (SUN-0001 complete, SUN-0002 in progress)
+    </div>
+
+    <h2>Domains</h2>
+    <ul>
+      <li>Human-facing: <code>siteborne.com</code> (company, services, portfolio)</li>
+      <li>Machine-facing: <code>siteborne.net</code> (autonomous utility network)</li>
+      <li>
+        Production origin: <code>utility.siteborne.net</code> (x402, MCP, A2A, OpenAPI, Nevermined)
+      </li>
+    </ul>
+
+    <h2>Core Standard</h2>
+    <p>
+      <strong>Proof-Carrying Context (PCC) v1.0.0</strong> — Every paid result includes normalized
+      facts, source evidence, timestamps, freshness metadata, completeness measurements,
+      input/output hashes, provenance, verification results, and an Ed25519 signed receipt.
+    </p>
+
+    <h2>Planned Services</h2>
+    <div class="service">company_evidence_graph.v1 — POST /v1/company/evidence-graph — $0.039</div>
+    <div class="service">
+      web_context_verified.v1 — POST /v1/web/context — $0.009 direct / $0.029 rendered
+    </div>
+    <div class="service">
+      document_evidence_json.v1 — POST /v1/document/evidence-json — $0.012 native / $0.019 OCR /
+      $0.029 table
+    </div>
+    <div class="service">
+      verify_agent_output.v1 — POST /v1/verify/agent-output — $0.019 standard / $0.049 independent
+    </div>
+
+    <h2>Protocols (Planned)</h2>
+    <ul>
+      <li>x402 v2 — Base/USDC, exact & upto schemes, Coinbase CDP facilitator</li>
+      <li>MCP — Remote Streamable HTTP, <code>net.siteborne/utility</code> namespace</li>
+      <li>A2A 1.0 — Signed Agent Card at <code>/.well-known/agent-card.json</code></li>
+      <li>Nevermined — Pay-as-you-go plans</li>
+      <li>Agentverse — Public agent registration</li>
+      <li>OpenAPI — Machine-readable contracts</li>
+    </ul>
+
+    <h2>Market Integrity</h2>
+    <p>
+      The first valid customer <strong>must be</strong> an unknown external autonomous system.
+      Forbidden: self-purchase, related wallet purchase, compensated buyer, precommitted purchase,
+      fake ratings, manufactured volume, free invocation as market proof.
+    </p>
+
+    <hr />
+    <p>
+      <small
+        >This is a machine-first static page. No payment endpoints, registry entries, or live
+        services exist yet.</small
+      >
+    </p>
+  </body>
+</html>

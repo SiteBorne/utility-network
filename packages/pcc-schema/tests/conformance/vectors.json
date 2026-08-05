@@ -1,0 +1,113 @@
+{
+  "description": "RFC 8785 / JCS conformance test vectors. Both TypeScript (canonical-json@0.4.0) and Python (rfc8785@0.1.4) must produce identical canonical bytes for each input.",
+  "vectors": [
+    {
+      "name": "rfc8785_primitive_example",
+      "input": { "b": 2, "a": 1 },
+      "expected_canonical": "{\"a\":1,\"b\":2}",
+      "expected_sha256": "sha256:43258cff783fe7036d8a43033f830adfc60ec037382473548ac742b888292777"
+    },
+    {
+      "name": "nested_object",
+      "input": { "c": { "b": 2, "a": 1 } },
+      "expected_canonical": "{\"c\":{\"a\":1,\"b\":2}}",
+      "expected_sha256": "sha256:e56bf7df3346f585828064d49fc4cff12859fdbb37373178980981dd5725ab88"
+    },
+    {
+      "name": "integer_in_safe_range",
+      "input": { "int": 42, "neg": -1, "zero": 0 },
+      "expected_canonical": "{\"int\":42,\"neg\":-1,\"zero\":0}",
+      "expected_sha256": "sha256:d7100a9470231351e723762778d00187a8011c5886df0043afa79b7f37317d20"
+    },
+    {
+      "name": "float_serialization",
+      "input": { "float": 1.5, "small": 0.0001 },
+      "expected_canonical": "{\"float\":1.5,\"small\":0.0001}",
+      "expected_sha256": "sha256:dd0af054da5b01bee80b776be85c46d94c930f29c5d68333dbbb84edf9e43a5c"
+    },
+    {
+      "name": "negative_zero_normalized",
+      "input": { "neg_zero": -0.0, "pos_zero": 0.0 },
+      "expected_canonical": "{\"neg_zero\":0,\"pos_zero\":0}",
+      "expected_sha256": "sha256:0c91a4eb864965dcc80f9f5dd1fd5844c36fef5b3fae19dcf8d2ebf9311eeea9"
+    },
+    {
+      "name": "array_order_preserved",
+      "input": { "arr": [3, 1, 2] },
+      "expected_canonical": "{\"arr\":[3,1,2]}",
+      "expected_sha256": "sha256:cab5b2405701293d6fae18f8809e9946d87a2720a4cff2b9fcac9dde50528852"
+    },
+    {
+      "name": "string_empty_and_unicode",
+      "input": { "key": "value", "empty": "" },
+      "expected_canonical": "{\"empty\":\"\",\"key\":\"value\"}",
+      "expected_sha256": "sha256:03db6c0b3fbd741ad6fa7dc44a8323232f94b482f7372bbc8e087851f44ec962"
+    },
+    {
+      "name": "unicode_not_normalized",
+      "input": { "日本語": "value" },
+      "expected_canonical": "{\"日本語\":\"value\"}",
+      "expected_sha256": "sha256:f1a1dea5dd2fb735f90647092d180a56ae7ba675f01e4f563d652271809f5d89"
+    },
+    {
+      "name": "empty_object",
+      "input": {},
+      "expected_canonical": "{}",
+      "expected_sha256": "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+    },
+    {
+      "name": "boolean_true_false",
+      "input": { "t": true, "f": false },
+      "expected_canonical": "{\"f\":false,\"t\":true}",
+      "expected_sha256": "sha256:c22848c47426fcf4d27e55573c22f1d23546315c251e8e4bc384820ba5fae568"
+    },
+    {
+      "name": "null_value",
+      "input": { "n": null },
+      "expected_canonical": "{\"n\":null}",
+      "expected_sha256": "sha256:5b4da02351c1c20974b216a5e3a4edb59ac51cbda6be3e9d82952b4f5beea463"
+    },
+    {
+      "name": "exponent_boundary",
+      "input": { "exp": 1e21 },
+      "expected_canonical": "{\"exp\":1e+21}",
+      "expected_sha256": "sha256:8d2f3c8102820a2b4ee8db335f81b122d00fdb5d4888e3561be4ede49a9adb41"
+    },
+    {
+      "name": "max_safe_integer",
+      "input": { "max_safe": 9007199254740991, "min_safe": -9007199254740991 },
+      "expected_canonical": "{\"max_safe\":9007199254740991,\"min_safe\":-9007199254740991}",
+      "expected_sha256": "sha256:a89049ae419a1d5be4e19bf82d230cbd8b668759c1602a32899faddba91e2d9a"
+    },
+    {
+      "name": "very_small_number_scientific",
+      "input": { "very_small": 1e-10 },
+      "expected_canonical": "{\"very_small\":1e-10}",
+      "expected_sha256": "sha256:705accafa3975064d82eb611c5bcef2430a677538a71ed8d42d58cddff0abb81"
+    },
+    {
+      "name": "control_character_escaping",
+      "input": { "ctrl": "hello\nworld" },
+      "expected_canonical": "{\"ctrl\":\"hello\\nworld\"}",
+      "expected_sha256": "sha256:c0d2449eeda6acd175c39345748d43511a8d6f6cb339328f6e1d8c72d25b0272"
+    },
+    {
+      "name": "surrogate_pair_emoji",
+      "input": { "emoji": "🎉" },
+      "expected_canonical": "{\"emoji\":\"🎉\"}",
+      "expected_sha256": "sha256:55f193ece9ed10fc8d284702415f691d6903b36814589e7784fbd61ee1f2eeae"
+    },
+    {
+      "name": "array_string_order_preserved",
+      "input": { "arr": ["c", "a", "b"] },
+      "expected_canonical": "{\"arr\":[\"c\",\"a\",\"b\"]}",
+      "expected_sha256": "sha256:3e47c3028e899a5b42995c6ab43a94c663c275d23e9720ad28e767546d5184ce"
+    },
+    {
+      "name": "unicode_nfc_vs_nfd_preserved",
+      "input": { "nfc": "café", "nfd": "cafe\u0301" },
+      "expected_canonical": "{\"nfc\":\"café\",\"nfd\":\"cafe\u0301\"}",
+      "expected_sha256": "sha256:cc673dfe566ccf77bd1d7472865fdbd6e97e0f0b1976615dbc4af1a4037cabfc"
+    }
+  ]
+}

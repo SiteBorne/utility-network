@@ -1,0 +1,53 @@
+name = "siteborne-utility-edge"
+main = "src/index.ts"
+compatibility_date = "2026-08-05"
+compatibility_flags = ["nodejs_compat"]
+
+[env]
+ENVIRONMENT = "production"
+LOG_LEVEL = "info"
+
+[vars]
+PCC_VERSION = "1.0.0"
+SELLER_WALLET_ADDRESS = ""
+CDP_API_KEY_NAME = ""
+CDP_API_KEY_PRIVATE_KEY = ""
+CDP_WALLET_SECRET = ""
+NEVERMINED_API_KEY = ""
+VOYAGE_API_KEY = ""
+MODAL_TOKEN_ID = ""
+MODAL_TOKEN_SECRET = ""
+SENTRY_DSN = ""
+
+[[d1_databases]]
+binding = "DB"
+database_name = "siteborne-utility"
+database_id = ""
+
+[[r2_buckets]]
+binding = "ARTIFACTS"
+bucket_name = "siteborne-artifacts"
+
+[[kv_namespaces]]
+binding = "CATALOG"
+id = ""
+
+[[queues]]
+binding = "JOBS"
+queue_name = "siteborne-jobs"
+
+[[queues]]
+binding = "EVENTS"
+queue_name = "siteborne-events"
+
+[ai]
+binding = "AI"
+
+[browser]
+binding = "BROWSER"
+
+[observability]
+enabled = true
+
+[build]
+command = "pnpm run build --filter=edge-api"

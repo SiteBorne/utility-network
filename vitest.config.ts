@@ -1,0 +1,37 @@
+import { defineConfig } from 'vitest/config';
+import path from 'path';
+
+export default defineConfig({
+  test: {
+    globals: true,
+    environment: 'node',
+    include: [
+      'packages/**/*.{test,spec}.ts',
+      'apps/edge-api/**/*.{test,spec}.ts',
+      'scripts/**/*.{test,spec}.ts',
+    ],
+    exclude: ['node_modules/**', 'dist/**', 'services/modal-worker/**'],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'json', 'html'],
+      exclude: [
+        'node_modules/**',
+        'dist/**',
+        '**/*.d.ts',
+        '**/*.config.*',
+        'scripts/**',
+        'services/**',
+      ],
+    },
+    alias: {
+      '@siteborne/contracts': path.resolve(__dirname, 'packages/contracts/src'),
+      '@siteborne/pcc-schema': path.resolve(__dirname, 'packages/pcc-schema/src'),
+      '@siteborne/pricing': path.resolve(__dirname, 'packages/pricing/src'),
+      '@siteborne/policy': path.resolve(__dirname, 'packages/policy/src'),
+      '@siteborne/test-fixtures': path.resolve(__dirname, 'packages/test-fixtures/src'),
+    },
+    typecheck: {
+      tsconfig: 'tsconfig.base.json',
+    },
+  },
+});

@@ -1,0 +1,94 @@
+project:
+  name: 'SITEBORNE Utility Network'
+  repository_status: 'foundation'
+  production_ready: false
+
+source_directive:
+  path: 'docs/source/SITEBORNE_UTILITY_NETWORK_MASTER_DIRECTIVE.md'
+  sha256: '03ccdebd57ab228502606c7fabdac57443267e66ab85bb6497a22dcd8f1f3af4'
+
+execution:
+  mode: 'serial'
+  active_mutation_tasks: 1
+  current_increment: 'SUN-0100'
+  current_phase: 'phase_3_contracts'
+
+implemented:
+  - 'governance_validation'
+  - 'task_ledger_validation'
+  - 'decision_record_validation'
+  - 'pricing_foundation'
+  - 'health_endpoint'
+  - 'readiness_endpoint'
+  - 'contracts_shared_types'
+  - 'pcc_schema_foundation'
+  - 'pcc_normative_schema'
+  - 'edge_api_foundation'
+  - 'modal_worker_foundation'
+
+not_implemented:
+  - 'company_evidence_graph'
+  - 'web_context_verified'
+  - 'document_evidence_json'
+  - 'verify_agent_output'
+  - 'd1_persistence'
+  - 'r2_artifacts'
+  - 'queue_orchestration'
+  - 'x402'
+  - 'mcp'
+  - 'a2a'
+  - 'nevermined'
+  - 'agentverse'
+  - 'modal_document_processing'
+  - 'production_deployment'
+
+blocked_external:
+  - 'cloudflare_account_configuration'
+  - 'ionos_dns_migration'
+  - 'seller_wallet'
+  - 'cdp_credentials'
+  - 'nevermined_credentials'
+  - 'registry_publication'
+  - 'modal_deployment_token'
+  - 'startup_program_approvals'
+
+frozen_decisions:
+  product:
+    public_name: 'SITEBORNE Utility Network'
+    human_domain: 'siteborne.com'
+    machine_domain: 'siteborne.net'
+    production_origin: 'utility.siteborne.net'
+  standard:
+    name: 'Proof-Carrying Context'
+    abbreviation: 'PCC'
+    version: '1.0.0'
+  service_ids:
+    - 'company_evidence_graph.v1'
+    - 'web_context_verified.v1'
+    - 'document_evidence_json.v1'
+    - 'verify_agent_output.v1'
+  privacy:
+    initial_classification: 'public_data_or_buyer_authorized'
+    sensitive_data_processing: 'disabled'
+  market_integrity:
+    unknown_external_customer_required: true
+    self_purchase: 'forbidden'
+    related_wallet_purchase: 'forbidden'
+    compensated_purchase: 'forbidden'
+    precommitted_purchase: 'forbidden'
+    artificial_volume: 'forbidden'
+    free_invocation_as_market_proof: 'forbidden'
+  pricing:
+    company_evidence_graph_usd: '0.039'
+    web_context_direct_usd: '0.009'
+    web_context_rendered_usd: '0.029'
+    document_native_page_usd: '0.012'
+    document_ocr_page_usd: '0.019'
+    document_table_page_usd: '0.029'
+    document_job_maximum_usd: '0.19'
+    verification_standard_usd: '0.019'
+    verification_independent_usd: '0.049'
+    target_gross_margin: '0.70'
+    minimum_accepted_margin: '0.60'
+
+last_updated: '2026-08-05T14:25:00Z'

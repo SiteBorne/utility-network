@@ -1,0 +1,69 @@
+version: '1.0.0'
+description: 'Marketplace integrity rules for SITEBORNE Utility Network'
+forbidden_practices:
+  - id: self_purchase
+    name: 'Self Purchase'
+    description: 'Using own buyer wallet to purchase services'
+    detection: 'Seller wallet address matches buyer wallet address'
+    action: 'Reject transaction, alert operator'
+  - id: related_wallet_purchase
+    name: 'Related Wallet Purchase'
+    description: 'Purchases from wallets with known relationship to operator'
+    detection: 'Shared funding source, sequential addresses, correlated timing'
+    action: 'Reject transaction, alert operator'
+  - id: compensated_buyer
+    name: 'Compensated Buyer'
+    description: 'Paying or incentivizing external parties to purchase'
+    detection: 'Unusual repeat patterns, identical query sequences, artificial volume'
+    action: 'Reject transaction, alert operator, tombstone buyer'
+  - id: prior_purchase_commitment
+    name: 'Prior Purchase Commitment'
+    description: 'Pre-arranged purchases disguised as autonomous discovery'
+    detection: 'Buyer wallet appears in pre-launch communications, coordinated timing'
+    action: 'Reject transaction, alert operator'
+  - id: fake_rating
+    name: 'Fake Rating'
+    description: 'Manufacturing reputation signals'
+    detection: 'Self-reported metrics, synthetic reviews, manipulated benchmarks'
+    action: 'Remove fabricated data, alert operator'
+  - id: manufactured_volume
+    name: 'Manufactured Volume'
+    description: 'Creating artificial transaction volume'
+    detection: 'High frequency from same wallet, non-consuming purchases, zero-repeat buyers'
+    action: 'Rate limit, alert operator'
+  - id: transaction_time_human_selection
+    name: 'Transaction-Time Human Selection'
+    description: 'Manual intervention during automated purchase flow'
+    detection: 'Payment timing anomalies, non-deterministic buyer behavior'
+    action: 'Reject transaction, alert operator'
+
+first_purchase_validator:
+  requirements:
+    - 'Previously unseen external wallet address'
+    - 'No known relationship to operator wallets'
+    - 'Autonomous payment signature (x402/nevermined)'
+    - 'Useful output delivered and consumed'
+    - 'Valid signed receipt returned'
+    - 'Result delivered to downstream workflow (not just returned)'
+  evidence_required:
+    - 'Wallet first-seen timestamp'
+    - 'Payment transaction hash'
+    - 'Receipt verification'
+    - 'Downstream consumption proof (when available)'
+
+monitoring:
+  wallet_analysis:
+    enabled: true
+    lookback_days: 30
+    min_transactions_for_pattern: 5
+  volume_analysis:
+    enabled: true
+    window_hours: 24
+    max_transactions_per_wallet: 100
+  repeat_buyer_tracking:
+    enabled: true
+    min_repeat_interval_hours: 24
+  refund_monitoring:
+    enabled: true
+    max_refund_rate: 0.05
+    window_days: 7

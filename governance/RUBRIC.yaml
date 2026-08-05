@@ -1,0 +1,90 @@
+version: '1.0.0'
+description: 'Weighted evaluation rubric for SITEBORNE Utility Network services and decisions'
+criteria:
+  - id: existing_machine_demand
+    name: 'Existing Machine Demand'
+    weight: 20
+    description: 'Current agent workflows already purchase the capability'
+    high_score_indicators:
+      - 'Multiple autonomous agents actively buying this capability'
+      - 'Documented marketplace transaction history'
+      - 'Clear buyer intent signals in registry queries'
+  - id: composability
+    name: 'Composability'
+    weight: 12
+    description: 'Small, typed result that fits inside another workflow'
+    high_score_indicators:
+      - 'Well-defined JSON schema with minimal nesting'
+      - 'Standardized field names and types'
+      - 'No opaque blobs or provider-specific formats'
+  - id: objective_verifiability
+    name: 'Objective Verifiability'
+    weight: 12
+    description: 'Correctness can be checked deterministically'
+    high_score_indicators:
+      - 'Every claim has source-level evidence'
+      - 'Verification does not require model judgment'
+      - 'Reproducible results from same inputs'
+  - id: free_resource_feasibility
+    name: 'Free Resource Feasibility'
+    weight: 12
+    description: 'Can be delivered repeatedly without fixed expense'
+    high_score_indicators:
+      - 'Runs on Cloudflare free tier allocations'
+      - 'Uses Modal recurring credits'
+      - 'No per-request API costs for core paths'
+  - id: replacement_cost_margin
+    name: 'Replacement Cost Margin'
+    weight: 10
+    description: 'Remains profitable after free credits expire'
+    high_score_indicators:
+      - 'Per-request cost well below price at scale'
+      - 'Clear replacement cost model documented'
+      - 'Margin maintained at 10x volume'
+  - id: machine_discoverability
+    name: 'Machine Discoverability'
+    weight: 10
+    description: 'Exact match to registry and marketplace queries'
+    high_score_indicators:
+      - 'Literal capability names in metadata'
+      - 'Schema matches common buyer queries'
+      - 'Indexed in MCP Registry, Bazaar, Agentverse'
+  - id: reliability_latency
+    name: 'Reliability and Latency'
+    weight: 8
+    description: 'Predictable output and bounded completion'
+    high_score_indicators:
+      - 'p95 latency under SLA'
+      - 'Deterministic timeout handling'
+      - 'Graceful degradation with completeness vector'
+  - id: defensibility
+    name: 'Defensibility'
+    weight: 8
+    description: 'Creates proprietary performance or reputation data'
+    high_score_indicators:
+      - 'Provider performance graph accumulates'
+      - 'Buyer behavior patterns emerge'
+      - 'Routing intelligence improves over time'
+  - id: terms_compliance
+    name: 'Terms and Data Compliance'
+    weight: 5
+    description: 'Commercial automation and transformed outputs permitted'
+    high_score_indicators:
+      - 'Provider terms explicitly allow commercial use'
+      - 'Transformed output redistribution permitted'
+      - 'No account sharing or quota circumvention'
+  - id: implementation_simplicity
+    name: 'Implementation Simplicity'
+    weight: 3
+    description: 'Minimal independent failure surfaces'
+    high_score_indicators:
+      - 'Few external dependencies'
+      - 'Simple request/response flow'
+      - 'Easy to test and debug'
+
+thresholds:
+  reject: 70
+  research_only: 79
+  executable_candidate: 84
+  launch_candidate: 89
+  core_product: 90
