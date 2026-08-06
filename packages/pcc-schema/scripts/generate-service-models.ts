@@ -211,8 +211,8 @@ function main() {
   const pccPyPath = resolve(PY_OUTPUT_DIR, 'pcc.py');
   generateTypeScript(
     resolve(SCHEMAS_DIR, 'proof-carrying-context.schema.json'),
-    pccTsPath,
-    COMMON_SCHEMA_PATHS
+    pccTsPath
+    // No additional schemas — match standalone generate-models.ts behavior
   );
   generatePython(resolve(SCHEMAS_DIR, 'proof-carrying-context.schema.json'), pccPyPath);
 
