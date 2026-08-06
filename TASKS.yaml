@@ -473,7 +473,7 @@ tasks:
       - 'docs/decisions/0008-pcc-extension-container-patch.md'
     next_action: 'Freeze contracts version 1.0.0 (now targeting PCC 1.0.1 — see SUN-0100.amendment and ADR-0008)'
     blocker: null
-    commit_ref: null
+    commit_ref: '432409d'
     notes: >-
       OpenAPI drift test acceptance criterion not applicable — no OpenAPI spec
       exists in this repo yet; this increment delivers the JSON Schema
