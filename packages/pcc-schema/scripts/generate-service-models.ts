@@ -217,6 +217,9 @@ function main() {
     resolve(PY_OUTPUT_DIR, 'pcc.py')
   );
 
+  // Format PCC TypeScript model with prettier
+  run('prettier', ['--write', resolve(TS_OUTPUT_DIR, 'pcc.ts')]);
+
   console.log('\n✓ Generation complete');
   console.log(`  TypeScript: ${TS_OUTPUT_DIR}`);
   console.log(`  Python: ${PY_OUTPUT_DIR}`);
