@@ -1,0 +1,10 @@
+{
+  "description": "Company Evidence Graph - clarified description",
+  "type": "object",
+  "properties": {
+    "company_name": {
+      "type": "string",
+      "description": "Legal company name (clarified: must match SEC registration exactly)"
+    }
+  }
+}

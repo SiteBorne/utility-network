@@ -1,0 +1,12 @@
+{
+  "description": "Corrected invalid example without changing semantics",
+  "type": "object",
+  "properties": {
+    "amount": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d{2}$",
+      "examples": ["0.039"],
+      "description": "Fixed example to match pattern"
+    }
+  }
+}

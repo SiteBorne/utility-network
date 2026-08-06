@@ -1,0 +1,8 @@
+{
+  "description": "Remove input property - BREAKING",
+  "type": "object",
+  "properties": {
+    "existing_field": { "type": "string" }
+  },
+  "required": ["existing_field"]
+}

@@ -1,0 +1,481 @@
+policy_version: 'contract-compatibility-v1'
+schema_draft: '2020-12'
+openapi_version: '3.1.0'
+
+service_major_compatibility_rules:
+  service_identity:
+    identifier_pattern: "^[a-z_]+\\.v[0-9]+$"
+    immutable: true
+    breaking_if_changed: true
+
+  extension_namespace:
+    pattern: "^net\\.siteborne\\.[a-z-]+\\.v[0-9]+$"
+    immutable: true
+    breaking_if_changed: true
+
+  pcc_dependency:
+    schema_release: '1.0.1'
+    document_version: '1.0.0'
+    schema_sha256: 'f664208e387b161ab7897d8544d9c7d987501eba5764e2dde0ea69586e33dbb5'
+    breaking_if_changed: true
+
+release_semantic_versioning:
+  major: 'breaking changes requiring new .v{N+1} service identity'
+  minor: 'backward-compatible additions under strict-consumer evaluation'
+  patch: 'documentation, examples, generator fixes, nonsemantic metadata'
+
+change_classifications:
+  documentation_only:
+    default_compatibility: 'patch'
+    min_version_bump: 'patch'
+    human_review: false
+    runtime_migration: false
+    parallel_major_required: false
+
+  example_only:
+    default_compatibility: 'patch'
+    min_version_bump: 'patch'
+    human_review: false
+    runtime_migration: false
+    parallel_major_required: false
+
+  annotation_change:
+    default_compatibility: 'patch'
+    min_version_bump: 'patch'
+    human_review: false
+    runtime_migration: false
+    parallel_major_required: false
+
+  optional_property_added:
+    default_compatibility: 'minor_candidate'
+    min_version_bump: 'minor'
+    human_review: true
+    runtime_migration: false
+    parallel_major_required: false
+    compatibility_note: 'evaluated under strict-consumer mode; may be breaking if additionalProperties:false or closed enum'
+
+  required_property_added:
+    default_compatibility: 'major'
+    min_version_bump: 'major'
+    human_review: true
+    runtime_migration: true
+    parallel_major_required: true
+
+  property_removed:
+    default_compatibility: 'major'
+    min_version_bump: 'major'
+    human_review: true
+    runtime_migration: true
+    parallel_major_required: true
+
+  property_renamed:
+    default_compatibility: 'major'
+    min_version_bump: 'major'
+    human_review: true
+    runtime_migration: true
+    parallel_major_required: true
+
+  property_type_changed:
+    default_compatibility: 'major'
+    min_version_bump: 'major'
+    human_review: true
+    runtime_migration: true
+    parallel_major_required: true
+
+  enum_value_added:
+    default_compatibility: 'major'
+    min_version_bump: 'major'
+    human_review: true
+    runtime_migration: false
+    parallel_major_required: true
+    compatibility_note: 'breaking under strict-consumer mode unless contract explicitly requires unknown-value handling'
+
+  enum_value_removed:
+    default_compatibility: 'major'
+    min_version_bump: 'major'
+    human_review: true
+    runtime_migration: true
+    parallel_major_required: true
+
+  minimum_increased:
+    default_compatibility: 'major'
+    min_version_bump: 'major'
+    human_review: true
+    runtime_migration: true
+    parallel_major_required: true
+
+  minimum_decreased:
+    default_compatibility: 'minor_candidate'
+    min_version_bump: 'minor'
+    human_review: true
+    runtime_migration: false
+    parallel_major_required: false
+
+  maximum_increased:
+    default_compatibility: 'minor_candidate'
+    min_version_bump: 'minor'
+    human_review: true
+    runtime_migration: false
+    parallel_major_required: false
+
+  maximum_decreased:
+    default_compatibility: 'major'
+    min_version_bump: 'major'
+    human_review: true
+    runtime_migration: true
+    parallel_major_required: true
+
+  pattern_changed:
+    default_compatibility: 'major'
+    min_version_bump: 'major'
+    human_review: true
+    runtime_migration: true
+    parallel_major_required: true
+
+  format_changed:
+    default_compatibility: 'major'
+    min_version_bump: 'major'
+    human_review: true
+    runtime_migration: true
+    parallel_major_required: true
+
+  default_changed:
+    default_compatibility: 'patch'
+    min_version_bump: 'patch'
+    human_review: true
+    runtime_migration: false
+    parallel_major_required: false
+    compatibility_note: 'semantic if default affects validation outcome'
+
+  additional_properties_changed:
+    default_compatibility: 'major'
+    min_version_bump: 'major'
+    human_review: true
+    runtime_migration: false
+    parallel_major_required: true
+
+  required_list_changed:
+    default_compatibility: 'major'
+    min_version_bump: 'major'
+    human_review: true
+    runtime_migration: true
+    parallel_major_required: true
+
+  one_of_changed:
+    default_compatibility: 'major'
+    min_version_bump: 'major'
+    human_review: true
+    runtime_migration: true
+    parallel_major_required: true
+
+  any_of_changed:
+    default_compatibility: 'major'
+    min_version_bump: 'major'
+    human_review: true
+    runtime_migration: true
+    parallel_major_required: true
+
+  all_of_changed:
+    default_compatibility: 'major'
+    min_version_bump: 'major'
+    human_review: true
+    runtime_migration: true
+    parallel_major_required: true
+
+  reference_target_changed:
+    default_compatibility: 'major'
+    min_version_bump: 'major'
+    human_review: true
+    runtime_migration: true
+    parallel_major_required: true
+
+  identifier_changed:
+    default_compatibility: 'major'
+    min_version_bump: 'major'
+    human_review: true
+    runtime_migration: true
+    parallel_major_required: true
+
+  service_version_changed:
+    default_compatibility: 'major'
+    min_version_bump: 'major'
+    human_review: true
+    runtime_migration: true
+    parallel_major_required: true
+
+  pcc_dependency_changed:
+    default_compatibility: 'major'
+    min_version_bump: 'major'
+    human_review: true
+    runtime_migration: true
+    parallel_major_required: true
+
+  semantic_validator_changed:
+    default_compatibility: 'major'
+    min_version_bump: 'major'
+    human_review: true
+    runtime_migration: true
+    parallel_major_required: true
+
+  openapi_operation_changed:
+    default_compatibility: 'major'
+    min_version_bump: 'major'
+    human_review: true
+    runtime_migration: true
+    parallel_major_required: true
+
+  error_contract_changed:
+    default_compatibility: 'major'
+    min_version_bump: 'major'
+    human_review: true
+    runtime_migration: true
+    parallel_major_required: true
+
+  pricing_semantics_changed:
+    default_compatibility: 'major'
+    min_version_bump: 'major'
+    human_review: true
+    runtime_migration: true
+    parallel_major_required: true
+
+  signature_binding_changed:
+    default_compatibility: 'major'
+    min_version_bump: 'major'
+    human_review: true
+    runtime_migration: true
+    parallel_major_required: true
+
+allowed_version_transitions:
+  - from: '1.0.0'
+    to: '1.0.1'
+    classification: 'patch'
+    allowed: true
+  - from: '1.0.0'
+    to: '1.1.0'
+    classification: 'minor'
+    allowed: true
+  - from: '1.0.0'
+    to: '2.0.0'
+    classification: 'major'
+    allowed: true
+    requires_new_service_major: true
+
+forbidden_silent_changes:
+  - 'schema hash change without version evaluation'
+  - 'baseline mutation in place'
+  - 'service major identity reinterpretation'
+  - 'PCC dependency change without classification'
+  - 'OpenAPI change without contract version evaluation'
+  - 'metadata change contradicting schemas'
+  - 'generated artifact drift without version evaluation'
+
+required_evidence:
+  - 'change classification rationale'
+  - 'compatibility direction analysis (producer/consumer/bidirectional)'
+  - 'strict-consumer evaluation'
+  - 'human approval marker for minor/major'
+
+required_approvals:
+  patch: 'automated if classification matches'
+  minor: 'human review required'
+  major: 'human approval required + new service major identity'
+
+baseline_rules:
+  immutable_after_acceptance: true
+  modification_requires:
+    - 'explicit release process'
+    - 'new version directory'
+    - 'decision record'
+    - 'compatibility classification'
+    - 'human approval'
+  modification_detection: 'SHA256SUMS verification on every check'
+
+dependency_rules:
+  pcc_schema_release: 'must match declared dependency exactly'
+  pcc_document_version: 'must match declared dependency exactly'
+  pcc_schema_sha256: 'must match declared hash exactly'
+
+deprecation_rules:
+  states:
+    - 'ACTIVE'
+    - 'DEPRECATED'
+    - 'RETIRED'
+    - 'TOMBSTONED'
+  deprecation_does_not_alter_wire_behavior: true
+  deprecation_requires_replacement_or_reason: true
+  major_versions_may_coexist: true
+  existing_paid_receipts_remain_verifiable: true
+  frozen_schemas_remain_available: true
+  tombstoned_service_ids_cannot_be_reused: true
+  v1_cannot_be_silently_repointed_to_v2: true
+
+compatibility_modes:
+  schema_strict_consumer:
+    unknown_properties: 'reject'
+    unknown_enum_values: 'reject'
+    default_for_enforcement: true
+
+  tolerant_consumer:
+    unknown_properties: 'ignore_when_allowed'
+    unknown_enum_values: 'preserve_or_fail_safely'
+
+  existing_producer:
+    sends_only_baseline_fields: true
+
+  new_producer:
+    may_send_new_optional_fields: 'version_dependent'
+
+service_specific_freeze_rules:
+  company_evidence_graph:
+    frozen:
+      - 'service_id'
+      - 'extension_namespace'
+      - 'identity_signal_rules'
+      - 'supported_field_groups'
+      - 'evidence_linking_rules'
+      - 'completeness_semantics'
+      - 'verified_absence_semantics'
+      - 'no_realtime_market_data_promise'
+      - 'launch_price_metadata'
+      - 'output_pcc_pairing'
+    field_group_changes: 'compatibility_sensitive'
+    new_field_group: 'not_automatically_minor_compatible'
+
+  web_context_verified:
+    frozen:
+      - 'service_id'
+      - 'extension_namespace'
+      - 'retrieval_modes'
+      - 'output_modes'
+      - 'url_input_semantics'
+      - 'public_target_restrictions'
+      - 'structured_output_requirements'
+      - 'redirect_bounds'
+      - 'prompt_injection_result_semantics'
+      - 'direct_rendered_distinction'
+      - 'launch_pricing_metadata'
+    new_retrieval_or_output_mode: 'potentially_breaking_closed_enum_change'
+
+  document_evidence_json:
+    frozen:
+      - 'service_id'
+      - 'extension_namespace'
+      - 'exactly_one_document_reference_mode'
+      - 'accepted_media_types'
+      - '10_mb_limit'
+      - '10_page_limit'
+      - 'page_classifications'
+      - 'pricing_units'
+      - '0.19_maximum'
+      - 'upto_pricing_semantics'
+      - 'authorization_classes'
+      - 'evidence_locator_rules'
+    any_file_page_mediatype_price_limit_change: 'explicit_classification_required'
+
+  agent_output_verification:
+    frozen:
+      - 'service_id'
+      - 'extension_namespace'
+      - 'standard_and_independent_reproduction_modes'
+      - 'deterministic_failure_semantics'
+      - 'reproduction_requirements'
+      - 'score_range'
+      - 'failed_requirement_references'
+      - 'candidate_output_hash_semantics'
+      - 'launch_price_metadata'
+    deterministic_failure_weakening: 'major_and_forbidden_within_v1'
+
+common_contract_freeze_rules:
+  money:
+    breaking_without_major:
+      - 'decimal_representation_change'
+      - 'scientific_notation_acceptance'
+      - 'negative_value_acceptance'
+      - 'changed_normalization'
+      - 'precision_change'
+      - 'currency_semantic_change'
+
+  quotes:
+    breaking_without_major:
+      - 'exact_upto_reinterpretation'
+      - 'changed_expiration_semantics'
+      - 'changed_hash_binding_fields'
+      - 'contradictory_quote_behavior'
+      - 'changed_maximum_price_meaning'
+
+  errors:
+    compatibility_sensitive:
+      - 'category_removal'
+      - 'category_reinterpretation'
+      - 'retryability_semantic_changes'
+      - 'error_code_reuse'
+      - 'field_removal'
+      - 'original_receipt_reference_changes'
+
+  async_jobs:
+    compatibility_sensitive:
+      - 'state_removal'
+      - 'state_reinterpretation'
+      - 'terminal_state_changes'
+      - 'result_reference_meaning'
+      - 'retry_refund_semantic_changes'
+
+openapi_compatibility:
+  included_in_release_compatibility: true
+  checks:
+    - 'operation_ids'
+    - 'path_templates'
+    - 'request_body_schemas'
+    - 'response_schemas'
+    - 'status_codes'
+    - 'error_references'
+    - 'quote_references'
+    - 'service_ids'
+    - 'schema_hashes'
+    - 'examples'
+    - 'preproduction_status'
+    - 'production_enabled_status'
+  breaking_classifications:
+    - 'path_removal'
+    - 'operation_removal'
+    - 'request_requirement_tightening'
+    - 'success_response_schema_incompatibility'
+    - 'removed_status_response'
+    - 'changed_operation_meaning'
+    - 'changed_authentication_payment_requirements_without_versioning'
+    - 'changed_identifier_binding'
+
+service_metadata_compatibility:
+  included_in_release_compatibility: true
+  enforce:
+    - 'schema_hashes_match'
+    - 'service_ids_match'
+    - 'prices_match'
+    - 'bounds_match_schemas'
+    - 'pcc_dependency_matches'
+    - 'contract_version_matches'
+    - 'production_remains_false'
+    - 'protocol_statuses_remain_honest'
+    - 'no_publication_ids_unless_assigned'
+    - 'no_enabled_protocol_without_implementation_evidence'
+  machine_selection_affecting_changes_require_classification: true
+
+generated_artifact_compatibility:
+  verify:
+    - 'derive_from_frozen_canonical_schemas'
+    - 'contain_release_source_metadata'
+    - 'match_baseline_semantics'
+    - 'no_drift'
+    - 'no_independent_defaults_or_coercion'
+    - 'do_not_accept_rejected_values'
+    - 'do_not_reject_accepted_values_without_documented_runtime_policy'
+  cross_language_baseline_fixtures:
+    - 'baseline_valid_instances_remain_valid'
+    - 'baseline_invalid_instances_remain_invalid'
+    - 'typescript_and_python_agree'
+    - 'generated_models_remain_deterministic'
+  distinctions:
+    - 'artifact_byte_stability'
+    - 'wire_schema_stability'
+    - 'semantic_stability'
+  formatting_only_changes: 'not_semantic_unless_byte_hashes_in_public_binding'

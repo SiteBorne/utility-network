@@ -1,0 +1,11 @@
+{
+  "description": "Change service ID - BREAKING",
+  "type": "object",
+  "properties": {
+    "service_id": {
+      "type": "string",
+      "const": "new_service.v1"
+    }
+  },
+  "required": ["service_id"]
+}

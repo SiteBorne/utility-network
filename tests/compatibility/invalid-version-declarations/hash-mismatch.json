@@ -1,0 +1,7 @@
+{
+  "description": "Hash mismatch - INVALID",
+  "type": "object",
+  "properties": {
+    "field": { "type": "string" }
+  }
+}

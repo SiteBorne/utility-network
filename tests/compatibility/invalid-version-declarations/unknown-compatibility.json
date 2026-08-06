@@ -1,0 +1,7 @@
+{
+  "description": "Unknown compatibility classification - INVALID",
+  "type": "object",
+  "properties": {
+    "field": { "type": "string", "x-unknown-change-type": true }
+  }
+}

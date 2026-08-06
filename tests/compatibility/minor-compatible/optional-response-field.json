@@ -1,0 +1,12 @@
+{
+  "description": "New optional response field",
+  "type": "object",
+  "properties": {
+    "existing_field": { "type": "string" },
+    "new_optional_response": {
+      "type": "string",
+      "description": "New optional response field that old consumers can ignore"
+    }
+  },
+  "required": ["existing_field"]
+}

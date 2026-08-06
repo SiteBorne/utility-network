@@ -1,0 +1,10 @@
+{
+  "description": "Added test-only annotation",
+  "type": "object",
+  "properties": {
+    "field": {
+      "type": "string",
+      "x-test-only": true
+    }
+  }
+}

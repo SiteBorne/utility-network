@@ -1,0 +1,421 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://siteborne.net/schemas/services/agent-verification-output.schema.json",
+  "title": "Agent Output Verification Output",
+  "description": "Output schema for verify_agent_output.v1 service. Must be a valid PCC 1.0.0 document with required net.siteborne.agent-verification.v1 extension.",
+  "allOf": [
+    {
+      "$ref": "https://utility.siteborne.net/schemas/proof-carrying-context.schema.json"
+    },
+    {
+      "type": "object",
+      "required": ["contract", "extensions"],
+      "properties": {
+        "contract": {
+          "type": "object",
+          "required": ["service_id", "service_version", "output_schema_hash"],
+          "properties": {
+            "service_id": {
+              "const": "verify_agent_output.v1"
+            },
+            "service_version": {
+              "const": "v1"
+            },
+            "output_schema_hash": {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$"
+            }
+          }
+        },
+        "extensions": {
+          "type": "object",
+          "required": ["net.siteborne.agent-verification.v1"],
+          "propertyNames": {
+            "type": "string",
+            "minLength": 5,
+            "maxLength": 253,
+            "pattern": "^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?){2,}$"
+          },
+          "properties": {
+            "net.siteborne.agent-verification.v1": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Agent verification extension payload.",
+              "properties": {
+                "verification_mode": {
+                  "type": "string",
+                  "enum": ["standard", "independent_reproduction"]
+                },
+                "outcome": {
+                  "type": "string",
+                  "enum": ["pass", "fail", "conditional"]
+                },
+                "score": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "requirement_results": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["requirement_id", "passed"],
+                    "properties": {
+                      "requirement_id": {
+                        "type": "string"
+                      },
+                      "passed": {
+                        "type": "boolean"
+                      },
+                      "details": {
+                        "type": "string"
+                      },
+                      "evidence_ids": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  },
+                  "maxItems": 50
+                },
+                "schema_result": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["valid"],
+                  "properties": {
+                    "valid": {
+                      "type": "boolean"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "evidence_result": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["resolved", "unresolved_count"],
+                  "properties": {
+                    "resolved": {
+                      "type": "boolean"
+                    },
+                    "resolved_count": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "unresolved_count": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "unresolved_ids": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                },
+                "claim_support_result": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["supported", "unsupported_count"],
+                  "properties": {
+                    "supported": {
+                      "type": "boolean"
+                    },
+                    "supported_count": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "unsupported_count": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "conflicting_count": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  }
+                },
+                "reproduction_result": {
+                  "type": "object",
+                  "description": "Present only for independent_reproduction mode.",
+                  "additionalProperties": false,
+                  "properties": {
+                    "reproduced": {
+                      "type": "boolean"
+                    },
+                    "agreement_score": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    "differences": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "candidate_value": {
+                            "type": ["string", "number", "boolean", "null"]
+                          },
+                          "reproduced_value": {
+                            "type": ["string", "number", "boolean", "null"]
+                          }
+                        }
+                      },
+                      "maxItems": 20
+                    },
+                    "reproduction_output_hash": {
+                      "type": "string",
+                      "pattern": "^sha256:[a-f0-9]{64}$"
+                    }
+                  }
+                },
+                "failed_requirements": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 50
+                },
+                "deterministic_failures": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["requirement_id", "reason"],
+                    "properties": {
+                      "requirement_id": {
+                        "type": "string"
+                      },
+                      "reason": {
+                        "type": "string"
+                      },
+                      "blocks_pass": {
+                        "type": "boolean",
+                        "const": true
+                      }
+                    }
+                  },
+                  "maxItems": 20
+                },
+                "unverifiable_assertions": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "claim_id": {
+                        "type": "string"
+                      },
+                      "reason": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "maxItems": 20
+                },
+                "limitations": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 256
+                  },
+                  "maxItems": 20
+                },
+                "candidate_output_hash": {
+                  "type": "string",
+                  "pattern": "^sha256:[a-f0-9]{64}$"
+                },
+                "reproduction_output_hash": {
+                  "type": "string",
+                  "pattern": "^sha256:[a-f0-9]{64}$",
+                  "description": "Present only for independent_reproduction mode."
+                },
+                "reproduction_agreement_score": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1,
+                  "description": "Present only for independent_reproduction mode."
+                },
+                "verifier_classes_used": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 10
+                },
+                "policy_version": {
+                  "type": "string",
+                  "pattern": "^v[0-9]+(\\.[0-9]+)*$"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "examples": [
+    {
+      "pcc_version": "1.0.0",
+      "job_id": "job_aaaaaaaaaaaaaaaaaaaaaaaa",
+      "subject": {
+        "type": "organization",
+        "canonical_name": "Acme Example Corp",
+        "identifiers": {
+          "domain": "acme.example.com"
+        }
+      },
+      "claims": [],
+      "evidence": [],
+      "completeness": {
+        "requested_fields": 5,
+        "populated_fields": 4,
+        "supported_fields": 4,
+        "score": 0.8,
+        "missing_fields": ["ceo_name"],
+        "unsupported_fields": [],
+        "stale_fields": [],
+        "vector": [
+          {
+            "dimension": "general",
+            "requested": 5,
+            "populated": 4,
+            "supported": 4,
+            "score": 0.8
+          }
+        ]
+      },
+      "provenance": {
+        "routes": [
+          {
+            "type": "direct",
+            "provider": "web",
+            "version": "1.0.0"
+          }
+        ],
+        "providers": [
+          {
+            "name": "web",
+            "version": "1.0.0",
+            "capabilities": ["fetch"]
+          }
+        ],
+        "tools": {
+          "curl": "8.0.0"
+        },
+        "models": [],
+        "software_versions": {
+          "pcc": "1.0.0"
+        },
+        "policy_versions": {
+          "verification": "1.0.0"
+        },
+        "transformations": [],
+        "cache_provenance": {
+          "enabled": false,
+          "hit": false
+        },
+        "execution_environment": {
+          "runtime": "node",
+          "version": "22.0.0",
+          "platform": "linux"
+        },
+        "verification_routes": []
+      },
+      "verification": {
+        "schema_valid": true,
+        "material_claims_supported": true,
+        "evidence_accessibility": 1.0,
+        "freshness": 1.0,
+        "completeness": 0.8,
+        "cross_source_agreement": 1.0,
+        "provenance_valid": true,
+        "prompt_injection_result": {
+          "checked": true,
+          "result": "clean"
+        },
+        "deterministic_failures": [],
+        "verifier_versions": {
+          "pcc": "1.0.0"
+        },
+        "policy": "pol_aaaaaaaaaaaaaaaaaaaaaaaa",
+        "decision": "pass",
+        "score": 0.9,
+        "failed_requirements": []
+      },
+      "receipt": {
+        "output_hash": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "canonicalization_algorithm": "RFC8785-JCS",
+        "policy_hash": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "schema_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+        "signature_algorithm": "Ed25519",
+        "signing_key_id": "kid_aaaaaaaaaaaaaaaaaaaaaaaa",
+        "signature": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        "signed_at": "2026-08-05T10:00:00Z"
+      },
+      "contract": {
+        "input_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "input_schema_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "quote_id": "qte_aaaaaaaaaaaaaaaaaaaaaaaa",
+        "mode": "paid",
+        "currency": "USD",
+        "minimum_quality": 0.8,
+        "freshness_seconds": 3600,
+        "issued_at": "2026-08-05T10:00:00Z",
+        "expires_at": "2026-08-06T10:00:00Z",
+        "idempotency_key": "idk_aaaaaaaaaaaaaaaaaaaaaaaa",
+        "service_id": "verify_agent_output.v1",
+        "service_version": "v1",
+        "output_schema_hash": "sha256:abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+      },
+      "extensions": {
+        "net.siteborne.agent-verification.v1": {
+          "verification_mode": "standard",
+          "outcome": "pass",
+          "score": 0.92,
+          "requirement_results": [
+            {
+              "requirement_id": "req_1",
+              "passed": true,
+              "evidence_ids": ["evd_1"]
+            },
+            {
+              "requirement_id": "req_2",
+              "passed": true,
+              "evidence_ids": ["evd_2"]
+            }
+          ],
+          "schema_result": {
+            "valid": true,
+            "errors": []
+          },
+          "evidence_result": {
+            "resolved": true,
+            "resolved_count": 2,
+            "unresolved_count": 0
+          },
+          "claim_support_result": {
+            "supported": true,
+            "supported_count": 1,
+            "unsupported_count": 0
+          },
+          "candidate_output_hash": "sha256:abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+          "verifier_classes_used": ["schema_validator", "evidence_resolver"],
+          "policy_version": "v1"
+        }
+      }
+    }
+  ]
+}

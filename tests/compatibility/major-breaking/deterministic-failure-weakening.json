@@ -1,0 +1,10 @@
+{
+  "description": "Weaken deterministic failure - BREAKING",
+  "type": "object",
+  "properties": {
+    "deterministic_failure": {
+      "type": "boolean",
+      "default": false
+    }
+  }
+}

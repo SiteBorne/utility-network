@@ -1,0 +1,11 @@
+{
+  "description": "Change exact to upto - BREAKING",
+  "type": "object",
+  "properties": {
+    "pricing_scheme": {
+      "type": "string",
+      "enum": ["upto"]
+    }
+  },
+  "required": ["pricing_scheme"]
+}

@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://siteborne.net/schemas/services/document-evidence-input.schema.json",
+  "title": "Document Evidence JSON Input",
+  "description": "Input schema for document_evidence_json.v1 service. Exactly one document reference mode required.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "artifact_reference": {
+      "$ref": "https://siteborne.net/schemas/common/authorized-artifact-reference.schema.json",
+      "description": "Authorized artifact reference (mode 1)."
+    },
+    "upload_reference": {
+      "type": "object",
+      "description": "Authorized upload reference (mode 2).",
+      "additionalProperties": false,
+      "required": ["upload_id", "media_type", "size_bytes"],
+      "properties": {
+        "upload_id": { "type": "string", "maxLength": 512 },
+        "media_type": { "type": "string", "enum": ["application/pdf", "image/png", "image/jpeg"] },
+        "size_bytes": { "type": "integer", "minimum": 1, "maximum": 10485760 },
+        "content_hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" }
+      }
+    },
+    "document_url": {
+      "type": "string",
+      "description": "Public document URL (mode 3).",
+      "format": "uri",
+      "maxLength": 2048
+    },
+    "declared_page_count": {
+      "type": "integer",
+      "description": "Declared page count when known.",
+      "minimum": 1,
+      "maximum": 10
+    },
+    "page_range": {
+      "type": "object",
+      "description": "Page range to process (1-indexed, inclusive).",
+      "additionalProperties": false,
+      "properties": {
+        "start": { "type": "integer", "minimum": 1, "maximum": 10 },
+        "end": { "type": "integer", "minimum": 1, "maximum": 10 }
+      }
+    },
+    "extraction_request": {
+      "type": "object",
+      "description": "Extraction configuration.",
+      "additionalProperties": false,
+      "properties": {
+        "extract_text": { "type": "boolean", "default": true },
+        "extract_tables": { "type": "boolean", "default": false },
+        "extract_key_values": { "type": "boolean", "default": false },
+        "buyer_schema": {
+          "type": "object",
+          "additionalProperties": true,
+          "maxProperties": 50,
+          "maxDepth": 5
+        }
+      }
+    },
+    "ocr_permission": {
+      "type": "boolean",
+      "description": "Whether OCR is permitted for image-based content.",
+      "default": false
+    },
+    "table_extraction_request": {
+      "type": "boolean",
+      "description": "Whether table extraction is requested.",
+      "default": false
+    },
+    "language_hints": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[a-z]{2,3}(-[A-Z]{2})?$" },
+      "maxItems": 5,
+      "description": "Language hints for OCR/extraction (BCP 47)."
+    },
+    "maximum_authorized_price": {
+      "$ref": "https://siteborne.net/schemas/common/money.schema.json"
+    },
+    "minimum_verification_score": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "default": 0.7
+    },
+    "retention_preference": {
+      "type": "string",
+      "enum": ["none", "temporary", "permanent"],
+      "default": "temporary",
+      "description": "Retention preference within policy limits."
+    }
+  },
+  "oneOf": [
+    { "required": ["artifact_reference"] },
+    { "required": ["upload_reference"] },
+    { "required": ["document_url"] }
+  ],
+  "examples": [
+    {
+      "artifact_reference": {
+        "artifact_id": "doc/abc123/contract.pdf",
+        "media_type": "application/pdf",
+        "size_bytes": 2048576,
+        "page_count": 5,
+        "content_hash": "sha256:abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+        "authorization": "buyer_authorized"
+      },
+      "extraction_request": { "extract_tables": true, "extract_key_values": true },
+      "ocr_permission": true,
+      "maximum_authorized_price": { "amount": "0.19", "currency": "USD" }
+    }
+  ]
+}

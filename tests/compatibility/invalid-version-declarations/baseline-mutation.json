@@ -1,0 +1,7 @@
+{
+  "description": "Baseline mutation - INVALID",
+  "type": "object",
+  "properties": {
+    "field": { "type": "string" }
+  }
+}

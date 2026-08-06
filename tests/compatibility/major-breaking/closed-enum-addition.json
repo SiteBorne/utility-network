@@ -1,0 +1,11 @@
+{
+  "description": "Add closed enum value - BREAKING under strict consumer",
+  "type": "object",
+  "properties": {
+    "mode": {
+      "type": "string",
+      "enum": ["existing_mode", "new_mode"]
+    }
+  },
+  "required": ["mode"]
+}

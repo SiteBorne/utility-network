@@ -1,0 +1,19 @@
+{
+  "baseline_version": "1.0.0",
+  "candidate_version": "1.0.0",
+  "compatible": true,
+  "required_version_bump": "none",
+  "changes": [],
+  "policy_version": "contract-compatibility-v1",
+  "verdict": "pass",
+  "comparison_timestamp": "2026-08-05T22:45:00Z",
+  "pcc_dependency": {
+    "schema_release": "1.0.1",
+    "schema_sha256": "f664208e387b161ab7897d8544d9c7d987501eba5764e2dde0ea69586e33dbb5"
+  },
+  "files_compared": 28,
+  "tool_versions": {
+    "node": "20.x",
+    "pnpm": "9.x"
+  }
+}

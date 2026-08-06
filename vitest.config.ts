@@ -6,11 +6,16 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     include: [
-      'packages/**/*.{test,spec}.ts',
+      'packages/**/src/**/*.{test,spec}.ts',
       'apps/edge-api/**/*.{test,spec}.ts',
       'scripts/**/*.{test,spec}.ts',
     ],
-    exclude: ['node_modules/**', 'dist/**', 'services/modal-worker/**'],
+    exclude: [
+      'node_modules/**',
+      'dist/**',
+      'services/modal-worker/**',
+      'packages/**/node_modules/**',
+    ],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],

@@ -1,0 +1,7 @@
+{
+  "description": "Generator formatting correction - semantically identical",
+  "type": "object",
+  "properties": {
+    "field": { "type": "string" }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "description": "Change regex pattern - BREAKING",
+  "type": "object",
+  "properties": {
+    "field": {
+      "type": "string",
+      "pattern": "^[A-Z]+$"
+    }
+  },
+  "required": ["field"]
+}

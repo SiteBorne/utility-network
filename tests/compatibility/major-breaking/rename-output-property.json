@@ -1,0 +1,8 @@
+{
+  "description": "Rename output property - BREAKING",
+  "type": "object",
+  "properties": {
+    "renamed_field": { "type": "string" }
+  },
+  "required": ["renamed_field"]
+}

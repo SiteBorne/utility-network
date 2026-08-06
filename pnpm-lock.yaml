@@ -69,12 +69,18 @@ importers:
       eslint:
         specifier: ^9.0.0
         version: 9.18.0
+      json-schema-library:
+        specifier: 11.6.2
+        version: 11.6.2
       typescript:
         specifier: ^5.5.0
         version: 5.7.3
       vitest:
         specifier: ^2.0.0
         version: 2.1.8(@types/node@22.10.5)
+      yaml:
+        specifier: ^2.5.0
+        version: 2.7.0
 
   packages/knowledge-graph: {}
 
@@ -84,7 +90,7 @@ importers:
         specifier: ^2.1.0
         version: 2.3.0
       canonical-json:
-        specifier: ^0.4.0
+        specifier: 0.4.0
         version: 0.4.0
       zod:
         specifier: ^3.23.0
@@ -721,6 +727,18 @@ packages:
       }
     engines: { node: '>=18.18' }
 
+  '@hyperjump/json-schema-formats@1.0.4':
+    resolution:
+      {
+        integrity: sha512-EuP4W0jN1hnpoVF6zLtcTFs4pKyfq7dBkMli0WV7KgqKuLsdvQGEtXqJB7QT7AjXZRWeAlou5EyFAKK2xcN9iw==,
+      }
+
+  '@hyperjump/uri@1.3.4':
+    resolution:
+      {
+        integrity: sha512-aUVWwu2GtC/cU4DwdTM+b+5jjboM6wft6vNg1+7pUTk/nNRNaBYcYhaEnCir9eRLBbkcGPkiEO7XRUlcDkxj4Q==,
+      }
+
   '@jridgewell/sourcemap-codec@1.5.0':
     resolution:
       {
@@ -884,6 +902,12 @@ packages:
       }
     cpu: [x64]
     os: [win32]
+
+  '@sagold/json-pointer@7.2.1':
+    resolution:
+      {
+        integrity: sha512-8EX4r5Royl5M3qNPTh5W5njdOtRqbWgQfVv26DbzjGj2/55b60EqvbiqUIglzw7fADfY/Io6jDJxGNJHmC+g8g==,
+      }
 
   '@types/estree@1.0.6':
     resolution:
@@ -1341,6 +1365,12 @@ packages:
       }
     engines: { node: '>=8.0.0' }
 
+  fast-copy@4.0.4:
+    resolution:
+      {
+        integrity: sha512-eVAiWVNPSEGIzDl5yPuLrx8fNMogScXvD9xp1Kzd41FjRIz2I3sSIcxsFeM5EzFfHAfobdvs8ZySffUopljvIA==,
+      }
+
   fast-deep-equal@3.1.3:
     resolution:
       {
@@ -1434,6 +1464,12 @@ packages:
       }
     engines: { node: '>=16.9.0' }
 
+  idn-hostname@15.1.10:
+    resolution:
+      {
+        integrity: sha512-/mSXWRhVasTJ7Z4z18523rTA6CmStYN29yDt+oXi9fe1/M0SO2Un1BgUr3v28aAZG5hWicyUtIamC/juXt3nZQ==,
+      }
+
   ignore@5.3.2:
     resolution:
       {
@@ -1493,6 +1529,12 @@ packages:
     resolution:
       {
         integrity: sha512-4bV5BfR2mqfQTJm+V5tPPdf+ZpuhiIvTuAB5g8kcrXOZpTT/QwwVRWBywX1ozr6lEuPdbHxwaJlm9G6mI2sfSQ==,
+      }
+
+  json-schema-library@11.6.2:
+    resolution:
+      {
+        integrity: sha512-BwvoJfc6RNrYRxQ9AujaTMaLdQosdceRe0huKMnnIJa2b4QZlnmPgQm7iUMoyxS2ioTsTMVPWjuoqvFYF0HZ4Q==,
       }
 
   json-schema-traverse@0.4.1:
@@ -1906,6 +1948,12 @@ packages:
         integrity: sha512-7rKUyy33Q1yc98pQ1DAmLtwX109F7TIfWlW1Ydo8Wl1ii1SeHieeh0HHfPeL2fMXK6z0s8ecKs9frCuLJvndBg==,
       }
 
+  valid-url@1.0.9:
+    resolution:
+      {
+        integrity: sha512-QQDsV8OnSf5Uc30CKSwG9lnhMPe6exHtTXLRYX8uMwKENy640pU+2BgBL0LRbDh/eYRahNCS7aewCx0wf3NYVA==,
+      }
+
   vite-node@2.1.8:
     resolution:
       {
@@ -2232,6 +2280,13 @@ snapshots:
 
   '@humanwhocodes/retry@0.4.1': {}
 
+  '@hyperjump/json-schema-formats@1.0.4':
+    dependencies:
+      '@hyperjump/uri': 1.3.4
+      idn-hostname: 15.1.10
+
+  '@hyperjump/uri@1.3.4': {}
+
   '@jridgewell/sourcemap-codec@1.5.0': {}
 
   '@noble/ed25519@2.3.0': {}
@@ -2292,6 +2347,8 @@ snapshots:
 
   '@rollup/rollup-win32-x64-msvc@4.30.1':
     optional: true
+
+  '@sagold/json-pointer@7.2.1': {}
 
   '@types/estree@1.0.6': {}
 
@@ -2650,6 +2707,8 @@ snapshots:
     dependencies:
       pure-rand: 6.1.0
 
+  fast-copy@4.0.4: {}
+
   fast-deep-equal@3.1.3: {}
 
   fast-json-stable-stringify@2.1.0: {}
@@ -2689,6 +2748,10 @@ snapshots:
 
   hono@4.13.0: {}
 
+  idn-hostname@15.1.10:
+    dependencies:
+      punycode: 2.3.1
+
   ignore@5.3.2: {}
 
   ignore@7.0.6: {}
@@ -2713,6 +2776,15 @@ snapshots:
       argparse: 2.0.1
 
   json-buffer@3.0.1: {}
+
+  json-schema-library@11.6.2:
+    dependencies:
+      '@hyperjump/json-schema-formats': 1.0.4
+      '@sagold/json-pointer': 7.2.1
+      fast-copy: 4.0.4
+      fast-deep-equal: 3.1.3
+      uri-js: 4.4.1
+      valid-url: 1.0.9
 
   json-schema-traverse@0.4.1: {}
 
@@ -2923,6 +2995,8 @@ snapshots:
   uri-js@4.4.1:
     dependencies:
       punycode: 2.3.1
+
+  valid-url@1.0.9: {}
 
   vite-node@2.1.8(@types/node@22.10.5):
     dependencies:

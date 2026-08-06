@@ -1,0 +1,11 @@
+{
+  "description": "Remove enum value - BREAKING",
+  "type": "object",
+  "properties": {
+    "mode": {
+      "type": "string",
+      "enum": ["remaining_mode"]
+    }
+  },
+  "required": ["mode"]
+}

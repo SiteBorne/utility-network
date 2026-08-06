@@ -1,0 +1,8 @@
+{
+  "description": "Change string to number - BREAKING",
+  "type": "object",
+  "properties": {
+    "field": { "type": "number" }
+  },
+  "required": ["field"]
+}

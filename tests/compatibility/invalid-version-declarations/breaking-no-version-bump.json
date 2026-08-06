@@ -1,0 +1,9 @@
+{
+  "description": "Breaking change with version unchanged - INVALID",
+  "type": "object",
+  "properties": {
+    "existing_field": { "type": "string" },
+    "new_required_field": { "type": "string" }
+  },
+  "required": ["existing_field", "new_required_field"]
+}

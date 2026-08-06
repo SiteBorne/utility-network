@@ -1,0 +1,11 @@
+{
+  "description": "Change PCC dependency - BREAKING",
+  "type": "object",
+  "properties": {
+    "pcc_version": {
+      "type": "string",
+      "const": "2.0.0"
+    }
+  },
+  "required": ["pcc_version"]
+}

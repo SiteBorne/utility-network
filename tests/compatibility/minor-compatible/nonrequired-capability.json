@@ -1,0 +1,13 @@
+{
+  "description": "New non-required capability metadata",
+  "type": "object",
+  "properties": {
+    "existing_field": { "type": "string" },
+    "capabilities": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "New optional capability that does not affect existing behavior"
+    }
+  },
+  "required": ["existing_field"]
+}

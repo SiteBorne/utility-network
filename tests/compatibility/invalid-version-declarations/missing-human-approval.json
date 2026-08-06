@@ -1,0 +1,9 @@
+{
+  "description": "Missing human approval marker - INVALID",
+  "type": "object",
+  "properties": {
+    "existing_field": { "type": "string" },
+    "new_optional_field": { "type": "string" }
+  },
+  "required": ["existing_field"]
+}

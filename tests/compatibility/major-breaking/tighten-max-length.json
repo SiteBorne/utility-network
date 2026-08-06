@@ -1,0 +1,11 @@
+{
+  "description": "Tighten maximum length - BREAKING",
+  "type": "object",
+  "properties": {
+    "field": {
+      "type": "string",
+      "maxLength": 50
+    }
+  },
+  "required": ["field"]
+}

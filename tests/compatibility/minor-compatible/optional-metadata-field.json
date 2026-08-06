@@ -1,0 +1,15 @@
+{
+  "description": "New optional metadata field",
+  "type": "object",
+  "properties": {
+    "existing_field": { "type": "string" },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "new_optional_metadata": { "type": "string" }
+      },
+      "additionalProperties": true
+    }
+  },
+  "required": ["existing_field"]
+}

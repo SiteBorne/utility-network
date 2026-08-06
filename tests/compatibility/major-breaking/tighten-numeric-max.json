@@ -1,0 +1,11 @@
+{
+  "description": "Tighten numeric maximum - BREAKING",
+  "type": "object",
+  "properties": {
+    "field": {
+      "type": "number",
+      "maximum": 100
+    }
+  },
+  "required": ["field"]
+}

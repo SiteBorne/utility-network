@@ -1,0 +1,11 @@
+{
+  "description": "Invalid service major identifier - INVALID",
+  "type": "object",
+  "properties": {
+    "service_id": {
+      "type": "string",
+      "const": "invalid_service"
+    }
+  },
+  "required": ["service_id"]
+}

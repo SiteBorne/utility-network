@@ -1,0 +1,12 @@
+{
+  "description": "New optional request field",
+  "type": "object",
+  "properties": {
+    "existing_field": { "type": "string" },
+    "new_optional_field": {
+      "type": "string",
+      "description": "New optional field with safe absence semantic"
+    }
+  },
+  "required": ["existing_field"]
+}

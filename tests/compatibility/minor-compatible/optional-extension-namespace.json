@@ -1,0 +1,14 @@
+{
+  "description": "New optional extension namespace",
+  "type": "object",
+  "properties": {
+    "existing_field": { "type": "string" },
+    "net.siteborne.new-extension.v1": {
+      "type": "object",
+      "properties": {
+        "custom_field": { "type": "string" }
+      }
+    }
+  },
+  "required": ["existing_field"]
+}

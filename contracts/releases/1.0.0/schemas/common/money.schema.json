@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://siteborne.net/schemas/common/money.schema.json",
+  "title": "Decimal Money",
+  "description": "Canonical decimal-safe money representation. No binary floating-point. Amount is a canonical decimal string.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["amount", "currency"],
+  "properties": {
+    "amount": {
+      "type": "string",
+      "description": "Canonical decimal string. No scientific notation, no leading zeros (except single '0'), no trailing zeros unless significant, no sign. Maximum 18 decimal places.",
+      "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]{1,18})?$",
+      "examples": ["0", "0.009", "0.012", "0.019", "0.029", "0.039", "0.049", "0.19"]
+    },
+    "currency": {
+      "type": "string",
+      "description": "ISO 4217 currency code.",
+      "pattern": "^[A-Z]{3}$",
+      "enum": ["USD"],
+      "default": "USD"
+    },
+    "network": {
+      "type": "string",
+      "description": "Payment network identifier (e.g., 'base-mainnet', 'base-sepolia'). Optional for non-payment contexts.",
+      "pattern": "^[a-z0-9-]+$",
+      "maxLength": 64
+    },
+    "asset": {
+      "type": "string",
+      "description": "Payment asset identifier (e.g., 'USDC', 'ETH'). Optional for non-payment contexts.",
+      "pattern": "^[A-Z0-9]{3,10}$"
+    },
+    "precision": {
+      "type": "integer",
+      "description": "Maximum decimal places supported by the asset/network. Metadata only.",
+      "minimum": 0,
+      "maximum": 18,
+      "default": 6
+    }
+  },
+  "examples": [
+    { "amount": "0.039", "currency": "USD" },
+    { "amount": "0.19", "currency": "USD", "network": "base-mainnet", "asset": "USDC" }
+  ]
+}

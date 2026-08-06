@@ -1,0 +1,11 @@
+{
+  "description": "Change canonical money format - BREAKING",
+  "type": "object",
+  "properties": {
+    "amount": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d{4}$"
+    }
+  },
+  "required": ["amount"]
+}
