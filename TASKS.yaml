@@ -448,7 +448,7 @@ tasks:
   - id: 'SUN-0101'
     title: 'Define input/output schemas for all services (Phase 3b)'
     phase: 'phase_3_contracts'
-    state: 'active'
+    state: 'accepted'
     owner_agent: 'architect'
     dependencies:
       - 'SUN-0100'
@@ -457,15 +457,36 @@ tasks:
       - 'company-evidence-input.schema.json, web-context-input.schema.json, document-evidence-input.schema.json, verification-input.schema.json'
       - 'Output schemas, error schemas, quote schema, receipt schema'
       - 'OpenAPI drift test passes'
-    evidence: []
-    next_action: 'Freeze contracts version 1.0.0'
+    evidence:
+      - 'schemas/common/*.schema.json (9 files)'
+      - 'schemas/services/*.schema.json (8 files)'
+      - 'schemas/MANIFEST.json'
+      - 'packages/contracts/generated/typescript/{common,services}/*.ts, pcc.ts'
+      - 'packages/contracts/generated/python/{common,services}/*.py, pcc.py'
+      - 'packages/pcc-schema/scripts/{create-combined-schemas,create-ts-schemas,generate-service-models,drift-check-services,generate-manifest}.ts'
+      - 'packages/contracts/src/semantic/validators.ts'
+      - 'packages/contracts/src/semantic/validators.py'
+      - 'packages/contracts/src/semantic/validators.test.ts'
+      - 'packages/contracts/src/semantic/test_validators.py'
+      - 'packages/pcc-schema/tests/python/test_schema_examples.py'
+      - 'docs/reports/SUN-0101-service-schemas-report.md'
+      - 'docs/decisions/0008-pcc-extension-container-patch.md'
+    next_action: 'Freeze contracts version 1.0.0 (now targeting PCC 1.0.1 — see SUN-0100.amendment and ADR-0008)'
     blocker: null
     commit_ref: null
+    notes: >-
+      OpenAPI drift test acceptance criterion not applicable — no OpenAPI spec
+      exists in this repo yet; this increment delivers the JSON Schema
+      contract layer only. All other acceptance criteria satisfied: 17
+      canonical schemas (9 common + 8 service input/output) structurally
+      validated, generated (TS+Python), hashed, manifested, fixture-validated,
+      drift-enforced (0 drift), and covered by semantic validators. 284 tests
+      pass (155 TS + 129 Python). See docs/reports/SUN-0101-service-schemas-report.md.
 
   - id: 'SUN-0102'
     title: 'Freeze contracts version 1.0.0 (Phase 3c)'
     phase: 'phase_3_contracts'
-    state: 'pending'
+    state: 'active'
     owner_agent: 'architect'
     dependencies:
       - 'SUN-0101'

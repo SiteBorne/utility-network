@@ -16,7 +16,7 @@
     "service_id": {
       "type": "string",
       "description": "Canonical service identifier. Must match the target service schema.",
-      "pattern": "^[a-z0-9_]+\\.[a-z0-9_]+\\.v[0-9]+$",
+      "pattern": "^[a-z0-9_]+\\.v[0-9]+$",
       "enum": [
         "company_evidence_graph.v1",
         "web_context_verified.v1",
@@ -109,11 +109,11 @@
   },
   "examples": [
     {
-      "request_id": "01h9k3v7-4b2c-4d8e-9f1a-2b3c4d5e6f7a",
+      "request_id": "0fa9c307-4b2c-4d8e-9f1a-2b3c4d5e6f7a",
       "service_id": "company_evidence_graph.v1",
       "service_version": "v1",
       "response_schema_version": "v1",
-      "idempotency_key": "idem_abc123xyz",
+      "idempotency_key": "idem_abc123xyz4567890",
       "freshness_seconds": 86400,
       "minimum_verification_score": 0.7,
       "maximum_authorized_price": { "amount": "0.039", "currency": "USD" },

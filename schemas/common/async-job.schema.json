@@ -31,7 +31,7 @@
     "service_id": {
       "type": "string",
       "description": "Service identifier.",
-      "pattern": "^[a-z0-9_]+\\.[a-z0-9_]+\\.v[0-9]+$"
+      "pattern": "^[a-z0-9_]+\\.v[0-9]+$"
     },
     "service_version": {
       "type": "string",
@@ -103,8 +103,8 @@
   },
   "examples": [
     {
-      "job_id": "01h9k3v7-4b2c-4d8e-9f1a-2b3c4d5e6f7d",
-      "request_id": "01h9k3v7-4b2c-4d8e-9f1a-2b3c4d5e6f7a",
+      "job_id": "0fa9c307-4b2c-4d8e-9f1a-2b3c4d5e6f7d",
+      "request_id": "0fa9c307-4b2c-4d8e-9f1a-2b3c4d5e6f7a",
       "service_id": "document_evidence_json.v1",
       "service_version": "v1",
       "state": "executing",

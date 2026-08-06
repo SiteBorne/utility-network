@@ -33,7 +33,7 @@
     "service_id": {
       "type": "string",
       "description": "Canonical service identifier.",
-      "pattern": "^[a-z0-9_]+\\.[a-z0-9_]+\\.v[0-9]+$"
+      "pattern": "^[a-z0-9_]+\\.v[0-9]+$"
     },
     "service_version": {
       "type": "string",
@@ -206,6 +206,7 @@
       "pcc_version": "1.0.0",
       "pricing_schemes": ["exact"],
       "base_price": { "amount": "0.039", "currency": "USD" },
+      "maximum_price": { "amount": "0.10", "currency": "USD" },
       "execution_mode": "sync",
       "maximum_input_bytes": 102400,
       "expected_latency_class": "standard",

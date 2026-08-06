@@ -22,8 +22,11 @@
     "typecheck": "tsc --noEmit",
     "generate": "tsx scripts/generate-models.ts",
     "generate:check": "tsx scripts/drift-check.ts",
-    "generate:services": "tsx scripts/generate-service-models.ts",
+    "generate:services:prep": "tsx scripts/create-combined-schemas.ts && tsx scripts/create-ts-schemas.ts",
+    "generate:services": "pnpm generate:services:prep && tsx scripts/generate-service-models.ts",
     "generate:services:check": "tsx scripts/drift-check-services.ts",
+    "manifest:generate": "tsx scripts/generate-manifest.ts",
+    "manifest:check": "tsx scripts/generate-manifest.ts --check",
     "validate:canonicalization": "tsx scripts/validate-canonicalization.ts",
     "validate:compatibility": "tsx scripts/validate-compatibility.ts",
     "validate:signing": "tsx scripts/validate-signing.ts"

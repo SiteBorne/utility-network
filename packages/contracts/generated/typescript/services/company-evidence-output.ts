@@ -1,18 +1,21 @@
-// Generated from /Users/meta4ickal/SITEBORNE Utility Network/schemas/proof-carrying-context.schema.json
+// Generated from /Users/meta4ickal/SITEBORNE Utility Network/schemas/services/company-evidence-output.schema.json
   // DO NOT EDIT MANUALLY — regenerate from canonical schema
   
   /**
+ * Output schema for company_evidence_graph.v1 service. Must be a valid PCC 1.0.0 document
+ * with required net.siteborne.company-evidence.v1 extension.
+ *
  * Normative schema for Proof-Carrying Context 1.0.0. Frozen after compatibility validation
  * passes. Schema patch 1.0.1 (SUN-0100 correction): extension_container now structurally
  * permits qualified extension keys via patternProperties, matching documented semantics;
  * pcc_version (document content compatibility) is unchanged at 1.0.0.
  */
-export interface Pcc {
+export interface CompanyEvidenceOutput {
     claims:       Claim[];
     completeness: Completeness;
     contract:     Contract;
     evidence:     EvidenceItem[];
-    extensions?:  ExtensionContainer;
+    extensions:   ExtensionContainer;
     job_id:       string;
     pcc_version:  PccVersion;
     provenance:   Provenance;
@@ -76,7 +79,7 @@ export interface Contract {
     price?:                    string;
     quote_id:                  string;
     service_id:                ServiceID;
-    service_version:           string;
+    service_version:           ServiceVersion;
 }
 
 /**
@@ -94,7 +97,12 @@ export type Network = "base" | "base-testnet";
 /**
  * Service identifier
  */
-export type ServiceID = "company_evidence_graph.v1" | "web_context_verified.v1" | "document_evidence_json.v1" | "verify_agent_output.v1";
+export type ServiceID = "company_evidence_graph.v1";
+
+/**
+ * Service version
+ */
+export type ServiceVersion = "v1";
 
 export interface EvidenceItem {
     accessibility_status:         AccessibilityStatus;

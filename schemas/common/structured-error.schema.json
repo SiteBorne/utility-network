@@ -65,7 +65,7 @@
     "service_id": {
       "type": "string",
       "description": "Service that produced the error.",
-      "pattern": "^[a-z0-9_]+\\.[a-z0-9_]+\\.v[0-9]+$"
+      "pattern": "^[a-z0-9_]+\\.v[0-9]+$"
     },
     "occurred_at": {
       "type": "string",
@@ -132,12 +132,12 @@
   },
   "examples": [
     {
-      "error_id": "01h9k3v7-4b2c-4d8e-9f1a-2b3c4d5e6f7c",
+      "error_id": "0fa9c307-4b2c-4d8e-9f1a-2b3c4d5e6f7c",
       "error_code": "VALIDATION_INPUT_MISSING",
       "category": "validation",
       "message": "Required field 'company_name' is missing",
       "retryable": false,
-      "request_id": "01h9k3v7-4b2c-4d8e-9f1a-2b3c4d5e6f7a",
+      "request_id": "0fa9c307-4b2c-4d8e-9f1a-2b3c4d5e6f7a",
       "service_id": "company_evidence_graph.v1",
       "occurred_at": "2026-08-05T10:00:00Z",
       "failed_field_paths": ["/company_name"]

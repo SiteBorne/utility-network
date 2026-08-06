@@ -1,0 +1,194 @@
+{
+  "$comment": "Canonical schema manifest for SUN-0101 (17 canonical schemas: 9 common + 8 service input/output) plus the PCC root schema. Regenerate with `pnpm --filter @siteborne/pcc-schema manifest:generate`; verify with `manifest:check`.",
+  "generated_at_note": "Timestamp intentionally omitted — hashes are the source of truth; regenerate to see drift.",
+  "pcc": {
+    "file": "schemas/proof-carrying-context.schema.json",
+    "id": "https://utility.siteborne.net/schemas/proof-carrying-context.schema.json",
+    "title": "Proof-Carrying Context (PCC) v1.0.0",
+    "sha256": "f664208e387b161ab7897d8544d9c7d987501eba5764e2dde0ea69586e33dbb5",
+    "generated": {
+      "typescript": "packages/contracts/generated/typescript/pcc.ts",
+      "python": "packages/contracts/generated/python/pcc.py"
+    }
+  },
+  "common": [
+    {
+      "file": "schemas/common/money.schema.json",
+      "id": "https://siteborne.net/schemas/common/money.schema.json",
+      "title": "Decimal Money",
+      "sha256": "4567307ae24362cb33c1078072cd4d409eb14c0a2783e9941c1d0ec0e7d4b90f",
+      "generated": {
+        "typescript": "packages/contracts/generated/typescript/common/money.ts",
+        "python": "packages/contracts/generated/python/common/money.py"
+      }
+    },
+    {
+      "file": "schemas/common/request-envelope.schema.json",
+      "id": "https://siteborne.net/schemas/common/request-envelope.schema.json",
+      "title": "Service Request Envelope",
+      "sha256": "c3c50ca6e7bea34236e2ed92004f61d69acf52b208ba6d38e072a46900d817a9",
+      "generated": {
+        "typescript": "packages/contracts/generated/typescript/common/request-envelope.ts",
+        "python": "packages/contracts/generated/python/common/request-envelope.py"
+      }
+    },
+    {
+      "file": "schemas/common/quote-request.schema.json",
+      "id": "https://siteborne.net/schemas/common/quote-request.schema.json",
+      "title": "Quote Request",
+      "sha256": "6db5dcb73b5a40ff31bed8c0ce2acd045a785dd64a3bacaec05ede9d26a426bc",
+      "generated": {
+        "typescript": "packages/contracts/generated/typescript/common/quote-request.ts",
+        "python": "packages/contracts/generated/python/common/quote-request.py"
+      }
+    },
+    {
+      "file": "schemas/common/quote-response.schema.json",
+      "id": "https://siteborne.net/schemas/common/quote-response.schema.json",
+      "title": "Quote Response",
+      "sha256": "0fcc1ef9a79fa4548a47af3ba677c3cc260d68dffe4a6c2e53f9cc60d3601b11",
+      "generated": {
+        "typescript": "packages/contracts/generated/typescript/common/quote-response.ts",
+        "python": "packages/contracts/generated/python/common/quote-response.py"
+      }
+    },
+    {
+      "file": "schemas/common/structured-error.schema.json",
+      "id": "https://siteborne.net/schemas/common/structured-error.schema.json",
+      "title": "Structured Error",
+      "sha256": "aa968374d206ff5e8264dad3eca25be6b27e8bd849065843fa8488732c593d98",
+      "generated": {
+        "typescript": "packages/contracts/generated/typescript/common/structured-error.ts",
+        "python": "packages/contracts/generated/python/common/structured-error.py"
+      }
+    },
+    {
+      "file": "schemas/common/service-metadata.schema.json",
+      "id": "https://siteborne.net/schemas/common/service-metadata.schema.json",
+      "title": "Service Metadata",
+      "sha256": "97f514fab559fd067673dad2b3aa546d47beb393160b40d4d1a34956158b03bb",
+      "generated": {
+        "typescript": "packages/contracts/generated/typescript/common/service-metadata.ts",
+        "python": "packages/contracts/generated/python/common/service-metadata.py"
+      }
+    },
+    {
+      "file": "schemas/common/async-job.schema.json",
+      "id": "https://siteborne.net/schemas/common/async-job.schema.json",
+      "title": "Async Job",
+      "sha256": "2979350890d8b2376cf72fabbddbdbfe35182e693eb043d9ca20aa6fe86af994",
+      "generated": {
+        "typescript": "packages/contracts/generated/typescript/common/async-job.ts",
+        "python": "packages/contracts/generated/python/common/async-job.py"
+      }
+    },
+    {
+      "file": "schemas/common/pagination.schema.json",
+      "id": "https://siteborne.net/schemas/common/pagination.schema.json",
+      "title": "Pagination",
+      "sha256": "a966b1d885ecb10d03d35f843bce625e60ca2ab6798040e178baa45ab5db3e31",
+      "generated": {
+        "typescript": "packages/contracts/generated/typescript/common/pagination.ts",
+        "python": "packages/contracts/generated/python/common/pagination.py"
+      }
+    },
+    {
+      "file": "schemas/common/authorized-artifact-reference.schema.json",
+      "id": "https://siteborne.net/schemas/common/authorized-artifact-reference.schema.json",
+      "title": "Authorized Artifact Reference",
+      "sha256": "772db35bb1d19bcee3cfbbfde41da88f77bb10b9afeabe505a15e6a0b25655ac",
+      "generated": {
+        "typescript": "packages/contracts/generated/typescript/common/authorized-artifact-reference.ts",
+        "python": "packages/contracts/generated/python/common/authorized-artifact-reference.py"
+      }
+    }
+  ],
+  "services": [
+    {
+      "file": "schemas/services/company-evidence-input.schema.json",
+      "id": "https://siteborne.net/schemas/services/company-evidence-input.schema.json",
+      "title": "Company Evidence Graph Input",
+      "sha256": "8d9a6c432b019e24a2df4d48dd93424a8782febb49c0c88f7cf9208cf0204dd7",
+      "generated": {
+        "typescript": "packages/contracts/generated/typescript/services/company-evidence-input.ts",
+        "python": "packages/contracts/generated/python/services/company-evidence-input.py"
+      }
+    },
+    {
+      "file": "schemas/services/company-evidence-output.schema.json",
+      "id": "https://siteborne.net/schemas/services/company-evidence-output.schema.json",
+      "title": "Company Evidence Graph Output",
+      "sha256": "54d0a0dac135f978b60f89a616589341c1bb7e23027598f17fecafedad2237d2",
+      "generated": {
+        "typescript": "packages/contracts/generated/typescript/services/company-evidence-output.ts",
+        "python": "packages/contracts/generated/python/services/company-evidence-output.py"
+      }
+    },
+    {
+      "file": "schemas/services/web-context-input.schema.json",
+      "id": "https://siteborne.net/schemas/services/web-context-input.schema.json",
+      "title": "Verified Web Context Input",
+      "sha256": "d3b0762020d4cc1d1e846960ed978cf1237b1741f90213adabe8ed931c2845ea",
+      "generated": {
+        "typescript": "packages/contracts/generated/typescript/services/web-context-input.ts",
+        "python": "packages/contracts/generated/python/services/web-context-input.py"
+      }
+    },
+    {
+      "file": "schemas/services/web-context-output.schema.json",
+      "id": "https://siteborne.net/schemas/services/web-context-output.schema.json",
+      "title": "Verified Web Context Output",
+      "sha256": "2d53c59a2f7f0be4cc53751812450d78eeffa75203492121810db5e6ca0048ad",
+      "generated": {
+        "typescript": "packages/contracts/generated/typescript/services/web-context-output.ts",
+        "python": "packages/contracts/generated/python/services/web-context-output.py"
+      }
+    },
+    {
+      "file": "schemas/services/document-evidence-input.schema.json",
+      "id": "https://siteborne.net/schemas/services/document-evidence-input.schema.json",
+      "title": "Document Evidence JSON Input",
+      "sha256": "19e64c92f088ed8b7a45eef561c5426bb59ce5cc3576b85482aded4f620e57ba",
+      "generated": {
+        "typescript": "packages/contracts/generated/typescript/services/document-evidence-input.ts",
+        "python": "packages/contracts/generated/python/services/document-evidence-input.py"
+      }
+    },
+    {
+      "file": "schemas/services/document-evidence-output.schema.json",
+      "id": "https://siteborne.net/schemas/services/document-evidence-output.schema.json",
+      "title": "Document Evidence JSON Output",
+      "sha256": "bed74cf7240fb28a374f2cdff53386d195b7653aebe4f7f68aa00a169a69ee85",
+      "generated": {
+        "typescript": "packages/contracts/generated/typescript/services/document-evidence-output.ts",
+        "python": "packages/contracts/generated/python/services/document-evidence-output.py"
+      }
+    },
+    {
+      "file": "schemas/services/agent-verification-input.schema.json",
+      "id": "https://siteborne.net/schemas/services/agent-verification-input.schema.json",
+      "title": "Agent Output Verification Input",
+      "sha256": "66d459905cd1a18b57ccb3fc40043a4e4c1a77bc7dba40676fcaf674cacb0f34",
+      "generated": {
+        "typescript": "packages/contracts/generated/typescript/services/agent-verification-input.ts",
+        "python": "packages/contracts/generated/python/services/agent-verification-input.py"
+      }
+    },
+    {
+      "file": "schemas/services/agent-verification-output.schema.json",
+      "id": "https://siteborne.net/schemas/services/agent-verification-output.schema.json",
+      "title": "Agent Output Verification Output",
+      "sha256": "f01f39a64dff16678a87ebf68f93dc6b792f6955541f8d1fcff06dc3598ff4a2",
+      "generated": {
+        "typescript": "packages/contracts/generated/typescript/services/agent-verification-output.ts",
+        "python": "packages/contracts/generated/python/services/agent-verification-output.py"
+      }
+    }
+  ],
+  "counts": {
+    "common": 9,
+    "services": 8,
+    "canonical_total": 17,
+    "including_pcc": 18
+  }
+}

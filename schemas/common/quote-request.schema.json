@@ -24,7 +24,7 @@
     "service_id": {
       "type": "string",
       "description": "Canonical service identifier.",
-      "pattern": "^[a-z0-9_]+\\.[a-z0-9_]+\\.v[0-9]+$",
+      "pattern": "^[a-z0-9_]+\\.v[0-9]+$",
       "enum": [
         "company_evidence_graph.v1",
         "web_context_verified.v1",
@@ -92,12 +92,12 @@
   },
   "examples": [
     {
-      "request_id": "01h9k3v7-4b2c-4d8e-9f1a-2b3c4d5e6f7a",
+      "request_id": "0fa9c307-4b2c-4d8e-9f1a-2b3c4d5e6f7a",
       "service_id": "company_evidence_graph.v1",
       "service_version": "v1",
       "input_hash": "sha256:abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
       "input_schema_hash": "sha256:fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321",
-      "output_schema_hash": "sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcd",
+      "output_schema_hash": "sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
       "requested_pricing_scheme": "exact"
     }
   ]
