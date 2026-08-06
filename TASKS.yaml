@@ -424,9 +424,26 @@ tasks:
       - 'packages/pcc-schema/tests/fixtures/index.ts'
       - 'docs/decisions/0006-pcc-normative-schema.md'
       - 'docs/decisions/0007-pcc-canonicalization-and-signing.md'
+      - 'docs/decisions/0008-pcc-extension-container-patch.md'
+      - 'packages/pcc-schema/src/pcc-extension-container.test.ts'
+      - 'packages/pcc-schema/tests/python/test_pcc_extension_container.py'
     next_action: 'Define input/output schemas for all 4 services'
     blocker: null
     commit_ref: 'bab19d0'
+    amendment:
+      version: '1.0.1'
+      reason: >-
+        Narrowly scoped correction discovered during SUN-0101: extension_container
+        had additionalProperties:false with no properties/patternProperties, so it
+        unconditionally rejected every extension key regardless of what a
+        service-specific schema declared via allOf. Verified independently with
+        Python jsonschema and ajv 6. Fixed by adding patternProperties (same
+        reverse-domain pattern) mapping to a new bounded extension_value
+        definition. pcc_version (document content compatibility) stays 1.0.0;
+        only the schema package/hash moves to 1.0.1. All 100 pre-existing tests
+        plus 46 new tests (17 TS + 29 Python) pass.
+      schema_hash: 'f664208e387b161ab7897d8544d9c7d987501eba5764e2dde0ea69586e33dbb5'
+      decision_record: 'docs/decisions/0008-pcc-extension-container-patch.md'
 
   - id: 'SUN-0101'
     title: 'Define input/output schemas for all services (Phase 3b)'

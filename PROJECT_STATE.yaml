@@ -61,7 +61,10 @@ frozen_decisions:
   standard:
     name: 'Proof-Carrying Context'
     abbreviation: 'PCC'
-    version: '1.0.0'
+    version: '1.0.0' # document content-compatibility version (pcc_version); unchanged by the 1.0.1 schema patch
+    schema_package_version: '1.0.1'
+    schema_hash: 'f664208e387b161ab7897d8544d9c7d987501eba5764e2dde0ea69586e33dbb5'
+    schema_patch: 'docs/decisions/0008-pcc-extension-container-patch.md'
   service_ids:
     - 'company_evidence_graph.v1'
     - 'web_context_verified.v1'

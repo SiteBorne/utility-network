@@ -1,6 +1,6 @@
 {
   "name": "@siteborne/pcc-schema",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "type": "module",
   "description": "PCC normative schema package - Proof-Carrying Context 1.0.0",
@@ -22,6 +22,8 @@
     "typecheck": "tsc --noEmit",
     "generate": "tsx scripts/generate-models.ts",
     "generate:check": "tsx scripts/drift-check.ts",
+    "generate:services": "tsx scripts/generate-service-models.ts",
+    "generate:services:check": "tsx scripts/drift-check-services.ts",
     "validate:canonicalization": "tsx scripts/validate-canonicalization.ts",
     "validate:compatibility": "tsx scripts/validate-compatibility.ts",
     "validate:signing": "tsx scripts/validate-signing.ts"

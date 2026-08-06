@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://utility.siteborne.net/schemas/proof-carrying-context.schema.json",
   "title": "Proof-Carrying Context (PCC) v1.0.0",
-  "description": "Normative schema for Proof-Carrying Context 1.0.0. Frozen after compatibility validation passes.",
+  "description": "Normative schema for Proof-Carrying Context 1.0.0. Frozen after compatibility validation passes. Schema patch 1.0.1 (SUN-0100 correction): extension_container now structurally permits qualified extension keys via patternProperties, matching documented semantics; pcc_version (document content compatibility) is unchanged at 1.0.0.",
   "pcc_version": "1.0.0",
   "type": "object",
   "additionalProperties": false,
@@ -530,7 +530,18 @@
         "maxLength": 253,
         "pattern": "^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?){2,}$"
       },
-      "description": "Controlled extension container. Keys must use reverse-domain qualified namespaces with at least three DNS-safe labels (e.g., net.siteborne.verification.v1, com.example.custom-metrics.v1). Underscores, leading/trailing hyphens, empty labels, and uppercase are forbidden. Maximum 10 extensions. Maximum total namespace key length: 253 characters."
+      "patternProperties": {
+        "^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?){2,}$": {
+          "$ref": "#/definitions/extension_value"
+        }
+      },
+      "description": "Controlled extension container. Keys must use reverse-domain qualified namespaces with at least three DNS-safe labels (e.g., net.siteborne.verification.v1, com.example.custom-metrics.v1). Underscores, leading/trailing hyphens, empty labels, and uppercase are forbidden. Maximum 10 extensions. Maximum total namespace key length: 253 characters. Each value must conform to extension_value (bounded JSON data)."
+    },
+    "extension_value": {
+      "type": "object",
+      "additionalProperties": true,
+      "maxProperties": 200,
+      "description": "Bounded JSON data payload for a single namespaced extension (PCC 1.0.1). Must be a JSON object; unbounded, executable, or policy-changing structures are out of scope for structural validation. Individual services may further narrow this shape for their own namespace via allOf composition."
     }
   },
   "properties": {

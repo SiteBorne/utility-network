@@ -465,6 +465,14 @@ class Subject(BaseModel):
     identifiers: dict[str, str] | None = None
 
 
+class ExtensionValue(RootModel[dict[str, Any]]):
+    """
+    Bounded JSON data payload for a single namespaced extension (PCC 1.0.1). Must be a JSON object; unbounded, executable, or policy-changing structures are out of scope for structural validation. Individual services may further narrow this shape for their own namespace via allOf composition.
+    """
+
+    root: dict[str, Any] = Field(..., max_length=200)
+
+
 class ExtensionContainer(
     RootModel[
         dict[
@@ -473,7 +481,7 @@ class ExtensionContainer(
                 min_length=5,
                 max_length=253,
             ),
-            Any,
+            ExtensionValue,
         ]
     ]
 ):
@@ -483,17 +491,16 @@ class ExtensionContainer(
             min_length=5,
             max_length=253,
         ),
-        Any,
+        ExtensionValue,
     ] = Field(
         ...,
-        description='Controlled extension container. Keys must use reverse-domain qualified namespaces with at least three DNS-safe labels (e.g., net.siteborne.verification.v1, com.example.custom-metrics.v1). Underscores, leading/trailing hyphens, empty labels, and uppercase are forbidden. Maximum 10 extensions. Maximum total namespace key length: 253 characters.',
-        max_length=0,
+        description='Controlled extension container. Keys must use reverse-domain qualified namespaces with at least three DNS-safe labels (e.g., net.siteborne.verification.v1, com.example.custom-metrics.v1). Underscores, leading/trailing hyphens, empty labels, and uppercase are forbidden. Maximum 10 extensions. Maximum total namespace key length: 253 characters. Each value must conform to extension_value (bounded JSON data).',
     )
 
 
 class ProofCarryingContextPCCV100(BaseModel):
     """
-    Normative schema for Proof-Carrying Context 1.0.0. Frozen after compatibility validation passes.
+    Normative schema for Proof-Carrying Context 1.0.0. Frozen after compatibility validation passes. Schema patch 1.0.1 (SUN-0100 correction): extension_container now structurally permits qualified extension keys via patternProperties, matching documented semantics; pcc_version (document content compatibility) is unchanged at 1.0.0.
     """
 
     model_config = ConfigDict(
