@@ -9,18 +9,11 @@
     },
     {
       "type": "object",
-      "required": [
-        "contract",
-        "extensions"
-      ],
+      "required": ["contract", "extensions"],
       "properties": {
         "contract": {
           "type": "object",
-          "required": [
-            "service_id",
-            "service_version",
-            "output_schema_hash"
-          ],
+          "required": ["service_id", "service_version", "output_schema_hash"],
           "properties": {
             "service_id": {
               "const": "company_evidence_graph.v1"
@@ -36,9 +29,7 @@
         },
         "extensions": {
           "type": "object",
-          "required": [
-            "net.siteborne.company-evidence.v1"
-          ],
+          "required": ["net.siteborne.company-evidence.v1"],
           "propertyNames": {
             "type": "string",
             "minLength": 5,
@@ -100,12 +91,7 @@
                       "properties": {
                         "status": {
                           "type": "string",
-                          "enum": [
-                            "complete",
-                            "partial",
-                            "empty",
-                            "unavailable"
-                          ]
+                          "enum": ["complete", "partial", "empty", "unavailable"]
                         },
                         "items": {
                           "type": "array",
@@ -163,11 +149,7 @@
                 "normalized_facts": {
                   "type": "object",
                   "additionalProperties": {
-                    "type": [
-                      "string",
-                      "number",
-                      "boolean"
-                    ]
+                    "type": ["string", "number", "boolean"]
                   },
                   "description": "Normalized XBRL facts keyed by concept."
                 },
@@ -266,12 +248,7 @@
                   "items": {
                     "type": "object",
                     "additionalProperties": false,
-                    "required": [
-                      "claim",
-                      "scope",
-                      "sources_checked",
-                      "confidence"
-                    ],
+                    "required": ["claim", "scope", "sources_checked", "confidence"],
                     "properties": {
                       "claim": {
                         "type": "string",
@@ -411,9 +388,7 @@
         "populated_fields": 4,
         "supported_fields": 4,
         "score": 0.8,
-        "missing_fields": [
-          "ceo_name"
-        ],
+        "missing_fields": ["ceo_name"],
         "unsupported_fields": [],
         "stale_fields": [],
         "vector": [
@@ -438,9 +413,7 @@
           {
             "name": "web",
             "version": "1.0.0",
-            "capabilities": [
-              "fetch"
-            ]
+            "capabilities": ["fetch"]
           }
         ],
         "tools": {
@@ -532,10 +505,7 @@
               "source_count": 1
             }
           },
-          "limitations": [
-            "cache-only SEC data",
-            "no real-time price data"
-          ],
+          "limitations": ["cache-only SEC data", "no real-time price data"],
           "declared_freshness": "P1D"
         }
       }

@@ -9,18 +9,11 @@
     },
     {
       "type": "object",
-      "required": [
-        "contract",
-        "extensions"
-      ],
+      "required": ["contract", "extensions"],
       "properties": {
         "contract": {
           "type": "object",
-          "required": [
-            "service_id",
-            "service_version",
-            "output_schema_hash"
-          ],
+          "required": ["service_id", "service_version", "output_schema_hash"],
           "properties": {
             "service_id": {
               "const": "verify_agent_output.v1"
@@ -36,9 +29,7 @@
         },
         "extensions": {
           "type": "object",
-          "required": [
-            "net.siteborne.agent-verification.v1"
-          ],
+          "required": ["net.siteborne.agent-verification.v1"],
           "propertyNames": {
             "type": "string",
             "minLength": 5,
@@ -53,18 +44,11 @@
               "properties": {
                 "verification_mode": {
                   "type": "string",
-                  "enum": [
-                    "standard",
-                    "independent_reproduction"
-                  ]
+                  "enum": ["standard", "independent_reproduction"]
                 },
                 "outcome": {
                   "type": "string",
-                  "enum": [
-                    "pass",
-                    "fail",
-                    "conditional"
-                  ]
+                  "enum": ["pass", "fail", "conditional"]
                 },
                 "score": {
                   "type": "number",
@@ -76,10 +60,7 @@
                   "items": {
                     "type": "object",
                     "additionalProperties": false,
-                    "required": [
-                      "requirement_id",
-                      "passed"
-                    ],
+                    "required": ["requirement_id", "passed"],
                     "properties": {
                       "requirement_id": {
                         "type": "string"
@@ -103,9 +84,7 @@
                 "schema_result": {
                   "type": "object",
                   "additionalProperties": false,
-                  "required": [
-                    "valid"
-                  ],
+                  "required": ["valid"],
                   "properties": {
                     "valid": {
                       "type": "boolean"
@@ -121,10 +100,7 @@
                 "evidence_result": {
                   "type": "object",
                   "additionalProperties": false,
-                  "required": [
-                    "resolved",
-                    "unresolved_count"
-                  ],
+                  "required": ["resolved", "unresolved_count"],
                   "properties": {
                     "resolved": {
                       "type": "boolean"
@@ -148,10 +124,7 @@
                 "claim_support_result": {
                   "type": "object",
                   "additionalProperties": false,
-                  "required": [
-                    "supported",
-                    "unsupported_count"
-                  ],
+                  "required": ["supported", "unsupported_count"],
                   "properties": {
                     "supported": {
                       "type": "boolean"
@@ -193,20 +166,10 @@
                             "type": "string"
                           },
                           "candidate_value": {
-                            "type": [
-                              "string",
-                              "number",
-                              "boolean",
-                              "null"
-                            ]
+                            "type": ["string", "number", "boolean", "null"]
                           },
                           "reproduced_value": {
-                            "type": [
-                              "string",
-                              "number",
-                              "boolean",
-                              "null"
-                            ]
+                            "type": ["string", "number", "boolean", "null"]
                           }
                         }
                       },
@@ -230,10 +193,7 @@
                   "items": {
                     "type": "object",
                     "additionalProperties": false,
-                    "required": [
-                      "requirement_id",
-                      "reason"
-                    ],
+                    "required": ["requirement_id", "reason"],
                     "properties": {
                       "requirement_id": {
                         "type": "string"
@@ -324,9 +284,7 @@
         "populated_fields": 4,
         "supported_fields": 4,
         "score": 0.8,
-        "missing_fields": [
-          "ceo_name"
-        ],
+        "missing_fields": ["ceo_name"],
         "unsupported_fields": [],
         "stale_fields": [],
         "vector": [
@@ -351,9 +309,7 @@
           {
             "name": "web",
             "version": "1.0.0",
-            "capabilities": [
-              "fetch"
-            ]
+            "capabilities": ["fetch"]
           }
         ],
         "tools": {
@@ -433,16 +389,12 @@
             {
               "requirement_id": "req_1",
               "passed": true,
-              "evidence_ids": [
-                "evd_1"
-              ]
+              "evidence_ids": ["evd_1"]
             },
             {
               "requirement_id": "req_2",
               "passed": true,
-              "evidence_ids": [
-                "evd_2"
-              ]
+              "evidence_ids": ["evd_2"]
             }
           ],
           "schema_result": {
@@ -460,10 +412,7 @@
             "unsupported_count": 0
           },
           "candidate_output_hash": "sha256:abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
-          "verifier_classes_used": [
-            "schema_validator",
-            "evidence_resolver"
-          ],
+          "verifier_classes_used": ["schema_validator", "evidence_resolver"],
           "policy_version": "v1"
         }
       }

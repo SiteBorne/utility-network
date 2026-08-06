@@ -81,7 +81,8 @@ function buildManifest() {
       'Canonical schema manifest for SUN-0101 (17 canonical schemas: 9 common + 8 service ' +
       'input/output) plus the PCC root schema. Regenerate with ' +
       '`pnpm --filter @siteborne/pcc-schema manifest:generate`; verify with `manifest:check`.',
-    generated_at_note: 'Timestamp intentionally omitted — hashes are the source of truth; regenerate to see drift.',
+    generated_at_note:
+      'Timestamp intentionally omitted — hashes are the source of truth; regenerate to see drift.',
     pcc,
     common,
     services,
@@ -106,7 +107,9 @@ function main() {
     }
     const existing = readFileSync(MANIFEST_PATH, 'utf-8');
     if (existing !== serialized) {
-      console.error('❌ MANIFEST.json is stale. Run: pnpm --filter @siteborne/pcc-schema manifest:generate');
+      console.error(
+        '❌ MANIFEST.json is stale. Run: pnpm --filter @siteborne/pcc-schema manifest:generate'
+      );
       process.exit(1);
     }
     console.log(`✓ MANIFEST.json is current (${manifest.counts.including_pcc} schemas)`);

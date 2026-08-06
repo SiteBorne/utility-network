@@ -448,7 +448,7 @@ tasks:
   - id: 'SUN-0101'
     title: 'Define input/output schemas for all services (Phase 3b)'
     phase: 'phase_3_contracts'
-    state: 'accepted'
+    state: 'active'
     owner_agent: 'architect'
     dependencies:
       - 'SUN-0100'
@@ -471,22 +471,24 @@ tasks:
       - 'packages/pcc-schema/tests/python/test_schema_examples.py'
       - 'docs/reports/SUN-0101-service-schemas-report.md'
       - 'docs/decisions/0008-pcc-extension-container-patch.md'
-    next_action: 'Freeze contracts version 1.0.0 (now targeting PCC 1.0.1 — see SUN-0100.amendment and ADR-0008)'
-    blocker: null
+    next_action: 'Complete SUN-0101 acceptance gates: format, lint, OpenAPI generation, service metadata records, drift pipeline fix, test reconciliation'
+    blocker: 'Format check fails (33 files), lint fails (4 errors), OpenAPI not generated, service metadata records missing, drift check uses wrong Python path, working tree not clean, test counts misreported'
     commit_ref: '432409d'
     notes: >-
-      OpenAPI drift test acceptance criterion not applicable — no OpenAPI spec
-      exists in this repo yet; this increment delivers the JSON Schema
-      contract layer only. All other acceptance criteria satisfied: 17
-      canonical schemas (9 common + 8 service input/output) structurally
-      validated, generated (TS+Python), hashed, manifested, fixture-validated,
-      drift-enforced (0 drift), and covered by semantic validators. 284 tests
-      pass (155 TS + 129 Python). See docs/reports/SUN-0101-service-schemas-report.md.
+      SUN-0101 reopened from accepted to active because original acceptance
+      conditions were not fully satisfied. OpenAPI generation was mandatory
+      but not delivered. Format and lint checks fail. Drift check mutates
+      working tree and references wrong Python model path (pcc_models.py vs
+      pcc.py). Service metadata records not created. Test totals incorrectly
+      reported as 284 (actual: 210 TS + 136 Python = 346). Fast-check
+      coverage for service contracts not verified. Secret scanning not run.
+      Working tree has uncommitted drift artifacts. All schema and validator
+      work is sound and preserved.
 
   - id: 'SUN-0102'
     title: 'Freeze contracts version 1.0.0 (Phase 3c)'
     phase: 'phase_3_contracts'
-    state: 'active'
+    state: 'blocked_external'
     owner_agent: 'architect'
     dependencies:
       - 'SUN-0101'
@@ -496,8 +498,8 @@ tasks:
       - 'No breaking changes without version bump enforced'
       - 'Compatibility tests enforce schema stability'
     evidence: []
-    next_action: 'Begin Phase 4 control plane'
-    blocker: null
+    next_action: 'Await SUN-0101 genuine acceptance'
+    blocker: 'SUN-0101 acceptance gates not complete: format, lint, OpenAPI, service metadata, drift pipeline, test reconciliation, secret scan, clean tree'
     commit_ref: null
 
   # Phase 4+ tasks abbreviated

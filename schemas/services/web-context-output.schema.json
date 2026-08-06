@@ -9,18 +9,11 @@
     },
     {
       "type": "object",
-      "required": [
-        "contract",
-        "extensions"
-      ],
+      "required": ["contract", "extensions"],
       "properties": {
         "contract": {
           "type": "object",
-          "required": [
-            "service_id",
-            "service_version",
-            "output_schema_hash"
-          ],
+          "required": ["service_id", "service_version", "output_schema_hash"],
           "properties": {
             "service_id": {
               "const": "web_context_verified.v1"
@@ -36,9 +29,7 @@
         },
         "extensions": {
           "type": "object",
-          "required": [
-            "net.siteborne.web-context.v1"
-          ],
+          "required": ["net.siteborne.web-context.v1"],
           "propertyNames": {
             "type": "string",
             "minLength": 5,
@@ -63,17 +54,11 @@
                 },
                 "retrieval_mode_requested": {
                   "type": "string",
-                  "enum": [
-                    "direct",
-                    "rendered"
-                  ]
+                  "enum": ["direct", "rendered"]
                 },
                 "retrieval_mode_used": {
                   "type": "string",
-                  "enum": [
-                    "direct",
-                    "rendered"
-                  ],
+                  "enum": ["direct", "rendered"],
                   "description": "Mode actually used (may differ if rendered unavailable)."
                 },
                 "http_metadata": {
@@ -152,10 +137,7 @@
                   "items": {
                     "type": "object",
                     "additionalProperties": false,
-                    "required": [
-                      "url",
-                      "status_code"
-                    ],
+                    "required": ["url", "status_code"],
                     "properties": {
                       "url": {
                         "type": "string",
@@ -172,14 +154,7 @@
                 },
                 "content_classification": {
                   "type": "string",
-                  "enum": [
-                    "article",
-                    "landing",
-                    "document",
-                    "app",
-                    "error",
-                    "other"
-                  ]
+                  "enum": ["article", "landing", "document", "app", "error", "other"]
                 },
                 "prompt_injection_findings": {
                   "type": "array",
@@ -192,12 +167,7 @@
                       },
                       "severity": {
                         "type": "string",
-                        "enum": [
-                          "low",
-                          "medium",
-                          "high",
-                          "critical"
-                        ]
+                        "enum": ["low", "medium", "high", "critical"]
                       },
                       "location": {
                         "type": "string"
@@ -297,9 +267,7 @@
         "populated_fields": 4,
         "supported_fields": 4,
         "score": 0.8,
-        "missing_fields": [
-          "ceo_name"
-        ],
+        "missing_fields": ["ceo_name"],
         "unsupported_fields": [],
         "stale_fields": [],
         "vector": [
@@ -324,9 +292,7 @@
           {
             "name": "web",
             "version": "1.0.0",
-            "capabilities": [
-              "fetch"
-            ]
+            "capabilities": ["fetch"]
           }
         ],
         "tools": {

@@ -231,7 +231,10 @@ describe('PCC 1.0.1 extension_container patch', () => {
   });
 
   it('records the current PCC 1.0.1 schema hash for drift visibility', () => {
-    const schemaPath = resolve(import.meta.dirname, '../../../schemas/proof-carrying-context.schema.json');
+    const schemaPath = resolve(
+      import.meta.dirname,
+      '../../../schemas/proof-carrying-context.schema.json'
+    );
     const content = readFileSync(schemaPath, 'utf-8');
     const hash = createHash('sha256').update(content).digest('hex');
     // Recorded at time of the 1.0.1 patch (see docs/reports/SUN-0100-pcc-schema-report.md).

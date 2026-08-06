@@ -11,7 +11,7 @@ const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const ROOT = resolve(__dirname, '../../..');
 const SCHEMA_PATH = resolve(ROOT, 'schemas/proof-carrying-context.schema.json');
 const TS_OUTPUT = resolve(ROOT, 'packages/contracts/generated/typescript/pcc.ts');
-const PY_OUTPUT = resolve(ROOT, 'packages/contracts/generated/python/pcc_models.py');
+const PY_OUTPUT = resolve(ROOT, 'packages/contracts/generated/python/pcc.py');
 const VENV_PYTHON = resolve(ROOT, '.venv/bin/python3');
 
 function run(cmd: string, args: string[], cwd: string = ROOT): string {

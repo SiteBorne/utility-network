@@ -55,9 +55,9 @@ describe('validateHashPairing / validateServicePairing / validateTimestampOrderi
 
   it('rejects malformed hashes and reversed timestamps', () => {
     expect(validateHashPairing('not-a-hash', H('b'), H('c')).length).toBeGreaterThan(0);
-    expect(
-      validateTimestampOrdering('2026-08-06T10:00:00Z', '2026-08-05T10:00:00Z')
-    ).toContain('expires_at must be after issued_at');
+    expect(validateTimestampOrdering('2026-08-06T10:00:00Z', '2026-08-05T10:00:00Z')).toContain(
+      'expires_at must be after issued_at'
+    );
   });
 });
 
@@ -65,17 +65,19 @@ describe('validateQuoteExactUpto', () => {
   it('exact requires price, forbids maximum_authorized_price', () => {
     expect(validateQuoteExactUpto('exact', { amount: '1' })).toEqual([]);
     expect(validateQuoteExactUpto('exact')).toContain('exact scheme requires price');
-    expect(
-      validateQuoteExactUpto('exact', { amount: '1' }, { amount: '2' })
-    ).toContain('exact scheme must not have maximum_authorized_price');
+    expect(validateQuoteExactUpto('exact', { amount: '1' }, { amount: '2' })).toContain(
+      'exact scheme must not have maximum_authorized_price'
+    );
   });
 
   it('upto requires maximum_authorized_price, forbids price', () => {
     expect(validateQuoteExactUpto('upto', undefined, { amount: '2' })).toEqual([]);
-    expect(validateQuoteExactUpto('upto')).toContain('upto scheme requires maximum_authorized_price');
-    expect(
-      validateQuoteExactUpto('upto', { amount: '1' }, { amount: '2' })
-    ).toContain('upto scheme must not have price');
+    expect(validateQuoteExactUpto('upto')).toContain(
+      'upto scheme requires maximum_authorized_price'
+    );
+    expect(validateQuoteExactUpto('upto', { amount: '1' }, { amount: '2' })).toContain(
+      'upto scheme must not have price'
+    );
   });
 });
 
@@ -94,12 +96,22 @@ describe('validateExactlyOneMode', () => {
 describe('validateCompleteness / validateDeterministicFailures', () => {
   it('accepts internally consistent completeness', () => {
     expect(
-      validateCompleteness({ requested_fields: 5, populated_fields: 4, supported_fields: 4, score: 0.8 })
+      validateCompleteness({
+        requested_fields: 5,
+        populated_fields: 4,
+        supported_fields: 4,
+        score: 0.8,
+      })
     ).toEqual([]);
   });
   it('rejects supported_fields > populated_fields', () => {
     expect(
-      validateCompleteness({ requested_fields: 5, populated_fields: 2, supported_fields: 4, score: 0.4 })
+      validateCompleteness({
+        requested_fields: 5,
+        populated_fields: 2,
+        supported_fields: 4,
+        score: 0.4,
+      })
     ).toContain('supported_fields cannot exceed populated_fields');
   });
   it('rejects a pass decision alongside deterministic failures', () => {
@@ -108,7 +120,47 @@ describe('validateCompleteness / validateDeterministicFailures', () => {
     ).toContain('deterministic failures prevent pass decision');
   });
   it('allows a fail decision alongside deterministic failures', () => {
-    expect(validateDeterministicFailures({ decision: 'fail', deterministic_failures: ['x'] })).toEqual([]);
+    expect(
+      validateDeterministicFailures({ decision: 'fail', deterministic_failures: ['x'] })
+    ).toEqual([]);
+  });
+});
+
+describe('isValidRequestId', () => {
+  it('accepts valid UUID and ULID formats', () => {
+    expect(isValidRequestId('3fa85f64-4b2c-4d8e-9f1a-2b3c4d5e6f7a')).toBe(true);
+    expect(isValidRequestId('01H9K3V7M2N4P6Q8R9S1T3V5W7')).toBe(true);
+  });
+  it('rejects invalid formats', () => {
+    expect(isValidRequestId('not-a-valid-id')).toBe(false);
+    expect(isValidRequestId('')).toBe(false);
+    expect(isValidRequestId('too-short')).toBe(false);
+  });
+});
+
+describe('validateServiceExtension / validateWrongExtension', () => {
+  const requiredNs = 'net.siteborne.company-evidence.v1';
+  const wrongNs = 'net.siteborne.web-context.v1';
+  const validExt = { foo: 'bar' };
+
+  it('passes when required extension is present and valid', () => {
+    const errors = validateServiceExtension({ [requiredNs]: validExt }, requiredNs);
+    expect(errors).toEqual([]);
+  });
+  it('fails when required extension is missing', () => {
+    const errors = validateServiceExtension({ other: validExt }, requiredNs);
+    expect(errors.some((e) => e.includes('required extension namespace'))).toBe(true);
+  });
+  it('fails on invalid namespace format', () => {
+    const errors = validateServiceExtension({ 'invalid.ns': validExt }, requiredNs);
+    expect(errors.some((e) => e.includes('invalid'))).toBe(true);
+  });
+  it('validateWrongExtension passes when wrong namespace absent', () => {
+    expect(validateWrongExtension({ [requiredNs]: validExt }, wrongNs)).toEqual([]);
+  });
+  it('validateWrongExtension fails when wrong namespace present', () => {
+    const errors = validateWrongExtension({ [wrongNs]: validExt }, wrongNs);
+    expect(errors.some((e) => e.includes('wrong service extension'))).toBe(true);
   });
 });
 
@@ -266,13 +318,17 @@ describe('validateServiceOutputDocument (SUN-0101 Task 10)', () => {
   it('fails on a service_id/expected_service_id mismatch', () => {
     const doc = baseDoc('web_context_verified.v1', 'net.siteborne.company-evidence.v1');
     const errors = validateServiceOutputDocument(doc, 'company_evidence_graph.v1');
-    expect(errors.some((e) => e.includes("contract.service_id must be 'company_evidence_graph.v1'"))).toBe(true);
+    expect(
+      errors.some((e) => e.includes("contract.service_id must be 'company_evidence_graph.v1'"))
+    ).toBe(true);
   });
 });
 
 describe('input-side semantic guards', () => {
   it('validateDocumentEvidenceInputMode requires exactly one source', () => {
-    expect(validateDocumentEvidenceInputMode({ document_url: 'https://x.example/a.pdf' })).toEqual([]);
+    expect(validateDocumentEvidenceInputMode({ document_url: 'https://x.example/a.pdf' })).toEqual(
+      []
+    );
     expect(validateDocumentEvidenceInputMode({})).not.toEqual([]);
     expect(
       validateDocumentEvidenceInputMode({

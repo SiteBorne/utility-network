@@ -12,7 +12,7 @@ const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const ROOT = resolve(__dirname, '../../..');
 const SCHEMA_PATH = resolve(ROOT, 'schemas/proof-carrying-context.schema.json');
 const TS_OUTPUT = resolve(ROOT, 'packages/contracts/generated/typescript/pcc.ts');
-const PY_OUTPUT = resolve(ROOT, 'packages/contracts/generated/python/pcc_models.py');
+const PY_OUTPUT = resolve(ROOT, 'packages/contracts/generated/python/pcc.py');
 const TEMP_DIR = resolve(ROOT, '.pcc-drift-temp');
 // Use venv python for datamodel-code-generator
 const VENV_PYTHON = resolve(ROOT, '.venv/bin/python3');
@@ -103,6 +103,10 @@ function main() {
 `;
     const tsContent = readFileSync(tsTempOutput, 'utf-8');
     writeFileSync(tsTempOutput, tsHeader + tsContent);
+
+    // Format with prettier to match committed style
+    console.log('Formatting with prettier...');
+    run('prettier', ['--write', tsTempOutput]);
 
     // Generate Python models to temp
     console.log('Generating Python models...');

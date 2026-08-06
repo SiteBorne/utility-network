@@ -4,8 +4,10 @@ import { z } from 'zod';
 const SHA256_REGEX = /^sha256:[a-f0-9]{64}$/;
 const RFC3339_REGEX = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?Z$/;
 const MONEY_AMOUNT_REGEX = /^(0|[1-9]\d*)(\.\d{1,18})?$/;
-const DOMAIN_REGEX = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/;
-const EXTENSION_NAMESPACE_REGEX = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?){2,}$/;
+const DOMAIN_REGEX =
+  /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/;
+const EXTENSION_NAMESPACE_REGEX =
+  /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?){2,}$/;
 const SERVICE_ID_REGEX = /^[a-z0-9_]+\.v[0-9]+$/;
 const SERVICE_VERSION_REGEX = /^v[0-9]+(\.[0-9]+)*$/;
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -48,7 +50,11 @@ export function isTimestampAfter(after: string, before: string): boolean {
   return new Date(after) > new Date(before);
 }
 
-export function validateHashPairing(inputHash: string, inputSchemaHash: string, outputSchemaHash: string): string[] {
+export function validateHashPairing(
+  inputHash: string,
+  inputSchemaHash: string,
+  outputSchemaHash: string
+): string[] {
   const errors: string[] = [];
   if (!isValidSha256(inputHash)) errors.push('input_hash must be valid sha256');
   if (!isValidSha256(inputSchemaHash)) errors.push('input_schema_hash must be valid sha256');
@@ -66,7 +72,9 @@ export function validateMoney(amount: string, currency: string): string[] {
 export function validateExtensionNamespace(ns: string): string[] {
   const errors: string[] = [];
   if (!isValidExtensionNamespace(ns)) {
-    errors.push(`extension namespace '${ns}' must be reverse-domain qualified (max 253 chars, min 3 labels, lowercase DNS-safe)`);
+    errors.push(
+      `extension namespace '${ns}' must be reverse-domain qualified (max 253 chars, min 3 labels, lowercase DNS-safe)`
+    );
   }
   return errors;
 }
@@ -78,7 +86,11 @@ export function validateServicePairing(serviceId: string, serviceVersion: string
   return errors;
 }
 
-export function validateQuoteExactUpto(scheme: string, price?: unknown, maxPrice?: unknown): string[] {
+export function validateQuoteExactUpto(
+  scheme: string,
+  price?: unknown,
+  maxPrice?: unknown
+): string[] {
   const errors: string[] = [];
   if (scheme === 'exact') {
     if (!price) errors.push('exact scheme requires price');
@@ -99,15 +111,23 @@ export function validateTimestampOrdering(issuedAt: string, expiresAt: string): 
   return errors;
 }
 
-export function validateExactlyOneMode(modes: Record<string, unknown>, modeNames: string[]): string[] {
-  const present = modeNames.filter(k => k in modes && modes[k] !== undefined && modes[k] !== null);
+export function validateExactlyOneMode(
+  modes: Record<string, unknown>,
+  modeNames: string[]
+): string[] {
+  const present = modeNames.filter(
+    (k) => k in modes && modes[k] !== undefined && modes[k] !== null
+  );
   if (present.length !== 1) {
     return [`exactly one of [${modeNames.join(', ')}] must be provided`];
   }
   return [];
 }
 
-export function validateServiceExtension(extensions: Record<string, unknown>, requiredNs: string): string[] {
+export function validateServiceExtension(
+  extensions: Record<string, unknown>,
+  requiredNs: string
+): string[] {
   const errors: string[] = [];
   if (!(requiredNs in extensions)) {
     errors.push(`required extension namespace '${requiredNs}' is missing`);
@@ -120,14 +140,22 @@ export function validateServiceExtension(extensions: Record<string, unknown>, re
   return errors;
 }
 
-export function validateWrongExtension(extensions: Record<string, unknown>, wrongNs: string): string[] {
+export function validateWrongExtension(
+  extensions: Record<string, unknown>,
+  wrongNs: string
+): string[] {
   if (wrongNs in extensions) {
     return [`wrong service extension '${wrongNs}' is not allowed`];
   }
   return [];
 }
 
-export function validateCompleteness(completeness: { requested_fields: number; populated_fields: number; supported_fields: number; score: number }): string[] {
+export function validateCompleteness(completeness: {
+  requested_fields: number;
+  populated_fields: number;
+  supported_fields: number;
+  score: number;
+}): string[] {
   const errors: string[] = [];
   if (completeness.supported_fields > completeness.populated_fields) {
     errors.push('supported_fields cannot exceed populated_fields');
@@ -138,14 +166,25 @@ export function validateCompleteness(completeness: { requested_fields: number; p
   if (completeness.score < 0 || completeness.score > 1) {
     errors.push('score must be in [0, 1]');
   }
-  if (completeness.requested_fields < 0 || completeness.populated_fields < 0 || completeness.supported_fields < 0) {
+  if (
+    completeness.requested_fields < 0 ||
+    completeness.populated_fields < 0 ||
+    completeness.supported_fields < 0
+  ) {
     errors.push('counts cannot be negative');
   }
   return errors;
 }
 
-export function validateDeterministicFailures(verification: { decision: string; deterministic_failures?: string[] }): string[] {
-  if (verification.decision === 'pass' && verification.deterministic_failures && verification.deterministic_failures.length > 0) {
+export function validateDeterministicFailures(verification: {
+  decision: string;
+  deterministic_failures?: string[];
+}): string[] {
+  if (
+    verification.decision === 'pass' &&
+    verification.deterministic_failures &&
+    verification.deterministic_failures.length > 0
+  ) {
     return ['deterministic failures prevent pass decision'];
   }
   return [];
@@ -155,8 +194,15 @@ export function validateDeterministicFailures(verification: { decision: string; 
 export const MoneySchema = z.object({
   amount: z.string().regex(MONEY_AMOUNT_REGEX),
   currency: z.enum(['USD']),
-  network: z.string().regex(/^[a-z0-9-]+$/).max(64).optional(),
-  asset: z.string().regex(/^[A-Z0-9]{3,10}$/).optional(),
+  network: z
+    .string()
+    .regex(/^[a-z0-9-]+$/)
+    .max(64)
+    .optional(),
+  asset: z
+    .string()
+    .regex(/^[A-Z0-9]{3,10}$/)
+    .optional(),
   precision: z.number().int().min(0).max(18).optional(),
 });
 
@@ -165,11 +211,20 @@ export const RequestEnvelopeSchema = z.object({
   service_id: z.string().regex(SERVICE_ID_REGEX),
   service_version: z.string().regex(SERVICE_VERSION_REGEX),
   response_schema_version: z.string().regex(SERVICE_VERSION_REGEX),
-  idempotency_key: z.string().min(16).max(128).regex(/^[a-zA-Z0-9_-]+$/),
+  idempotency_key: z
+    .string()
+    .min(16)
+    .max(128)
+    .regex(/^[a-zA-Z0-9_-]+$/),
   freshness_seconds: z.number().int().min(0).max(2592000),
   minimum_verification_score: z.number().min(0).max(1),
   maximum_authorized_price: MoneySchema,
-  buyer_metadata: z.object({ reference: z.string().max(256).optional(), tags: z.array(z.string().max(64)).max(20).optional() }).optional(),
+  buyer_metadata: z
+    .object({
+      reference: z.string().max(256).optional(),
+      tags: z.array(z.string().max(64)).max(20).optional(),
+    })
+    .optional(),
   input: z.unknown(),
   extensions: z.record(z.unknown()).optional(),
 });
@@ -185,7 +240,11 @@ export const QuoteRequestSchema = z.object({
   maximum_authorized_price: MoneySchema.optional(),
   requested_freshness_seconds: z.number().int().min(0).max(2592000).optional(),
   requested_execution_mode: z.enum(['sync', 'async']).optional(),
-  idempotency_key: z.string().min(16).max(128).regex(/^[a-zA-Z0-9_-]+$/),
+  idempotency_key: z
+    .string()
+    .min(16)
+    .max(128)
+    .regex(/^[a-zA-Z0-9_-]+$/),
 });
 
 export const QuoteResponseSchema = z.object({
@@ -197,7 +256,10 @@ export const QuoteResponseSchema = z.object({
   price: MoneySchema.optional(),
   maximum_authorized_price: MoneySchema.optional(),
   currency: z.literal('USD'),
-  payment_network: z.string().regex(/^[a-z0-9-]+$/).max(64),
+  payment_network: z
+    .string()
+    .regex(/^[a-z0-9-]+$/)
+    .max(64),
   payment_asset: z.string().regex(/^[A-Z0-9]{3,10}$/),
   estimated_execution_class: z.enum(['light', 'standard', 'heavy', 'intensive']),
   execution_mode: z.enum(['sync', 'async']),
@@ -215,8 +277,25 @@ export const QuoteResponseSchema = z.object({
 
 export const StructuredErrorSchema = z.object({
   error_id: z.string().regex(REQUEST_ID_REGEX),
-  error_code: z.string().regex(/^[A-Z][A-Z0-9_]*$/).max(64),
-  category: z.enum(['validation', 'authorization', 'payment_required', 'payment_invalid', 'rate_limited', 'unsupported', 'unavailable', 'provider_failure', 'verification_failure', 'conflict', 'duplicate', 'internal', 'quarantined']),
+  error_code: z
+    .string()
+    .regex(/^[A-Z][A-Z0-9_]*$/)
+    .max(64),
+  category: z.enum([
+    'validation',
+    'authorization',
+    'payment_required',
+    'payment_invalid',
+    'rate_limited',
+    'unsupported',
+    'unavailable',
+    'provider_failure',
+    'verification_failure',
+    'conflict',
+    'duplicate',
+    'internal',
+    'quarantined',
+  ]),
   message: z.string().max(512),
   retryable: z.boolean(),
   request_id: z.string().regex(REQUEST_ID_REGEX),
@@ -224,11 +303,18 @@ export const StructuredErrorSchema = z.object({
   occurred_at: z.string().regex(RFC3339_REGEX),
   job_id: z.string().regex(REQUEST_ID_REGEX).optional(),
   quote_id: z.string().regex(REQUEST_ID_REGEX).optional(),
-  failed_field_paths: z.array(z.string().regex(/^(\/[^\/~]+)+$|^$/)).max(50).optional(),
+  failed_field_paths: z
+    .array(z.string().regex(/^(\/[^~]+)+$|^$/))
+    .max(50)
+    .optional(),
   limitations: z.array(z.string().max(256)).max(20).optional(),
   retry_after_seconds: z.number().int().min(1).max(86400).optional(),
   original_receipt_reference: z.string().regex(SHA256_REGEX).optional(),
-  provider_class: z.string().regex(/^[a-z0-9_-]+$/).max(32).optional(),
+  provider_class: z
+    .string()
+    .regex(/^[a-z0-9_-]+$/)
+    .max(32)
+    .optional(),
   quarantine_reason: z.string().max(256).optional(),
   extensions: z.record(z.unknown()).optional(),
 });
@@ -244,14 +330,26 @@ export const ServiceMetadataSchema = z.object({
   output_schema_uri: z.string().url().optional(),
   output_schema_hash: z.string().regex(SHA256_REGEX),
   pcc_version: z.literal('1.0.0'),
-  pricing_schemes: z.array(z.enum(['exact', 'upto'])).min(1).max(2),
+  pricing_schemes: z
+    .array(z.enum(['exact', 'upto']))
+    .min(1)
+    .max(2),
   base_price: MoneySchema,
   maximum_price: MoneySchema.optional(),
   execution_mode: z.enum(['sync', 'async', 'both']),
   maximum_input_bytes: z.number().int().min(0).max(10485760),
   expected_latency_class: z.enum(['fast', 'standard', 'slow', 'variable']),
   authorization_classification: z.enum(['public', 'buyer_authorized', 'restricted']),
-  promotion_state: z.enum(['draft', 'case_supported', 'multi_case_supported', 'verified_pattern', 'executable_candidate', 'executable_verified', 'retired', 'tombstoned']),
+  promotion_state: z.enum([
+    'draft',
+    'case_supported',
+    'multi_case_supported',
+    'verified_pattern',
+    'executable_candidate',
+    'executable_verified',
+    'retired',
+    'tombstoned',
+  ]),
   production_enabled: z.literal(false),
   declared_limitations: z.array(z.string().max(256)).max(20),
   protocols: z.object({
@@ -297,7 +395,12 @@ interface ServiceOutputDocument {
     expires_at: string;
   };
   extensions?: Record<string, unknown>;
-  completeness: { requested_fields: number; populated_fields: number; supported_fields: number; score: number };
+  completeness: {
+    requested_fields: number;
+    populated_fields: number;
+    supported_fields: number;
+    score: number;
+  };
   verification: { decision: string; deterministic_failures?: string[] };
 }
 
@@ -314,15 +417,23 @@ export function validateServiceOutputDocument(
   const errors: string[] = [];
   const requiredNs = SERVICE_EXTENSION_NAMESPACE[expectedServiceId];
   if (!requiredNs) {
-    return [`unknown service_id '${expectedServiceId}' — not in SERVICE_EXTENSION_NAMESPACE registry`];
+    return [
+      `unknown service_id '${expectedServiceId}' — not in SERVICE_EXTENSION_NAMESPACE registry`,
+    ];
   }
 
   if (doc.contract.service_id !== expectedServiceId) {
-    errors.push(`contract.service_id must be '${expectedServiceId}', got '${doc.contract.service_id}'`);
+    errors.push(
+      `contract.service_id must be '${expectedServiceId}', got '${doc.contract.service_id}'`
+    );
   }
   errors.push(...validateServicePairing(doc.contract.service_id, doc.contract.service_version));
   errors.push(
-    ...validateHashPairing(doc.contract.input_hash, doc.contract.input_schema_hash, doc.contract.output_schema_hash)
+    ...validateHashPairing(
+      doc.contract.input_hash,
+      doc.contract.input_schema_hash,
+      doc.contract.output_schema_hash
+    )
   );
   errors.push(...validateTimestampOrdering(doc.contract.issued_at, doc.contract.expires_at));
 
@@ -353,7 +464,9 @@ export function validateDocumentEvidenceInputMode(input: Record<string, unknown>
  * domain / identifiers (enforced structurally via `anyOf`); re-checked here
  * as a semantic-layer guard.
  */
-export function validateCompanyEvidenceInputHasIdentifier(input: Record<string, unknown>): string[] {
+export function validateCompanyEvidenceInputHasIdentifier(
+  input: Record<string, unknown>
+): string[] {
   const keys = ['company_name', 'ticker', 'domain', 'identifiers'];
   const present = keys.filter((k) => input[k] !== undefined && input[k] !== null);
   if (present.length === 0) {

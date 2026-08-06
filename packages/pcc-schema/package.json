@@ -25,6 +25,8 @@
     "generate:services:prep": "tsx scripts/create-combined-schemas.ts && tsx scripts/create-ts-schemas.ts",
     "generate:services": "pnpm generate:services:prep && tsx scripts/generate-service-models.ts",
     "generate:services:check": "tsx scripts/drift-check-services.ts",
+    "generate:openapi": "tsx scripts/generate-openapi.ts",
+    "generate:openapi:check": "tsx scripts/drift-check-openapi.ts",
     "manifest:generate": "tsx scripts/generate-manifest.ts",
     "manifest:check": "tsx scripts/generate-manifest.ts --check",
     "validate:canonicalization": "tsx scripts/validate-canonicalization.ts",

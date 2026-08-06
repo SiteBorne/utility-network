@@ -10,9 +10,9 @@ source_directive:
 execution:
   mode: 'serial'
   active_mutation_tasks: 1
-  current_increment: 'SUN-0102'
+  current_increment: 'SUN-0101'
   current_phase: 'phase_3_contracts'
-  last_completed_increment: 'SUN-0101'
+  last_completed_increment: 'SUN-0100'
 
 implemented:
   - 'governance_validation'

@@ -1,0 +1,37 @@
+{
+  "service_id": "web_context_verified.v1",
+  "service_version": "v1",
+  "title": "Verified Web Context",
+  "description": "Fetches and verifies web content from direct HTTP requests or browser-rendered pages, extracting structured data with cryptographic proof of retrieval and content integrity.",
+  "capabilities": ["direct_fetch", "browser_rendered", "content_extraction", "structured_data"],
+  "input_schema_uri": "https://siteborne.net/schemas/services/web-context-input.schema.json",
+  "input_schema_hash": "sha256:d3b0762020d4cc1d1e846960ed978cf1237b1741f90213adabe8ed931c2845ea",
+  "output_schema_uri": "https://siteborne.net/schemas/services/web-context-output.schema.json",
+  "output_schema_hash": "sha256:2d53c59a2f7f0be4cc53751812450d78eeffa75203492121810db5e6ca0048ad",
+  "pcc_version": "1.0.0",
+  "pricing_schemes": ["exact", "upto"],
+  "base_price": { "amount": "0.009", "currency": "USD" },
+  "maximum_price": { "amount": "0.029", "currency": "USD" },
+  "execution_mode": "async",
+  "maximum_input_bytes": 5242880,
+  "expected_latency_class": "variable",
+  "authorization_classification": "public",
+  "promotion_state": "executable_candidate",
+  "production_enabled": false,
+  "declared_limitations": [
+    "Direct fetch cannot execute JavaScript",
+    "Browser-rendered limited to static content extraction",
+    "Rate limits apply to external sites",
+    "No authentication or private content access"
+  ],
+  "protocols": {
+    "x402": "planned",
+    "mcp": "planned",
+    "a2a": "planned",
+    "nevermined": "planned",
+    "agentverse": "planned",
+    "coinbase_bazaar": "planned",
+    "mcp_registry": "planned"
+  },
+  "updated_at": "2026-08-05T22:00:00Z"
+}

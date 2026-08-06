@@ -262,19 +262,19 @@ the immediate dependency-safe next task per TASKS.yaml.
 
 While defining SUN-0101's service output schemas, `extension_container`'s
 "boundary test results" above turned out to only have been tested for
-*rejection* — no test exercised a document that actually populated
-`extensions` with a valid qualified key. Doing so during SUN-0101 revealed
-that `additionalProperties: false` with no `properties`/`patternProperties`
-(introduced in commit `44534ea`, "bound extension namespaces") rejects
-**every** extension key unconditionally, not just malformed ones —
-`propertyNames` constrains key shape but does not itself admit a property
-under `additionalProperties: false`. Verified independently with Python
-`jsonschema` and Node `ajv@6`.
+_rejection_ — no test exercised a document that actually populated `extensions`
+with a valid qualified key. Doing so during SUN-0101 revealed that
+`additionalProperties: false` with no `properties`/`patternProperties`
+(introduced in commit `44534ea`, "bound extension namespaces") rejects **every**
+extension key unconditionally, not just malformed ones — `propertyNames`
+constrains key shape but does not itself admit a property under
+`additionalProperties: false`. Verified independently with Python `jsonschema`
+and Node `ajv@6`.
 
 Patched in [ADR-0008](../decisions/0008-pcc-extension-container-patch.md):
-restored `patternProperties` (same reverse-domain pattern already enforced
-via `propertyNames`) mapping to a new bounded `extension_value` definition.
-All previously-passing boundary tests above still pass unchanged (verified in
+restored `patternProperties` (same reverse-domain pattern already enforced via
+`propertyNames`) mapping to a new bounded `extension_value` definition. All
+previously-passing boundary tests above still pass unchanged (verified in
 `packages/pcc-schema/src/pcc-extension-container.test.ts` and
 `packages/pcc-schema/tests/python/test_pcc_extension_container.py`); the only
 behavior change is that valid qualified keys now actually validate.
@@ -284,6 +284,6 @@ behavior change is that valid qualified keys now actually validate.
 - New schema hash:
   `f664208e387b161ab7897d8544d9c7d987501eba5764e2dde0ea69586e33dbb5`
 - Pre-existing tests: 100 TS + 23 Python, all still pass
-- New tests: 17 TS + 29 Python covering the full namespace/cap matrix, all
-  four SITEBORNE service namespaces, and per-service required-extension
-  enforcement (present / missing / wrong-service-substituted)
+- New tests: 17 TS + 29 Python covering the full namespace/cap matrix, all four
+  SITEBORNE service namespaces, and per-service required-extension enforcement
+  (present / missing / wrong-service-substituted)

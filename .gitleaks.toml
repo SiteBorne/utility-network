@@ -1,0 +1,13 @@
+title = "Gitleaks configuration for SITEBORNE Utility Network"
+
+[allowlist]
+description = "Allowlisted paths and patterns for test fixtures and examples"
+paths = [
+  "schemas/common/request-envelope.schema.json",
+  "packages/contracts/src/semantic/validators.test.ts",
+  "packages/contracts/src/semantic/test_validators.py",
+]
+regexes = [
+  '''idem_[a-z0-9]{24}''',
+  '''idem_abc123xyz[a-z0-9]*''',
+]

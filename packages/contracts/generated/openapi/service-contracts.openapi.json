@@ -1,0 +1,3859 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "SITEBORNE Utility Network Service Contracts",
+    "version": "1.0.0-preproduction",
+    "description": "Preproduction OpenAPI document for SITEBORNE Utility Network service contracts. No routes are currently enabled. All operations marked as not implemented."
+  },
+  "servers": [
+    {
+      "url": "https://utility.siteborne.net",
+      "description": "Preproduction server (not currently deployed)"
+    }
+  ],
+  "paths": {
+    "/v1/company/evidence-graph": {
+      "post": {
+        "operationId": "postcompanyEvidenceGraph",
+        "summary": "Execute undefined service",
+        "description": "Service contract for company_evidence_graph.v1. Not currently implemented - preproduction contract only.",
+        "x-service-id": "company_evidence_graph.v1",
+        "x-production-enabled": false,
+        "x-implementation-status": "not_implemented",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompanyEvidenceGraphInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyEvidenceGraphOutput"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StructuredError"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Payment required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StructuredError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StructuredError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/web/context": {
+      "post": {
+        "operationId": "postwebContextVerified",
+        "summary": "Execute undefined service",
+        "description": "Service contract for web_context_verified.v1. Not currently implemented - preproduction contract only.",
+        "x-service-id": "web_context_verified.v1",
+        "x-production-enabled": false,
+        "x-implementation-status": "not_implemented",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WebContextVerifiedInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebContextVerifiedOutput"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StructuredError"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Payment required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StructuredError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StructuredError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/document/evidence-json": {
+      "post": {
+        "operationId": "postdocumentEvidenceJson",
+        "summary": "Execute undefined service",
+        "description": "Service contract for document_evidence_json.v1. Not currently implemented - preproduction contract only.",
+        "x-service-id": "document_evidence_json.v1",
+        "x-production-enabled": false,
+        "x-implementation-status": "not_implemented",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DocumentEvidenceJsonInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentEvidenceJsonOutput"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StructuredError"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Payment required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StructuredError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StructuredError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/verify/agent-output": {
+      "post": {
+        "operationId": "postverifyAgentOutput",
+        "summary": "Execute undefined service",
+        "description": "Service contract for verify_agent_output.v1. Not currently implemented - preproduction contract only.",
+        "x-service-id": "verify_agent_output.v1",
+        "x-production-enabled": false,
+        "x-implementation-status": "not_implemented",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyAgentOutputInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerifyAgentOutputOutput"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StructuredError"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Payment required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StructuredError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StructuredError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quotes/{service_id}": {
+      "post": {
+        "operationId": "postQuote",
+        "summary": "Request a quote for a service",
+        "description": "Returns a quote for the specified service. Not currently implemented - preproduction contract only.",
+        "x-production-enabled": false,
+        "x-implementation-status": "not_implemented",
+        "parameters": [
+          {
+            "name": "service_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "company_evidence_graph.v1",
+                "web_context_verified.v1",
+                "document_evidence_json.v1",
+                "verify_agent_output.v1"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuoteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Quote response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuoteResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StructuredError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Service not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StructuredError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Money": {
+        "title": "Decimal Money",
+        "description": "Canonical decimal-safe money representation. No binary floating-point. Amount is a canonical decimal string.",
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["amount", "currency"],
+        "properties": {
+          "amount": {
+            "type": "string",
+            "description": "Canonical decimal string. No scientific notation, no leading zeros (except single '0'), no trailing zeros unless significant, no sign. Maximum 18 decimal places.",
+            "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]{1,18})?$"
+          },
+          "currency": {
+            "type": "string",
+            "description": "ISO 4217 currency code.",
+            "pattern": "^[A-Z]{3}$",
+            "enum": ["USD"],
+            "default": "USD"
+          },
+          "network": {
+            "type": "string",
+            "description": "Payment network identifier (e.g., 'base-mainnet', 'base-sepolia'). Optional for non-payment contexts.",
+            "pattern": "^[a-z0-9-]+$",
+            "maxLength": 64
+          },
+          "asset": {
+            "type": "string",
+            "description": "Payment asset identifier (e.g., 'USDC', 'ETH'). Optional for non-payment contexts.",
+            "pattern": "^[A-Z0-9]{3,10}$"
+          },
+          "precision": {
+            "type": "integer",
+            "description": "Maximum decimal places supported by the asset/network. Metadata only.",
+            "minimum": 0,
+            "maximum": 18,
+            "default": 6
+          }
+        }
+      },
+      "RequestEnvelope": {
+        "title": "Service Request Envelope",
+        "description": "Common request envelope for all SITEBORNE service invocations. Wraps service-specific input payload.",
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["request_id", "service_id", "service_version", "input"],
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "description": "Unique request identifier. Must be a valid UUID v4 or ULID.",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$|^[0-9A-HJKMNP-TV-Z]{26}$",
+            "maxLength": 36
+          },
+          "service_id": {
+            "type": "string",
+            "description": "Canonical service identifier. Must match the target service schema.",
+            "pattern": "^[a-z0-9_]+\\.v[0-9]+$",
+            "enum": [
+              "company_evidence_graph.v1",
+              "web_context_verified.v1",
+              "document_evidence_json.v1",
+              "verify_agent_output.v1"
+            ]
+          },
+          "service_version": {
+            "type": "string",
+            "description": "Explicit service version. Must match the service schema version.",
+            "pattern": "^v[0-9]+(\\.[0-9]+)*$",
+            "enum": ["v1"]
+          },
+          "response_schema_version": {
+            "type": "string",
+            "description": "Expected output schema version. Allows forward-compatible evolution.",
+            "pattern": "^v[0-9]+(\\.[0-9]+)*$",
+            "enum": ["v1"]
+          },
+          "idempotency_key": {
+            "type": "string",
+            "description": "Client-generated idempotency key for exactly-once semantics. Required for paid operations.",
+            "minLength": 16,
+            "maxLength": 128,
+            "pattern": "^[a-zA-Z0-9_-]+$"
+          },
+          "freshness_seconds": {
+            "type": "integer",
+            "description": "Maximum acceptable age of cached data in seconds. 0 = no cache. Bounded to prevent stale data.",
+            "minimum": 0,
+            "maximum": 2592000
+          },
+          "minimum_verification_score": {
+            "type": "number",
+            "description": "Minimum PCC verification score required for the result to be accepted. Range [0, 1].",
+            "minimum": 0,
+            "maximum": 1,
+            "default": 0.7
+          },
+          "maximum_authorized_price": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "buyer_metadata": {
+            "type": "object",
+            "description": "Optional buyer-provided metadata that cannot alter execution policy, pricing, or security constraints.",
+            "additionalProperties": false,
+            "maxProperties": 10,
+            "properties": {
+              "reference": {
+                "type": "string",
+                "description": "Buyer's internal reference.",
+                "maxLength": 256
+              },
+              "tags": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 64
+                },
+                "maxItems": 20
+              }
+            }
+          },
+          "input": {
+            "type": "object",
+            "description": "Service-specific input payload. Schema determined by service_id.",
+            "additionalProperties": true
+          },
+          "extensions": {
+            "type": "object",
+            "description": "Reverse-domain qualified extensions per PCC 1.0.0 rules.",
+            "additionalProperties": false,
+            "propertyNames": {
+              "type": "string",
+              "minLength": 5,
+              "maxLength": 253,
+              "pattern": "^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?){2,}$"
+            }
+          }
+        },
+        "if": {
+          "properties": {
+            "service_id": {
+              "const": "company_evidence_graph.v1"
+            }
+          }
+        },
+        "then": {
+          "properties": {
+            "input": {
+              "$ref": "#/components/schemas/CompanyEvidenceInput"
+            }
+          }
+        }
+      },
+      "QuoteRequest": {
+        "title": "Quote Request",
+        "description": "Request for a price quote for a service execution. Used for pre-authorization and cost estimation.",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "request_id",
+          "service_id",
+          "service_version",
+          "input_hash",
+          "input_schema_hash",
+          "output_schema_hash",
+          "requested_pricing_scheme"
+        ],
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "description": "Unique quote request identifier.",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$|^[0-9A-HJKMNP-TV-Z]{26}$",
+            "maxLength": 36
+          },
+          "service_id": {
+            "type": "string",
+            "description": "Canonical service identifier.",
+            "pattern": "^[a-z0-9_]+\\.v[0-9]+$",
+            "enum": [
+              "company_evidence_graph.v1",
+              "web_context_verified.v1",
+              "document_evidence_json.v1",
+              "verify_agent_output.v1"
+            ]
+          },
+          "service_version": {
+            "type": "string",
+            "description": "Explicit service version.",
+            "pattern": "^v[0-9]+(\\.[0-9]+)*$",
+            "enum": ["v1"]
+          },
+          "input_hash": {
+            "type": "string",
+            "description": "SHA-256 hash of the canonicalized input payload that will be executed.",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "input_schema_hash": {
+            "type": "string",
+            "description": "SHA-256 hash of the input schema that validates the input.",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "output_schema_hash": {
+            "type": "string",
+            "description": "SHA-256 hash of the output schema that will validate the result.",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "requested_pricing_scheme": {
+            "type": "string",
+            "description": "Pricing scheme requested for the quote.",
+            "enum": ["exact", "upto"]
+          },
+          "maximum_authorized_price": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "requested_freshness_seconds": {
+            "type": "integer",
+            "description": "Requested freshness for the execution.",
+            "minimum": 0,
+            "maximum": 2592000
+          },
+          "requested_execution_mode": {
+            "type": "string",
+            "description": "Preferred execution mode.",
+            "enum": ["sync", "async"],
+            "default": "sync"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "description": "Idempotency key for quote deduplication.",
+            "minLength": 16,
+            "maxLength": 128,
+            "pattern": "^[a-zA-Z0-9_-]+$"
+          }
+        },
+        "if": {
+          "properties": {
+            "requested_pricing_scheme": {
+              "const": "upto"
+            }
+          }
+        },
+        "then": {
+          "required": ["maximum_authorized_price"]
+        }
+      },
+      "QuoteResponse": {
+        "title": "Quote Response",
+        "description": "Price quote for a service execution. Includes pricing details, validity, and execution metadata.",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "quote_id",
+          "request_id",
+          "service_id",
+          "service_version",
+          "pricing_scheme",
+          "currency",
+          "payment_network",
+          "payment_asset",
+          "estimated_execution_class",
+          "execution_mode",
+          "issued_at",
+          "expires_at",
+          "input_hash",
+          "input_schema_hash",
+          "output_schema_hash",
+          "pricing_policy_version",
+          "expected_completeness",
+          "declared_limitations",
+          "production_enabled",
+          "payment_required"
+        ],
+        "properties": {
+          "quote_id": {
+            "type": "string",
+            "description": "Unique quote identifier.",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$|^[0-9A-HJKMNP-TV-Z]{26}$",
+            "maxLength": 36
+          },
+          "request_id": {
+            "type": "string",
+            "description": "Original quote request identifier.",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$|^[0-9A-HJKMNP-TV-Z]{26}$",
+            "maxLength": 36
+          },
+          "service_id": {
+            "type": "string",
+            "description": "Canonical service identifier.",
+            "pattern": "^[a-z0-9_]+\\.v[0-9]+$"
+          },
+          "service_version": {
+            "type": "string",
+            "description": "Service version.",
+            "pattern": "^v[0-9]+(\\.[0-9]+)*$"
+          },
+          "pricing_scheme": {
+            "type": "string",
+            "description": "Pricing scheme for this quote.",
+            "enum": ["exact", "upto"]
+          },
+          "price": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "maximum_authorized_price": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "currency": {
+            "type": "string",
+            "description": "ISO 4217 currency code.",
+            "pattern": "^[A-Z]{3}$",
+            "enum": ["USD"]
+          },
+          "payment_network": {
+            "type": "string",
+            "description": "Payment network for settlement.",
+            "pattern": "^[a-z0-9-]+$",
+            "maxLength": 64
+          },
+          "payment_asset": {
+            "type": "string",
+            "description": "Payment asset for settlement.",
+            "pattern": "^[A-Z0-9]{3,10}$"
+          },
+          "estimated_execution_class": {
+            "type": "string",
+            "description": "Estimated resource class for execution.",
+            "enum": ["light", "standard", "heavy", "intensive"]
+          },
+          "execution_mode": {
+            "type": "string",
+            "description": "Execution mode.",
+            "enum": ["sync", "async"]
+          },
+          "issued_at": {
+            "type": "string",
+            "description": "Quote issuance timestamp (RFC 3339 UTC).",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,6})?Z$"
+          },
+          "expires_at": {
+            "type": "string",
+            "description": "Quote expiration timestamp (RFC 3339 UTC). Must be after issued_at.",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,6})?Z$"
+          },
+          "input_hash": {
+            "type": "string",
+            "description": "SHA-256 hash of the input payload.",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "input_schema_hash": {
+            "type": "string",
+            "description": "SHA-256 hash of the input schema.",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "output_schema_hash": {
+            "type": "string",
+            "description": "SHA-256 hash of the output schema.",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "pricing_policy_version": {
+            "type": "string",
+            "description": "Pricing policy version used for this quote.",
+            "pattern": "^v[0-9]+(\\.[0-9]+)*$"
+          },
+          "expected_completeness": {
+            "type": "number",
+            "description": "Expected completeness score for the result.",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "declared_limitations": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "maxItems": 20,
+            "description": "Declared limitations of the quoted service."
+          },
+          "production_enabled": {
+            "type": "boolean",
+            "description": "Whether the service is production-enabled. Must be false for SUN-0101.",
+            "const": false
+          },
+          "payment_required": {
+            "type": "boolean",
+            "description": "Whether payment is required for execution."
+          }
+        },
+        "if": {
+          "properties": {
+            "pricing_scheme": {
+              "const": "upto"
+            }
+          }
+        },
+        "then": {
+          "required": ["maximum_authorized_price"],
+          "not": {
+            "required": ["price"]
+          }
+        }
+      },
+      "StructuredError": {
+        "title": "Structured Error",
+        "description": "Canonical structured error envelope for all SITEBORNE services. Machine-actionable, no secrets, no stack traces.",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "error_id",
+          "error_code",
+          "category",
+          "message",
+          "retryable",
+          "request_id",
+          "service_id",
+          "occurred_at"
+        ],
+        "properties": {
+          "error_id": {
+            "type": "string",
+            "description": "Unique error instance identifier.",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$|^[0-9A-HJKMNP-TV-Z]{26}$",
+            "maxLength": 36
+          },
+          "error_code": {
+            "type": "string",
+            "description": "Stable machine-actionable error code.",
+            "pattern": "^[A-Z][A-Z0-9_]*$",
+            "maxLength": 64
+          },
+          "category": {
+            "type": "string",
+            "description": "Closed error category.",
+            "enum": [
+              "validation",
+              "authorization",
+              "payment_required",
+              "payment_invalid",
+              "rate_limited",
+              "unsupported",
+              "unavailable",
+              "provider_failure",
+              "verification_failure",
+              "conflict",
+              "duplicate",
+              "internal",
+              "quarantined"
+            ]
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable descriptive message. Not authoritative for machine control.",
+            "maxLength": 512
+          },
+          "retryable": {
+            "type": "boolean",
+            "description": "Whether the operation may succeed on retry without caller changes."
+          },
+          "request_id": {
+            "type": "string",
+            "description": "Original request identifier.",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$|^[0-9A-HJKMNP-TV-Z]{26}$",
+            "maxLength": 36
+          },
+          "service_id": {
+            "type": "string",
+            "description": "Service that produced the error.",
+            "pattern": "^[a-z0-9_]+\\.v[0-9]+$"
+          },
+          "occurred_at": {
+            "type": "string",
+            "description": "Error occurrence timestamp (RFC 3339 UTC).",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,6})?Z$"
+          },
+          "job_id": {
+            "type": "string",
+            "description": "Associated job identifier if assigned.",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$|^[0-9A-HJKMNP-TV-Z]{26}$",
+            "maxLength": 36
+          },
+          "quote_id": {
+            "type": "string",
+            "description": "Associated quote identifier if applicable.",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$|^[0-9A-HJKMNP-TV-Z]{26}$",
+            "maxLength": 36
+          },
+          "failed_field_paths": {
+            "type": "array",
+            "description": "Bounded field paths that failed validation (JSON Pointer format).",
+            "items": {
+              "type": "string",
+              "pattern": "^(/[^/~]+)+$|^$"
+            },
+            "maxItems": 50
+          },
+          "limitations": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "maxItems": 20,
+            "description": "Known limitations related to this error."
+          },
+          "retry_after_seconds": {
+            "type": "integer",
+            "description": "Seconds before retry is recommended. Only when meaningful.",
+            "minimum": 1,
+            "maximum": 86400
+          },
+          "original_receipt_reference": {
+            "type": "string",
+            "description": "Original receipt reference for idempotent replay scenarios.",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "provider_class": {
+            "type": "string",
+            "description": "Class of provider that failed (e.g., 'sec', 'web', 'document').",
+            "pattern": "^[a-z0-9_-]+$",
+            "maxLength": 32
+          },
+          "quarantine_reason": {
+            "type": "string",
+            "description": "Reason for quarantine if category is quarantined.",
+            "maxLength": 256
+          },
+          "extensions": {
+            "type": "object",
+            "description": "Reverse-domain qualified extensions per PCC rules.",
+            "additionalProperties": false,
+            "propertyNames": {
+              "type": "string",
+              "minLength": 5,
+              "maxLength": 253,
+              "pattern": "^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?){2,}$"
+            }
+          }
+        }
+      },
+      "ServiceMetadata": {
+        "title": "Service Metadata",
+        "description": "Machine-readable service metadata for discovery, pricing, and capability advertisement.",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "service_id",
+          "service_version",
+          "title",
+          "description",
+          "capabilities",
+          "input_schema_uri",
+          "input_schema_hash",
+          "output_schema_uri",
+          "output_schema_hash",
+          "pcc_version",
+          "pricing_schemes",
+          "base_price",
+          "maximum_price",
+          "execution_mode",
+          "maximum_input_bytes",
+          "expected_latency_class",
+          "authorization_classification",
+          "promotion_state",
+          "production_enabled",
+          "declared_limitations",
+          "protocols",
+          "updated_at"
+        ],
+        "properties": {
+          "service_id": {
+            "type": "string",
+            "description": "Canonical service identifier.",
+            "pattern": "^[a-z0-9_]+\\.v[0-9]+$"
+          },
+          "service_version": {
+            "type": "string",
+            "description": "Service schema version.",
+            "pattern": "^v[0-9]+(\\.[0-9]+)*$"
+          },
+          "title": {
+            "type": "string",
+            "description": "Human-readable service title.",
+            "maxLength": 128
+          },
+          "description": {
+            "type": "string",
+            "description": "Literal capability description. No promotional language.",
+            "maxLength": 1024
+          },
+          "capabilities": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "maxItems": 20,
+            "description": "List of capability identifiers."
+          },
+          "input_schema_uri": {
+            "type": "string",
+            "description": "URI to the input schema (relative or absolute).",
+            "format": "uri-reference"
+          },
+          "input_schema_hash": {
+            "type": "string",
+            "description": "SHA-256 hash of the canonical input schema.",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "output_schema_uri": {
+            "type": "string",
+            "description": "URI to the output schema (relative or absolute).",
+            "format": "uri-reference"
+          },
+          "output_schema_hash": {
+            "type": "string",
+            "description": "SHA-256 hash of the canonical output schema.",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "pcc_version": {
+            "type": "string",
+            "description": "PCC version this service conforms to.",
+            "pattern": "^1\\.0\\.0$"
+          },
+          "pricing_schemes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["exact", "upto"]
+            },
+            "minItems": 1,
+            "maxItems": 2,
+            "uniqueItems": true
+          },
+          "base_price": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "maximum_price": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "execution_mode": {
+            "type": "string",
+            "description": "Supported execution modes.",
+            "enum": ["sync", "async", "both"]
+          },
+          "maximum_input_bytes": {
+            "type": "integer",
+            "description": "Maximum input payload size in bytes.",
+            "minimum": 0,
+            "maximum": 10485760
+          },
+          "expected_latency_class": {
+            "type": "string",
+            "description": "Expected latency class for sync execution.",
+            "enum": ["fast", "standard", "slow", "variable"]
+          },
+          "authorization_classification": {
+            "type": "string",
+            "description": "Required authorization level.",
+            "enum": ["public", "buyer_authorized", "restricted"]
+          },
+          "promotion_state": {
+            "type": "string",
+            "description": "Service promotion state per governance.",
+            "enum": [
+              "draft",
+              "case_supported",
+              "multi_case_supported",
+              "verified_pattern",
+              "executable_candidate",
+              "executable_verified",
+              "retired",
+              "tombstoned"
+            ]
+          },
+          "production_enabled": {
+            "type": "boolean",
+            "description": "Whether the service is production-enabled. Must be false for SUN-0101.",
+            "const": false
+          },
+          "declared_limitations": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "maxItems": 20,
+            "description": "Explicit declared limitations."
+          },
+          "protocols": {
+            "type": "object",
+            "description": "Protocol support status. Values: 'planned', 'scaffolded', 'tested', 'enabled', 'not_enabled'.",
+            "additionalProperties": false,
+            "properties": {
+              "x402": {
+                "type": "string",
+                "enum": ["planned", "scaffolded", "tested", "enabled", "not_enabled"]
+              },
+              "mcp": {
+                "type": "string",
+                "enum": ["planned", "scaffolded", "tested", "enabled", "not_enabled"]
+              },
+              "a2a": {
+                "type": "string",
+                "enum": ["planned", "scaffolded", "tested", "enabled", "not_enabled"]
+              },
+              "nevermined": {
+                "type": "string",
+                "enum": ["planned", "scaffolded", "tested", "enabled", "not_enabled"]
+              },
+              "agentverse": {
+                "type": "string",
+                "enum": ["planned", "scaffolded", "tested", "enabled", "not_enabled"]
+              },
+              "coinbase_bazaar": {
+                "type": "string",
+                "enum": ["planned", "scaffolded", "tested", "enabled", "not_enabled"]
+              },
+              "mcp_registry": {
+                "type": "string",
+                "enum": ["planned", "scaffolded", "tested", "enabled", "not_enabled"]
+              }
+            },
+            "required": [
+              "x402",
+              "mcp",
+              "a2a",
+              "nevermined",
+              "agentverse",
+              "coinbase_bazaar",
+              "mcp_registry"
+            ]
+          },
+          "updated_at": {
+            "type": "string",
+            "description": "Metadata last updated timestamp (RFC 3339 UTC).",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,6})?Z$"
+          }
+        }
+      },
+      "AsyncJob": {
+        "title": "Async Job",
+        "description": "Async job representation for long-running service executions. Does not imply queue/database implementation.",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "job_id",
+          "request_id",
+          "service_id",
+          "service_version",
+          "state",
+          "created_at",
+          "updated_at",
+          "expires_at"
+        ],
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "description": "Unique job identifier.",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$|^[0-9A-HJKMNP-TV-Z]{26}$",
+            "maxLength": 36
+          },
+          "request_id": {
+            "type": "string",
+            "description": "Original request identifier.",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$|^[0-9A-HJKMNP-TV-Z]{26}$",
+            "maxLength": 36
+          },
+          "service_id": {
+            "type": "string",
+            "description": "Service identifier.",
+            "pattern": "^[a-z0-9_]+\\.v[0-9]+$"
+          },
+          "service_version": {
+            "type": "string",
+            "description": "Service version.",
+            "pattern": "^v[0-9]+(\\.[0-9]+)*$"
+          },
+          "state": {
+            "type": "string",
+            "description": "Current job state.",
+            "enum": [
+              "accepted",
+              "queued",
+              "executing",
+              "verifying",
+              "settling",
+              "delivered",
+              "failed",
+              "quarantined",
+              "refund_required"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "description": "Job creation timestamp (RFC 3339 UTC).",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,6})?Z$"
+          },
+          "updated_at": {
+            "type": "string",
+            "description": "Last update timestamp (RFC 3339 UTC).",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,6})?Z$"
+          },
+          "expires_at": {
+            "type": "string",
+            "description": "Job expiration timestamp (RFC 3339 UTC).",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,6})?Z$"
+          },
+          "progress": {
+            "type": "number",
+            "description": "Progress estimate [0, 1]. 0 = not started, 1 = complete.",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "poll_after_seconds": {
+            "type": "integer",
+            "description": "Recommended seconds before next status poll.",
+            "minimum": 1,
+            "maximum": 3600
+          },
+          "result_reference": {
+            "type": "string",
+            "description": "Reference to result artifact (e.g., R2 key, artifact ID).",
+            "maxLength": 512
+          },
+          "error": {
+            "$ref": "#/components/schemas/StructuredError"
+          },
+          "receipt_reference": {
+            "type": "string",
+            "description": "PCC receipt reference for delivered jobs.",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "attempt_number": {
+            "type": "integer",
+            "description": "Current attempt number (1-indexed).",
+            "minimum": 1,
+            "maximum": 10
+          }
+        }
+      },
+      "Pagination": {
+        "title": "Pagination",
+        "description": "Standard pagination controls for list-based service outputs.",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "page": {
+            "type": "integer",
+            "description": "Page number (1-indexed).",
+            "minimum": 1,
+            "maximum": 10000,
+            "default": 1
+          },
+          "page_size": {
+            "type": "integer",
+            "description": "Number of items per page.",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 20
+          },
+          "total_items": {
+            "type": "integer",
+            "description": "Total number of items across all pages.",
+            "minimum": 0
+          },
+          "total_pages": {
+            "type": "integer",
+            "description": "Total number of pages.",
+            "minimum": 0
+          },
+          "has_next": {
+            "type": "boolean",
+            "description": "Whether a next page exists."
+          },
+          "has_previous": {
+            "type": "boolean",
+            "description": "Whether a previous page exists."
+          },
+          "cursor": {
+            "type": "string",
+            "description": "Opaque cursor for cursor-based pagination.",
+            "maxLength": 256
+          }
+        }
+      },
+      "AuthorizedArtifactReference": {
+        "title": "Authorized Artifact Reference",
+        "description": "Reference to an authorized document artifact for processing. Used for document evidence service.",
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["artifact_id", "media_type", "size_bytes"],
+        "properties": {
+          "artifact_id": {
+            "type": "string",
+            "description": "Unique artifact identifier (e.g., R2 object key, artifact registry ID).",
+            "maxLength": 512
+          },
+          "media_type": {
+            "type": "string",
+            "description": "Declared MIME type of the artifact.",
+            "enum": ["application/pdf", "image/png", "image/jpeg"]
+          },
+          "size_bytes": {
+            "type": "integer",
+            "description": "Declared size in bytes.",
+            "minimum": 1,
+            "maximum": 10485760
+          },
+          "page_count": {
+            "type": "integer",
+            "description": "Declared page count when known.",
+            "minimum": 1,
+            "maximum": 10
+          },
+          "content_hash": {
+            "type": "string",
+            "description": "SHA-256 content hash for integrity verification.",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "authorization": {
+            "type": "string",
+            "description": "Authorization classification.",
+            "enum": ["public", "buyer_authorized"]
+          },
+          "access_token": {
+            "type": "string",
+            "description": "Short-lived access token for private artifacts. Must not be logged.",
+            "maxLength": 2048
+          }
+        }
+      },
+      "PCCDocument": {
+        "title": "Proof-Carrying Context (PCC) v1.0.0",
+        "description": "Normative schema for Proof-Carrying Context 1.0.0. Frozen after compatibility validation passes. Schema patch 1.0.1 (SUN-0100 correction): extension_container now structurally permits qualified extension keys via patternProperties, matching documented semantics; pcc_version (document content compatibility) is unchanged at 1.0.0.",
+        "pcc_version": "1.0.0",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "pcc_version",
+          "job_id",
+          "contract",
+          "subject",
+          "claims",
+          "evidence",
+          "completeness",
+          "provenance",
+          "verification",
+          "receipt"
+        ],
+        "definitions": {
+          "pcc_version": {
+            "type": "string",
+            "const": "1.0.0",
+            "description": "PCC specification version"
+          },
+          "job_id": {
+            "type": "string",
+            "pattern": "^job_[a-z0-9]{24}$",
+            "description": "Unique job identifier"
+          },
+          "hash": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$",
+            "description": "SHA-256 hash with algorithm tag"
+          },
+          "timestamp_rfc3339": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,6})?Z$",
+            "description": "RFC 3339 UTC timestamp with Z suffix, normalized fractional seconds"
+          },
+          "decimal_string": {
+            "type": "string",
+            "pattern": "^(0|[1-9]\\d*)(\\.\\d+)?$",
+            "description": "Non-negative decimal string, no scientific notation, no leading zeros except single zero"
+          },
+          "currency": {
+            "type": "string",
+            "enum": ["USD", "USDC"],
+            "description": "Permitted currencies"
+          },
+          "service_id": {
+            "type": "string",
+            "enum": [
+              "company_evidence_graph.v1",
+              "web_context_verified.v1",
+              "document_evidence_json.v1",
+              "verify_agent_output.v1"
+            ],
+            "description": "Service identifier"
+          },
+          "service_version": {
+            "type": "string",
+            "pattern": "^v\\d+(\\.\\d+)*$",
+            "description": "Service version"
+          },
+          "quote_id": {
+            "type": "string",
+            "pattern": "^qte_[a-z0-9]{24}$",
+            "description": "Quote identifier"
+          },
+          "claim_id": {
+            "type": "string",
+            "pattern": "^clm_[a-z0-9]{24}$",
+            "description": "Claim identifier"
+          },
+          "evidence_id": {
+            "type": "string",
+            "pattern": "^evd_[a-z0-9]{24}$",
+            "description": "Evidence identifier"
+          },
+          "policy_id": {
+            "type": "string",
+            "pattern": "^pol_[a-z0-9]{24}$",
+            "description": "Policy identifier"
+          },
+          "key_id": {
+            "type": "string",
+            "pattern": "^kid_[a-z0-9]{24}$",
+            "description": "Key identifier"
+          },
+          "idempotency_key": {
+            "type": "string",
+            "pattern": "^idk_[a-z0-9]{24}$",
+            "description": "Idempotency key"
+          },
+          "contract_mode": {
+            "type": "string",
+            "enum": ["paid", "benchmark", "offline_verification"],
+            "description": "Contract mode determines required fields"
+          },
+          "subject_type": {
+            "type": "string",
+            "enum": ["organization", "person", "document", "webpage", "other"],
+            "description": "Subject type"
+          },
+          "materiality": {
+            "type": "string",
+            "enum": ["material", "supporting", "contextual"],
+            "description": "Claim materiality classification"
+          },
+          "verification_status": {
+            "type": "string",
+            "enum": ["verified", "unsupported", "disputed", "pending"],
+            "description": "Claim verification status"
+          },
+          "locator_type": {
+            "type": "string",
+            "enum": [
+              "json_pointer",
+              "xpath",
+              "css_selector",
+              "text_quote",
+              "page_region",
+              "byte_range",
+              "database_record",
+              "artifact_pointer"
+            ],
+            "description": "Evidence locator type"
+          },
+          "accessibility_status": {
+            "type": "string",
+            "enum": ["accessible", "unavailable", "restricted", "requires_authorization"],
+            "description": "Evidence accessibility status"
+          },
+          "authorization_classification": {
+            "type": "string",
+            "enum": ["public", "buyer_authorized", "restricted", "confidential"],
+            "description": "Evidence authorization classification"
+          },
+          "freshness_status": {
+            "type": "string",
+            "enum": ["fresh", "stale", "unknown"],
+            "description": "Evidence freshness status"
+          },
+          "verification_decision": {
+            "type": "string",
+            "enum": ["pass", "conditional", "fail", "quarantined"],
+            "description": "Verification decision"
+          },
+          "signature_algorithm": {
+            "type": "string",
+            "const": "Ed25519",
+            "description": "Signature algorithm"
+          },
+          "canonicalization_algorithm": {
+            "type": "string",
+            "const": "RFC8785-JCS",
+            "description": "Canonicalization algorithm"
+          },
+          "transformation": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["type", "timestamp", "tool_version"],
+            "properties": {
+              "type": {
+                "type": "string",
+                "minLength": 1
+              },
+              "timestamp": {
+                "$ref": "#/definitions/timestamp_rfc3339"
+              },
+              "tool_version": {
+                "type": "string",
+                "minLength": 1
+              },
+              "parameters": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          },
+          "locator": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["type", "value"],
+            "properties": {
+              "type": {
+                "$ref": "#/definitions/locator_type"
+              },
+              "value": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          "evidence_item": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "evidence_id",
+              "source_uri",
+              "retrieved_at",
+              "content_hash",
+              "media_type",
+              "locator",
+              "accessibility_status",
+              "transformation_history",
+              "authorization_classification",
+              "freshness_status"
+            ],
+            "properties": {
+              "evidence_id": {
+                "$ref": "#/definitions/evidence_id"
+              },
+              "source_uri": {
+                "type": "string",
+                "format": "uri",
+                "minLength": 1
+              },
+              "source_timestamp": {
+                "$ref": "#/definitions/timestamp_rfc3339"
+              },
+              "retrieved_at": {
+                "$ref": "#/definitions/timestamp_rfc3339"
+              },
+              "content_hash": {
+                "$ref": "#/definitions/hash"
+              },
+              "media_type": {
+                "type": "string",
+                "minLength": 1
+              },
+              "locator": {
+                "$ref": "#/definitions/locator"
+              },
+              "accessibility_status": {
+                "$ref": "#/definitions/accessibility_status"
+              },
+              "transformation_history": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/definitions/transformation"
+                }
+              },
+              "authorization_classification": {
+                "$ref": "#/definitions/authorization_classification"
+              },
+              "freshness_status": {
+                "$ref": "#/definitions/freshness_status"
+              }
+            }
+          },
+          "claim": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "claim_id",
+              "predicate",
+              "value",
+              "confidence",
+              "evidence_ids",
+              "materiality",
+              "verification_status"
+            ],
+            "properties": {
+              "claim_id": {
+                "$ref": "#/definitions/claim_id"
+              },
+              "predicate": {
+                "type": "string",
+                "minLength": 1
+              },
+              "value": {
+                "type": ["string", "number", "boolean", "object", "array", "null"]
+              },
+              "confidence": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "evidence_ids": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/definitions/evidence_id"
+                }
+              },
+              "materiality": {
+                "$ref": "#/definitions/materiality"
+              },
+              "verification_status": {
+                "$ref": "#/definitions/verification_status"
+              }
+            }
+          },
+          "completeness_vector_entry": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["dimension", "requested", "populated", "supported", "score"],
+            "properties": {
+              "dimension": {
+                "type": "string",
+                "minLength": 1
+              },
+              "requested": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "populated": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "supported": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "score": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              }
+            }
+          },
+          "completeness": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "requested_fields",
+              "populated_fields",
+              "supported_fields",
+              "score",
+              "missing_fields",
+              "unsupported_fields",
+              "stale_fields",
+              "vector"
+            ],
+            "properties": {
+              "requested_fields": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "populated_fields": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "supported_fields": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "score": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "missing_fields": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "unsupported_fields": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "stale_fields": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "vector": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/definitions/completeness_vector_entry"
+                }
+              }
+            }
+          },
+          "provenance_route": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["type", "provider", "version"],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["cache", "direct", "deterministic", "model", "hybrid"]
+              },
+              "provider": {
+                "type": "string",
+                "minLength": 1
+              },
+              "version": {
+                "type": "string",
+                "minLength": 1
+              },
+              "model_name": {
+                "type": "string"
+              },
+              "model_version": {
+                "type": "string"
+              },
+              "parameters": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          },
+          "provenance": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "routes",
+              "providers",
+              "tools",
+              "models",
+              "software_versions",
+              "policy_versions",
+              "transformations",
+              "cache_provenance",
+              "execution_environment",
+              "verification_routes"
+            ],
+            "properties": {
+              "routes": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/definitions/provenance_route"
+                }
+              },
+              "providers": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["name", "version", "capabilities"],
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "version": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "capabilities": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              },
+              "tools": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "description": "Tool name to version mapping"
+              },
+              "models": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["name", "version", "provider"],
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "version": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "provider": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  }
+                }
+              },
+              "software_versions": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "description": "Component name to version mapping"
+              },
+              "policy_versions": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "description": "Policy name to version mapping"
+              },
+              "transformations": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/definitions/transformation"
+                }
+              },
+              "cache_provenance": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["enabled", "hit"],
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "hit": {
+                    "type": "boolean"
+                  },
+                  "cache_key": {
+                    "type": "string"
+                  },
+                  "stored_at": {
+                    "$ref": "#/definitions/timestamp_rfc3339"
+                  }
+                }
+              },
+              "execution_environment": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["runtime", "version", "platform"],
+                "properties": {
+                  "runtime": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "version": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "platform": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "container_image": {
+                    "type": "string"
+                  }
+                }
+              },
+              "verification_routes": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/definitions/provenance_route"
+                }
+              }
+            }
+          },
+          "verification": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "schema_valid",
+              "material_claims_supported",
+              "evidence_accessibility",
+              "freshness",
+              "completeness",
+              "cross_source_agreement",
+              "provenance_valid",
+              "prompt_injection_result",
+              "deterministic_failures",
+              "verifier_versions",
+              "policy",
+              "decision",
+              "score",
+              "failed_requirements"
+            ],
+            "properties": {
+              "schema_valid": {
+                "type": "boolean"
+              },
+              "material_claims_supported": {
+                "type": "boolean"
+              },
+              "evidence_accessibility": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "freshness": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "completeness": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "cross_source_agreement": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "provenance_valid": {
+                "type": "boolean"
+              },
+              "prompt_injection_result": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["checked", "result"],
+                "properties": {
+                  "checked": {
+                    "type": "boolean"
+                  },
+                  "result": {
+                    "type": "string",
+                    "enum": ["clean", "suspected", "confirmed"]
+                  },
+                  "details": {
+                    "type": "string"
+                  }
+                }
+              },
+              "deterministic_failures": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "verifier_versions": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "policy": {
+                "$ref": "#/definitions/policy_id"
+              },
+              "decision": {
+                "$ref": "#/definitions/verification_decision"
+              },
+              "score": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "failed_requirements": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          },
+          "receipt": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "output_hash",
+              "canonicalization_algorithm",
+              "policy_hash",
+              "schema_hash",
+              "signature_algorithm",
+              "signing_key_id",
+              "signature",
+              "signed_at"
+            ],
+            "properties": {
+              "output_hash": {
+                "$ref": "#/definitions/hash"
+              },
+              "canonicalization_algorithm": {
+                "$ref": "#/definitions/canonicalization_algorithm"
+              },
+              "policy_hash": {
+                "$ref": "#/definitions/hash"
+              },
+              "schema_hash": {
+                "$ref": "#/definitions/hash"
+              },
+              "signature_algorithm": {
+                "$ref": "#/definitions/signature_algorithm"
+              },
+              "signing_key_id": {
+                "$ref": "#/definitions/key_id"
+              },
+              "signature": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]{86,88}$"
+              },
+              "signed_at": {
+                "$ref": "#/definitions/timestamp_rfc3339"
+              }
+            }
+          },
+          "contract": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "service_id",
+              "service_version",
+              "input_hash",
+              "input_schema_hash",
+              "output_schema_hash",
+              "quote_id",
+              "mode",
+              "currency",
+              "minimum_quality",
+              "freshness_seconds",
+              "issued_at",
+              "expires_at",
+              "idempotency_key"
+            ],
+            "properties": {
+              "service_id": {
+                "$ref": "#/definitions/service_id"
+              },
+              "service_version": {
+                "$ref": "#/definitions/service_version"
+              },
+              "input_hash": {
+                "$ref": "#/definitions/hash"
+              },
+              "input_schema_hash": {
+                "$ref": "#/definitions/hash"
+              },
+              "output_schema_hash": {
+                "$ref": "#/definitions/hash"
+              },
+              "quote_id": {
+                "$ref": "#/definitions/quote_id"
+              },
+              "price": {
+                "$ref": "#/definitions/decimal_string"
+              },
+              "maximum_authorized_price": {
+                "$ref": "#/definitions/decimal_string"
+              },
+              "mode": {
+                "$ref": "#/definitions/contract_mode"
+              },
+              "currency": {
+                "$ref": "#/definitions/currency"
+              },
+              "network": {
+                "type": "string",
+                "enum": ["base", "base-testnet"]
+              },
+              "minimum_quality": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "freshness_seconds": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "issued_at": {
+                "$ref": "#/definitions/timestamp_rfc3339"
+              },
+              "expires_at": {
+                "$ref": "#/definitions/timestamp_rfc3339"
+              },
+              "idempotency_key": {
+                "$ref": "#/definitions/idempotency_key"
+              }
+            }
+          },
+          "subject": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["type", "canonical_name"],
+            "properties": {
+              "type": {
+                "$ref": "#/definitions/subject_type"
+              },
+              "canonical_name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "identifiers": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "extension_container": {
+            "type": "object",
+            "additionalProperties": false,
+            "maxProperties": 10,
+            "propertyNames": {
+              "type": "string",
+              "minLength": 5,
+              "maxLength": 253,
+              "pattern": "^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?){2,}$"
+            },
+            "patternProperties": {
+              "^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?){2,}$": {
+                "$ref": "#/definitions/extension_value"
+              }
+            },
+            "description": "Controlled extension container. Keys must use reverse-domain qualified namespaces with at least three DNS-safe labels (e.g., net.siteborne.verification.v1, com.example.custom-metrics.v1). Underscores, leading/trailing hyphens, empty labels, and uppercase are forbidden. Maximum 10 extensions. Maximum total namespace key length: 253 characters. Each value must conform to extension_value (bounded JSON data)."
+          },
+          "extension_value": {
+            "type": "object",
+            "additionalProperties": true,
+            "maxProperties": 200,
+            "description": "Bounded JSON data payload for a single namespaced extension (PCC 1.0.1). Must be a JSON object; unbounded, executable, or policy-changing structures are out of scope for structural validation. Individual services may further narrow this shape for their own namespace via allOf composition."
+          }
+        },
+        "properties": {
+          "pcc_version": {
+            "$ref": "#/definitions/pcc_version"
+          },
+          "job_id": {
+            "$ref": "#/definitions/job_id"
+          },
+          "contract": {
+            "$ref": "#/definitions/contract"
+          },
+          "subject": {
+            "$ref": "#/definitions/subject"
+          },
+          "claims": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/claim"
+            },
+            "uniqueItems": true
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "$ref": "#/definitions/evidence_item"
+            },
+            "uniqueItems": true
+          },
+          "completeness": {
+            "$ref": "#/definitions/completeness"
+          },
+          "provenance": {
+            "$ref": "#/definitions/provenance"
+          },
+          "verification": {
+            "$ref": "#/definitions/verification"
+          },
+          "receipt": {
+            "$ref": "#/definitions/receipt"
+          },
+          "extensions": {
+            "$ref": "#/definitions/extension_container"
+          }
+        }
+      },
+      "CompanyEvidenceInput": {
+        "title": "Company Evidence Graph Input",
+        "description": "Input schema for company_evidence_graph.v1 service. At least one identity signal is required.",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [],
+        "properties": {
+          "company_name": {
+            "type": "string",
+            "description": "Company legal or common name.",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "ticker": {
+            "type": "string",
+            "description": "Stock ticker symbol.",
+            "pattern": "^[A-Z]{1,5}$",
+            "maxLength": 5
+          },
+          "domain": {
+            "type": "string",
+            "description": "Primary website domain.",
+            "format": "hostname",
+            "maxLength": 253
+          },
+          "identifiers": {
+            "type": "object",
+            "description": "Authoritative identifiers when known.",
+            "additionalProperties": false,
+            "maxProperties": 10,
+            "properties": {
+              "cik": {
+                "type": "string",
+                "pattern": "^[0-9]{10}$",
+                "description": "SEC CIK"
+              },
+              "lei": {
+                "type": "string",
+                "pattern": "^[A-Z0-9]{20}$",
+                "description": "Legal Entity Identifier"
+              },
+              "isin": {
+                "type": "string",
+                "pattern": "^[A-Z]{2}[A-Z0-9]{9}[0-9]$",
+                "description": "ISIN"
+              },
+              "cusip": {
+                "type": "string",
+                "pattern": "^[A-Z0-9]{9}$",
+                "description": "CUSIP"
+              },
+              "ticker_symbol": {
+                "type": "string",
+                "pattern": "^[A-Z]{1,5}$",
+                "description": "Primary ticker"
+              },
+              "exchange": {
+                "type": "string",
+                "maxLength": 16,
+                "description": "Primary exchange"
+              },
+              "figi": {
+                "type": "string",
+                "pattern": "^BBG[0-9A-Z]{9}$",
+                "description": "OpenFIGI"
+              }
+            }
+          },
+          "requested_field_groups": {
+            "type": "array",
+            "description": "Field groups to include in the result.",
+            "items": {
+              "type": "string",
+              "enum": [
+                "identity",
+                "sec_submissions",
+                "xbrl_facts",
+                "recent_filings",
+                "website_evidence",
+                "regulatory_mentions",
+                "public_repository_signals"
+              ]
+            },
+            "maxItems": 7,
+            "uniqueItems": true,
+            "default": ["identity", "sec_submissions", "recent_filings", "website_evidence"]
+          },
+          "buyer_urls": {
+            "type": "array",
+            "description": "Buyer-provided public URLs for supplemental evidence.",
+            "items": {
+              "type": "string",
+              "format": "uri",
+              "maxLength": 2048
+            },
+            "maxItems": 20
+          },
+          "freshness_seconds": {
+            "type": "integer",
+            "description": "Maximum acceptable age of data in seconds.",
+            "minimum": 0,
+            "maximum": 2592000,
+            "default": 86400
+          },
+          "minimum_completeness": {
+            "type": "number",
+            "description": "Minimum completeness score required [0, 1].",
+            "minimum": 0,
+            "maximum": 1,
+            "default": 0.5
+          },
+          "minimum_verification_score": {
+            "type": "number",
+            "description": "Minimum PCC verification score [0, 1].",
+            "minimum": 0,
+            "maximum": 1,
+            "default": 0.7
+          },
+          "maximum_authorized_price": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "jurisdiction_hints": {
+            "type": "array",
+            "description": "Optional jurisdiction hints for regulatory context.",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Z]{2}$",
+              "maxLength": 2
+            },
+            "maxItems": 5
+          }
+        },
+        "anyOf": [
+          {
+            "required": ["company_name"]
+          },
+          {
+            "required": ["ticker"]
+          },
+          {
+            "required": ["domain"]
+          },
+          {
+            "required": ["identifiers"]
+          }
+        ]
+      },
+      "CompanyEvidenceOutput": {
+        "title": "Company Evidence Graph Output",
+        "description": "Output schema for company_evidence_graph.v1 service. Must be a valid PCC 1.0.0 document with required net.siteborne.company-evidence.v1 extension.",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/PCCDocument"
+          },
+          {
+            "type": "object",
+            "required": ["contract", "extensions"],
+            "properties": {
+              "contract": {
+                "type": "object",
+                "required": ["service_id", "service_version", "output_schema_hash"],
+                "properties": {
+                  "service_id": {
+                    "const": "company_evidence_graph.v1"
+                  },
+                  "service_version": {
+                    "const": "v1"
+                  },
+                  "output_schema_hash": {
+                    "type": "string",
+                    "pattern": "^sha256:[a-f0-9]{64}$"
+                  }
+                }
+              },
+              "extensions": {
+                "type": "object",
+                "required": ["net.siteborne.company-evidence.v1"],
+                "propertyNames": {
+                  "type": "string",
+                  "minLength": 5,
+                  "maxLength": 253,
+                  "pattern": "^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?){2,}$"
+                },
+                "properties": {
+                  "net.siteborne.company-evidence.v1": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "description": "Company evidence extension payload.",
+                    "properties": {
+                      "canonical_identity": {
+                        "type": "object",
+                        "description": "Canonical resolved organization identity.",
+                        "additionalProperties": false,
+                        "properties": {
+                          "legal_name": {
+                            "type": "string",
+                            "maxLength": 256
+                          },
+                          "common_name": {
+                            "type": "string",
+                            "maxLength": 256
+                          },
+                          "ticker": {
+                            "type": "string",
+                            "pattern": "^[A-Z]{1,5}$"
+                          },
+                          "domain": {
+                            "type": "string",
+                            "format": "hostname"
+                          },
+                          "resolved_identifiers": {
+                            "type": "object",
+                            "additionalProperties": {
+                              "type": "string"
+                            },
+                            "maxProperties": 10
+                          }
+                        }
+                      },
+                      "resolved_identifiers": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "type": "string"
+                        },
+                        "maxProperties": 10,
+                        "description": "All resolved authoritative identifiers."
+                      },
+                      "field_groups": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "description": "Requested field groups with completion state.",
+                        "patternProperties": {
+                          "^(identity|sec_submissions|xbrl_facts|recent_filings|website_evidence|regulatory_mentions|public_repository_signals)$": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                              "status": {
+                                "type": "string",
+                                "enum": ["complete", "partial", "empty", "unavailable"]
+                              },
+                              "items": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object"
+                                }
+                              },
+                              "source_count": {
+                                "type": "integer",
+                                "minimum": 0
+                              },
+                              "evidence_ids": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "filing_summaries": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "accession_number": {
+                              "type": "string"
+                            },
+                            "filing_type": {
+                              "type": "string"
+                            },
+                            "filing_date": {
+                              "type": "string",
+                              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                            },
+                            "period_end": {
+                              "type": "string",
+                              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                            },
+                            "xbrl_available": {
+                              "type": "boolean"
+                            },
+                            "evidence_ids": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          }
+                        },
+                        "maxItems": 50
+                      },
+                      "normalized_facts": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "type": ["string", "number", "boolean"]
+                        },
+                        "description": "Normalized XBRL facts keyed by concept."
+                      },
+                      "website_observations": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "url": {
+                              "type": "string",
+                              "format": "uri"
+                            },
+                            "extracted_at": {
+                              "type": "string",
+                              "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,6})?Z$"
+                            },
+                            "content_hash": {
+                              "type": "string",
+                              "pattern": "^sha256:[a-f0-9]{64}$"
+                            },
+                            "evidence_ids": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          }
+                        },
+                        "maxItems": 20
+                      },
+                      "regulatory_references": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "source": {
+                              "type": "string"
+                            },
+                            "reference_id": {
+                              "type": "string"
+                            },
+                            "date": {
+                              "type": "string",
+                              "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                            },
+                            "description": {
+                              "type": "string"
+                            },
+                            "evidence_ids": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          }
+                        },
+                        "maxItems": 30
+                      },
+                      "repository_signals": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "platform": {
+                              "type": "string"
+                            },
+                            "owner": {
+                              "type": "string"
+                            },
+                            "repo": {
+                              "type": "string"
+                            },
+                            "stars": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "last_push": {
+                              "type": "string",
+                              "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,6})?Z$"
+                            },
+                            "evidence_ids": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          }
+                        },
+                        "maxItems": 20
+                      },
+                      "verified_absences": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": ["claim", "scope", "sources_checked", "confidence"],
+                          "properties": {
+                            "claim": {
+                              "type": "string",
+                              "description": "The claim that was verified absent."
+                            },
+                            "scope": {
+                              "type": "string",
+                              "description": "Search scope."
+                            },
+                            "sources_checked": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "search_window": {
+                              "type": "string",
+                              "description": "Time window searched."
+                            },
+                            "confidence": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "limitations": {
+                              "type": "string"
+                            },
+                            "evidence_ids": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          }
+                        },
+                        "maxItems": 20
+                      },
+                      "conflicts": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "field": {
+                              "type": "string"
+                            },
+                            "values": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "sources": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "resolution": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "maxItems": 20
+                      },
+                      "limitations": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "maxLength": 256
+                        },
+                        "maxItems": 20
+                      },
+                      "source_coverage_summary": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                          "sec": {
+                            "type": "boolean"
+                          },
+                          "website": {
+                            "type": "boolean"
+                          },
+                          "regulatory": {
+                            "type": "boolean"
+                          },
+                          "repositories": {
+                            "type": "boolean"
+                          }
+                        }
+                      },
+                      "cache_status": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                          "hit": {
+                            "type": "boolean"
+                          },
+                          "freshness_seconds": {
+                            "type": "integer"
+                          },
+                          "sources": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      },
+                      "declared_freshness": {
+                        "type": "string",
+                        "description": "ISO 8601 duration of freshness guarantee.",
+                        "pattern": "^P(\\d+D)?(T(\\d+H)?(\\d+M)?(\\d+S)?)?$"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "WebContextInput": {
+        "title": "Verified Web Context Input",
+        "description": "Input schema for web_context_verified.v1 service. Supports direct and rendered retrieval modes.",
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["target_url", "retrieval_mode"],
+        "properties": {
+          "target_url": {
+            "type": "string",
+            "description": "Target URL to retrieve. Public HTTP/HTTPS only.",
+            "format": "uri",
+            "maxLength": 2048
+          },
+          "retrieval_mode": {
+            "type": "string",
+            "description": "Retrieval mode.",
+            "enum": ["direct", "rendered"]
+          },
+          "output_mode": {
+            "type": "string",
+            "description": "Desired output format.",
+            "enum": ["clean_text", "markdown", "structured"],
+            "default": "clean_text"
+          },
+          "buyer_schema": {
+            "type": "object",
+            "description": "Optional buyer-provided JSON Schema for structured output validation.",
+            "additionalProperties": true,
+            "maxProperties": 50,
+            "maxDepth": 5
+          },
+          "field_selectors": {
+            "type": "array",
+            "description": "Requested field selectors for structured output.",
+            "items": {
+              "type": "string",
+              "maxLength": 128
+            },
+            "maxItems": 30
+          },
+          "freshness_seconds": {
+            "type": "integer",
+            "description": "Maximum acceptable age of cached content in seconds.",
+            "minimum": 0,
+            "maximum": 2592000,
+            "default": 3600
+          },
+          "max_content_size": {
+            "type": "integer",
+            "description": "Maximum content size in bytes to return.",
+            "minimum": 1024,
+            "maximum": 10485760,
+            "default": 1048576
+          },
+          "redirect_policy": {
+            "type": "string",
+            "description": "Redirect handling policy.",
+            "enum": ["follow", "follow_first", "manual"],
+            "default": "follow"
+          },
+          "max_redirects": {
+            "type": "integer",
+            "description": "Maximum number of redirects to follow.",
+            "minimum": 0,
+            "maximum": 10,
+            "default": 5
+          },
+          "locale_hint": {
+            "type": "string",
+            "description": "Locale hint for content negotiation (BCP 47).",
+            "pattern": "^[a-z]{2}(-[A-Z]{2})?$"
+          },
+          "minimum_verification_score": {
+            "type": "number",
+            "description": "Minimum PCC verification score [0, 1].",
+            "minimum": 0,
+            "maximum": 1,
+            "default": 0.7
+          },
+          "maximum_authorized_price": {
+            "$ref": "#/components/schemas/Money"
+          }
+        }
+      },
+      "WebContextOutput": {
+        "title": "Verified Web Context Output",
+        "description": "Output schema for web_context_verified.v1 service. Must be a valid PCC 1.0.0 document with required net.siteborne.web-context.v1 extension.",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/PCCDocument"
+          },
+          {
+            "type": "object",
+            "required": ["contract", "extensions"],
+            "properties": {
+              "contract": {
+                "type": "object",
+                "required": ["service_id", "service_version", "output_schema_hash"],
+                "properties": {
+                  "service_id": {
+                    "const": "web_context_verified.v1"
+                  },
+                  "service_version": {
+                    "const": "v1"
+                  },
+                  "output_schema_hash": {
+                    "type": "string",
+                    "pattern": "^sha256:[a-f0-9]{64}$"
+                  }
+                }
+              },
+              "extensions": {
+                "type": "object",
+                "required": ["net.siteborne.web-context.v1"],
+                "propertyNames": {
+                  "type": "string",
+                  "minLength": 5,
+                  "maxLength": 253,
+                  "pattern": "^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?){2,}$"
+                },
+                "properties": {
+                  "net.siteborne.web-context.v1": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "description": "Web context extension payload.",
+                    "properties": {
+                      "requested_url": {
+                        "type": "string",
+                        "format": "uri",
+                        "description": "Originally requested URL."
+                      },
+                      "final_url": {
+                        "type": "string",
+                        "format": "uri",
+                        "description": "Final URL after redirects."
+                      },
+                      "retrieval_mode_requested": {
+                        "type": "string",
+                        "enum": ["direct", "rendered"]
+                      },
+                      "retrieval_mode_used": {
+                        "type": "string",
+                        "enum": ["direct", "rendered"],
+                        "description": "Mode actually used (may differ if rendered unavailable)."
+                      },
+                      "http_metadata": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                          "status_code": {
+                            "type": "integer",
+                            "minimum": 100,
+                            "maximum": 599
+                          },
+                          "content_type": {
+                            "type": "string"
+                          },
+                          "content_length": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "headers": {
+                            "type": "object",
+                            "additionalProperties": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      },
+                      "rendering_metadata": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                          "engine": {
+                            "type": "string"
+                          },
+                          "version": {
+                            "type": "string"
+                          },
+                          "load_time_ms": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "scripts_executed": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "network_requests": {
+                            "type": "integer",
+                            "minimum": 0
+                          }
+                        }
+                      },
+                      "canonical_text": {
+                        "type": "string",
+                        "description": "Clean text extraction.",
+                        "maxLength": 10485760
+                      },
+                      "markdown": {
+                        "type": "string",
+                        "description": "Markdown output when requested.",
+                        "maxLength": 10485760
+                      },
+                      "structured_fields": {
+                        "type": "object",
+                        "description": "Structured extraction when requested.",
+                        "additionalProperties": true
+                      },
+                      "extraction_warnings": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "maxLength": 256
+                        },
+                        "maxItems": 20
+                      },
+                      "redirect_chain": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": ["url", "status_code"],
+                          "properties": {
+                            "url": {
+                              "type": "string",
+                              "format": "uri"
+                            },
+                            "status_code": {
+                              "type": "integer",
+                              "minimum": 300,
+                              "maximum": 399
+                            }
+                          }
+                        },
+                        "maxItems": 10
+                      },
+                      "content_classification": {
+                        "type": "string",
+                        "enum": ["article", "landing", "document", "app", "error", "other"]
+                      },
+                      "prompt_injection_findings": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "type": {
+                              "type": "string"
+                            },
+                            "severity": {
+                              "type": "string",
+                              "enum": ["low", "medium", "high", "critical"]
+                            },
+                            "location": {
+                              "type": "string"
+                            },
+                            "evidence_id": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "maxItems": 20
+                      },
+                      "source_hash": {
+                        "type": "string",
+                        "pattern": "^sha256:[a-f0-9]{64}$",
+                        "description": "Hash of raw source content."
+                      },
+                      "content_hash": {
+                        "type": "string",
+                        "pattern": "^sha256:[a-f0-9]{64}$",
+                        "description": "Hash of processed output content."
+                      },
+                      "truncation_status": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                          "truncated": {
+                            "type": "boolean"
+                          },
+                          "original_bytes": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "returned_bytes": {
+                            "type": "integer",
+                            "minimum": 0
+                          }
+                        }
+                      },
+                      "character_count": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "byte_count": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "limitations": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "maxLength": 256
+                        },
+                        "maxItems": 20
+                      },
+                      "cache_status": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                          "hit": {
+                            "type": "boolean"
+                          },
+                          "freshness_seconds": {
+                            "type": "integer"
+                          },
+                          "age_seconds": {
+                            "type": "integer"
+                          }
+                        }
+                      },
+                      "retrieval_freshness": {
+                        "type": "string",
+                        "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,6})?Z$",
+                        "description": "Timestamp of content retrieval."
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "DocumentEvidenceInput": {
+        "title": "Document Evidence JSON Input",
+        "description": "Input schema for document_evidence_json.v1 service. Exactly one document reference mode required.",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "artifact_reference": {
+            "$ref": "#/components/schemas/AuthorizedArtifactReference"
+          },
+          "upload_reference": {
+            "type": "object",
+            "description": "Authorized upload reference (mode 2).",
+            "additionalProperties": false,
+            "required": ["upload_id", "media_type", "size_bytes"],
+            "properties": {
+              "upload_id": {
+                "type": "string",
+                "maxLength": 512
+              },
+              "media_type": {
+                "type": "string",
+                "enum": ["application/pdf", "image/png", "image/jpeg"]
+              },
+              "size_bytes": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 10485760
+              },
+              "content_hash": {
+                "type": "string",
+                "pattern": "^sha256:[a-f0-9]{64}$"
+              }
+            }
+          },
+          "document_url": {
+            "type": "string",
+            "description": "Public document URL (mode 3).",
+            "format": "uri",
+            "maxLength": 2048
+          },
+          "declared_page_count": {
+            "type": "integer",
+            "description": "Declared page count when known.",
+            "minimum": 1,
+            "maximum": 10
+          },
+          "page_range": {
+            "type": "object",
+            "description": "Page range to process (1-indexed, inclusive).",
+            "additionalProperties": false,
+            "properties": {
+              "start": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 10
+              },
+              "end": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 10
+              }
+            }
+          },
+          "extraction_request": {
+            "type": "object",
+            "description": "Extraction configuration.",
+            "additionalProperties": false,
+            "properties": {
+              "extract_text": {
+                "type": "boolean",
+                "default": true
+              },
+              "extract_tables": {
+                "type": "boolean",
+                "default": false
+              },
+              "extract_key_values": {
+                "type": "boolean",
+                "default": false
+              },
+              "buyer_schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "maxProperties": 50,
+                "maxDepth": 5
+              }
+            }
+          },
+          "ocr_permission": {
+            "type": "boolean",
+            "description": "Whether OCR is permitted for image-based content.",
+            "default": false
+          },
+          "table_extraction_request": {
+            "type": "boolean",
+            "description": "Whether table extraction is requested.",
+            "default": false
+          },
+          "language_hints": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z]{2,3}(-[A-Z]{2})?$"
+            },
+            "maxItems": 5,
+            "description": "Language hints for OCR/extraction (BCP 47)."
+          },
+          "maximum_authorized_price": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "minimum_verification_score": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "default": 0.7
+          },
+          "retention_preference": {
+            "type": "string",
+            "enum": ["none", "temporary", "permanent"],
+            "default": "temporary",
+            "description": "Retention preference within policy limits."
+          }
+        },
+        "oneOf": [
+          {
+            "required": ["artifact_reference"]
+          },
+          {
+            "required": ["upload_reference"]
+          },
+          {
+            "required": ["document_url"]
+          }
+        ]
+      },
+      "DocumentEvidenceOutput": {
+        "title": "Document Evidence JSON Output",
+        "description": "Output schema for document_evidence_json.v1 service. Must be a valid PCC 1.0.0 document with required net.siteborne.document-evidence.v1 extension.",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/PCCDocument"
+          },
+          {
+            "type": "object",
+            "required": ["contract", "extensions"],
+            "properties": {
+              "contract": {
+                "type": "object",
+                "required": ["service_id", "service_version", "output_schema_hash"],
+                "properties": {
+                  "service_id": {
+                    "const": "document_evidence_json.v1"
+                  },
+                  "service_version": {
+                    "const": "v1"
+                  },
+                  "output_schema_hash": {
+                    "type": "string",
+                    "pattern": "^sha256:[a-f0-9]{64}$"
+                  }
+                }
+              },
+              "extensions": {
+                "type": "object",
+                "required": ["net.siteborne.document-evidence.v1"],
+                "propertyNames": {
+                  "type": "string",
+                  "minLength": 5,
+                  "maxLength": 253,
+                  "pattern": "^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?){2,}$"
+                },
+                "properties": {
+                  "net.siteborne.document-evidence.v1": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "description": "Document evidence extension payload.",
+                    "properties": {
+                      "document_classification": {
+                        "type": "string",
+                        "enum": [
+                          "contract",
+                          "invoice",
+                          "report",
+                          "form",
+                          "letter",
+                          "financial_statement",
+                          "regulatory_filing",
+                          "other"
+                        ]
+                      },
+                      "media_type_confirmed": {
+                        "type": "string"
+                      },
+                      "size_bytes_confirmed": {
+                        "type": "integer",
+                        "minimum": 1
+                      },
+                      "total_pages": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 10
+                      },
+                      "processed_pages": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 10
+                      },
+                      "page_classifications": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": ["page_number", "classification"],
+                          "properties": {
+                            "page_number": {
+                              "type": "integer",
+                              "minimum": 1
+                            },
+                            "classification": {
+                              "type": "string",
+                              "enum": [
+                                "native_text",
+                                "ocr",
+                                "table_heavy",
+                                "image_only",
+                                "unsupported"
+                              ]
+                            },
+                            "extraction_method": {
+                              "type": "string",
+                              "enum": ["native", "ocr", "hybrid", "none"]
+                            },
+                            "confidence": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            }
+                          }
+                        },
+                        "maxItems": 10
+                      },
+                      "extracted_data": {
+                        "type": "object",
+                        "description": "Structured extraction results.",
+                        "additionalProperties": true
+                      },
+                      "text_blocks": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "page": {
+                              "type": "integer",
+                              "minimum": 1
+                            },
+                            "text": {
+                              "type": "string"
+                            },
+                            "bbox": {
+                              "type": "array",
+                              "items": {
+                                "type": "number"
+                              },
+                              "minItems": 4,
+                              "maxItems": 4
+                            }
+                          }
+                        },
+                        "maxItems": 100
+                      },
+                      "tables": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "page": {
+                              "type": "integer",
+                              "minimum": 1
+                            },
+                            "table_index": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "headers": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "rows": {
+                              "type": "array",
+                              "items": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            "bbox": {
+                              "type": "array",
+                              "items": {
+                                "type": "number"
+                              },
+                              "minItems": 4,
+                              "maxItems": 4
+                            }
+                          }
+                        },
+                        "maxItems": 50
+                      },
+                      "ocr_confidence": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "page": {
+                              "type": "integer",
+                              "minimum": 1
+                            },
+                            "mean_confidence": {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 1
+                            },
+                            "low_confidence_regions": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          }
+                        },
+                        "maxItems": 10
+                      },
+                      "page_warnings": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "page": {
+                              "type": "integer",
+                              "minimum": 1
+                            },
+                            "warning": {
+                              "type": "string"
+                            },
+                            "severity": {
+                              "type": "string",
+                              "enum": ["low", "medium", "high"]
+                            }
+                          }
+                        },
+                        "maxItems": 50
+                      },
+                      "unsupported_content": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "page": {
+                              "type": "integer",
+                              "minimum": 1
+                            },
+                            "reason": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "maxItems": 20
+                      },
+                      "truncation": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                          "truncated": {
+                            "type": "boolean"
+                          },
+                          "pages_omitted": {
+                            "type": "array",
+                            "items": {
+                              "type": "integer"
+                            }
+                          }
+                        }
+                      },
+                      "retention_result": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                          "stored": {
+                            "type": "boolean"
+                          },
+                          "expires_at": {
+                            "type": "string",
+                            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,6})?Z$"
+                          }
+                        }
+                      },
+                      "limitations": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "maxLength": 256
+                        },
+                        "maxItems": 20
+                      },
+                      "calculated_billable_units": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                          "native_text_pages": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "ocr_pages": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "table_pages": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "total_billable": {
+                            "type": "integer",
+                            "minimum": 0
+                          }
+                        }
+                      },
+                      "estimated_or_final_amount": {
+                        "$ref": "#/components/schemas/Money"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "AgentVerificationInput": {
+        "title": "Agent Output Verification Input",
+        "description": "Input schema for verify_agent_output.v1 service. Supports standard and independent reproduction modes.",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "verification_contract",
+          "candidate_output",
+          "required_schema",
+          "verification_mode"
+        ],
+        "properties": {
+          "verification_contract": {
+            "type": "object",
+            "description": "Contract specifying what to verify.",
+            "additionalProperties": false,
+            "required": ["claims", "deterministic_requirements"],
+            "properties": {
+              "claims": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["claim_id", "predicate", "expected_value"],
+                  "properties": {
+                    "claim_id": {
+                      "type": "string",
+                      "maxLength": 64
+                    },
+                    "predicate": {
+                      "type": "string",
+                      "enum": [
+                        "equals",
+                        "contains",
+                        "matches",
+                        "greater_than",
+                        "less_than",
+                        "exists",
+                        "not_exists"
+                      ]
+                    },
+                    "expected_value": {
+                      "type": ["string", "number", "boolean", "object", "array", "null"]
+                    },
+                    "tolerance": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "materiality": {
+                      "type": "string",
+                      "enum": ["material", "supporting", "contextual"],
+                      "default": "material"
+                    }
+                  }
+                },
+                "maxItems": 50
+              },
+              "deterministic_requirements": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["requirement_id", "check"],
+                  "properties": {
+                    "requirement_id": {
+                      "type": "string",
+                      "maxLength": 64
+                    },
+                    "check": {
+                      "type": "string",
+                      "enum": [
+                        "schema_valid",
+                        "hash_match",
+                        "signature_valid",
+                        "evidence_resolves",
+                        "no_pii",
+                        "no_secrets"
+                      ]
+                    },
+                    "parameters": {
+                      "type": "object",
+                      "additionalProperties": true
+                    }
+                  }
+                },
+                "maxItems": 30
+              }
+            }
+          },
+          "candidate_output": {
+            "type": "object",
+            "description": "The agent output to verify. Cannot modify verifier policy.",
+            "additionalProperties": true,
+            "maxProperties": 200,
+            "maxDepth": 10
+          },
+          "supplied_evidence": {
+            "type": "array",
+            "description": "Evidence items supplied with the candidate output.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["evidence_id", "content", "content_hash"],
+              "properties": {
+                "evidence_id": {
+                  "type": "string",
+                  "maxLength": 64
+                },
+                "content": {
+                  "type": "object",
+                  "additionalProperties": true
+                },
+                "content_hash": {
+                  "type": "string",
+                  "pattern": "^sha256:[a-f0-9]{64}$"
+                },
+                "source_uri": {
+                  "type": "string",
+                  "format": "uri",
+                  "maxLength": 2048
+                },
+                "retrieved_at": {
+                  "type": "string",
+                  "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,6})?Z$"
+                }
+              }
+            },
+            "maxItems": 20
+          },
+          "required_schema": {
+            "type": "object",
+            "description": "Required output schema (JSON Schema) that candidate must conform to.",
+            "additionalProperties": true
+          },
+          "minimum_score": {
+            "type": "number",
+            "description": "Minimum verification score [0, 1].",
+            "minimum": 0,
+            "maximum": 1,
+            "default": 0.7
+          },
+          "verification_mode": {
+            "type": "string",
+            "enum": ["standard", "independent_reproduction"],
+            "description": "Verification mode."
+          },
+          "allowed_evidence_sources": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uri",
+              "maxLength": 2048
+            },
+            "maxItems": 10,
+            "description": "Allowed evidence source domains/URIs."
+          },
+          "freshness_requirements": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "evidence_max_age_seconds": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2592000
+              },
+              "schema_max_age_seconds": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2592000
+              }
+            }
+          },
+          "maximum_authorized_price": {
+            "$ref": "#/components/schemas/Money"
+          }
+        }
+      },
+      "AgentVerificationOutput": {
+        "title": "Agent Output Verification Output",
+        "description": "Output schema for verify_agent_output.v1 service. Must be a valid PCC 1.0.0 document with required net.siteborne.agent-verification.v1 extension.",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/PCCDocument"
+          },
+          {
+            "type": "object",
+            "required": ["contract", "extensions"],
+            "properties": {
+              "contract": {
+                "type": "object",
+                "required": ["service_id", "service_version", "output_schema_hash"],
+                "properties": {
+                  "service_id": {
+                    "const": "verify_agent_output.v1"
+                  },
+                  "service_version": {
+                    "const": "v1"
+                  },
+                  "output_schema_hash": {
+                    "type": "string",
+                    "pattern": "^sha256:[a-f0-9]{64}$"
+                  }
+                }
+              },
+              "extensions": {
+                "type": "object",
+                "required": ["net.siteborne.agent-verification.v1"],
+                "propertyNames": {
+                  "type": "string",
+                  "minLength": 5,
+                  "maxLength": 253,
+                  "pattern": "^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?){2,}$"
+                },
+                "properties": {
+                  "net.siteborne.agent-verification.v1": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "description": "Agent verification extension payload.",
+                    "properties": {
+                      "verification_mode": {
+                        "type": "string",
+                        "enum": ["standard", "independent_reproduction"]
+                      },
+                      "outcome": {
+                        "type": "string",
+                        "enum": ["pass", "fail", "conditional"]
+                      },
+                      "score": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1
+                      },
+                      "requirement_results": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": ["requirement_id", "passed"],
+                          "properties": {
+                            "requirement_id": {
+                              "type": "string"
+                            },
+                            "passed": {
+                              "type": "boolean"
+                            },
+                            "details": {
+                              "type": "string"
+                            },
+                            "evidence_ids": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          }
+                        },
+                        "maxItems": 50
+                      },
+                      "schema_result": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["valid"],
+                        "properties": {
+                          "valid": {
+                            "type": "boolean"
+                          },
+                          "errors": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      },
+                      "evidence_result": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["resolved", "unresolved_count"],
+                        "properties": {
+                          "resolved": {
+                            "type": "boolean"
+                          },
+                          "resolved_count": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "unresolved_count": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "unresolved_ids": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      },
+                      "claim_support_result": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["supported", "unsupported_count"],
+                        "properties": {
+                          "supported": {
+                            "type": "boolean"
+                          },
+                          "supported_count": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "unsupported_count": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "conflicting_count": {
+                            "type": "integer",
+                            "minimum": 0
+                          }
+                        }
+                      },
+                      "reproduction_result": {
+                        "type": "object",
+                        "description": "Present only for independent_reproduction mode.",
+                        "additionalProperties": false,
+                        "properties": {
+                          "reproduced": {
+                            "type": "boolean"
+                          },
+                          "agreement_score": {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1
+                          },
+                          "differences": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "properties": {
+                                "path": {
+                                  "type": "string"
+                                },
+                                "candidate_value": {
+                                  "type": ["string", "number", "boolean", "null"]
+                                },
+                                "reproduced_value": {
+                                  "type": ["string", "number", "boolean", "null"]
+                                }
+                              }
+                            },
+                            "maxItems": 20
+                          },
+                          "reproduction_output_hash": {
+                            "type": "string",
+                            "pattern": "^sha256:[a-f0-9]{64}$"
+                          }
+                        }
+                      },
+                      "failed_requirements": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "maxItems": 50
+                      },
+                      "deterministic_failures": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": ["requirement_id", "reason"],
+                          "properties": {
+                            "requirement_id": {
+                              "type": "string"
+                            },
+                            "reason": {
+                              "type": "string"
+                            },
+                            "blocks_pass": {
+                              "type": "boolean",
+                              "const": true
+                            }
+                          }
+                        },
+                        "maxItems": 20
+                      },
+                      "unverifiable_assertions": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "claim_id": {
+                              "type": "string"
+                            },
+                            "reason": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "maxItems": 20
+                      },
+                      "limitations": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "maxLength": 256
+                        },
+                        "maxItems": 20
+                      },
+                      "candidate_output_hash": {
+                        "type": "string",
+                        "pattern": "^sha256:[a-f0-9]{64}$"
+                      },
+                      "reproduction_output_hash": {
+                        "type": "string",
+                        "pattern": "^sha256:[a-f0-9]{64}$",
+                        "description": "Present only for independent_reproduction mode."
+                      },
+                      "reproduction_agreement_score": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "Present only for independent_reproduction mode."
+                      },
+                      "verifier_classes_used": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "maxItems": 10
+                      },
+                      "policy_version": {
+                        "type": "string",
+                        "pattern": "^v[0-9]+(\\.[0-9]+)*$"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}
