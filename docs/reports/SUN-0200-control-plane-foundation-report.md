@@ -6,6 +6,8 @@ Successfully implemented the credential-independent control plane foundation for
 the SITEBORNE Utility Network (Phase 4a). All components implemented, tested
 locally, and validated without Cloudflare credentials.
 
+**Implementation commit:** `1ef2088`
+
 ## Acceptance Criteria Verification
 
 ### ✅ Contract Baselines Unchanged
@@ -249,8 +251,8 @@ apps/edge-api/src/index.ts  # Integrated control plane
 ## Test Results
 
 ```
-Test Files  16 passed (16)
-Tests       334 passed (334)
+Test Files  17 passed (17)
+Tests       366 passed (366)
   - State machine: 39
   - Repositories: 14
   - Artifacts/Queue: 13
@@ -259,6 +261,25 @@ Tests       334 passed (334)
   - Routes: 8
   - Edge API: 5
   - Contracts/Pricing/Policy/PCC: 222
+  - D1 Integration: 32
+
+TypeScript total: 366
+Python PCC/contracts: 91 (91 passed, 5 warnings)
+Python modal-worker: 7 (7 passed, 3 warnings)
+Independent test total: 464
+```
+
+### D1 Local Verification Results
+
+```
+Migration verification: PASSED
+  - All 13 tables created
+  - All 42 indexes verified
+  - Foreign key enforcement active
+  - All constraint tests passed (6/6)
+  - Transaction behavior verified (2/2)
+  - Concurrency test: 20 parallel → 1 acquired, 19 duplicates
+  - Queue consumer validation: 8/8 outcomes tested
 ```
 
 ## Exact Idempotency Guarantee
@@ -288,6 +309,8 @@ backoff; dead letter queue for exhausted retries.**
 ## Git Status
 
 - Working tree clean (no uncommitted changes to tracked files)
+- Implementation commit: `1ef2088`
+- Bookkeeping commit: pending
 - New files: control plane source, tests, migrations, docs
 - Modified: PROJECT_STATE.yaml, TASKS.yaml, apps/edge-api/src/index.ts
 

@@ -10,9 +10,9 @@ source_directive:
 execution:
   mode: 'serial'
   active_mutation_tasks: 1
-  current_increment: 'SUN-0200'
-  current_phase: 'phase_4_control_plane'
-  last_completed_increment: 'SUN-0102'
+  current_increment: 'SUN-0300'
+  current_phase: 'phase_5_adapters'
+  last_completed_increment: 'SUN-0200'
 
 implemented:
   - 'governance_validation'
@@ -28,15 +28,32 @@ implemented:
   - 'modal_worker_foundation'
   - 'service_contracts_release_1.0.0'
   - 'contract_compatibility_enforcement'
+  - 'control_plane_state_machine'
+  - 'control_plane_middleware'
+  - 'control_plane_repositories'
+  - 'control_plane_idempotency'
+  - 'control_plane_artifacts'
+  - 'control_plane_queue_dispatch'
+  - 'control_plane_quota_cost_guard'
+  - 'control_plane_audit_events'
+  - 'control_plane_routes'
+  - 'control_plane_d1_migrations'
+  - 'control_plane_local_testing'
+  - 'd1_persistence'
+  - 'r2_artifacts'
+  - 'queue_orchestration'
+  - 'd1_repositories_locally_tested'
+  - 'd1_migrations_locally_verified'
+  - 'transactional_idempotency_locally_verified'
+  - 'queue_consumer_safety_locally_tested'
+  - 'local_dead_letter_behavior'
+  - 'in_memory_repositories'
 
 not_implemented:
   - 'company_evidence_graph'
   - 'web_context_verified'
   - 'document_evidence_json'
   - 'verify_agent_output'
-  - 'd1_persistence'
-  - 'r2_artifacts'
-  - 'queue_orchestration'
   - 'x402'
   - 'mcp'
   - 'a2a'
@@ -47,6 +64,7 @@ not_implemented:
 
 blocked_external:
   - 'cloudflare_account_configuration'
+  - 'cloudflare_production_provisioning'
   - 'ionos_dns_migration'
   - 'seller_wallet'
   - 'cdp_credentials'
@@ -126,4 +144,4 @@ pcc_schema:
   extension_namespace: 'reverse-domain-qualified'
   drift_check: 'enabled'
 
-last_updated: '2026-08-05T23:26:00Z'
+last_updated: '2026-08-06T18:55:00Z'
