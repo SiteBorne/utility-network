@@ -101,10 +101,10 @@ function generateTypeScript(
   run('quicktype', args);
 
   // Add header
-  const tsHeader = `// Generated from ${schemaPath}
-  // DO NOT EDIT MANUALLY — regenerate from canonical schema
-  
-  `;
+  const tsHeader = `// Generated from schemas/proof-carrying-context.schema.json
+// DO NOT EDIT MANUALLY — regenerate from canonical schema
+
+`;
   const tsContent = readFileSync(outputPath, 'utf-8');
   writeFileSync(outputPath, tsHeader + tsContent);
 
@@ -148,7 +148,7 @@ function generatePython(schemaPath: string, outputPath: string): void {
   );
 
   // Add header
-  const pyHeader = `# Generated from ${schemaPath}
+  const pyHeader = `# Generated from schemas/proof-carrying-context.schema.json
 # DO NOT EDIT MANUALLY — regenerate from canonical schema
 
 from __future__ import annotations

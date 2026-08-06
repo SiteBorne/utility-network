@@ -1,4 +1,4 @@
-# Generated from /Users/meta4ickal/SITEBORNE Utility Network/schemas/common/service-metadata.schema.json
+# Generated from schemas/proof-carrying-context.schema.json
 # DO NOT EDIT MANUALLY — regenerate from canonical schema
 
 from __future__ import annotations
