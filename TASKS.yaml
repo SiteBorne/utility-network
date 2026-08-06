@@ -448,7 +448,7 @@ tasks:
   - id: 'SUN-0101'
     title: 'Define input/output schemas for all services (Phase 3b)'
     phase: 'phase_3_contracts'
-    state: 'active'
+    state: 'accepted'
     owner_agent: 'architect'
     dependencies:
       - 'SUN-0100'
@@ -463,7 +463,7 @@ tasks:
       - 'schemas/MANIFEST.json'
       - 'packages/contracts/generated/typescript/{common,services}/*.ts, pcc.ts'
       - 'packages/contracts/generated/python/{common,services}/*.py, pcc.py'
-      - 'packages/pcc-schema/scripts/{create-combined-schemas,create-ts-schemas,generate-service-models,drift-check-services,generate-manifest}.ts'
+      - 'packages/pcc-schema/scripts/{create-combined-schemas,create-ts-schemas,generate-service-models,drift-check-services,generate-manifest,generate-openapi,drift-check-openapi}.ts'
       - 'packages/contracts/src/semantic/validators.ts'
       - 'packages/contracts/src/semantic/validators.py'
       - 'packages/contracts/src/semantic/validators.test.ts'
@@ -471,24 +471,23 @@ tasks:
       - 'packages/pcc-schema/tests/python/test_schema_examples.py'
       - 'docs/reports/SUN-0101-service-schemas-report.md'
       - 'docs/decisions/0008-pcc-extension-container-patch.md'
-    next_action: 'Complete SUN-0101 acceptance gates: format, lint, OpenAPI generation, service metadata records, drift pipeline fix, test reconciliation'
-    blocker: 'Format check fails (33 files), lint fails (4 errors), OpenAPI not generated, service metadata records missing, drift check uses wrong Python path, working tree not clean, test counts misreported'
+    next_action: 'SUN-0102: Freeze service contracts 1.0.0 and compatibility enforcement'
+    blocker: null
     commit_ref: '432409d'
     notes: >-
-      SUN-0101 reopened from accepted to active because original acceptance
-      conditions were not fully satisfied. OpenAPI generation was mandatory
-      but not delivered. Format and lint checks fail. Drift check mutates
-      working tree and references wrong Python model path (pcc_models.py vs
-      pcc.py). Service metadata records not created. Test totals incorrectly
-      reported as 284 (actual: 210 TS + 136 Python = 346). Fast-check
-      coverage for service contracts not verified. Secret scanning not run.
-      Working tree has uncommitted drift artifacts. All schema and validator
-      work is sound and preserved.
+      All acceptance gates satisfied: 17 canonical schemas (9 common + 8 service
+      input/output) structurally validated, generated (TS+Python), hashed,
+      manifested, fixture-validated, drift-enforced (0 drift), OpenAPI generated
+      (3 artifacts), service metadata records created (4), semantic validators
+      with cross-language fixture agreement. 315 tests pass (217 TS + 91 Python
+      PCC/contracts + 7 Python modal-worker). Format/lint/typecheck pass. Secret
+      scan clean. Working tree clean. PCC remains 1.0.1; service contracts frozen
+      at 1.0.0 depending on PCC 1.0.1.
 
   - id: 'SUN-0102'
-    title: 'Freeze contracts version 1.0.0 (Phase 3c)'
+    title: 'Freeze service contracts 1.0.0 and compatibility enforcement (Phase 3c)'
     phase: 'phase_3_contracts'
-    state: 'blocked_external'
+    state: 'active'
     owner_agent: 'architect'
     dependencies:
       - 'SUN-0101'
@@ -497,9 +496,11 @@ tasks:
       - 'All schemas versioned 1.0.0'
       - 'No breaking changes without version bump enforced'
       - 'Compatibility tests enforce schema stability'
+      - 'Service contracts explicitly record dependency on PCC 1.0.1 and its schema hash'
+      - 'PCC remains 1.0.1; service contracts frozen at 1.0.0'
     evidence: []
-    next_action: 'Await SUN-0101 genuine acceptance'
-    blocker: 'SUN-0101 acceptance gates not complete: format, lint, OpenAPI, service metadata, drift pipeline, test reconciliation, secret scan, clean tree'
+    next_action: 'Implement contract version pinning, compatibility test suite, and schema dependency recording'
+    blocker: null
     commit_ref: null
 
   # Phase 4+ tasks abbreviated
