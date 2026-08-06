@@ -18,23 +18,30 @@
     "contracts:compat": "pnpm --filter @siteborne/contracts contracts:compat",
     "contracts:compat:check": "pnpm --filter @siteborne/contracts contracts:compat:check",
     "contracts:release:verify": "pnpm --filter @siteborne/contracts contracts:release:verify",
-    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm python:test:pcc && pnpm governance:validate && pnpm state:validate && pnpm tasks:validate && pnpm contracts:baseline:verify && pnpm contracts:compat:check && pnpm contracts:release:verify",
+    "migrations:verify": "tsx scripts/d1-verify.ts",
+    "d1:test": "tsx scripts/d1-verify.ts",
+    "control-plane:test": "vitest run apps/edge-api/tests/d1-integration.test.ts",
+    "control-plane:check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm control-plane:test",
     "python:install": "cd services/modal-worker && python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'",
     "python:lint": "cd services/modal-worker && .venv/bin/ruff .",
     "python:typecheck": "cd services/modal-worker && .venv/bin/mypy .",
     "python:test": "cd services/modal-worker && .venv/bin/python -m pytest",
-    "python:test:pcc": "cd packages/pcc-schema && ../../.venv/bin/python -m pytest tests/python/ -v"
+    "python:test:pcc": "cd packages/pcc-schema && ../../.venv/bin/python -m pytest tests/python/ -v",
+    "python:test:modal": "cd services/modal-worker && .venv/bin/python -m pytest -v",
+    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm python:test:pcc && pnpm python:test:modal && pnpm governance:validate && pnpm state:validate && pnpm tasks:validate && pnpm contracts:baseline:verify && pnpm contracts:compat:check && pnpm contracts:release:verify && pnpm migrations:verify && pnpm d1:test && pnpm control-plane:test && pnpm control-plane:check"
   },
   "devDependencies": {
-    "turbo": "^2.0.0",
-    "typescript": "^5.5.0",
-    "tsx": "^4.16.0",
-    "vitest": "^2.0.0",
+    "@eslint/js": "^9.0.0",
     "@types/node": "^22.0.0",
     "eslint": "^9.0.0",
-    "@eslint/js": "^9.0.0",
-    "typescript-eslint": "^8.0.0",
+    "miniflare": "5.20260801.0-alpha",
     "prettier": "^3.3.0",
+    "tsx": "^4.16.0",
+    "turbo": "^2.0.0",
+    "typescript": "^5.5.0",
+    "typescript-eslint": "^8.0.0",
+    "vitest": "^2.0.0",
+    "wrangler": "4.119.0",
     "yaml": "^2.5.0",
     "zod": "^3.23.0"
   },
@@ -42,5 +49,9 @@
     "node": ">=22.0.0",
     "pnpm": ">=9.0.0"
   },
-  "packageManager": "pnpm@9.0.0"
+  "packageManager": "pnpm@9.0.0",
+  "dependencies": {
+    "@types/uuid": "11.0.0",
+    "uuid": "11.0.5"
+  }
 }

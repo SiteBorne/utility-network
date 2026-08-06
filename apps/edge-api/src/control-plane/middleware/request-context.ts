@@ -1,0 +1,249 @@
+import { z } from 'zod';
+import type { Context, Next } from 'hono';
+
+export interface RequestContext {
+  requestId: string;
+  correlationId: string;
+  idempotencyKey: string | null;
+  serviceId: string | null;
+  serviceVersion: string | null;
+  inputHash: string | null;
+  inputSchemaHash: string | null;
+  startTime: number;
+  isTestMode: boolean;
+  auditContext: AuditContext;
+}
+
+export interface AuditContext {
+  requestId: string;
+  correlationId: string;
+  clientIp?: string;
+  userAgent?: string;
+  timestamp: string;
+}
+
+export const RequestContextSchema = z.object({
+  requestId: z.string().uuid(),
+  correlationId: z.string().uuid(),
+  idempotencyKey: z.string().optional(),
+  serviceId: z.string().optional(),
+  serviceVersion: z.string().optional(),
+  inputHash: z.string().optional(),
+  inputSchemaHash: z.string().optional(),
+  startTime: z.number(),
+  isTestMode: z.boolean(),
+  auditContext: z.object({
+    requestId: z.string().uuid(),
+    correlationId: z.string().uuid(),
+    clientIp: z.string().optional(),
+    userAgent: z.string().optional(),
+    timestamp: z.string().datetime({ offset: true }),
+  }),
+});
+
+export function generateRequestId(): string {
+  return crypto.randomUUID();
+}
+
+export function generateCorrelationId(): string {
+  return crypto.randomUUID();
+}
+
+export function createRequestContext(
+  requestId: string,
+  correlationId: string,
+  idempotencyKey: string | null,
+  isTestMode: boolean,
+  clientIp?: string,
+  userAgent?: string
+): RequestContext {
+  return {
+    requestId,
+    correlationId,
+    idempotencyKey,
+    serviceId: null,
+    serviceVersion: null,
+    inputHash: null,
+    inputSchemaHash: null,
+    startTime: Date.now(),
+    isTestMode,
+    auditContext: {
+      requestId,
+      correlationId,
+      clientIp,
+      userAgent,
+      timestamp: new Date().toISOString(),
+    },
+  };
+}
+
+export const MAX_BODY_SIZE = 10 * 1024 * 1024; // 10 MB
+
+export const AllowedContentTypes = ['application/json', 'application/json; charset=utf-8'] as const;
+
+export function validateContentType(contentType: string | null): boolean {
+  if (!contentType) return false;
+  return AllowedContentTypes.some((ct) => contentType.startsWith(ct));
+}
+
+export function createIdempotencyMiddleware() {
+  return async (c: Context, next: Next) => {
+    const requestId = c.get('requestId') || generateRequestId();
+    const correlationId = c.get('correlationId') || generateCorrelationId();
+    const idempotencyKey = c.req.header('Idempotency-Key') || null;
+    const isTestMode = true; // Default to test mode for local development
+
+    c.set(
+      'requestContext',
+      createRequestContext(
+        requestId,
+        correlationId,
+        idempotencyKey,
+        isTestMode,
+        c.req.header('CF-Connecting-IP'),
+        c.req.header('User-Agent')
+      )
+    );
+
+    if (idempotencyKey) {
+      c.set('idempotencyKey', idempotencyKey);
+    }
+
+    await next();
+  };
+}
+
+export function createBodySizeMiddleware() {
+  return async (c: Context, next: Next) => {
+    const contentLength = c.req.header('Content-Length');
+    if (contentLength && parseInt(contentLength, 10) > MAX_BODY_SIZE) {
+      return c.json(
+        {
+          code: 'PAYLOAD_TOO_LARGE',
+          message: `Request body exceeds maximum size of ${MAX_BODY_SIZE} bytes`,
+        },
+        413
+      );
+    }
+    await next();
+  };
+}
+
+export function createContentTypeMiddleware() {
+  return async (c: Context, next: Next) => {
+    if (c.req.method !== 'GET' && c.req.method !== 'HEAD') {
+      const contentType = c.req.header('Content-Type');
+      if (!validateContentType(contentType)) {
+        return c.json(
+          { code: 'UNSUPPORTED_MEDIA_TYPE', message: 'Content-Type must be application/json' },
+          415
+        );
+      }
+    }
+    await next();
+  };
+}
+
+export function createStructuredErrorMiddleware() {
+  return async (c: Context, next: Next) => {
+    try {
+      await next();
+    } catch (error) {
+      const requestContext = c.get('requestContext');
+      const requestId = requestContext?.requestId || 'unknown';
+
+      if (error instanceof z.ZodError) {
+        return c.json(
+          {
+            code: 'VALIDATION_ERROR',
+            message: 'Request validation failed',
+            details: error.errors,
+            request_id: requestId,
+          },
+          400
+        );
+      }
+
+      if (error.name === 'InvalidTransitionError' || error.name === 'TerminalStateError') {
+        return c.json(
+          {
+            code: 'INVALID_STATE_TRANSITION',
+            message: error.message,
+            request_id: requestId,
+          },
+          409
+        );
+      }
+
+      console.error(`[${requestId}] Unhandled error:`, error);
+      return c.json(
+        {
+          code: 'INTERNAL_ERROR',
+          message: 'An internal error occurred',
+          request_id: requestId,
+        },
+        500
+      );
+    }
+  };
+}
+
+export function createSecurityHeadersMiddleware() {
+  return async (c: Context, next: Next) => {
+    await next();
+    c.header('X-Content-Type-Options', 'nosniff');
+    c.header('X-Frame-Options', 'DENY');
+    c.header('Referrer-Policy', 'strict-origin-when-cross-origin');
+    c.header('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
+  };
+}
+
+export function createRequestTimingMiddleware() {
+  return async (c: Context, next: Next) => {
+    const start = Date.now();
+    await next();
+    const duration = Date.now() - start;
+    c.header('X-Request-Duration-Ms', String(duration));
+  };
+}
+
+export function createAuditContextMiddleware() {
+  return async (c: Context, next: Next) => {
+    const requestContext = c.get('requestContext');
+    if (requestContext) {
+      c.set('auditContext', requestContext.auditContext);
+    }
+    await next();
+  };
+}
+
+export function createDevelopmentModeMiddleware(env?: Env) {
+  return async (c: Context, next: Next) => {
+    const isTestMode = env?.ENVIRONMENT !== 'production';
+    c.set('isTestMode', isTestMode);
+    await next();
+  };
+}
+
+export function getRequestContext(c: Context): RequestContext {
+  return c.get('requestContext');
+}
+
+export function getAuditContext(c: Context): AuditContext {
+  return (
+    c.get('auditContext') || {
+      requestId: 'unknown',
+      correlationId: 'unknown',
+      timestamp: new Date().toISOString(),
+    }
+  );
+}
+
+export function getIsTestMode(c: Context): boolean {
+  return c.get('isTestMode') ?? false;
+}
+
+export const REQUEST_CONTEXT_KEY = 'requestContext';
+export const AUDIT_CONTEXT_KEY = 'auditContext';
+export const IDEMPOTENCY_KEY = 'idempotencyKey';
+export const TEST_MODE_KEY = 'isTestMode';

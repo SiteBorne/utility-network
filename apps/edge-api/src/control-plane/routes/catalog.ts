@@ -1,0 +1,434 @@
+import { Hono } from 'hono';
+import { z } from 'zod';
+import { validateServiceError } from '@siteborne/contracts';
+import type { ServicesRepository } from '../../control-plane/repositories/interfaces';
+
+export const catalogRoute = new Hono();
+
+const ServiceCatalogEntrySchema = z.object({
+  service_id: z.string(),
+  version: z.string(),
+  title: z.string(),
+  description: z.string(),
+  price_usd: z.string(),
+  production_enabled: z.boolean(),
+  production_ready: z.boolean(),
+  protocol_status: z.enum(['preproduction', 'production']),
+  input_schema_ref: z.string(),
+  output_schema_ref: z.string(),
+});
+
+const CatalogResponseSchema = z.object({
+  services: z.array(ServiceCatalogEntrySchema),
+  contract_release: z.string(),
+  pcc_version: z.string(),
+  generated_at: z.string().datetime({ offset: true }),
+});
+
+catalogRoute.get('/', async (c) => {
+  const repo = c.get('servicesRepo') as ServicesRepository;
+  const result = await repo.getAll();
+
+  if (!result.ok) {
+    return c.json(
+      validateServiceError({
+        code: 'CATALOG_ERROR',
+        message: 'Failed to retrieve service catalog',
+        request_id: crypto.randomUUID(),
+      }),
+      500
+    );
+  }
+
+  const services = result.value.map((s) => ({
+    service_id: s.service_id,
+    version: s.version,
+    title: s.title,
+    description: s.description,
+    price_usd: s.price_usd,
+    production_enabled: s.production_enabled,
+    production_ready: s.production_ready,
+    protocol_status: s.protocol_status,
+    input_schema_ref: `/schemas/${s.service_id}/input`,
+    output_schema_ref: `/schemas/${s.service_id}/output`,
+  }));
+
+  const response = {
+    services,
+    contract_release: '1.0.0',
+    pcc_version: '1.0.0',
+    generated_at: new Date().toISOString(),
+  };
+
+  return c.json(CatalogResponseSchema.parse(response));
+});
+
+export const serviceMetadataRoute = new Hono();
+
+const ServiceMetadataResponseSchema = z.object({
+  service_id: z.string(),
+  version: z.string(),
+  title: z.string(),
+  description: z.string(),
+  price_usd: z.string(),
+  production_enabled: z.boolean(),
+  production_ready: z.boolean(),
+  protocol_status: z.enum(['preproduction', 'production']),
+  input_schema: z.string(),
+  output_schema: z.string(),
+  bounds: z
+    .object({
+      max_input_bytes: z.number(),
+      max_output_bytes: z.number(),
+      max_execution_time_seconds: z.number(),
+    })
+    .optional(),
+});
+
+serviceMetadataRoute.get('/:service_id', async (c) => {
+  const serviceId = c.req.param('service_id');
+  const repo = c.get('servicesRepo') as ServicesRepository;
+
+  const result = await repo.getById(serviceId);
+
+  if (!result.ok) {
+    return c.json(
+      validateServiceError({
+        code: 'SERVICE_NOT_FOUND',
+        message: `Service ${serviceId} not found`,
+        request_id: crypto.randomUUID(),
+      }),
+      404
+    );
+  }
+
+  if (!result.value) {
+    return c.json(
+      validateServiceError({
+        code: 'SERVICE_NOT_FOUND',
+        message: `Service ${serviceId} not found`,
+        request_id: crypto.randomUUID(),
+      }),
+      404
+    );
+  }
+
+  const service = result.value;
+  const response = {
+    service_id: service.service_id,
+    version: service.version,
+    title: service.title,
+    description: service.description,
+    price_usd: service.price_usd,
+    production_enabled: service.production_enabled,
+    production_ready: service.production_ready,
+    protocol_status: service.protocol_status,
+    input_schema: service.input_schema,
+    output_schema: service.output_schema,
+    bounds: {
+      max_input_bytes: 10 * 1024 * 1024,
+      max_output_bytes: 50 * 1024 * 1024,
+      max_execution_time_seconds: 300,
+    },
+  };
+
+  return c.json(ServiceMetadataResponseSchema.parse(response));
+});
+
+export const schemasRoute = new Hono();
+
+const SchemaResponseSchema = z.object({
+  schemas: z.record(z.string()),
+  contract_release: z.string(),
+  pcc_version: z.string(),
+  generated_at: z.string().datetime({ offset: true }),
+});
+
+schemasRoute.get('/', async (c) => {
+  const baseUrl = new URL(c.req.url).origin;
+  const response = {
+    schemas: {
+      'proof-carrying-context': `${baseUrl}/schemas/proof-carrying-context.schema.json`,
+      'common/money': `${baseUrl}/schemas/common/money.schema.json`,
+      'common/request-envelope': `${baseUrl}/schemas/common/request-envelope.schema.json`,
+      'common/quote-request': `${baseUrl}/schemas/common/quote-request.schema.json`,
+      'common/quote-response': `${baseUrl}/schemas/common/quote-response.schema.json`,
+      'common/structured-error': `${baseUrl}/schemas/common/structured-error.schema.json`,
+      'common/service-metadata': `${baseUrl}/schemas/common/service-metadata.schema.json`,
+      'common/async-job': `${baseUrl}/schemas/common/async-job.schema.json`,
+      'common/pagination': `${baseUrl}/schemas/common/pagination.schema.json`,
+      'common/authorized-artifact-reference': `${baseUrl}/schemas/common/authorized-artifact-reference.schema.json`,
+      'services/company-evidence-input': `${baseUrl}/schemas/services/company-evidence-input.schema.json`,
+      'services/company-evidence-output': `${baseUrl}/schemas/services/company-evidence-output.schema.json`,
+      'services/web-context-input': `${baseUrl}/schemas/services/web-context-input.schema.json`,
+      'services/web-context-output': `${baseUrl}/schemas/services/web-context-output.schema.json`,
+      'services/document-evidence-input': `${baseUrl}/schemas/services/document-evidence-input.schema.json`,
+      'services/document-evidence-output': `${baseUrl}/schemas/services/document-evidence-output.schema.json`,
+      'services/agent-verification-input': `${baseUrl}/schemas/services/agent-verification-input.schema.json`,
+      'services/agent-verification-output': `${baseUrl}/schemas/services/agent-verification-output.schema.json`,
+    },
+    contract_release: '1.0.0',
+    pcc_version: '1.0.0',
+    generated_at: new Date().toISOString(),
+  };
+
+  return c.json(SchemaResponseSchema.parse(response));
+});
+
+export const openapiRoute = new Hono();
+
+openapiRoute.get('/openapi.json', async (c) => {
+  const baseUrl = new URL(c.req.url).origin;
+  const openapi = {
+    openapi: '3.0.3',
+    info: {
+      title: 'SITEBORNE Utility Network API',
+      version: '0.0.0-preproduction',
+      description:
+        'Preproduction API for SITEBORNE Utility Network - Machine-native utility network for autonomous agents',
+      contact: {
+        name: 'SITEBORNE',
+        url: 'https://siteborne.net',
+        email: 'ops@siteborne.net',
+      },
+      license: {
+        name: 'Proprietary',
+        url: 'https://siteborne.net/license',
+      },
+    },
+    servers: [{ url: `${baseUrl}`, description: 'Current environment' }],
+    paths: {
+      '/health': {
+        get: {
+          summary: 'Health check',
+          operationId: 'health',
+          responses: {
+            '200': {
+              description: 'Service is healthy',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/HealthResponse' },
+                },
+              },
+            },
+          },
+        },
+      },
+      '/ready': {
+        get: {
+          summary: 'Readiness check',
+          operationId: 'ready',
+          responses: {
+            '200': {
+              description: 'Readiness status',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ReadinessResponse' },
+                },
+              },
+            },
+          },
+        },
+      },
+      '/catalog': {
+        get: {
+          summary: 'Service catalog',
+          operationId: 'catalog',
+          responses: {
+            '200': {
+              description: 'Available services',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/CatalogResponse' },
+                },
+              },
+            },
+          },
+        },
+      },
+      '/schemas': {
+        get: {
+          summary: 'Schema references',
+          operationId: 'schemas',
+          responses: {
+            '200': {
+              description: 'Schema reference list',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/SchemaResponse' },
+                },
+              },
+            },
+          },
+        },
+      },
+      '/services/{service_id}': {
+        get: {
+          summary: 'Service metadata',
+          operationId: 'serviceMetadata',
+          parameters: [
+            {
+              name: 'service_id',
+              in: 'path',
+              required: true,
+              schema: {
+                type: 'string',
+                enum: [
+                  'company_evidence_graph.v1',
+                  'web_context_verified.v1',
+                  'document_evidence_json.v1',
+                  'verify_agent_output.v1',
+                ],
+              },
+            },
+          ],
+          responses: {
+            '200': {
+              description: 'Service metadata',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ServiceMetadataResponse' },
+                },
+              },
+            },
+            '404': {
+              description: 'Service not found',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ServiceError' },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    components: {
+      schemas: {
+        HealthResponse: {
+          type: 'object',
+          properties: {
+            status: { type: 'string', enum: ['ok'] },
+            timestamp: { type: 'string', format: 'date-time' },
+            version: { type: 'string' },
+            uptime_seconds: { type: 'integer', minimum: 0 },
+          },
+          required: ['status', 'timestamp', 'version', 'uptime_seconds'],
+        },
+        ReadinessResponse: {
+          type: 'object',
+          properties: {
+            status: { type: 'string', enum: ['ready', 'not_ready'] },
+            phase: { type: 'string' },
+            production_services_enabled: { type: 'boolean' },
+            blocked_external: { type: 'array', items: { type: 'string' } },
+            reason: { type: 'string' },
+          },
+          required: [
+            'status',
+            'phase',
+            'production_services_enabled',
+            'blocked_external',
+            'reason',
+          ],
+        },
+        CatalogResponse: {
+          type: 'object',
+          properties: {
+            services: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  service_id: { type: 'string' },
+                  version: { type: 'string' },
+                  title: { type: 'string' },
+                  description: { type: 'string' },
+                  price_usd: { type: 'string' },
+                  production_enabled: { type: 'boolean' },
+                  production_ready: { type: 'boolean' },
+                  protocol_status: { type: 'string', enum: ['preproduction', 'production'] },
+                  input_schema_ref: { type: 'string' },
+                  output_schema_ref: { type: 'string' },
+                },
+                required: [
+                  'service_id',
+                  'version',
+                  'title',
+                  'description',
+                  'price_usd',
+                  'production_enabled',
+                  'production_ready',
+                  'protocol_status',
+                  'input_schema_ref',
+                  'output_schema_ref',
+                ],
+              },
+            },
+            contract_release: { type: 'string' },
+            pcc_version: { type: 'string' },
+            generated_at: { type: 'string', format: 'date-time' },
+          },
+          required: ['services', 'contract_release', 'pcc_version', 'generated_at'],
+        },
+        SchemaResponse: {
+          type: 'object',
+          properties: {
+            schemas: { type: 'object', additionalProperties: { type: 'string' } },
+            contract_release: { type: 'string' },
+            pcc_version: { type: 'string' },
+            generated_at: { type: 'string', format: 'date-time' },
+          },
+          required: ['schemas', 'contract_release', 'pcc_version', 'generated_at'],
+        },
+        ServiceMetadataResponse: {
+          type: 'object',
+          properties: {
+            service_id: { type: 'string' },
+            version: { type: 'string' },
+            title: { type: 'string' },
+            description: { type: 'string' },
+            price_usd: { type: 'string' },
+            production_enabled: { type: 'boolean' },
+            production_ready: { type: 'boolean' },
+            protocol_status: { type: 'string', enum: ['preproduction', 'production'] },
+            input_schema: { type: 'string' },
+            output_schema: { type: 'string' },
+            bounds: {
+              type: 'object',
+              properties: {
+                max_input_bytes: { type: 'integer' },
+                max_output_bytes: { type: 'integer' },
+                max_execution_time_seconds: { type: 'integer' },
+              },
+            },
+          },
+          required: [
+            'service_id',
+            'version',
+            'title',
+            'description',
+            'price_usd',
+            'production_enabled',
+            'production_ready',
+            'protocol_status',
+            'input_schema',
+            'output_schema',
+          ],
+        },
+        ServiceError: {
+          type: 'object',
+          properties: {
+            code: { type: 'string' },
+            message: { type: 'string' },
+            details: { type: 'object' },
+            request_id: { type: 'string' },
+          },
+          required: ['code', 'message', 'request_id'],
+        },
+      },
+    },
+  };
+
+  return c.json(openapi);
+});
