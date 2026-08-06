@@ -207,18 +207,17 @@ function main() {
 
   // Also generate PCC schema (already exists but regenerate for consistency)
   console.log('\n--- PCC Schema ---');
+  const pccTsPath = resolve(TS_OUTPUT_DIR, 'pcc.ts');
+  const pccPyPath = resolve(PY_OUTPUT_DIR, 'pcc.py');
   generateTypeScript(
     resolve(SCHEMAS_DIR, 'proof-carrying-context.schema.json'),
-    resolve(TS_OUTPUT_DIR, 'pcc.ts'),
+    pccTsPath,
     COMMON_SCHEMA_PATHS
   );
-  generatePython(
-    resolve(SCHEMAS_DIR, 'proof-carrying-context.schema.json'),
-    resolve(PY_OUTPUT_DIR, 'pcc.py')
-  );
+  generatePython(resolve(SCHEMAS_DIR, 'proof-carrying-context.schema.json'), pccPyPath);
 
-  // Format PCC TypeScript model with prettier
-  run('prettier', ['--write', resolve(TS_OUTPUT_DIR, 'pcc.ts')]);
+  // Format PCC TypeScript model with prettier (uses actual output path)
+  run('prettier', ['--write', pccTsPath]);
 
   console.log('\n✓ Generation complete');
   console.log(`  TypeScript: ${TS_OUTPUT_DIR}`);
