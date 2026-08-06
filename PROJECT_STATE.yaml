@@ -1,6 +1,6 @@
 project:
   name: 'SITEBORNE Utility Network'
-  repository_status: 'contracts_frozen'
+  repository_status: 'development'
   production_ready: false
 
 source_directive:
