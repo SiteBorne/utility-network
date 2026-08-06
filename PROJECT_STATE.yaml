@@ -1,6 +1,6 @@
 project:
   name: 'SITEBORNE Utility Network'
-  repository_status: 'foundation'
+  repository_status: 'contracts_frozen'
   production_ready: false
 
 source_directive:
@@ -10,9 +10,9 @@ source_directive:
 execution:
   mode: 'serial'
   active_mutation_tasks: 1
-  current_increment: 'SUN-0102'
-  current_phase: 'phase_3_contracts'
-  last_completed_increment: 'SUN-0101'
+  current_increment: 'SUN-0200'
+  current_phase: 'phase_4_control_plane'
+  last_completed_increment: 'SUN-0102'
 
 implemented:
   - 'governance_validation'
@@ -26,6 +26,8 @@ implemented:
   - 'pcc_normative_schema'
   - 'edge_api_foundation'
   - 'modal_worker_foundation'
+  - 'service_contracts_release_1.0.0'
+  - 'contract_compatibility_enforcement'
 
 not_implemented:
   - 'company_evidence_graph'
@@ -95,6 +97,26 @@ frozen_decisions:
     target_gross_margin: '0.70'
     minimum_accepted_margin: '0.60'
 
+service_contract_release:
+  version: '1.0.0'
+  status: 'normative'
+  frozen_at: '2026-08-05T22:45:00Z'
+  source_commit: '537e747'
+  release_descriptor: 'contracts/CONTRACT_RELEASE.yaml'
+  frozen_baseline: 'contracts/releases/1.0.0/'
+  baseline_sha256sums: 'contracts/releases/1.0.0/SHA256SUMS'
+  compatibility_report: 'contracts/releases/1.0.0/COMPATIBILITY_REPORT.json'
+  compatibility_policy_version: 'contract-compatibility-v1'
+  pcc_dependency:
+    schema_release: '1.0.1'
+    document_version: '1.0.0'
+    schema_sha256: 'f664208e387b161ab7897d8544d9c7d987501eba5764e2dde0ea69586e33dbb5'
+  service_ids:
+    - 'company_evidence_graph.v1'
+    - 'web_context_verified.v1'
+    - 'document_evidence_json.v1'
+    - 'verify_agent_output.v1'
+
 pcc_schema:
   status: 'normative'
   version: '1.0.0'
@@ -104,4 +126,4 @@ pcc_schema:
   extension_namespace: 'reverse-domain-qualified'
   drift_check: 'enabled'
 
-last_updated: '2026-08-05T16:35:00Z'
+last_updated: '2026-08-05T23:26:00Z'

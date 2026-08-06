@@ -1,5 +1,5 @@
 version: '1.0.0'
-last_updated: '2026-08-05T10:09:47Z'
+last_updated: '2026-08-05T23:26:00Z'
 tasks:
   # Phase 0: Establish Source of Truth
   - id: 'SUN-0001'
@@ -487,7 +487,7 @@ tasks:
   - id: 'SUN-0102'
     title: 'Freeze service contracts 1.0.0 and compatibility enforcement (Phase 3c)'
     phase: 'phase_3_contracts'
-    state: 'active'
+    state: 'accepted'
     owner_agent: 'architect'
     dependencies:
       - 'SUN-0101'
@@ -498,16 +498,31 @@ tasks:
       - 'Compatibility tests enforce schema stability'
       - 'Service contracts explicitly record dependency on PCC 1.0.1 and its schema hash'
       - 'PCC remains 1.0.1; service contracts frozen at 1.0.0'
-    evidence: []
-    next_action: 'Implement contract version pinning, compatibility test suite, and schema dependency recording'
+    evidence:
+      - 'contracts/CONTRACT_RELEASE.yaml'
+      - 'contracts/releases/1.0.0/'
+      - 'governance/CONTRACT_COMPATIBILITY.yaml'
+      - 'docs/contracts/COMPATIBILITY_POLICY.md'
+      - 'docs/contracts/SERVICE_CONTRACT_RELEASE_1.0.0.md'
+      - 'docs/contracts/VERSIONING.md'
+      - 'docs/contracts/DEPRECATION_POLICY.md'
+      - 'docs/decisions/0012-service-contract-release-versioning.md'
+      - 'docs/decisions/0013-contract-compatibility-classification.md'
+      - 'docs/decisions/0014-frozen-baseline-and-change-enforcement.md'
+      - 'docs/decisions/0015-strict-consumer-compatibility-model.md'
+      - 'docs/reports/SUN-0102-contract-freeze-report.md'
+      - 'packages/contracts/scripts/compat.ts'
+      - 'packages/contracts/src/compat/compat.property.test.ts'
+      - 'tests/compatibility/'
+    next_action: 'SUN-0200: Build control plane'
     blocker: null
-    commit_ref: null
+    commit_ref: '537e747'
 
   # Phase 4+ tasks abbreviated
   - id: 'SUN-0200'
     title: 'Build control plane (Hono Worker, routing, D1, R2, Queues, idempotency)'
     phase: 'phase_4_control_plane'
-    state: 'pending'
+    state: 'active'
     owner_agent: 'architect'
     dependencies:
       - 'SUN-0102'
