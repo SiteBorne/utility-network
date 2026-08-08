@@ -193,18 +193,21 @@ function main() {
     if (hasDrift) {
       console.error('\n❌ DRIFT DETECTED — committed generated/ does not match canonical schemas.');
       console.error('   Run: pnpm --filter @siteborne/pcc-schema generate && generate:services');
-      process.exit(1);
-    } else {
-      console.log(`\n✓ ALL ${allNames.length} MODELS MATCH - NO DRIFT`);
-      process.exit(0);
+      return 1;
     }
+    console.log(`\n✓ ALL ${allNames.length} MODELS MATCH - NO DRIFT`);
+    return 0;
   } finally {
     cleanTemp();
     for (const tmp of ['.temp-combined-schemas', '.temp-ts-schemas', '.temp-schemas']) {
       const p = resolve(ROOT, tmp);
       if (existsSync(p)) rmSync(p, { recursive: true, force: true });
     }
+    // Also clean any service-drift residue written by subprocesses outside ROOT.
+    const serviceDrift = resolve(ROOT, '.service-drift-check');
+    if (existsSync(serviceDrift)) rmSync(serviceDrift, { recursive: true, force: true });
   }
 }
 
-main();
+const exitCode = main();
+if (exitCode !== 0) process.exit(exitCode ?? 0);

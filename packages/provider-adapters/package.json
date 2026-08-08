@@ -1,13 +1,57 @@
 {
   "name": "@siteborne/provider-adapters",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
-  "description": "Planned for future increment - not implemented in SUN-0001",
-  "x-status": "planned",
-  "scripts": {
-    "lint": "echo 'No lint script - package not implemented' && exit 0",
-    "typecheck": "echo 'No typecheck - package not implemented' && exit 0",
-    "test": "echo 'No tests - package not implemented' && exit 0"
+  "type": "module",
+  "description": "Credential-independent authoritative public-data adapters for SITEBORNE Utility Network",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
   },
-  "devDependencies": {}
+  "scripts": {
+    "build": "tsc && tsc -m ESNext --outDir dist/esm && mv dist/esm/*.mjs dist/ 2>/dev/null || true",
+    "test": "vitest run",
+    "test:property": "vitest run --config vitest.property.config.ts",
+    "lint": "eslint src/",
+    "typecheck": "tsc --noEmit",
+    "fixtures:verify": "tsx scripts/verify-fixtures.ts",
+    "manifests:verify": "tsx scripts/verify-manifests.ts",
+    "adapter:test": "pnpm vitest run packages/provider-adapters/src/tests/adapter-execution.tests.ts",
+    "fixtures:verify": "tsx scripts/verify-fixtures.ts",
+    "manifests:verify": "tsx scripts/verify-manifests.ts",
+    "drift:test": "pnpm vitest run packages/provider-adapters/src/drift/drift.test.ts",
+    "provider-drift:test": "pnpm vitest run packages/provider-adapters/src/drift/provider-drift.test.ts",
+    "terms-rate-cache-circuit:test": "pnpm vitest run packages/provider-adapters/src/tests/terms_rate_cache_circuit.tests.ts",
+    "http-ssrf:test": "pnpm vitest run packages/provider-adapters/src/tests/http-ssrf.tests.ts",
+    "fast-check:test": "pnpm vitest run packages/provider-adapters/src/tests/fast-check.tests.ts",
+    "live-gates:test": "pnpm vitest run packages/provider-adapters/src/tests/live-gates.tests.ts",
+    "all:test": "pnpm vitest run",
+    "check": "pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run test",
+    "secrets:scan": "secret-scan --config .secretscan.json",
+    "adapters:test": "pnpm adapters:test",
+    "adapters:fixtures:verify": "pnpm fixtures:verify",
+    "adapters:manifests:verify": "pnpm manifests:verify",
+    "adapters:check": "pnpm check"
+  },
+  "dependencies": {
+    "fast-check": "^3.17.0",
+    "glob": "^11.0.0",
+    "yaml": "^2.5.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/jsdom": "28.0.3",
+    "@types/node": "^22.0.0",
+    "eslint": "^9.0.0",
+    "jsdom": "26.0.0",
+    "tsx": "^4.16.0",
+    "typescript": "^5.5.0",
+    "vitest": "^2.0.0"
+  }
 }

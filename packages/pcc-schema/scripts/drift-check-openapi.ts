@@ -103,14 +103,14 @@ function main() {
     if (hasDrift) {
       console.error('\n❌ DRIFT DETECTED — committed OpenAPI does not match canonical schemas.');
       console.error('   Run: pnpm --filter @siteborne/pcc-schema generate:openapi');
-      process.exit(1);
-    } else {
-      console.log(`\n✓ ALL ${expectedFiles.length} OPENAPI FILES MATCH - NO DRIFT`);
-      process.exit(0);
+      return 1;
     }
+    console.log(`\n✓ ALL ${expectedFiles.length} OPENAPI FILES MATCH - NO DRIFT`);
+    return 0;
   } finally {
     cleanTemp();
   }
 }
 
-main();
+const exitCode = main();
+if (exitCode !== 0) process.exit(exitCode ?? 0);

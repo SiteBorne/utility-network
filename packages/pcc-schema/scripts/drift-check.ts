@@ -172,14 +172,14 @@ from __future__ import annotations
 
     if (hasDrift) {
       console.error('\n❌ DRIFT CHECK FAILED');
-      process.exit(1);
-    } else {
-      console.log('\n✓ ALL MODELS MATCH - NO DRIFT');
-      process.exit(0);
+      return 1;
     }
+    console.log('\n✓ ALL MODELS MATCH - NO DRIFT');
+    return 0;
   } finally {
     cleanTemp();
   }
 }
 
-main();
+const exitCode = main();
+if (exitCode !== 0) process.exit(exitCode ?? 0);
