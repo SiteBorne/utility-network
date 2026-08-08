@@ -1,0 +1,59 @@
+# SITEBORNE Utility Network — Verification Mesh Policy (SUN-0500)
+# Machine-readable. Loaded and Zod-validated by packages/verification/src/policy.ts.
+# Hashed (RFC 8785 JCS + SHA-256, via @siteborne/pcc-schema canonicalize/hashCanonical)
+# and bound into every verification receipt's policy_hash field.
+
+policy_version: '1.0.0'
+
+# Verifier IDs that must run, and whose blocking failures force the final
+# decision away from `pass`, per verification mode.
+required_verifiers:
+  standard:
+    - 'schema_verifier'
+    - 'evidence_accessibility_verifier'
+    - 'claim_evidence_verifier'
+    - 'freshness_verifier'
+    - 'completeness_verifier'
+    - 'cross_source_verifier'
+    - 'provenance_verifier'
+    - 'prompt_injection_verifier'
+  independent_reproduction:
+    - 'schema_verifier'
+    - 'evidence_accessibility_verifier'
+    - 'claim_evidence_verifier'
+    - 'freshness_verifier'
+    - 'completeness_verifier'
+    - 'cross_source_verifier'
+    - 'provenance_verifier'
+    - 'prompt_injection_verifier'
+    - 'reproduction_verifier'
+
+blocking_severities:
+  - 'blocking'
+
+timeout_ms:
+  total: 30000
+  per_verifier: 5000
+
+completeness_requirement:
+  minimum_score: 0.0 # completeness is reported, not itself a pass/fail gate
+
+freshness_requirement:
+  default_max_age_ms: 86400000 # 24h
+
+verified_absent_requires_evidence: true
+
+independent_reproduction:
+  required_for:
+    - 'verify_agent_output.v1'
+
+receipt:
+  signature_algorithm: 'Ed25519'
+  canonicalization_algorithm: 'RFC8785-JCS'
+
+limits:
+  max_claims: 200
+  max_evidence_items: 200
+  max_artifacts: 100
+  max_locator_resolutions: 500
+  max_receipt_bytes: 5000000

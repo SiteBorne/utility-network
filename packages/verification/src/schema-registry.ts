@@ -1,0 +1,70 @@
+/**
+ * Loads the frozen JSON Schema files (schemas/**) and registers them with a
+ * single ajv instance, so SchemaVerifier validates against the *actual*
+ * frozen schema artifacts rather than a hand-written, divergent copy.
+ */
+import { readFileSync, readdirSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import Ajv2020 from 'ajv/dist/2020.js';
+import addFormats from 'ajv-formats';
+// The frozen PCC schema (schemas/proof-carrying-context.schema.json) predates
+// the 2020-12 migration and still declares draft-07 ($schema:
+// http://json-schema.org/draft-07/schema#) — it is frozen and must not be
+// edited to match. Every service output schema $refs it via `allOf`, so a
+// single Ajv2020 instance needs the draft-07 meta-schema registered too, or
+// adding the PCC schema throws "no schema with key or ref ...draft-07...".
+import draft07MetaSchema from 'ajv/dist/refs/json-schema-draft-07.json' with { type: 'json' };
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
+// packages/verification/src -> repo root
+const REPO_ROOT = join(__dirname, '..', '..', '..');
+const SCHEMAS_DIR = join(REPO_ROOT, 'schemas');
+
+let ajvSingleton: InstanceType<typeof Ajv2020> | null = null;
+
+export function getAjv(): InstanceType<typeof Ajv2020> {
+  if (ajvSingleton) return ajvSingleton;
+
+  const ajv = new Ajv2020({ strict: false, allErrors: true });
+  addFormats(ajv);
+  ajv.addMetaSchema(draft07MetaSchema);
+
+  const files: string[] = [];
+  for (const dir of ['common', 'services']) {
+    const full = join(SCHEMAS_DIR, dir);
+    for (const f of readdirSync(full)) {
+      if (f.endsWith('.schema.json')) files.push(join(full, f));
+    }
+  }
+  files.push(join(SCHEMAS_DIR, 'proof-carrying-context.schema.json'));
+
+  for (const file of files) {
+    const schema = JSON.parse(readFileSync(file, 'utf-8'));
+    ajv.addSchema(schema);
+  }
+
+  ajvSingleton = ajv;
+  return ajv;
+}
+
+/** service_id -> output schema $id, derived from schemas/MANIFEST.json's
+ * naming convention (services/<name>-output.schema.json). */
+const SERVICE_ID_TO_SCHEMA_FILE: Record<string, string> = {
+  'company_evidence_graph.v1': 'company-evidence-output.schema.json',
+  'web_context_verified.v1': 'web-context-output.schema.json',
+  'document_evidence_json.v1': 'document-evidence-output.schema.json',
+  'verify_agent_output.v1': 'agent-verification-output.schema.json',
+};
+
+export function getOutputSchemaId(serviceId: string): string | null {
+  const file = SERVICE_ID_TO_SCHEMA_FILE[serviceId];
+  if (!file) return null;
+  const schema = JSON.parse(readFileSync(join(SCHEMAS_DIR, 'services', file), 'utf-8'));
+  return schema.$id as string;
+}
+
+export function knownServiceIds(): string[] {
+  return Object.keys(SERVICE_ID_TO_SCHEMA_FILE);
+}

@@ -1,0 +1,193 @@
+{
+  "job_id": "job_verificationfixture01aaa",
+  "request_id": "req_verificationfixture01aaa",
+  "service_id": "document_evidence_json.v1",
+  "service_version": "v1",
+  "contract_release": "1.0.0",
+  "input_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "input_schema_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "output_schema_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "output": {
+    "pcc_version": "1.0.0",
+    "job_id": "job_verificationfixture01aaa",
+    "contract": {
+      "service_id": "document_evidence_json.v1",
+      "service_version": "v1",
+      "input_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "input_schema_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "output_schema_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "quote_id": "qte_verificationfixture01aaa",
+      "mode": "offline_verification",
+      "price": "0.012",
+      "currency": "USD",
+      "network": "base",
+      "minimum_quality": 0.8,
+      "freshness_seconds": 3600,
+      "issued_at": "2026-08-05T10:00:00Z",
+      "expires_at": "2026-08-06T10:00:00Z",
+      "idempotency_key": "idk_verificationfixture01aaa"
+    },
+    "subject": {
+      "type": "document",
+      "canonical_name": "Annual Report 2025.pdf",
+      "identifiers": {
+        "filename": "annual-report-2025.pdf"
+      }
+    },
+    "claims": [
+      {
+        "claim_id": "clm_verificationfixture01aaa",
+        "predicate": "page_count",
+        "value": 24,
+        "confidence": 1,
+        "evidence_ids": ["evd_verificationfixture01aaa"],
+        "materiality": "material",
+        "verification_status": "verified"
+      }
+    ],
+    "evidence": [
+      {
+        "evidence_id": "evd_verificationfixture01aaa",
+        "source_uri": "file:///docs/annual-report-2025.pdf",
+        "retrieved_at": "2026-08-05T10:00:00Z",
+        "content_hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "media_type": "application/pdf",
+        "locator": {
+          "type": "byte_range",
+          "value": "0-1024"
+        },
+        "accessibility_status": "accessible",
+        "transformation_history": [
+          {
+            "type": "pdf_text_extract",
+            "timestamp": "2026-08-05T10:00:00Z",
+            "tool_version": "pdfplumber-0.11.0"
+          }
+        ],
+        "authorization_classification": "buyer_authorized",
+        "freshness_status": "fresh"
+      }
+    ],
+    "completeness": {
+      "requested_fields": 4,
+      "populated_fields": 4,
+      "supported_fields": 4,
+      "score": 1,
+      "missing_fields": [],
+      "unsupported_fields": [],
+      "stale_fields": [],
+      "vector": [
+        {
+          "dimension": "document",
+          "requested": 4,
+          "populated": 4,
+          "supported": 4,
+          "score": 1
+        }
+      ]
+    },
+    "provenance": {
+      "routes": [
+        {
+          "type": "direct",
+          "provider": "document-worker",
+          "version": "1.0.0"
+        }
+      ],
+      "providers": [
+        {
+          "name": "document-worker",
+          "version": "1.0.0",
+          "capabilities": ["extract"]
+        }
+      ],
+      "tools": {},
+      "models": [],
+      "software_versions": {
+        "pcc": "1.0.0"
+      },
+      "policy_versions": {
+        "verification": "1.0.0"
+      },
+      "transformations": [],
+      "cache_provenance": {
+        "enabled": false,
+        "hit": false
+      },
+      "execution_environment": {
+        "runtime": "node",
+        "version": "22.0.0",
+        "platform": "linux"
+      },
+      "verification_routes": []
+    },
+    "verification": {
+      "schema_valid": true,
+      "material_claims_supported": true,
+      "evidence_accessibility": 1,
+      "freshness": 1,
+      "completeness": 1,
+      "cross_source_agreement": 1,
+      "provenance_valid": true,
+      "prompt_injection_result": {
+        "checked": true,
+        "result": "clean"
+      },
+      "deterministic_failures": [],
+      "verifier_versions": {
+        "pcc": "1.0.0"
+      },
+      "policy": "pol_verificationfixture01aaa",
+      "decision": "pass",
+      "score": 1,
+      "failed_requirements": []
+    },
+    "receipt": {
+      "output_hash": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "canonicalization_algorithm": "RFC8785-JCS",
+      "policy_hash": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "schema_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      "signature_algorithm": "Ed25519",
+      "signing_key_id": "kid_verificationfixture01aaa",
+      "signature": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "signed_at": "2026-08-05T10:00:00Z"
+    },
+    "extensions": {
+      "net.siteborne.document-evidence.v1": {
+        "document_classification": "financial_statement",
+        "total_pages": 4,
+        "processed_pages": 4
+      }
+    }
+  },
+  "claims": [
+    {
+      "claim_id": "clm_verificationfixture01aaa",
+      "subject": "job_verificationfixture01aaa",
+      "predicate": "page_count",
+      "value": 24,
+      "evidence_ids": ["evd_verificationfixture01aaa"]
+    }
+  ],
+  "evidence": [
+    {
+      "evidence_id": "evd_verificationfixture01aaa",
+      "source_uri": "file:///docs/annual-report-2025.pdf",
+      "locator": {
+        "type": "byte_range",
+        "value": "0-1024"
+      },
+      "content_hash": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "retrieved_at": "2026-08-05T10:00:00Z",
+      "authorization_classification": "buyer_authorized",
+      "result_class": "success"
+    }
+  ],
+  "completeness": {
+    "requested_fields": 4,
+    "populated_fields": 4,
+    "supported_fields": 4,
+    "missing_fields": []
+  },
+  "freshness_requirement_ms": 86400000
+}

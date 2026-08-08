@@ -56,6 +56,9 @@ jobs:
       - name: Adapter checks (format, lint, typecheck, tests, property tests, fixtures, manifests)
         run: pnpm adapters:check
 
+      - name: Verification mesh checks (format, lint, typecheck, tests, property tests, fixtures, policy)
+        run: pnpm verification:check
+
   python-validate:
     name: Validate (Python)
     runs-on: ubuntu-latest

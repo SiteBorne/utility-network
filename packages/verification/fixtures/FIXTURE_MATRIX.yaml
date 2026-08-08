@@ -1,0 +1,52 @@
+# Verification mesh fixture matrix (SUN-0500).
+# Each row is a static candidate JSON file under fixtures/candidates/,
+# generated from src/tests/fixtures.ts by scripts/generate-fixtures.ts, and
+# the decision the full standard-mode mesh (buildStandardVerifiers) must
+# produce for it. scripts/verify-fixtures.ts runs every row for real and
+# fails the check if any candidate's mesh decision drifts from what is
+# documented here — this is a regression gate, not a file-existence check.
+
+fixtures:
+  - id: valid-pass
+    file: candidates/01-valid-pass.json
+    expected_decision: pass
+    description: >
+      A fully schema-valid, fresh, complete, single-source document
+      candidate. Every mandatory verifier should pass.
+
+  - id: schema-invalid-fail
+    file: candidates/02-schema-invalid-fail.json
+    expected_decision: fail
+    description: >
+      Candidate output is missing nearly every field required by the frozen
+      PCC schema. schema_verifier must fail closed, which must fail the
+      whole mesh regardless of any other verifier.
+
+  - id: disqualified-evidence-fail
+    file: candidates/03-disqualified-evidence-fail.json
+    expected_decision: fail
+    description: >
+      The only evidence item backing the only claim has result_class
+      "source_changed" (a disqualifying class). evidence_accessibility_verifier
+      and completeness_verifier must both fail closed.
+
+  - id: confirmed-injection-quarantined
+    file: candidates/04-confirmed-injection-quarantined.json
+    expected_decision: quarantined
+    description: >
+      Claim content matches a confirmed prompt-injection signal
+      (ignore_instructions rule) and the claim additionally lost its
+      evidence backing. Decision must be `quarantined`, not merely `fail`
+      — quarantine takes precedence when injection is confirmed alongside
+      any mandatory blocking failure.
+
+  - id: stale-evidence-still-pass
+    file: candidates/05-stale-evidence-still-pass.json
+    expected_decision: pass
+    description: >
+      Evidence is far outside the freshness requirement. Freshness is a
+      reported score, not itself a pass/fail gate in the current policy
+      (governance/VERIFICATION_POLICY.yaml completeness_requirement /
+      freshness_requirement are advisory, not blocking, in this release) —
+      the mesh must still reach `pass`, proving freshness alone cannot
+      force a fail closed the way a mandatory blocking verifier can.
