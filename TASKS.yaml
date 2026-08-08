@@ -1,5 +1,5 @@
 version: '1.0.0'
-last_updated: '2026-08-05T23:26:00Z'
+last_updated: '2026-08-08T13:00:00Z'
 tasks:
   # Phase 0: Establish Source of Truth
   - id: 'SUN-0001'
@@ -198,7 +198,7 @@ tasks:
   - id: 'SUN-0013'
     title: 'Implement contracts package (shared types)'
     phase: 'phase_2_monorepo'
-    state: 'pending'
+    state: 'active'
     owner_agent: 'architect'
     dependencies:
       - 'SUN-0002'
@@ -209,7 +209,7 @@ tasks:
       - 'TypeScript types generated'
       - 'Unit tests pass'
     evidence: []
-    next_action: 'Implement pcc-schema package'
+    next_action: 'NOTE (SUN-0300 acceptance pass): selected as the next dependency-safe task per the ledger (blocker: null, dependency SUN-0002 accepted). Not started. Its stated acceptance criteria (HealthResponse, ReadinessResponse, ServiceError, PromotionState, RubricEvaluation, TaskRecord, DecisionRecord exports, Zod validation, generated types, passing tests) already appear satisfied by packages/contracts@1.0.0, which exists, passes contracts:baseline:verify/compat:check/release:verify, and has its own tests — this task and the SUN-0014..SUN-0022 chain following it look like a superseded planning branch left stale when SUN-0100..SUN-0102 executed the same scope under different task IDs (SUN-0100/0101/0102 are already accepted). Recommend a ledger-hygiene pass to reconcile or mark SUN-0013..SUN-0022 superseded before actually starting work here — do not implement against this task without first resolving that discrepancy.'
     blocker: null
     commit_ref: null
 
@@ -574,7 +574,7 @@ tasks:
   - id: 'SUN-0300'
     title: 'Credential-Independent Authoritative Public-Data Adapters'
     phase: 'phase_5_adapters'
-    state: 'active'
+    state: 'accepted'
     owner_agent: 'architect'
     dependencies:
       - 'SUN-0200'
@@ -593,10 +593,25 @@ tasks:
       - 'Provenance tracking implemented'
       - 'Deterministic fixtures provided'
       - 'Failure classification deterministic'
-    evidence: []
-    next_action: 'SUN-0400: Build Modal worker'
-    blocker: 'Requires Modal token (blocked_external)'
-    commit_ref: null
+    evidence:
+      - 'packages/provider-adapters/src/'
+      - 'packages/provider-adapters/fixtures/FIXTURE_MATRIX.yaml'
+      - 'packages/provider-adapters/manifests/'
+      - 'packages/provider-adapters/PARSER_PARITY.md'
+      - 'docs/adrs/0001-adapter-boundary.md'
+      - 'docs/adrs/0002-terms-and-live-activation.md'
+      - 'docs/adrs/0003-source-normalization.md'
+      - 'docs/adrs/0004-public-http-security-boundary.md'
+      - 'docs/adrs/0005-source-drift-and-quarantine.md'
+      - 'docs/guides/provider-adapter-operations.md'
+      - 'docs/guides/source-terms-review-guide.md'
+      - 'docs/guides/optional-live-test-guide.md'
+      - 'docs/guides/public-http-security.md'
+      - 'docs/guides/root-adapter-commands.md'
+      - 'docs/reports/SUN-0300-public-data-adapters-report.md'
+    next_action: 'SUN-0400: Build Modal worker (blocked_external — requires Modal deployment token); SUN-0013 selected as the next dependency-safe task pending ledger review (see report)'
+    blocker: null
+    commit_ref: '541ab34'
 
   - id: 'SUN-0400'
     title: 'Build Modal worker (Docling, OCR, PDF processing)'

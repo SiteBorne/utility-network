@@ -10,9 +10,9 @@ source_directive:
 execution:
   mode: 'serial'
   active_mutation_tasks: 1
-  current_increment: 'SUN-0300'
-  current_phase: 'phase_5_adapters'
-  last_completed_increment: 'SUN-0200'
+  current_increment: 'SUN-0013'
+  current_phase: 'phase_2_monorepo'
+  last_completed_increment: 'SUN-0300'
 
 implemented:
   - 'governance_validation'
@@ -48,6 +48,18 @@ implemented:
   - 'queue_consumer_safety_locally_tested'
   - 'local_dead_letter_behavior'
   - 'in_memory_repositories'
+  - 'provider_adapters_sec_edgar'
+  - 'provider_adapters_openalex'
+  - 'provider_adapters_crossref'
+  - 'provider_adapters_github_public'
+  - 'provider_adapters_federal_register'
+  - 'provider_adapters_direct_public_http'
+  - 'provider_adapters_source_drift_detection'
+  - 'provider_adapters_fixture_matrix'
+  - 'provider_adapters_terms_guard'
+  - 'provider_adapters_rate_limit_circuit_breaker_cache'
+  - 'provider_adapters_ssrf_protection'
+  - 'provider_adapters_html_worker_runtime_isolation'
 
 not_implemented:
   - 'company_evidence_graph'
@@ -61,6 +73,8 @@ not_implemented:
   - 'agentverse'
   - 'modal_document_processing'
   - 'production_deployment'
+  - 'provider_adapters_live_activation' # all six providers: pending_review terms, policy_blocked
+  - 'provider_adapters_dns_rebinding_protection' # connection pinning not proven; see ADR 0004
 
 blocked_external:
   - 'cloudflare_account_configuration'
@@ -144,4 +158,4 @@ pcc_schema:
   extension_namespace: 'reverse-domain-qualified'
   drift_check: 'enabled'
 
-last_updated: '2026-08-06T18:55:00Z'
+last_updated: '2026-08-08T13:00:00Z'
