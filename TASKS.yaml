@@ -1,5 +1,5 @@
 version: '1.0.0'
-last_updated: '2026-08-08T14:00:00Z'
+last_updated: '2026-08-08T15:00:00Z'
 tasks:
   # Phase 0: Establish Source of Truth
   - id: 'SUN-0001'
@@ -626,9 +626,9 @@ tasks:
     commit_ref: '541ab34'
 
   - id: 'SUN-0400'
-    title: 'Build Modal worker (Docling, OCR, PDF processing)'
+    title: 'Build Modal worker (Docling, OCR, PDF processing) [DECOMPOSED]'
     phase: 'phase_6_modal_worker'
-    state: 'active'
+    state: 'superseded'
     owner_agent: 'architect'
     dependencies:
       - 'SUN-0300'
@@ -639,8 +639,65 @@ tasks:
       - 'OCR extracts text from images'
       - 'Table extraction works'
     evidence: []
-    next_action: 'Ledger-hygiene audit (post-SUN-0300): this is the genuine next task in the accepted dependency chain (dependency SUN-0300 is accepted; nothing supersedes it). It is not dependency-safe in the actionable sense: every acceptance criterion (Modal app deploys, Docling/OCR/table extraction work) requires a live Modal deployment token, which is blocked_external. Set active (not blocked_external) to reflect that it is the correct designated next increment in the serial queue, per docs/decisions/0003-serial-execution-model.md, distinct from SUN-0006..SUN-0012-style tasks that are entirely operator-only. Not started; do not begin implementation until the Modal token is available.'
-    blocker: 'Requires Modal deployment token (blocked_external)'
+    next_action: "Superseded by decomposition into SUN-0400A (credential-independent document-worker implementation, active) and SUN-0400B (Modal deployment and live verification, blocked_external). This coarse task conflated three locally-buildable-and-testable criteria (Docling PDF->JSON, OCR text extraction, table extraction — none require a Modal token to implement or test locally) with one that genuinely requires a live Modal deployment ('Modal app deploys successfully'), which made the whole task simultaneously 'active' and blocked_external — a semantic contradiction. Do not implement against this task; see SUN-0400A/SUN-0400B."
+    blocker: null
+    commit_ref: null
+
+  - id: 'SUN-0400A'
+    title: 'Credential-Independent Document Processing Worker Foundation'
+    phase: 'phase_6_modal_worker'
+    state: 'active'
+    owner_agent: 'architect'
+    dependencies:
+      - 'SUN-0300'
+    rubric_target: 85
+    acceptance_tests:
+      - 'Docling integration processes native PDFs to structured JSON locally (no Modal token required)'
+      - 'OCR interface defined, with a local implementation exercised in tests where dependency installation permits'
+      - 'Page classification (native text vs. scanned/image) implemented'
+      - 'Table extraction implemented and tested against fixture PDFs'
+      - 'Deterministic page ordering'
+      - 'Document- and page-level content hashing'
+      - 'Evidence locator generation for extracted content'
+      - 'Bounded document size and page-count enforcement (explicit limits, explicit truncation/rejection)'
+      - 'Media-type validation before processing'
+      - 'Artifact-reference input/output contract (no raw payload smuggling)'
+      - 'Resource budgets and timeout handling enforced locally'
+      - 'Deterministic, closed failure classification (mirrors the provider-adapters AdapterResultClass pattern)'
+      - 'Worker request/result contracts derived from the frozen service-contract release (packages/contracts, PCC 1.0.1)'
+      - 'Fully local execution: fixture corpus (native PDFs, scanned/image PDFs, malformed/adversarial PDFs, table-heavy PDFs, image fixtures) with deterministic expected outputs'
+      - 'Property tests for hashing/ordering/bounds invariants'
+      - 'Local benchmark harness (timing/resource use on the fixture corpus, no live infrastructure)'
+      - 'Modal function definitions/app configuration exist and type-check/compile without requiring deployment or credentials'
+      - 'Local packaging/container build verification (e.g. `docker build`/dependency-resolution succeeds) without pushing or deploying'
+      - 'Documentation: architecture, fixture corpus, local run instructions, explicit list of what remains blocked on SUN-0400B'
+    evidence: []
+    next_action: 'Not started. Implement the credential-independent document-worker foundation per the acceptance criteria above; do not add Modal credentials, live deployment, live invocation, production secrets, production R2, a customer-facing document service, x402/payment wiring, or any production activation to this task — all of that belongs to SUN-0400B or later.'
+    blocker: null
+    commit_ref: null
+
+  - id: 'SUN-0400B'
+    title: 'Modal Deployment and Live Document Worker Verification'
+    phase: 'phase_6_modal_worker'
+    state: 'blocked_external'
+    owner_agent: 'operator'
+    dependencies:
+      - 'SUN-0400A'
+    rubric_target: 85
+    acceptance_tests:
+      - 'Modal credentials configured'
+      - 'Modal app deploys successfully to a live environment'
+      - 'Live health check succeeds against the deployed worker'
+      - 'Deployed resource configuration (CPU/memory/timeout/concurrency) verified'
+      - 'Cold-start and warm-invocation latency measured'
+      - 'Configured timeout enforcement verified live'
+      - 'Real artifact round-trip verified where authorized (no customer data)'
+      - 'Live resource/cost measurement recorded'
+      - 'Production destination/binding verification'
+      - 'Live evidence package produced for promotion review'
+    evidence: []
+    next_action: 'Blocked until a Modal account and deployment token are available. Do not execute against this task before then.'
+    blocker: 'Requires Modal account/token and a live deployment environment (blocked_external)'
     commit_ref: null
 
   - id: 'SUN-0500'
@@ -649,7 +706,7 @@ tasks:
     state: 'pending'
     owner_agent: 'architect'
     dependencies:
-      - 'SUN-0400'
+      - 'SUN-0400A'
     rubric_target: 85
     acceptance_tests:
       - 'SchemaVerifier validates PCC schema'

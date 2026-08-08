@@ -6,7 +6,11 @@ import { z } from 'zod';
 const TASKS_PATH = resolve(__dirname, '../TASKS.yaml');
 
 const TaskSchema = z.object({
-  id: z.string().regex(/^SUN-\d{4}$/),
+  // Trailing single uppercase letter (e.g. SUN-0400A) is allowed for a
+  // coarse increment split into dependency-linked sub-increments (e.g.
+  // credential-independent implementation vs. external-deployment gate)
+  // without renumbering the whole downstream sequence.
+  id: z.string().regex(/^SUN-\d{4}[A-Z]?$/),
   title: z.string().min(1),
   phase: z.string().min(1),
   state: z.enum([
