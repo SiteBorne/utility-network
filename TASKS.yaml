@@ -1,5 +1,5 @@
 version: '1.0.0'
-last_updated: '2026-08-08T13:00:00Z'
+last_updated: '2026-08-08T14:00:00Z'
 tasks:
   # Phase 0: Establish Source of Truth
   - id: 'SUN-0001'
@@ -198,7 +198,7 @@ tasks:
   - id: 'SUN-0013'
     title: 'Implement contracts package (shared types)'
     phase: 'phase_2_monorepo'
-    state: 'active'
+    state: 'superseded'
     owner_agent: 'architect'
     dependencies:
       - 'SUN-0002'
@@ -208,15 +208,16 @@ tasks:
       - 'Zod schemas validate correctly'
       - 'TypeScript types generated'
       - 'Unit tests pass'
-    evidence: []
-    next_action: 'NOTE (SUN-0300 acceptance pass): selected as the next dependency-safe task per the ledger (blocker: null, dependency SUN-0002 accepted). Not started. Its stated acceptance criteria (HealthResponse, ReadinessResponse, ServiceError, PromotionState, RubricEvaluation, TaskRecord, DecisionRecord exports, Zod validation, generated types, passing tests) already appear satisfied by packages/contracts@1.0.0, which exists, passes contracts:baseline:verify/compat:check/release:verify, and has its own tests — this task and the SUN-0014..SUN-0022 chain following it look like a superseded planning branch left stale when SUN-0100..SUN-0102 executed the same scope under different task IDs (SUN-0100/0101/0102 are already accepted). Recommend a ledger-hygiene pass to reconcile or mark SUN-0013..SUN-0022 superseded before actually starting work here — do not implement against this task without first resolving that discrepancy.'
+    evidence:
+      - 'packages/contracts/ (v1.0.0, pre-existing, passes contracts:baseline:verify/compat:check/release:verify)'
+    next_action: "Superseded (ledger-hygiene audit, post-SUN-0300): this task's full scope was delivered directly under SUN-0002 (accepted; its own evidence list already cites 'packages/contracts, pcc-schema, pricing, policy, test-fixtures') and further built out under SUN-0100/0101/0102. SUN-0013 was never a real forward task — it, and SUN-0014..SUN-0022, describe a Phase-2 breakdown that the actual accepted history bypassed by consolidating into SUN-0002 directly. Do not implement against this task."
     blocker: null
     commit_ref: null
 
   - id: 'SUN-0014'
     title: 'Implement pcc-schema package (foundation)'
     phase: 'phase_2_monorepo'
-    state: 'pending'
+    state: 'superseded'
     owner_agent: 'architect'
     dependencies:
       - 'SUN-0013'
@@ -228,15 +229,16 @@ tasks:
       - 'Pre-normative draft schema exists with pre_normative: true marker'
       - 'Policy markdown files exist (COMPATIBILITY.md, CANONICALIZATION.md, SIGNING.md)'
       - 'Tests verify pre-normative marker present'
-    evidence: []
-    next_action: 'Implement pricing package'
+    evidence:
+      - 'packages/pcc-schema/ (frozen normative 1.0.1, exceeds this pre-normative scope)'
+    next_action: 'Superseded (ledger-hygiene audit): pcc-schema was implemented and then frozen normative under SUN-0100 (accepted, commit bab19d0), which supersedes this pre-normative-draft-scoped task entirely. Do not implement against this task.'
     blocker: null
     commit_ref: null
 
   - id: 'SUN-0015'
     title: 'Implement pricing package (decimal-safe)'
     phase: 'phase_2_monorepo'
-    state: 'pending'
+    state: 'superseded'
     owner_agent: 'architect'
     dependencies:
       - 'SUN-0014'
@@ -249,15 +251,16 @@ tasks:
       - 'Margin boundary enforcement tests'
       - 'Price change limit validation (20%)'
       - 'All tests pass with Vitest'
-    evidence: []
-    next_action: 'Implement policy package'
+    evidence:
+      - 'packages/pricing/src/pricing.test.ts (19 tests, passing)'
+    next_action: 'Superseded (ledger-hygiene audit): packages/pricing exists with passing tests and is validated by governance:validate (RESOURCE_POLICY pricing-formula and price-change-limit checks), delivered as part of SUN-0002. Do not implement against this task.'
     blocker: null
     commit_ref: null
 
   - id: 'SUN-0016'
     title: 'Implement policy package (hard gates, promotion, privacy)'
     phase: 'phase_2_monorepo'
-    state: 'pending'
+    state: 'superseded'
     owner_agent: 'architect'
     dependencies:
       - 'SUN-0015'
@@ -268,15 +271,16 @@ tasks:
       - 'isProductionEligible: only EXECUTABLE_VERIFIED returns true'
       - 'PublicDataOnlyPrivacy: rejects sensitive data classifications'
       - 'All tests pass'
-    evidence: []
-    next_action: 'Implement test-fixtures foundation'
+    evidence:
+      - 'packages/policy/src/policy.test.ts (22 tests, passing)'
+    next_action: 'Superseded (ledger-hygiene audit): packages/policy exists with passing tests and is validated by governance:validate (hard-gates/promotion-states/privacy-classes checks), delivered as part of SUN-0002. Do not implement against this task.'
     blocker: null
     commit_ref: null
 
   - id: 'SUN-0017'
     title: 'Implement test-fixtures foundation'
     phase: 'phase_2_monorepo'
-    state: 'pending'
+    state: 'superseded'
     owner_agent: 'architect'
     dependencies:
       - 'SUN-0016'
@@ -287,15 +291,16 @@ tasks:
       - 'Valid/invalid decision records'
       - 'Sample provider manifests (valid/invalid)'
       - 'Used by governance validation tests'
-    evidence: []
-    next_action: 'Implement edge-api foundation'
+    evidence:
+      - 'packages/test-fixtures/src/test-fixtures.test.ts (9 tests, passing)'
+    next_action: 'Superseded (ledger-hygiene audit): packages/test-fixtures exists with passing tests, delivered as part of SUN-0002. Do not implement against this task.'
     blocker: null
     commit_ref: null
 
   - id: 'SUN-0018'
     title: 'Implement apps/edge-api foundation (Hono, /health, /ready)'
     phase: 'phase_2_monorepo'
-    state: 'pending'
+    state: 'superseded'
     owner_agent: 'architect'
     dependencies:
       - 'SUN-0013'
@@ -307,15 +312,16 @@ tasks:
       - 'Responses typed with contracts package types'
       - 'Vitest tests: schema validation, response shape'
       - 'No D1/R2/Queues/x402/MCP/A2A/Nevermined dependencies'
-    evidence: []
-    next_action: 'Implement apps/network-site and apps/docs'
+    evidence:
+      - 'apps/edge-api/ (delivered under SUN-0002 foundation, then exceeded by the full SUN-0200 control-plane build)'
+    next_action: 'Superseded (ledger-hygiene audit): the edge-api foundation this task describes was delivered under SUN-0002 and then substantially exceeded by SUN-0200 (accepted; full control-plane, D1, idempotency, artifacts, queues). Do not implement against this task.'
     blocker: null
     commit_ref: null
 
   - id: 'SUN-0019'
     title: 'Implement apps/network-site (machine-first static)'
     phase: 'phase_2_monorepo'
-    state: 'pending'
+    state: 'superseded'
     owner_agent: 'architect'
     dependencies:
       - 'SUN-0018'
@@ -325,15 +331,16 @@ tasks:
       - 'Identifies: SITEBORNE Utility Network, siteborne.net, utility.siteborne.net, Proof-Carrying Context, 4 service IDs'
       - 'Status: preproduction foundation'
       - 'No claims of live payment endpoints or registry entries'
-    evidence: []
-    next_action: 'Implement apps/docs shell'
+    evidence:
+      - 'apps/network-site/index.html (verified: identifies product/domains/PCC/4 service IDs, status "Preproduction Foundation", no live-payment claims)'
+    next_action: 'Superseded (ledger-hygiene audit): apps/network-site/index.html already satisfies every acceptance criterion verbatim, delivered as part of SUN-0002. Do not implement against this task.'
     blocker: null
     commit_ref: null
 
   - id: 'SUN-0020'
     title: 'Implement apps/docs documentation shell'
     phase: 'phase_2_monorepo'
-    state: 'pending'
+    state: 'superseded'
     owner_agent: 'architect'
     dependencies:
       - 'SUN-0019'
@@ -341,15 +348,16 @@ tasks:
     acceptance_tests:
       - 'Navigation for: Architecture, Decisions, Governance, Contracts, Security, Operations, Marketplace Integrity, Source Directive'
       - 'Markdown-based, no heavy framework'
-    evidence: []
-    next_action: 'Implement services/modal-worker foundation'
+    evidence:
+      - 'apps/docs/README.md (verified: nav for exactly the 8 required categories, markdown-only)'
+    next_action: 'Superseded (ledger-hygiene audit): apps/docs/README.md already satisfies every acceptance criterion verbatim, delivered as part of SUN-0002. Do not implement against this task.'
     blocker: null
     commit_ref: null
 
   - id: 'SUN-0021'
     title: 'Implement services/modal-worker foundation (Python)'
     phase: 'phase_2_monorepo'
-    state: 'pending'
+    state: 'superseded'
     owner_agent: 'architect'
     dependencies:
       - 'SUN-0020'
@@ -361,15 +369,16 @@ tasks:
       - 'ruff and mypy strict pass'
       - 'No OCR/Docling/document-processing dependencies'
       - 'README.md explains Modal deployment not configured'
-    evidence: []
-    next_action: 'Create placeholder packages and repository controls'
+    evidence:
+      - 'services/modal-worker/src/modal_worker/{health,config}.py, tests/test_health_config.py (7 tests, passing)'
+    next_action: 'Superseded (ledger-hygiene audit): services/modal-worker already has exactly this health.py/config.py foundation with passing pytest coverage, delivered as part of SUN-0002. Do not implement against this task.'
     blocker: null
     commit_ref: null
 
   - id: 'SUN-0022'
     title: 'Create placeholder packages and repository controls'
     phase: 'phase_2_monorepo'
-    state: 'pending'
+    state: 'superseded'
     owner_agent: 'architect'
     dependencies:
       - 'SUN-0021'
@@ -379,8 +388,11 @@ tasks:
       - '.gitignore, .editorconfig, .npmrc, README.md, LICENSE, SECURITY.md, CONTRIBUTING.md, CODE_OF_CONDUCT.md exist'
       - 'Root pnpm-workspace.yaml, turbo.json, tsconfig.base.json valid'
       - 'GitHub Actions CI workflow runs install → format:check → lint → typecheck → test → governance:validate → state:validate → tasks:validate'
-    evidence: []
-    next_action: 'Run full validation suite (pnpm check)'
+    evidence:
+      - 'packages/{verification,knowledge-graph,protocol-x402,protocol-mcp,protocol-a2a,protocol-nevermined,telemetry}/package.json (x-status: planned, verified)'
+      - '.gitignore, .editorconfig, .npmrc, README.md, LICENSE, SECURITY.md, CONTRIBUTING.md, CODE_OF_CONDUCT.md, pnpm-workspace.yaml, turbo.json, tsconfig.base.json (all present)'
+      - '.github/workflows/ci.yml (runs the full listed sequence, plus secret-scan and adapter checks added since)'
+    next_action: 'Superseded (ledger-hygiene audit): every named placeholder package and repository-control file exists exactly as specified (provider-adapters has since been fully implemented under SUN-0300 and is no longer a placeholder), delivered as part of SUN-0002. Do not implement against this task.'
     blocker: null
     commit_ref: null
 
@@ -609,14 +621,14 @@ tasks:
       - 'docs/guides/public-http-security.md'
       - 'docs/guides/root-adapter-commands.md'
       - 'docs/reports/SUN-0300-public-data-adapters-report.md'
-    next_action: 'SUN-0400: Build Modal worker (blocked_external — requires Modal deployment token); SUN-0013 selected as the next dependency-safe task pending ledger review (see report)'
+    next_action: 'SUN-0400: Build Modal worker'
     blocker: null
     commit_ref: '541ab34'
 
   - id: 'SUN-0400'
     title: 'Build Modal worker (Docling, OCR, PDF processing)'
     phase: 'phase_6_modal_worker'
-    state: 'pending'
+    state: 'active'
     owner_agent: 'architect'
     dependencies:
       - 'SUN-0300'
@@ -627,8 +639,8 @@ tasks:
       - 'OCR extracts text from images'
       - 'Table extraction works'
     evidence: []
-    next_action: 'Build verification mesh'
-    blocker: 'Requires Modal deployment'
+    next_action: 'Ledger-hygiene audit (post-SUN-0300): this is the genuine next task in the accepted dependency chain (dependency SUN-0300 is accepted; nothing supersedes it). It is not dependency-safe in the actionable sense: every acceptance criterion (Modal app deploys, Docling/OCR/table extraction work) requires a live Modal deployment token, which is blocked_external. Set active (not blocked_external) to reflect that it is the correct designated next increment in the serial queue, per docs/decisions/0003-serial-execution-model.md, distinct from SUN-0006..SUN-0012-style tasks that are entirely operator-only. Not started; do not begin implementation until the Modal token is available.'
+    blocker: 'Requires Modal deployment token (blocked_external)'
     commit_ref: null
 
   - id: 'SUN-0500'

@@ -61,7 +61,7 @@ Crossref, GitHub, and Federal Register (`src/drift/drift.test.ts`, 19 tests;
 ## Fixture behavior matrix
 
 `packages/provider-adapters/fixtures/FIXTURE_MATRIX.yaml` — 103 scenario rows
-across 9 categories (common, sec_company_facts, terms, rate_limit,
+across 11 categories (common, sec_company_facts, terms, rate_limit,
 circuit_breaker, cache, ssrf, drift, property, live_gate, html_runtime),
 cross-checked by `scripts/verify-fixture-matrix.ts`
 (`pnpm --filter @siteborne/provider-adapters run fixture-matrix:verify`, folded

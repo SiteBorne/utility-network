@@ -10,8 +10,8 @@ source_directive:
 execution:
   mode: 'serial'
   active_mutation_tasks: 1
-  current_increment: 'SUN-0013'
-  current_phase: 'phase_2_monorepo'
+  current_increment: 'SUN-0400'
+  current_phase: 'phase_6_modal_worker'
   last_completed_increment: 'SUN-0300'
 
 implemented:
@@ -158,4 +158,4 @@ pcc_schema:
   extension_namespace: 'reverse-domain-qualified'
   drift_check: 'enabled'
 
-last_updated: '2026-08-08T13:00:00Z'
+last_updated: '2026-08-08T14:00:00Z'
