@@ -10,9 +10,9 @@ source_directive:
 execution:
   mode: 'serial'
   active_mutation_tasks: 1
-  current_increment: 'SUN-0500'
-  current_phase: 'phase_7_verification'
-  last_completed_increment: 'SUN-0400A'
+  current_increment: 'SUN-0600'
+  current_phase: 'phase_8_services'
+  last_completed_increment: 'SUN-0500'
 
 implemented:
   - 'governance_validation'
@@ -69,6 +69,20 @@ implemented:
   - 'document_worker_failure_taxonomy'
   - 'document_worker_internal_verification'
   - 'document_worker_modal_wrapper_scaffolded'
+  - 'verification_mesh_schema_verifier'
+  - 'verification_mesh_evidence_accessibility_verifier'
+  - 'verification_mesh_claim_evidence_verifier'
+  - 'verification_mesh_freshness_verifier'
+  - 'verification_mesh_completeness_verifier'
+  - 'verification_mesh_cross_source_verifier'
+  - 'verification_mesh_provenance_verifier'
+  - 'verification_mesh_prompt_injection_verifier'
+  - 'verification_mesh_reproduction_verifier'
+  - 'verification_mesh_non_voting_fail_closed_aggregation'
+  - 'verification_mesh_dependency_wave_execution'
+  - 'verification_receipt_canonical_binding'
+  - 'verification_receipt_ed25519_signing'
+  - 'verification_key_registry'
 
 not_implemented:
   - 'company_evidence_graph'
@@ -87,6 +101,8 @@ not_implemented:
   - 'document_worker_modal_deployment' # SUN-0400B, blocked_external (Modal token)
   - 'document_worker_live_r2_artifact_access' # placeholder only; see ADR 0029
   - 'document_worker_hard_preemptive_timeout' # best-effort checkpoint timeout only; see ADR 0028
+  - 'verification_production_key_custody' # no HSM/KMS integration; test-only ephemeral keys, see ADR 0033 / docs/operations/KEY_ROTATION.md
+  - 'verification_independent_reproduction_live_execution' # ReproductionVerifier contract implemented; no real second-execution source, see ADR 0034
 
 blocked_external:
   - 'cloudflare_account_configuration'

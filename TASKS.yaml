@@ -720,25 +720,36 @@ tasks:
   - id: 'SUN-0500'
     title: 'Build verification mesh (9 verifiers + receipt signer)'
     phase: 'phase_7_verification'
-    state: 'active'
+    state: 'accepted'
     owner_agent: 'architect'
     dependencies:
       - 'SUN-0400A'
     rubric_target: 85
     acceptance_tests:
-      - 'SchemaVerifier validates PCC schema'
-      - 'EvidenceAccessibilityVerifier checks sources'
-      - 'ClaimEvidenceAlignmentVerifier validates claims'
-      - 'ReceiptSigner produces Ed25519 signatures'
-    evidence: []
-    next_action: 'Selected as the next dependency-safe task (SUN-0400A accepted, blocker: null, no external credentials required — verifier logic and Ed25519 signing are both locally implementable/testable). Not started.'
+      - 'SchemaVerifier validates candidate output against the frozen output schema (ajv, incl. draft-07 PCC base via addMetaSchema)'
+      - 'EvidenceAccessibilityVerifier fails closed on disqualified/missing-locator/unreferenced evidence'
+      - 'ClaimEvidenceVerifier requires evidence_ids for material claims and absence-proof evidence for verified_absent claims'
+      - 'FreshnessVerifier/CompletenessVerifier/CrossSourceVerifier/ProvenanceVerifier/PromptInjectionVerifier implemented and tested'
+      - 'ReproductionVerifier: skipped_by_policy in standard mode, fails closed (never falls back) in independent_reproduction mode without input'
+      - 'runMesh is dependency-aware (wave-based) and never a voting system — one mandatory blocking failure forces fail/conditional regardless of other passes (fast-check property over all 2^8 combinations)'
+      - 'issueReceipt/verifyReceipt: canonical tamper-evident receipt binding, Ed25519 signing via @noble/ed25519, KeyRegistry active/retiring/retired/revoked lifecycle'
+      - '76 unit/integration tests + 3 property tests + 5-row fixture-matrix regression gate + policy/code cross-check, all passing; full root pnpm check passes'
+    evidence:
+      - 'docs/reports/SUN-0500-verification-mesh-report.md'
+      - 'docs/decisions/0030-verification-mesh-boundary.md'
+      - 'docs/decisions/0031-mesh-non-voting-fail-closed-aggregation.md'
+      - 'docs/decisions/0032-receipt-canonical-binding.md'
+      - 'docs/decisions/0033-ed25519-signer-and-key-registry.md'
+      - 'docs/decisions/0034-independent-reproduction-semantics.md'
+      - 'docs/decisions/0035-verifier-result-binding-hash-list-not-merkle.md'
+    next_action: 'Accepted. No literal production key custody/rotation and no live reproduction execution — recorded as non-blocking follow-ups in docs/operations/KEY_ROTATION.md and docs/operations/INDEPENDENT_REPRODUCTION.md, not silently claimed. SUN-0400B remains blocked_external; select the next dependency-safe, credential-independent task after SUN-0500 from TASKS.yaml.'
     blocker: null
-    commit_ref: null
+    commit_ref: 'b18466f'
 
   - id: 'SUN-0600'
     title: 'Implement 4 services (company_evidence_graph → web_context_verified → verify_agent_output → document_evidence_json)'
     phase: 'phase_8_services'
-    state: 'pending'
+    state: 'active'
     owner_agent: 'architect'
     dependencies:
       - 'SUN-0500'
@@ -749,8 +760,8 @@ tasks:
       - 'verify_agent_output.v1 passes rubric >= 85'
       - 'document_evidence_json.v1 passes rubric >= 85'
     evidence: []
-    next_action: 'Implement x402 payments'
-    blocker: 'Requires CDP credentials (blocked_external)'
+    next_action: 'Selected as the next dependency-safe task (SUN-0500 accepted, dependency satisfied). Implementing the 4 services against the already-frozen service contracts, provider adapters, document worker, and verification mesh is credential-independent — payment (x402/CDP) is a separate, later concern (SUN-0700) and does not block building/testing the services'' own request/response/verification logic in paid=false / offline_verification contract modes. The previous blocker text ("Requires CDP credentials") mis-scoped SUN-0700''s dependency onto this task and has been cleared. Not started.'
+    blocker: null
     commit_ref: null
 
   - id: 'SUN-0700'
