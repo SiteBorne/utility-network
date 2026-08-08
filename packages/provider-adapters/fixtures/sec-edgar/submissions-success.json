@@ -1,0 +1,49 @@
+{
+  "cik": "0000320193",
+  "entityName": "Apple Inc.",
+  "tickers": ["AAPL"],
+  "exchanges": ["NASDAQ"],
+  "ein": "942404110",
+  "description": "Apple Inc. designs, manufactures, and markets smartphones, personal computers, tablets, wearables, and accessories.",
+  "website": "https://www.apple.com",
+  "investorWebsite": "https://investor.apple.com",
+  "category": "Large Accelerated Filer",
+  "fiscalYearEnd": "0925",
+  "stateOfIncorporation": "CA",
+  "stateOfIncorporationDescription": "California",
+  "addresses": {
+    "mailing": {
+      "street1": "One Apple Park Way",
+      "city": "Cupertino",
+      "stateOrCountry": "CA",
+      "zipCode": "95014"
+    },
+    "business": {
+      "street1": "One Apple Park Way",
+      "city": "Cupertino",
+      "stateOrCountry": "CA",
+      "zipCode": "95014"
+    }
+  },
+  "phone": "408-996-1010",
+  "flags": "0",
+  "formerNames": [{ "name": "Apple Computer, Inc.", "date": "1977-01-03" }],
+  "filings": {
+    "recent": {
+      "accessionNumber": ["0000320193-24-000010", "0000320193-24-000009"],
+      "filingDate": ["2024-01-26", "2024-01-25"],
+      "reportDate": ["2023-12-30", "2023-12-30"],
+      "acceptanceDateTime": ["2024-01-26T16:05:00.000Z", "2024-01-25T16:05:00.000Z"],
+      "act": ["34", "34"],
+      "form": ["10-Q", "8-K"],
+      "fileNumber": ["001-36743", "001-36743"],
+      "filmNumber": ["24523456", "24523455"],
+      "items": ["2.02", "1.01"],
+      "size": [123456, 45678],
+      "isXBRL": [1, 0],
+      "isInlineXBRL": [1, 0],
+      "primaryDocument": ["aapl-20231230.htm", "aapl-8k-20240125.htm"],
+      "primaryDocDescription": ["Quarterly Report", "Current Report"]
+    }
+  }
+}

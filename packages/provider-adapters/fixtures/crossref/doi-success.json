@@ -1,0 +1,33 @@
+{
+  "DOI": "10.1038/s41586-023-05874-3",
+  "title": ["Protein structure prediction using AlphaFold"],
+  "subtitle": ["A deep learning approach"],
+  "author": [
+    {
+      "given": "John",
+      "family": "Jumper",
+      "name": "John Jumper",
+      "sequence": "first",
+      "ORCID": "https://orcid.org/0000-0002-8525-6337"
+    },
+    { "given": "Richard", "family": "Evans", "name": "Richard Evans", "sequence": "additional" }
+  ],
+  "container-title": ["Nature"],
+  "short-container-title": ["Nature"],
+  "publisher": "Nature Publishing Group",
+  "published": { "date-parts": [[2023, 3, 15]] },
+  "published-print": { "date-parts": [[2023, 3, 15]] },
+  "type": "journal-article",
+  "reference-count": 45,
+  "reference": [{ "DOI": "10.1038/nature14230", "key": "ref1" }],
+  "license": [
+    {
+      "URL": "http://creativecommons.org/licenses/by/4.0/",
+      "start": { "date-parts": [[2023, 3, 15]] },
+      "delay-in-days": 0
+    }
+  ],
+  "URL": "https://doi.org/10.1038/s41586-023-05874-3",
+  "score": 1.0,
+  "indexed": { "date-parts": [[2024, 1, 15]] }
+}

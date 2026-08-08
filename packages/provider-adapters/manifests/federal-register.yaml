@@ -1,0 +1,27 @@
+provider_id: 'federal-register'
+source_class: 'authoritative'
+base_uris:
+  - 'https://www.federalregister.gov'
+capabilities:
+  - 'federal_register_document'
+  - 'federal_register_search'
+  - 'federal_register_agency'
+commercial_application_allowed: true
+automated_access_allowed: true
+transformed_output_allowed: true
+raw_access_resale_allowed: false
+sensitive_data_allowed: false
+account_sharing_allowed: false
+quota_multiplication_allowed: false
+credentials_required: false
+terms_uri: 'https://www.federalregister.gov/about/developers'
+terms_hash: null
+terms_review_status: 'pending_review'
+reviewed_at: null
+rate_policy:
+  strategy: 'token_bucket'
+  maximum_concurrency: 10
+  minimum_interval_ms: 100
+  retry_after_respected: true
+  maximum_retries: 3
+promotion_state: 'fixture_tested'

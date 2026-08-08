@@ -1,0 +1,28 @@
+provider_id: 'github-public'
+source_class: 'public_repository'
+base_uris:
+  - 'https://api.github.com'
+capabilities:
+  - 'github_repository'
+  - 'github_releases'
+  - 'github_languages'
+  - 'github_topics'
+commercial_application_allowed: true
+automated_access_allowed: true
+transformed_output_allowed: true
+raw_access_resale_allowed: false
+sensitive_data_allowed: false
+account_sharing_allowed: false
+quota_multiplication_allowed: false
+credentials_required: false
+terms_uri: 'https://docs.github.com/en/site-policy/github-terms/github-terms-of-service'
+terms_hash: null
+terms_review_status: 'pending_review'
+reviewed_at: null
+rate_policy:
+  strategy: 'token_bucket'
+  maximum_concurrency: 5
+  minimum_interval_ms: 1000
+  retry_after_respected: true
+  maximum_retries: 3
+promotion_state: 'fixture_tested'

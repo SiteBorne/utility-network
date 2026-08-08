@@ -1,0 +1,39 @@
+{
+  "id": 1296269,
+  "node_id": "MDEwOlJlcG9zaXRvcnkxMjk2MjY5",
+  "name": "siteborne-utility-network",
+  "full_name": "siteborne/siteborne-utility-network",
+  "owner": {
+    "login": "siteborne",
+    "id": 12345678,
+    "type": "Organization"
+  },
+  "private": false,
+  "html_url": "https://github.com/siteborne/siteborne-utility-network",
+  "description": "SITEBORNE Utility Network - Machine-native utility network for autonomous agents",
+  "fork": false,
+  "created_at": "2024-01-15T10:30:00Z",
+  "updated_at": "2024-08-01T15:45:00Z",
+  "pushed_at": "2024-08-05T09:20:00Z",
+  "homepage": "https://siteborne.net",
+  "size": 524288,
+  "stargazers_count": 42,
+  "watchers_count": 42,
+  "language": "TypeScript",
+  "has_issues": true,
+  "has_projects": true,
+  "has_downloads": true,
+  "has_wiki": false,
+  "has_pages": false,
+  "forks_count": 12,
+  "archived": false,
+  "disabled": false,
+  "open_issues_count": 5,
+  "license": {
+    "key": "mit",
+    "name": "MIT License",
+    "spdx_id": "MIT"
+  },
+  "topics": ["utility-network", "autonomous-agents", "pcc", "proof-carrying-context"],
+  "default_branch": "main"
+}

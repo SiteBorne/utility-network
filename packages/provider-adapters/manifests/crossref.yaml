@@ -1,0 +1,27 @@
+provider_id: 'crossref'
+source_class: 'public_index'
+base_uris:
+  - 'https://api.crossref.org'
+capabilities:
+  - 'crossref_doi'
+  - 'crossref_title'
+  - 'crossref_bibliographic'
+commercial_application_allowed: true
+automated_access_allowed: true
+transformed_output_allowed: true
+raw_access_resale_allowed: false
+sensitive_data_allowed: false
+account_sharing_allowed: false
+quota_multiplication_allowed: false
+credentials_required: false
+terms_uri: 'https://www.crossref.org/terms/'
+terms_hash: null
+terms_review_status: 'pending_review'
+reviewed_at: null
+rate_policy:
+  strategy: 'token_bucket'
+  maximum_concurrency: 5
+  minimum_interval_ms: 200
+  retry_after_respected: true
+  maximum_retries: 3
+promotion_state: 'fixture_tested'

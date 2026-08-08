@@ -1,0 +1,31 @@
+{
+  "document_number": "2024-01234",
+  "title": "Cybersecurity Requirements for Financial Institutions",
+  "type": "Proposed Rule",
+  "abstract": "This proposed rule would establish cybersecurity requirements for financial institutions to protect sensitive customer information and ensure the resilience of the financial system.",
+  "html_url": "https://www.federalregister.gov/documents/2024/01/15/2024-01234/cybersecurity-requirements-for-financial-institutions",
+  "pdf_url": "https://www.federalregister.gov/documents/2024/01/15/2024-01234/cybersecurity-requirements-for-financial-institutions.pdf",
+  "publication_date": "2024-01-15",
+  "effective_date": null,
+  "agencies": [
+    {
+      "name": "Federal Reserve System",
+      "id": 123,
+      "url": "https://www.federalregister.gov/agencies/federal-reserve-system"
+    },
+    {
+      "name": "Office of the Comptroller of the Currency",
+      "id": 456,
+      "url": "https://www.federalregister.gov/agencies/office-of-the-comptroller-of-the-currency"
+    }
+  ],
+  "action": "Notice of proposed rulemaking",
+  "docket_ids": ["FRB-2023-0045", "OCC-2023-0012"],
+  "significant": true,
+  "presidential_document_type": null,
+  "president": null,
+  "excerpt": "The Agencies are proposing to update and strengthen cybersecurity requirements...",
+  "comments_close_on": "2024-03-15",
+  "volume": 89,
+  "page": 2345
+}

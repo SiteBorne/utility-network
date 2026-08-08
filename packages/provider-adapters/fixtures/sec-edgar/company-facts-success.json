@@ -1,0 +1,91 @@
+{
+  "cik": "0000320193",
+  "entityName": "Apple Inc.",
+  "facts": {
+    "us-gaap": {
+      "label": "US GAAP",
+      "description": "US Generally Accepted Accounting Principles",
+      "concepts": {
+        "Revenues": {
+          "label": "Revenues",
+          "description": "Total revenue from all sources",
+          "units": {
+            "USD": [
+              {
+                "val": 383285000000,
+                "accn": "0000320193-24-000010",
+                "fy": 2024,
+                "fp": "Q1",
+                "form": "10-Q",
+                "filed": "2024-01-26",
+                "frame": "CY2023Q4",
+                "start": "2023-10-01",
+                "end": "2023-12-30"
+              },
+              {
+                "val": 394328000000,
+                "accn": "0000320193-23-000010",
+                "fy": 2023,
+                "fp": "FY",
+                "form": "10-K",
+                "filed": "2023-11-03",
+                "frame": "CY2023",
+                "start": "2022-09-25",
+                "end": "2023-09-30"
+              }
+            ]
+          }
+        },
+        "NetIncomeLoss": {
+          "label": "Net Income (Loss)",
+          "units": {
+            "USD": [
+              {
+                "val": 33916000000,
+                "accn": "0000320193-24-000010",
+                "fy": 2024,
+                "fp": "Q1",
+                "form": "10-Q",
+                "filed": "2024-01-26",
+                "frame": "CY2023Q4",
+                "start": "2023-10-01",
+                "end": "2023-12-30"
+              },
+              {
+                "val": 96995000000,
+                "accn": "0000320193-23-000010",
+                "fy": 2023,
+                "fp": "FY",
+                "form": "10-K",
+                "filed": "2023-11-03",
+                "frame": "CY2023",
+                "start": "2022-09-25",
+                "end": "2023-09-30"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "dei": {
+      "label": "DEI",
+      "concepts": {
+        "EntityRegistrantName": {
+          "label": "Entity Registrant Name",
+          "units": {
+            "": [
+              {
+                "val": "Apple Inc.",
+                "accn": "0000320193-24-000010",
+                "fy": 2024,
+                "fp": "Q1",
+                "form": "10-Q",
+                "filed": "2024-01-26"
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

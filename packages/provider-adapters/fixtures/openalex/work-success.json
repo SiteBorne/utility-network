@@ -1,0 +1,62 @@
+{
+  "meta": { "count": 1, "page": 1, "per_page": 25 },
+  "results": [
+    {
+      "id": "https://openalex.org/W2741809807",
+      "doi": "https://doi.org/10.1038/s41586-023-05874-3",
+      "title": "Protein structure prediction using AlphaFold",
+      "publication_year": 2023,
+      "publication_date": "2023-03-15",
+      "type": "journal-article",
+      "cited_by_count": 1542,
+      "is_retracted": false,
+      "is_paratext": false,
+      "authorships": [
+        {
+          "author": {
+            "id": "https://openalex.org/A5000000001",
+            "display_name": "John Jumper",
+            "orcid": "https://orcid.org/0000-0002-8525-6337"
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I123456789",
+              "display_name": "DeepMind",
+              "ror": "https://ror.org/00000001"
+            }
+          ],
+          "raw_author_name": "John Jumper"
+        }
+      ],
+      "primary_location": {
+        "source": {
+          "id": "https://openalex.org/S123456789",
+          "display_name": "Nature",
+          "issn_l": "0028-0836",
+          "issn": ["0028-0836", "1476-4687"]
+        },
+        "landing_page_url": "https://www.nature.com/articles/s41586-023-05874-3",
+        "pdf_url": "https://www.nature.com/articles/s41586-023-05874-3.pdf",
+        "is_oa": true,
+        "version": "publishedVersion",
+        "license": "cc-by"
+      },
+      "concepts": [
+        {
+          "id": "https://openalex.org/C123456789",
+          "display_name": "Protein folding",
+          "level": 1,
+          "score": 0.95
+        }
+      ],
+      "open_access": {
+        "is_oa": true,
+        "oa_status": "gold",
+        "oa_url": "https://www.nature.com/articles/s41586-023-05874-3"
+      },
+      "language": "en",
+      "updated_date": "2024-01-15",
+      "created_date": "2023-03-15"
+    }
+  ]
+}
