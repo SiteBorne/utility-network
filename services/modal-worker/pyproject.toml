@@ -1,19 +1,29 @@
 [project]
 name = "siteborne-modal-worker"
-version = "0.1.0"
-description = "Modal worker for document processing - foundation only"
+version = "0.2.0"
+description = "Modal worker for document processing - SUN-0400A credential-independent foundation"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "pydantic>=2.7",
+    "pypdf>=6.0,<7",
+    "pdfplumber>=0.11,<1",
+    "pillow>=12.0,<13",
+    "rapidocr>=3.9,<4",
+    "torch>=2.0",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.2",
     "pytest-asyncio>=0.23",
+    "hypothesis>=6.100",
+    "reportlab>=5.0,<6",
     "ruff>=0.4",
     "mypy>=1.10",
+]
+modal = [
+    "modal>=1.5,<2",
 ]
 
 [tool.pytest.ini_options]
@@ -24,7 +34,11 @@ testpaths = ["tests"]
 target-version = "py312"
 line-length = 100
 select = ["E", "F", "I", "UP", "W"]
-ignore = ["E501"]
+# E501: line-length is a formatting nicety, not correctness.
+# UP042: this project's closed-enum convention is `class X(str, Enum)` (matches
+# the FailureCode/AdapterResultClass-style closed unions elsewhere in the repo);
+# StrEnum is equivalent but the explicit form is kept for consistency.
+ignore = ["E501", "UP042"]
 
 [tool.mypy]
 python_version = "3.12"
@@ -33,3 +47,14 @@ warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
 no_implicit_optional = true
+# pdfplumber/pypdf/PIL/rapidocr/modal/reportlab do not ship inline types or complete stubs.
+[[tool.mypy.overrides]]
+module = ["pdfplumber.*", "pypdf.*", "PIL.*", "rapidocr.*", "modal.*", "reportlab.*"]
+ignore_missing_imports = true
+
+# Test/fixture-generation code is exempt from disallow_untyped_defs (pytest
+# fixtures/parametrized args are conventionally left unannotated).
+[[tool.mypy.overrides]]
+module = ["tests.*"]
+disallow_untyped_defs = false
+

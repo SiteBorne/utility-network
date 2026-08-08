@@ -73,7 +73,7 @@ jobs:
         run: |
           cd services/modal-worker
           python3 -m venv .venv
-          .venv/bin/pip install -e ".[dev]"
+          .venv/bin/pip install -e ".[dev]" -e ".[modal]"
 
       - name: Ruff
         run: |

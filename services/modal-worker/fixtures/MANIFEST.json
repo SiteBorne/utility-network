@@ -1,0 +1,22 @@
+{
+  "generator": "scripts/generate_fixtures.py",
+  "images": [
+    "blank.png",
+    "low_contrast.png",
+    "malformed.png",
+    "mismatched_extension.png",
+    "text.png",
+    "text.jpg"
+  ],
+  "pdf": [
+    "blank_page.pdf",
+    "encrypted.pdf",
+    "malformed.pdf",
+    "multi_table.pdf",
+    "native_text_multi_page.pdf",
+    "native_text_one_page.pdf",
+    "over_page_limit.pdf",
+    "scanned_page.pdf",
+    "single_table.pdf"
+  ]
+}

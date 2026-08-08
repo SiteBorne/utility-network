@@ -31,12 +31,20 @@
     "python:test": "cd services/modal-worker && .venv/bin/python -m pytest",
     "python:test:pcc": "cd packages/pcc-schema && ../../.venv/bin/python -m pytest tests/python/ -v",
     "python:test:modal": "cd services/modal-worker && .venv/bin/python -m pytest -v",
+    "document-worker:test": "cd services/modal-worker && .venv/bin/python -m pytest tests/ -q",
+    "document-worker:typecheck": "cd services/modal-worker && .venv/bin/mypy .",
+    "document-worker:lint": "cd services/modal-worker && .venv/bin/ruff check .",
+    "document-worker:fixtures:verify": "cd services/modal-worker && .venv/bin/python -c \"import json,pathlib; m=json.loads(pathlib.Path('fixtures/MANIFEST.json').read_text()); pdf=[f for f in m['pdf'] if not (pathlib.Path('fixtures/pdf')/f).exists()]; img=[f for f in m['images'] if not (pathlib.Path('fixtures/images')/f).exists()]; assert not pdf and not img, (pdf, img); print(f'fixture manifest OK: {len(m[\\\"pdf\\\"])} pdf + {len(m[\\\"images\\\"])} image fixtures present')\"",
+    "document-worker:fixtures:generate": "cd services/modal-worker && .venv/bin/python scripts/generate_fixtures.py",
+    "document-worker:benchmark": "cd services/modal-worker && .venv/bin/python scripts/benchmark.py",
+    "document-worker:modal-import-check": "cd services/modal-worker && .venv/bin/python -c \"import modal_worker.modal_app\"",
+    "document-worker:check": "pnpm document-worker:lint && pnpm document-worker:typecheck && pnpm document-worker:test && pnpm document-worker:modal-import-check",
     "adapters:test": "pnpm --filter @siteborne/provider-adapters run all:test",
     "adapters:fixtures:verify": "pnpm --filter @siteborne/provider-adapters run fixtures:verify",
     "adapters:manifests:verify": "pnpm --filter @siteborne/provider-adapters run manifests:verify",
     "adapters:check": "pnpm --filter @siteborne/provider-adapters run format:check && pnpm --filter @siteborne/provider-adapters run lint && pnpm --filter @siteborne/provider-adapters run typecheck && pnpm --filter @siteborne/provider-adapters run all:test && pnpm --filter @siteborne/provider-adapters run test:property && pnpm adapters:fixtures:verify && pnpm adapters:manifests:verify",
     "secrets:scan": "gitleaks detect --source=. --config=.gitleaks.toml --no-git --redact --verbose",
-    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm pcc:generate:check && pnpm services:generate:check && pnpm openapi:generate:check && pnpm python:test:pcc && pnpm python:test:modal && pnpm governance:validate && pnpm state:validate && pnpm tasks:validate && pnpm contracts:baseline:verify && pnpm contracts:compat:check && pnpm contracts:release:verify && pnpm migrations:verify && pnpm d1:test && pnpm control-plane:test && pnpm control-plane:check && pnpm adapters:check && pnpm secrets:scan"
+    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm pcc:generate:check && pnpm services:generate:check && pnpm openapi:generate:check && pnpm python:test:pcc && pnpm python:test:modal && pnpm governance:validate && pnpm state:validate && pnpm tasks:validate && pnpm contracts:baseline:verify && pnpm contracts:compat:check && pnpm contracts:release:verify && pnpm migrations:verify && pnpm d1:test && pnpm control-plane:test && pnpm control-plane:check && pnpm adapters:check && pnpm document-worker:check && pnpm document-worker:fixtures:verify && pnpm secrets:scan"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",
