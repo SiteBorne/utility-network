@@ -2,7 +2,8 @@
 
 ## Root Commands
 
-The following root commands are available for managing adapters and the overall system:
+The following root commands are available for managing adapters and the overall
+system:
 
 - `pnpm adapters:test` - Run all adapter execution tests
 - `pnpm adapters:fixtures:verify` - Verify all fixture files
@@ -18,23 +19,30 @@ The following root commands are available for managing adapters and the overall 
   - Public export verification
   - Runtime parser verification
   - Hygiene verification
-- `pnpm check` - Invoke all checks including format, lint, typecheck, tests, and secret scan
+- `pnpm check` - Invoke all checks including format, lint, typecheck, tests, and
+  secret scan
 - `pnpm secrets:scan` - Run secret scanning with repository-standard scanner
-- `pnpm check` - Run all checks including format, lint, typecheck, tests, and secret scan
+- `pnpm check` - Run all checks including format, lint, typecheck, tests, and
+  secret scan
 
 ## Root Command Details
 
 ### `pnpm adapters:test`
+
 Executes all adapter execution tests to verify public interface functionality.
 
 ### `pnpm adapters:fixtures:verify`
+
 Verifies all fixture files for correctness and validity.
 
 ### `pnpm adapters:manifests:verify`
+
 Verifies all manifest files for correctness and validation.
 
 ### `pnpm adapters:check`
+
 Includes:
+
 - Adapter formatting
 - Adapter linting
 - Adapter type checking
@@ -47,7 +55,9 @@ Includes:
 - Hygiene verification
 
 ### `pnpm check`
+
 Invokes:
+
 - format:check
 - lint
 - typecheck

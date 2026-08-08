@@ -1,7 +1,10 @@
 # SITEBORNE Utility Network - Source-Terms Review Guide
 
 ## Overview
-This guide documents the process for reviewing and managing source terms (TERMS) for the SITEBORNE Utility Network. Terms are used to control access to data sources and must be reviewed before activation.
+
+This guide documents the process for reviewing and managing source terms (TERMS)
+for the SITEBORNE Utility Network. Terms are used to control access to data
+sources and must be reviewed before activation.
 
 ## Terms Status Categories
 
@@ -60,7 +63,8 @@ promotion_state: 'fixture_tested' | 'live_verified' | 'policy_blocked'
 
 Each provider is classified based on its terms status:
 
-- **fixture_verified**: Adapter has verified fixtures and terms are pending_review
+- **fixture_verified**: Adapter has verified fixtures and terms are
+  pending_review
 - **locally_live_verified**: Adapter has verified fixtures and terms are active
 - **live_unverified**: Adapter is live but terms are pending_review
 - **policy_blocked**: Terms are blocked by policy
@@ -69,14 +73,19 @@ Each provider is classified based on its terms status:
 
 ## Terms and Activation Policy
 
-- **pending_review**: No provider is production_verified until terms are reviewed
-- **policy_blocked**: Providers with policy_blocked terms cannot be used for live access
-- **live_unverified**: Providers may be used in testing but not in production until terms are approved
-- **policy_blocked or live_unverified**: These are the expected states for SUN-0300 until terms are reviewed
+- **pending_review**: No provider is production_verified until terms are
+  reviewed
+- **policy_blocked**: Providers with policy_blocked terms cannot be used for
+  live access
+- **live_unverified**: Providers may be used in testing but not in production
+  until terms are approved
+- **policy_blocked or live_unverified**: These are the expected states for
+  SUN-0300 until terms are reviewed
 
 ## Audit and Tracking
 
 All term changes must be recorded in audit events with:
+
 - Provider ID
 - Capability
 - Timestamp

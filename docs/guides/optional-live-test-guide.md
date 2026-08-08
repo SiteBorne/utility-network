@@ -1,7 +1,10 @@
 # SITEBORNE Utility Network - Optional Live-Test Guide
 
 ## Overview
-Optional live-test gates are disabled by default and require TermsGuard approval to run. They are designed to verify live adapter functionality with minimal risk.
+
+Optional live-test gates are disabled by default and require TermsGuard approval
+to run. They are designed to verify live adapter functionality with minimal
+risk.
 
 ## Guidelines
 
@@ -13,11 +16,13 @@ Optional live-test gates are disabled by default and require TermsGuard approval
 6. **No Mutation**: Tests must not mutate or download payload
 7. **No Commits**: Downloaded payload must not be committed to repository
 8. **Source Drift**: Source drift must be classified and reported
-9. **Result Classification**: Results must be classified as skip/pass/fail separately
+9. **Result Classification**: Results must be classified as skip/pass/fail
+   separately
 
 ## Live Gate Definitions
 
 ### RUN_LIVE_SEC
+
 - **Default**: Skipped
 - **Requirement**: TermsGuard approval
 - **Scope**: SEC submissions adapter
@@ -26,6 +31,7 @@ Optional live-test gates are disabled by default and require TermsGuard approval
 - **Expected Result**: Skip (due to pending_review terms)
 
 ### RUN_LIVE_OPENALEX
+
 - **Default**: Skipped
 - **Requirement**: TermsGuard approval
 - **Scope**: OpenAlex adapter
@@ -35,6 +41,7 @@ Optional live-test gates are disabled by default and require TermsGuard approval
 - **Expected Result**: Skip (policy_blocked or skipped)
 
 ### RUN_LIVE_CROSSREF
+
 - **Default**: Skipped
 - **Requirement**: TermsGuard approval
 - **Scope**: Crossref adapter
@@ -42,6 +49,7 @@ Optional live-test gates are disabled by default and require TermsGuard approval
 - **Expected Result**: Skip (policy_blocked or skipped)
 
 ### RUN_LIVE_GITHUB_PUBLIC
+
 - **Default**: Skipped
 - **Requirement**: TermsGuard approval
 - **Scope**: GitHub Public adapter
@@ -50,6 +58,7 @@ Optional live-test gates are disabled by default and require TermsGuard approval
 - **Expected Result**: Skip (expected to be policy_blocked or skipped)
 
 ### RUN_LIVE_FEDERAL_REGISTER
+
 - **Default**: Skipped
 - **Requirement**: TermsGuard approval
 - **Scope**: Federal Register adapter
@@ -57,6 +66,7 @@ Optional live-test gates are disabled by default and require TermsGuard approval
 - **Expected Result**: Skip (policy_blocked or skipped)
 
 ### RUN_LIVE_PUBLIC_HTTP
+
 - **Default**: Skipped
 - **Requirement**: TermsGuard approval
 - **Scope**: Public HTTP adapter

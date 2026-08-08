@@ -14,6 +14,9 @@
     "governance:validate": "tsx scripts/validate-governance.ts",
     "state:validate": "tsx scripts/validate-state.ts",
     "tasks:validate": "tsx scripts/validate-tasks.ts",
+    "pcc:generate:check": "pnpm --filter @siteborne/pcc-schema run generate:check",
+    "services:generate:check": "pnpm --filter @siteborne/pcc-schema run generate:services:check",
+    "openapi:generate:check": "pnpm --filter @siteborne/pcc-schema run generate:openapi:check",
     "contracts:baseline:verify": "pnpm --filter @siteborne/contracts contracts:baseline:verify",
     "contracts:compat": "pnpm --filter @siteborne/contracts contracts:compat",
     "contracts:compat:check": "pnpm --filter @siteborne/contracts contracts:compat:check",
@@ -33,7 +36,7 @@
     "adapters:manifests:verify": "pnpm --filter @siteborne/provider-adapters run manifests:verify",
     "adapters:check": "pnpm --filter @siteborne/provider-adapters run format:check && pnpm --filter @siteborne/provider-adapters run lint && pnpm --filter @siteborne/provider-adapters run typecheck && pnpm --filter @siteborne/provider-adapters run all:test && pnpm --filter @siteborne/provider-adapters run test:property && pnpm adapters:fixtures:verify && pnpm adapters:manifests:verify",
     "secrets:scan": "gitleaks detect --source=. --config=.gitleaks.toml --no-git --redact --verbose",
-    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm python:test:pcc && pnpm python:test:modal && pnpm governance:validate && pnpm state:validate && pnpm tasks:validate && pnpm contracts:baseline:verify && pnpm contracts:compat:check && pnpm contracts:release:verify && pnpm migrations:verify && pnpm d1:test && pnpm control-plane:test && pnpm control-plane:check && pnpm adapters:check && pnpm secrets:scan"
+    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm pcc:generate:check && pnpm services:generate:check && pnpm openapi:generate:check && pnpm python:test:pcc && pnpm python:test:modal && pnpm governance:validate && pnpm state:validate && pnpm tasks:validate && pnpm contracts:baseline:verify && pnpm contracts:compat:check && pnpm contracts:release:verify && pnpm migrations:verify && pnpm d1:test && pnpm control-plane:test && pnpm control-plane:check && pnpm adapters:check && pnpm secrets:scan"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",

@@ -4,8 +4,8 @@
 
 The production HTML normalization path uses the Cloudflare Workers
 `HTMLRewriter` streaming implementation (`createWorkerHtmlParser()` in
-`packages/provider-adapters/src/html/parser.ts`). This is the only implementation
-permitted in the Worker production bundle.
+`packages/provider-adapters/src/html/parser.ts`). This is the only
+implementation permitted in the Worker production bundle.
 
 JSDOM is permitted **only** in the Node test/nonproduction path
 (`createNodeHtmlParser()` / `parseHtmlWithJsdom()`), and only when:
@@ -21,8 +21,9 @@ throws `WorkerHtmlRewriterUnavailableError`. There is no silent JSDOM fallback.
 
 ## Behaviors that are identical on both paths
 
-- `title`, `<meta name="description">`, `<link rel="canonical">`, and `<html lang>`
-  extraction are single-element, unambiguous and produce identical values.
+- `title`, `<meta name="description">`, `<link rel="canonical">`, and
+  `<html lang>` extraction are single-element, unambiguous and produce identical
+  values.
 - JSON-LD (`<script type="application/ld+json">`) capture is identical when the
   JSON is well-formed; malformed JSON-LD is omitted deterministically on both
   paths (no throw).
@@ -30,8 +31,8 @@ throws `WorkerHtmlRewriterUnavailableError`. There is no silent JSDOM fallback.
   excluded from visible text on both paths.
 - Bounded result counts (`maxLinks`, `maxTableRows`/`maxTableCols`, `maxNodes`,
   `maxTextLength`) are enforced on both paths, and truncation flags are set.
-- Injection-signal scanning (`runInjectionTextScan`) runs over normalized visible
-  text identically (regex-based, runtime-agnostic).
+- Injection-signal scanning (`runInjectionTextScan`) runs over normalized
+  visible text identically (regex-based, runtime-agnostic).
 
 ## Behaviors that cannot be identical (streaming vs tree)
 
@@ -39,17 +40,17 @@ throws `WorkerHtmlRewriterUnavailableError`. There is no silent JSDOM fallback.
 production parser therefore performs **flat streaming attribution** of text to
 the currently-open element using open/close booleans driven by `element` /
 `onEndTag` handlers. JSDOM parses into a full tree. The following are therefore
-**not guaranteed byte-identical** between paths and must be treated as
-parity limitations:
+**not guaranteed byte-identical** between paths and must be treated as parity
+limitations:
 
 - **CSS selector paths** for headings/paragraphs/links/list-items/tables are
-  generated as `nth-of-type` counters in document order; they are *stable and
-  deterministic* on each path but are not identical to the JSDOM-generated
+  generated as `nth-of-type` counters in document order; they are _stable and
+  deterministic_ on each path but are not identical to the JSDOM-generated
   structural `:nth-child` paths. Do not depend on selector string equality
   across paths; depend on stable ordering within a path.
 - **Nested/overlapping elements**: when elements nest (e.g. `<a>` inside `<p>`,
-  `<span>` inside `<h1>`), streaming flat attribution may cross-attribute
-  inner text to multiple buffers or to `visibleText` rather than the innermost
+  `<span>` inside `<h1>`), streaming flat attribution may cross-attribute inner
+  text to multiple buffers or to `visibleText` rather than the innermost
   element. The tree path attributes text to the exact descendant. The
   `visibleText` aggregate is identical; per-element text buffers may differ for
   nested content.
@@ -69,8 +70,8 @@ parity limitations:
 
 ## Validation
 
-The executable runtime test `src/html/html-worker-runtime.test.ts` proves, against
-a local Miniflare Workers runtime:
+The executable runtime test `src/html/html-worker-runtime.test.ts` proves,
+against a local Miniflare Workers runtime:
 
 - the Worker entry uses `HTMLRewriter` and does not require JSDOM;
 - `HTMLRewriter`-backed normalization initializes in the local Worker runtime;

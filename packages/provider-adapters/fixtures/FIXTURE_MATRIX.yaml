@@ -1,1453 +1,1596 @@
 # SITEBORNE Utility Network — SUN-0300 Fixture Behavior Matrix
-# Machine-readable specification of required test scenarios and expected outcomes
-
-# Common behaviors
-sec-submissions:
-  scenario: success
-  fixture: sec-edgar/submissions-success.json
-  expected_result_class: success
-  expected_warning: none
-  expected_network_calls: 1
-  expected_cache: hit (when repeated)
-  expected_audit: source_changed
-  test_reference: sec-edgar/submissions-success.json
-
-sec-submissions:
-  scenario: not_found
-  fixture: sec-edgar/submissions-not-found.json
-  expected_result_class: not_found
-  expected_warning: none
-  expected_network_calls: 1
-  expected_cache: miss
-  expected_audit: source_changed
-  test_reference: sec-edgar/submissions-not-found.json
-
-sec-submissions:
-  scenario: partial
-  fixture: sec-edgar/submissions-partial.json
-  expected_result_class: partial
-  expected_warning: none
-  expected_network_calls: 1
-  expected_cache: miss
-  expected_audit: source_changed
-  test_reference: sec-edgar/submissions-partial.json
-
-sec-company-facts:
-  scenario: success
-  fixture: sec-edgar/company-facts-success.json
-  expected_result_class: success
-  expected_warning: none
-  expected_network_calls: 1
-  expected_cache: hit (when repeated)
-  expected_audit: source_changed
-  test_reference: sec-edger/company-facts-success.json
-
-sec-company-facts:
-  scenario: partial
-  fixture: sec-edger/company-facts-partial.json
-  expected_result_class: partial
-  expected_warning: none
-  expected_network_calls: 1
-  expected_cache: miss
-  expected_audit: source_changed
-  test_reference: sec-edger/company-facts-partial.json
-
-direct-public-http:
-  scenario: html_success
-  fixture: direct-public-http/html-success.html
-  expected_result_class: success
-  expected_warning: none
-  expected_network_calls: 1
-  expected_cache: miss (HTML requires fresh fetch)
-  expected_audit: source_changed
-  test_reference: direct-public-http/html-success.html
-
-direct-public-http:
-  scenario: malformed_html
-  fixture: direct-public-http/html-success.html
-  expected_result_class: success
-  expected_warning: none
-  expected_network_calls: 1
-  expected_cache: miss
-  expected_audit: source_changed
-  test_reference: direct-public-http/html-success.html
-
-# SEC submissions scenarios
-sec-submissions:
-  scenario: leading-zero_cik
-  fixture: sec-edgar/submissions-success.json
-  expected_result_class: success
-  expected_warning: none
-  expected_network_calls: 1
-  expected_cache: miss
-  expected_audit: source_changed
-  test_reference: sec-edger/submissions-success.json
-
-sec-submissions:
-  scenario: invalid_cik
-  fixture: sec-edgar/submissions-not-found.json
-  expected_result_class: not_found
-  expected_warning: none
-  expected_network_calls: 1
-  expected_cache: miss
-  expected_audit: source_changed
-  test_reference: sec-edgar/submissions-not-found.json
-
-sec-submissions:
-  scenario: expected-name-mismatch
-  fixture: sec-edger/submissions-success.json
-  expected_result_class: success
-  expected_warning: ticker-hint
-  expected_network_calls: 1
-  expected_cache: miss
-  expected_audit: source_changed
-  test-reference: sec-edger/submissions-success.json
-
-sec-submissions:
-  scenario: ticker-hint
-  fixture: sec-edgar/submissions-success.json
-  expected_result_class: success
-  expected_warning: ticker-hint
-  expected_network_calls: 1
-  expected_cache: miss
-  expected_audit: source_changed
-  test-reference: sec-edgar/submissions-success.json
-
-sec-submissions:
-  scenario: filing-count-bound
-  fixture: sec-edgar/submissions-success.json
-  expected_result_class: success
-  expected_warning: none
-  expected_network_calls: 1
-  expected_cache: miss
-  expected_audit: source_changed
-  test-reference: sec-edgar/submissions-success.json
-
-sec-submissions:
-  scenario: form-filter
-  fixture: sec-edger/submissions-success.json
-  expected_result_class: success
-  expected_warning: none
-  expected_network_calls: 1
-  expected_cache: miss
-  expected_audit: source_changed
-  test-reference: sec-edger/submissions-success.json
-
-sec-submissions:
-  scenario: malformed-accession
-  fixture: sec-edger/submissions-partial.json
-  expected_result_class: partial
-  expected_warning: none
-  expected_network_calls: 1
-  expected_cache: miss
-  expected_audit: source_changed
-  test-reference: sec-edger/submissions-partial.json
-
-sec-submissions:
-  scenario: partial-filing
-  fixture: sec-edger/submissions-partial.json
-  expected_result_class: partial
-  expected_warning: none
-  expected_network_calls: 1
-  expected_cache: miss
-  expected_audit: source_changed
-  test-reference: sec-edger/submissions-partial.json
-
-sec-submissions:
-  scenario: former-names
-  fixture: sec-edger/submissions-success.json
-  expected_result_class: success
-  expected_warning: none
-  expected_network_calls: 1
-  expected_cache: miss
-  expected_audit: source_changed
-  test-reference: sec-edger/submissions-success.json
-
-sec-submissions:
-  scenario: missing-timestamps
-  fixture: sec-edger/submissions-partial.json
-  expected_result_class: partial
-  expected_warning: none
-  expected_network_calls: 1
-  expected_cache: miss
-  expected_audit: source_changed
-  test-reference: sec-edger/submissions-partial.json
-
-sec-submissions:
-  scenario: drift
-  fixture: sec-edger/submissions-success.json
-  expected_result_class: source_changed
-  expected_warning: source_changed
-  expected_network_calls: 1
-  expected_cache: miss
-  expected_audit: source_changed
-  test-reference: sec-edger/submissions-success.json
-
-# SEC company facts scenarios
-sec-company-facts:
-  scenario: multiple-units
-  fixture: sec-edgar/company-facts-success.json
-  expected_result_class: success
-  expected_warning: none
-  expected_network_calls: 1
-  expected_cache: hit (when repeated)
-  expected_audit: source_changed
-  test-reference: sec-edger/company-facts-success.json
-
-sec-company-facts:
-  scenario: amendment
-  fixture: sec-edger/company-facts-partial.json
-  expected_result_class: success
-  expected_warning: none
-  expected_network_calls: 1
-  expected_cache: miss
-  expected_audit: source_changed
-  test-reference: sec-edger/company-facts-partial.json
-
-sec-company-facts:
-  scenario: instant-fact
-  fixture: sec-edger/company-facts-success.json
-  expected_result_class: success
-  expected_warning: none
-  expected_network_calls: 1
-  expected_cache: hit (when repeated)
-  expected_audit: source_changed
-  test-reference: sec-edger/company-facts-success.json
-
-sec-company-facts:
-  scenario: missing-concept
-  fixture: sec-edger/company-facts-partial.json
-  expected_result_class: partial
-  expected_warning: none
-  expected_network_calls: 1
-  expected_cache: miss
-  expected_audit: source_changed
-  test-reference: sec-edger/company-facts-partial.json
-
-sec-company-facts:
-  scenario: taxonomy-filter
-  fixture: sec-edger/company-facts-success.json
-  expected_result_class: success
-  expected_warning: none
-  expected_network_calls: 1
-  expected_cache: miss
-  expected_audit: source_changed
-  test-reference: sec-edger/company-facts-success.json
-
-sec-company-facts:
-  scenario: concept-filter
-  fixture: sec-edger/company-facts-success.json
-  expected_result_class: success
-  expected_warning: none
-  expected_network_calls: 1
-  expected-cache: miss
-  expected_audit: source_changed
-  test-reference: sec-edger/company-facts-success.json
-
-sec-company-facts:
-  scenario: form-filter
-  fixture: sec-edger/company-facts-success.json
-  expected_result_class: success
-  expected_warning: none
-  expected_network_calls: 1
-  expected-cache: miss
-  expected_audit: source_changed
-  test-reference: sec-edger/company-facts-success.json
-
-sec-company-facts:
-  scenario: reporting-period-filter
-  fixture: sec-edger/company-facts-success.json
-  expected_result_class: success
-  expected-warnings: none
-  expected_network_calls: 1
-  expected-cache: miss
-  expected_audit: source_changed
-  test-reference: sec-edger/company-facts-success.json
-
-sec-company-facts:
-  scenario: truncation
-  fixture: sec-edger/company-facts-partial.json
-  expected_result_class: partial
-  expected_warning: none
-  expected_network_calls: 1
-  expected_cache: miss
-  expected_audit: source_changed
-  test-reference: sec-edger/company-facts-partial.json
-
-sec-company-facts:
-  scenario: exact-decimals
-  fixture: sec-edger/company-facts-success.json
-  expected_result_class: success
-  expected-warning: none
-  expected_network_calls: 1
-  expected-cache: miss
-  expected_audit: source-changed
-  test-reference: sec-edger/company-facts-success.json
-
-sec-company-facts:
-  scenario: textual-fact
-  fixture: sec-edger/company-facts-success.json
-  expected_result_class: success
-  expected-warning: none
-  expected_network_calls: 1
-  expected-cache: miss
-  expected_audit: source-changed
-  test-reference: sec-edger/company-facts-success.json
-
-sec-company-facts:
-  scenario: malformed-unit-shape
-  fixture: sec-edger/company-facts-partial.json
-  expected_result_class: partial
-  expected-warnings: none
-  expected_network_calls: 1
-  expected-cache: miss
-  expected_audit: source-changed
-  test-reference: sec-edger/company-facts-partial.json
-
-sec-company-facts:
-  scenario: drift
-  fixture: sec-edger/company-facts-success.json
-  expected_result_class: source-changed
-  expected-warnings: source-changed
-  expected_network_calls: 1
-  expected-cache: miss
-  expected_audit: source-changed
-  test-reference: sec-edger/company-facts-success.json
-
-# Direct HTTP scenarios
-direct-public-http:
-  scenario: https-success
-  fixture: direct-public-http/html-success.html
-  expected_result_class: success
-  expected-warning: none
-  expected_network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: direct-public-http/html-success.html
-
-direct-public-http:
-  scenario: http-success
-  fixture: direct-public-http/html-success.html
-  expected_result_class: success
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: direct-public-http/html-success.html
-
-direct-public-http:
-  scenario: according-to-policy
-  fixture: direct-public-http/html-success.html
-  expected_result_class: success
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: direct-public-http/html-success.html
-
-direct-public-http:
-  scenario: embedded-credentials
-  fixture: direct-public-http/html-success.html
-  expected_result_class: success
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: direct-public-http/html-success.html
-
-direct-public-http:
-  scenario: unsupported-scheme
-  fixture: direct-public-http/html-success.html
-  expected_result_class: policy-blocked
-  expected-warning: none
-  expected-network-calls: 0
-  expected-cache: miss
-  expected-audit: policy-blocked
-  test-reference: direct-public-http/html-success.html
-
-direct-public-http:
-  scenario: localhost
-  fixture: direct-public-http/html-success.html
-  expected_result_class: policy-blocked
-  expected-warning: none
-  expected-network-calls: 0
-  expected-cache: miss
-  expected-audit: policy-blocked
-  test-reference: direct-public-http/html-success.html
-
-direct-public-http:
-  scenario: prohibited-ipv4
-  fixture: direct-public-http/html-success.html
-  expected_result_class: policy-blocked
-  expected-warning: none
-  expected-network-calls: 0
-  expected-cache: miss
-  expected-audit: policy-blocked
-  test-reference: direct-public-http/html-success.html
-
-direct-public-http:
-  scenario: prohibited-ipv6
-  fixture: direct-public-http/html-success.html
-  expected_result_class: policy-blocked
-  expected-warning: none
-  expected-network-calls: 0
-  expected-cache: miss
-  expected-audit: policy-blocked
-  test-reference: direct-public-http/html-success.html
-
-direct-public-http:
-  scenario: cloud-metadata-candidate
-  fixture: direct-public-http/html-success.html
-  expected_result_class: success
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: direct-public-http/html-success.html
-
-direct-public-http:
-  scenario: redirect-chain
-  fixture: direct-public-http/html-success.html
-  expected_result_class: success
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: direct-public-http/html-success.html
-
-direct-public-http:
-  scenario: redirect-loop
-  fixture: direct-public-http/html-success.html
-  expected_result_class: policy-blocked
-  expected-warning: none
-  expected-network-calls: 0
-  expected-cache: miss
-  expected-audit: policy-blocked
-  test-reference: direct-public-http/html-success.html
-
-direct-public-http:
-  scenario: excessive-redirects
-  fixture: direct-public-http/html-success.html
-  expected_result_class: policy-blocked
-  expected-warning: none
-  expected-network-calls: 0
-  expected-cache: miss
-  expected-audit: policy-blocked
-  test-reference: direct-public-http/html-success.html
-
-direct-public-http:
-  scenario: media-mismatch
-  fixture: direct-public-http/html-success.html
-  expected_result_class: policy-blocked
-  expected-warning: none
-  expected-network-calls: 0
-  expected-cache: miss
-  expected-audit: policy-blocked
-  test-reference: direct-public-http/html-success.html
-
-direct-public-http:
-  scenario: compressed-size-overflow
-  fixture: direct-public-http/html-success.html
-  expected_result_class: policy-blocked
-  expected-warning: none
-  expected-network-calls: 0
-  expected-cache: miss
-  expected-audit: policy-blocked
-  test-reference: direct-public-http/html-success.html
-
-direct-public-http:
-  scenario: decompressed-size-overflow
-  fixture: direct-public-http/html-success.html
-  expected_result_class: policy-blocked
-  expected-warning: none
-  expected-network-calls: 0
-  expected-cache: miss
-  expected-audit: policy-blocked
-  test-reference: direct-public-http/html-success.html
-
-direct-public-http:
-  scenario: timeout
-  fixture: direct-public-http/html-success.html
-  expected_result_class: policy-blocked
-  expected-warning: none
-  expected-network-calls: 0
-  expected-cache: miss
-  expected-audit: policy-blocked
-  test-reference: direct-public-http/html-success.html
-
-direct-public-http:
-  scenario: cancellation
-  fixture: direct-public-http/html-success.html
-  expected_result_class: policy-blocked
-  expected-warning: none
-  expected-network-calls: 0
-  expected-cache: miss
-  expected-audit: policy-blocked
-  test-reference: direct-public-http/html-success.html
-
-direct-public-http:
-  scenario: invalid-encoding
-  fixture: direct-public-http/html-success.html
-  expected_result_class: policy-blocked
-  expected-warning: none
-  expected-network-calls: 0
-  expected-cache: miss
-  expected-audit: policy-blocked
-  test-reference: direct-public-http/html-success.html
-
-direct-public-http:
-  scenario: etag
-  fixture: direct-public-http/html-success.html
-  expected_result_class: success
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: hit (when repeated)
-  expected-audit: source-changed
-  test-reference: direct-public-http/html-success.html
-
-direct-public-http:
-  scenario: last-modified
-  fixture: direct-public-http/html-success.html
-  expected_result_class: success
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: hit (when repeated)
-  expected-audit: source-changed
-  test-reference: direct-public-http/html-success.html
-
-direct-public-http:
-  scenario: initial-vs-final-uri
-  fixture: direct-public-http/html-success.html
-  expected_result_class: success
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: direct-public-http/html-success.html
-
-direct-public-http:
-  scenario: hash-stability
-  fixture: direct-public-http/html-success.html
-  expected_result_class: success
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: direct-public-http/html-success.html
-
-# HTML scenarios
-html:
-  scenario: scripts-removed
-  fixture: direct-public-http/html-success.html
-  expected_result_class: success
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: direct-public-http/html-success.html
-
-html:
-  scenario: styles-removed
-  fixture: direct-public-http/html-success.html
-  expected_result_class: success
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: direct-public-http/html-success.html
-
-html:
-  scenario: comments-removed
-  fixture: direct-public-http/html-success.html
-  expected_result_class: success
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: direct-public-http/html-success.html
-
-html:
-  scenario: hidden-content-policy
-  fixture: direct-public-http/html-success.html
-  expected_result_class: success
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: direct-public-http/html-success.html
-
-html:
-  scenario: headings
-  fixture: direct-public-http/html-success.html
-  expected_result_class: success
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: direct-public-http/html-success.html
-
-html:
-  scenario: paragraphs
-  fixture: direct-public-http/html-success.html
-  expected_result_class: success
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: direct-public-http/html-success.html
-
-html:
-  scenario: lists
-  fixture: direct-public-http/html-success.html
-  expected_result_class: success
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: direct-public-http/html-success.html
-
-html:
-  scenario: links
-  fixture: direct-public-http/html-success.html
-  expected_result_class: success
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: direct-public-http/html-success.html
-
-html:
-  scenario: tables
-  fixture: direct-public-http/html-success.html
-  expected_result_class: success
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: direct-public-http/html-success.html
-
-html:
-  scenario: canonical-uri
-  fixture: direct-public-http/html-success.html
-  expected_result_class: success
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: direct-public-http/html-success.html
-
-html:
-  scenario: language
-  fixture: direct-public-http/html-success.html
-  expected_result_class: success
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: direct-public-http/html-success.html
-
-html:
-  scenario: description
-  fixture: direct-public-http/html-success.html
-  expected_result_class: success
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: direct-public-http/html-success.html
-
-html:
-  scenario: bounded-structured-data
-  fixture: direct-public-http/html-success.html
-  expected_result_class: success
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: direct-public-http/html-success.html
-
-html:
-  scenario: malformed-html
-  fixture: direct-public-http/html-success.html
-  expected_result_class: success
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: direct-public-http/html-success.html
-
-html:
-  scenario: excessive-depth-events
-  fixture: direct-public-http/html-success.html
-  expected_result_class: success
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: direct-public-http/html-success.html
-
-html:
-  scenario: excessive-links
-  fixture: direct-public-http/html-success.html
-  expected_result_class: success
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: direct-public-http/html-success.html
-
-html:
-  scenario: excessive-table-dimensions
-  fixture: direct-public-http/html-success.html
-  expected_result_class: success
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: direct-public-http/html-success.html
-
-html:
-  scenario: truncation
-  fixture: direct-public-http/html-success.html
-  expected_result_class: success
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: direct-public-http/html-success.html
-
-# OpenAlex scenarios
-openalex:
-  scenario: exact-identifier-success
-  fixture: openalex/work-success.json
-  expected_result_class: success
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: openalex/work-success.json
-
-openalex:
-  scenario: bounded-search-success
-  fixture: openalex/work-success.json
-  expected_result_class: success
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: openalex/work-success.json
-
-openalex:
-  scenario: ambiguous-search
-  fixture: openalex/work-success.json
-  expected_result_class: success
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: openalex/work-success.json
-
-openalex:
-  scenario: no-result
-  fixture: openalex/work-success.json
-  expected_result_class: not-found
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: openalex/work-success.json
-
-openalex:
-  scenario: malformed-payload
-  fixture: openalex/work-success.json
-  expected_result_class: policy-blocked
-  expected-warning: none
-  expected-network-calls: 0
-  expected-cache: miss
-  expected-audit: policy-blocked
-  test-reference: openalex/work-success.json
-
-openalex:
-  scenario: missing-optional-fields
-  fixture: openalex/work-success.json
-  expected_result_class: success
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: openalex/work-success.json
-
-openalex:
-  scenario: changing-metrics-with-retrieval-timestamp
-  fixture: openalex/work-success.json
-  expected_result_class: success
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: openalex/work-success.json
-
-openalex:
-  scenario: provenance
-  fixture: openalex/work-success.json
-  expected_result_class: success
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: openalex/work-success.json
-
-openalex:
-  scenario: locators
-  fixture: openalex/work-success.json
-  expected_result_class: success
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: openalex/work-success.json
-
-# Crossref scenarios
-crossref:
-  scenario: exact-identifier-success
-  fixture: crossref/doi-success.json
-  expected_result_class: success
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: crossref/doi-success.json
-
-crossref:
-  scenario: bounded-search-success
-  fixture: crossref/doi-success.json
-  expected_result_class: success
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: crossref/doi-success.json
-
-crossref:
-  scenario: ambiguous-search
-  fixture: crossref/doi-success.json
-  expected_result_class: success
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: crossref/doi-success.json
-
-crossref:
-  scenario: no-result
-  fixture: crossref/doi-success.json
-  expected_result_class: not-found
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: crossref/doi-success.json
-
-crossref:
-  scenario: malformed-payload
-  fixture: crossref/doi-success.json
-  expected_result_class: policy-blocked
-  expected-warning: none
-  expected-network-calls: 0
-  expected-cache: miss
-  expected-audit: policy-blocked
-  test-reference: crossref/doi-success.json
-
-crossref:
-  scenario: missing-optional-fields
-  fixture: crossref/doi-success.json
-  expected_result_class: success
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: crossref/doi-success.json
-
-crossref:
-  scenario: changing-metrics-with-retrieval-timestamp
-  fixture: crossref/doi-success.json
-  expected_result_class: success
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: crossref/doi-success.json
-
-crossref:
-  scenario: provenance
-  fixture: crossref/doi-success.json
-  expected_result_class: success
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: crossref/doi-success.json
-
-crossref:
-  scenario: locators
-  fixture: crossref/doi-success.json
-  expected_result_class: success
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: crossref/doi-success.json
-
-# GitHub scenarios
-github:
-  scenario: exact-identifier-success
-  fixture: github-public/repository-success.json
-  expected_result_class: success
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: github-public/repository-success.json
-
-github:
-  scenario: bounded-search-success
-  fixture: github-public/repository-success.json
-  expected_result_class: success
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: github-public/repository-success.json
-
-github:
-  scenario: ambiguous-search
-  fixture: github-public/repository-success.json
-  expected_result_class: success
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: github-public/repository-success.json
-
-github:
-  scenario: no-result
-  fixture: github-public/repository-success.json
-  expected_result_class: not-found
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: github-public/repository-success.json
-
-github:
-  scenario: malformed-payload
-  fixture: github-public/repository-success.json
-  expected_result_class: policy-blocked
-  expected-warning: none
-  expected-network-calls: 0
-  expected-cache: miss
-  expected-audit: policy-blocked
-  test-reference: github-public/repository-success.json
-
-github:
-  scenario: missing-optional-fields
-  fixture: github-public/repository-success.json
-  expected_result_class: success
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: github-public/repository-success.json
-
-github:
-  scenario: changing-metrics-with-retrieval-timestamp
-  fixture: github-public/repository-success.json
-  expected_result_class: success
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: github-public/repository-success.json
-
-github:
-  scenario: provenance
-  fixture: github-public/repository-success.json
-  expected_result_class: success
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: github-public/repository-success.json
-
-github:
-  scenario: locators
-  fixture: github-public/repository-success.json
-  expected_result_class: success
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: github-public/repository-success.json
-
-# Federal Register scenarios
-federal-register:
-  scenario: exact-identifier-success
-  fixture: federal-register/document-success.json
-  expected_result_class: success
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: federal-register/document-success.json
-
-federal-register:
-  scenario: bounded-search-success
-  fixture: federal-register/document-success.json
-  expected_result_class: success
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: federal-register/document-success.json
-
-federal-register:
-  scenario: ambiguous-search
-  fixture: federal-register/document-success.json
-  expected_result_class: success
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: federal-register/document-success.json
-
-federal-register:
-  scenario: no-result
-  fixture: federal-register/document-success.json
-  expected_result_class: not-found
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: federal-register/document-success.json
-
-federal-register:
-  scenario: malformed-payload
-  fixture: federal-register/document-success.json
-  expected_result_class: policy-blocked
-  expected-warning: none
-  expected-network-calls: 0
-  expected-cache: miss
-  expected-audit: policy-blocked
-  test-reference: federal-register/document-success.json
-
-federal-register:
-  scenario: missing-optional-fields
-  fixture: federal-register/document-success.json
-  expected_result_class: success
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: federal-register/document-success.json
-
-federal-register:
-  scenario: changing-metrics-with-retrieval-timestamp
-  fixture: federal-register/document-success.json
-  expected_result_class: success
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: federal-register/document-success.json
-
-federal-register:
-  scenario: provenance
-  fixture: federal-register/document-success.json
-  expected_result_class: success
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: federal-register/document-success.json
-
-federal-register:
-  scenario: locators
-  fixture: federal-register/document-success.json
-  expected_result_class: success
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: federal-register/document-success.json
-
-# Rate limiting and circuit breaker scenarios
-rate-limiting:
-  scenario: token-bucket-limit
-  fixture: sec-edgar/submissions-success.json
-  expected_result_class: rate-limited
-  expected-warning: none
-  expected-network-calls: 0
-  expected-cache: miss
-  expected-audit: policy-blocked
-  test-reference: sec-edgar/submissions-success.json
-
-rate-limiting:
-  scenario: retry-after-respected
-  fixture: sec-edger/submissions-success.json
-  expected_result_class: success
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: sec-edger/submissions-success.json
-
-rate-limiting:
-  scenario: malformed-retry-after
-  fixture: sec-edger/submissions-success.json
-  expected_result_class: rate-limited
-  expected-warning: none
-  expected-network-calls: 0
-  expected-cache: miss
-  expected-audit: policy-blocked
-  test-reference: sec-edger/submissions-success.json
-
-circuit-breaker:
-  scenario: closed-to-open
-  fixture: sec-edger/submissions-success.json
-  expected_result_class: source-changed
-  expected-warning: source-changed
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: sec-edger/submissions-success.json
-
-circuit-breaker:
-  scenario: open-to-half-open
-  fixture: sec-edger/submissions-success.json
-  expected_result_class: source-changed
-  expected-warning: source-changed
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: sec-edger/submissions-success.json
-
-circuit-breaker:
-  scenario: half-open-failure
-  fixture: sec-edger/submissions-success.json
-  expected_result_class: source-changed
-  expected-warning: source-changed
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: sec-edger/submissions-success.json
-
-circuit-breaker:
-  scenario: independent-circuits
-  fixture: sec-edger/submissions-success.json
-  expected_result_class: success
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: sec-edger/submissions-success.json
-
-# Cache behavior scenarios
-cache:
-  scenario: stable-key-ordering
-  fixture: sec-edgar/submissions-success.json
-  expected_result_class: success
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: hit (when repeated)
-  expected-audit: source-changed
-  test-reference: sec-edger/submissions-success.json
-
-cache:
-  scenario: all-contract-relevant-inputs-affect-key
-  fixture: sec-edger/submissions-success.json
-  expected_result_class: success
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: sec-edger/submissions-success.json
-
-cache:
-  scenario: positive-ttl-enforced
-  fixture: sec-edger/submissions-success.json
-  expected_result_class: success
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: sec-edger/submissions-success.json
-
-cache:
-  scenario: negative-ttl-shorter
-  fixture: sec-edger/submissions-success.json
-  expected_result_class: success
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: sec-edger/submissions-success.json
-
-cache:
-  scenario: stale-results-explicit
-  fixture: sec-edger/submissions-success.json
-  expected_result_class: success
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: sec-edger/submissions-success.json
-
-cache:
-  scenario: lru-eviction-is-deterministic
-  fixture: sec-edger/submissions-success.json
-  expected_result_class: success
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: sec-edger/submissions-success.json
-
-cache:
-  scenario: retryable-failure-is-not-cached-as-absence
-  fixture: sec-edger/submissions-success.json
-  expected_result_class: success
-  expected-warning: none
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: sec-edger/submissions-success.json
-
-cache:
-  scenario: policy-blocked-is-not-cached-as-absence
-  fixture: sec-edger/submissions-success.json
-  expected_result_class: policy-blocked
-  expected-warning: none
-  expected-network-calls: 0
-  expected-cache: miss
-  expected-audit: policy-blocked
-  test-reference: sec-edger/submissions-success.json
-
-cache:
-  scenario: source-changed-is-not-cached-as-absence
-  fixture: sec-edger/submissions-success.json
-  expected_result_class: source-changed
-  expected-warning: source-changed
-  expected-network-calls: 1
-  expected-cache: miss
-  expected-audit: source-changed
-  test-reference: sec-edger/submissions-success.json
-
-# Fast-check property tests
-fast-check:
-  scenario: cik-normalization-is-idempotent
-  fixture: sec-edgar/submissions-success.json
-  expected-property: cik-normalization-is-idempotent
-  expected-runs: 1000
-  expected-failure: none
-  test-reference: sec-edgar/submissions-success.json
-
-fast-check:
-  scenario: invalid-cik-remains-invalid
-  fixture: sec-edgar/submissions-not-found.json
-  expected-property: invalid-ci-k-remains-invalid
-  expected-runs: 1000
-  expected-failure: none
-  test-reference: sec-edger/submissions-not-found.json
-
-fast-check:
-  scenario: accession-normalization-is-idempotent
-  fixture: sec-edger/submissions-success.json
-  expected-property: accession-normalization-is-idempotent
-  expected-runs: 1000
-  expected-failure: none
-  test-reference: sec-edger/submissions-success.json
-
-fast-check:
-  scenario: canonical-cache-keys-ignore-object-key-ordering
-  fixture: sec-edger/submissions-success.json
-  expected-property: canonical-cache-keys-ignore-object-key-ordering
-  expected-runs: 1000
-  expected-failure: none
-  test-reference: sec-edger/submissions-success.json
-
-fast-check:
-  scenario: materially-different-inputs-change-key
-  fixture: sec-edger/submissions-success.json
-  expected-property: materially-different-inputs-change-key
-  expected-runs: 1000
-  expected-failure: none
-  test-reference: sec-edger/submissions-success.json
-
-fast-check:
-  scenario: prohibited-address-classes-never-pass-policy
-  fixture: sec-edger/submissions-success.json
-  expected-property: prohibited-address-classes-never-pass-policy
-  expected-runs: 1000
-  expected-failure: none
-  test-reference: sec-edger/submissions-success.json
-
-fast-check:
-  scenario: redirect-loops-terminate-within-configured-bounds
-  fixture: sec-edger/submissions-success.json
-  expected-property: redirect-loops-terminate-within-configured-bounds
-  expected-runs: 1000
-  expected-failure: none
-  test-reference: sec-edger/submissions-success.json
-
-fast-check:
-  scenario: accepted-response-bytes-never-exceed-maximum
-  fixture: sec-edger/submissions-success.json
-  expected-property: accepted-response-bytes-never-exceed-maximum
-  expected-runs: 1000
-  expected-failure: none
-  test-reference: sec-edger/submissions-success.json
-
-fast-check:
-  scenario: backoff-never-exceeds-cap
-  fixture: sec-edger/submissions-success.json
-  expected-property: backoff-never-exceeds-cap
-  expected-runs: 1000
-  expected-failure: none
-  test-reference: sec-edger/submissions-success.json
-
-fast-check:
-  scenario: retry-growth-is-monotonic-before-capping
-  fixture: sec-edger/submissions-success.json
-  expected-property: retry-growth-is-monotonic-before-capping
-  expected-runs: 1000
-  expected-failure: none
-  test-reference: sec-edger/submissions-success.json
-
-fast-check:
-  scenario: token-counts-never-become-negative
-  fixture: sec-edger/submissions-success.json
-  expected-property: token-counts-never-become-negative
-  expected-runs: 1000
-  expected-failure: none
-  test-reference: sec-edger/submissions-success.json
-
-fast-check:
-  scenario: circuit-state-remains-within-closed-state-machine
-  fixture: sec-edger/submissions-success.json
-  expected-property: circuit-state-remains-within-closed-state-machine
-  expected-runs: 1000
-  expected-failure: none
-  test-reference: sec-edger/submissions-success.json
-
-fast-check:
-  scenario: identical-bytes-produce-identical-hashes
-  fixture: sec-edger/submissions-success.json
-  expected-property: identical-bytes-produce-identical-hashes
-  expected-runs: 1000
-  expected-failure: none
-  test-reference: sec-edger/submissions-success.json
-
-fast-check:
-  scenario: changed-bytes-produce-different-hashes-under-collision-assumption
-  fixture: sec-edger/submissions-success.json
-  expected-property: changed-bytes-produce-different-hashes-under-collision-assumption
-  expected-runs: 1000
-  expected-failure: none
-  test-reference: sec-edger/submissions-success.json
-
-fast-check:
-  scenario: repeated-html-normalization-is-stable
-  fixture: direct-public-http/html-success.html
-  expected-property: repeated-html-normalization-is-stable
-  expected-runs: 1000
-  expected-failure: none
-  test-reference: direct-public-http/html-success.html
-
-fast-check:
-  scenario: evidence-ids-are-deterministic-and-nonempty
-  fixture: openalex/work-success.json
-  expected-property: generated-locators-are-deterministic-and-nonempty
-  expected-runs: 1000
-  expected-failure: none
-  test-reference: openalex/work-success.json
-
-fast-check:
-  scenario: generated-locators-validate
-  fixture: github-public/repository-success.json
-  expected-property: generated-locators-validate
-  expected-runs: 1000
-  expected-failure: none
-  test-reference: github-public/repository-success.json
-
-fast-check:
-  scenario: decimal-facts-avoid-binary-floating-point-conversion
-  fixture: sec-company-facts-success.json
-  expected-property: decimal-facts-avoid-binary-floating-point-conversion
-  expected-runs: 1000
-  expected-failure: none
-  test-reference: sec-company-facts-success.json
-
-fast-check:
-  scenario: result-arrays-respect-configured-bounds
-  fixture: sec-company-facts-success.json
-  expected-property: result-arrays-respect-configured-bounds
-  expected-runs: 1000
-  expected-failure: none
-  test-reference: sec-company-facts-success.json
-
-fast-check:
-  scenario: failures-remain-inside-the-closed-result-union
-  fixture: sec-company-facts-success.json
-  expected-property: failures-remain-inside-the-closed-result-union
-  expected-runs: 1000
-  expected-failure: none
-  test-reference: sec-company-facts-success.json
-
-# Optional live gates
-live-gates:
-  scenario: run-live-sec
-  fixture: sec-edgar/submissions-success.json
-  expected-skip: true
-  expected-pass: false
-  expected-fail: false
-  test-reference: sec-edgar/submissions-success.json
-
-live-gates:
-  scenario: run-live-openalex
-  fixture: openalex/work-success.json
-  expected-skip: true
-  expected-pass: false
-  expected-fail: false
-  test-reference: openalex/work-success.json
-
-live-gates:
-  scenario: run-live-crossref
-  fixture: crossref/doi-success.json
-  expected-skip: true
-  expected-pass: false
-  expected-fail: false
-  test-reference: crossref/doi-success.json
-
-live-gates:
-  scenario: run-live-github-public
-  fixture: github-public/repository-success.json
-  expected-skip: true
-  expected-pass: false
-  expected-fail: false
-  test-reference: github-public/repository-success.json
-
-live-gates:
-  scenario: run-live-federal-register
-  fixture: federal-register/document-success.json
-  expected-skip: true
-  expected-pass: false
-  expected-fail: false
-  test-reference: federal-register/document-success.json
-
-live-gates:
-  scenario: run-live-public-http
-  fixture: direct-public-http/html-success.html
-  expected-skip: true
-  expected-pass: false
-  expected-fail: false
-  test-reference: direct-public-http/html-success.html
+#
+# Normative coverage inventory: one row per tested behavior. Each row is
+# cross-checked by `pnpm --filter @siteborne/provider-adapters run
+# fixtures:verify` (scripts/verify-fixture-matrix.ts), which fails the build
+# if:
+#   - a scenario_id is duplicated;
+#   - expected_result_class is not one of the closed AdapterResultClass values
+#     (or the literal "n/a" for rows that assert below the execute() level);
+#   - a referenced fixture file does not exist;
+#   - a referenced test_file does not exist, or does not contain an `it(...)`
+#     whose title includes test_anchor.
+#
+# This matrix is grounded in tests that exist today. Rows are not added ahead
+# of their test — see docs/reports/SUN-0300-public-data-adapters-report.md for
+# the categories from the original completion-plan list that are not yet
+# covered by an executable test.
+
+scenarios:
+  # ---------------------------------------------------------------------
+  # Common behavior — result classes, cache, circuit, terms, SSRF
+  # ---------------------------------------------------------------------
+  - scenario_id: common-success-sec-submissions
+    provider_id: sec-edgar
+    capability: company_submissions
+    category: common
+    scenario: success
+    fixture: sec-edgar/submissions-success.json
+    expected_result_class: success
+    expected_warning: none
+    expected_network_calls: 1
+    expected_cache: miss
+    expected_provenance: complete (locators, transformation_history, contentHash)
+    expected_audit: n/a (no audit sink assertion in this row)
+    test_file: src/tests/adapter-execution.test.ts
+    test_anchor: 'returns success with complete provenance for a valid CIK'
+
+  - scenario_id: common-deterministic-hash-sec-submissions
+    provider_id: sec-edgar
+    capability: company_submissions
+    category: common
+    scenario: hash_stability
+    fixture: sec-edgar/submissions-success.json
+    expected_result_class: success
+    expected_warning: none
+    expected_network_calls: 2
+    expected_cache: bypass
+    expected_provenance: identical contentHash across independent calls
+    expected_audit: n/a
+    test_file: src/tests/adapter-execution.test.ts
+    test_anchor: 'is deterministic: identical input yields identical content hash'
+
+  - scenario_id: common-result-bound-sec-submissions
+    provider_id: sec-edgar
+    capability: company_submissions
+    category: common
+    scenario: oversized_result_truncation
+    fixture: sec-edgar/submissions-success.json
+    expected_result_class: success
+    expected_warning: none
+    expected_network_calls: 1
+    expected_cache: miss
+    expected_provenance: filings array bounded to maxFilings
+    expected_audit: n/a
+    test_file: src/tests/adapter-execution.test.ts
+    test_anchor: 'bounds the returned filing array to maxFilings'
+
+  - scenario_id: common-policy-blocked-sec-submissions
+    provider_id: sec-edgar
+    capability: company_submissions
+    category: common
+    scenario: policy_blocked
+    fixture: none (unreachableHttpClient — zero network calls expected)
+    expected_result_class: policy_blocked
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: miss
+    expected_provenance: none (blocked before fetch)
+    expected_audit: n/a
+    test_file: src/tests/adapter-execution.test.ts
+    test_anchor: 'returns policy_blocked and performs zero network calls'
+
+  - scenario_id: common-empty-sec-company-facts
+    provider_id: sec-edgar
+    capability: company_facts
+    category: common
+    scenario: empty
+    fixture: 'inline: { cik, entityName, facts: {} }'
+    expected_result_class: success
+    expected_warning: none
+    expected_network_calls: 1
+    expected_cache: miss
+    expected_provenance: complete, zero facts, explicit limitation
+    expected_audit: n/a
+    test_file: src/tests/adapter-execution.test.ts
+    test_anchor: 'does not fabricate facts when the source has none matching the filter'
+
+  - scenario_id: common-decimal-preservation-sec-company-facts
+    provider_id: sec-edgar
+    capability: company_facts
+    category: common
+    scenario: decimal_fact_type
+    fixture: sec-edgar/company-facts-success.json
+    expected_result_class: success
+    expected_warning: none
+    expected_network_calls: 1
+    expected_cache: miss
+    expected_provenance: every fact.value is string, not number
+    expected_audit: n/a
+    test_file: src/tests/adapter-execution.test.ts
+    test_anchor: 'decimal facts stored as strings'
+
+  - scenario_id: common-success-openalex
+    provider_id: openalex
+    capability: openalex_work
+    category: common
+    scenario: success
+    fixture: openalex/work-success.json
+    expected_result_class: success
+    expected_warning: 'limitation: citation counts are point-in-time observations'
+    expected_network_calls: 1
+    expected_cache: miss
+    expected_provenance: complete
+    expected_audit: n/a
+    test_file: src/tests/adapter-execution.test.ts
+    test_anchor: 'flags citation counts as point-in-time observations'
+
+  - scenario_id: common-empty-openalex
+    provider_id: openalex
+    capability: openalex_work
+    category: common
+    scenario: empty
+    fixture: 'inline: { meta: {count:0}, results: [] }'
+    expected_result_class: success
+    expected_warning: 'limitation: No results found'
+    expected_network_calls: 1
+    expected_cache: miss
+    expected_provenance: complete, zero results
+    expected_audit: n/a
+    test_file: src/tests/adapter-execution.test.ts
+    test_anchor: 'reports no_results limitation for an empty result set'
+
+  - scenario_id: common-success-crossref
+    provider_id: crossref
+    capability: crossref_doi
+    category: common
+    scenario: success
+    fixture: crossref/doi-success.json
+    expected_result_class: success
+    expected_warning: none
+    expected_network_calls: 1
+    expected_cache: miss
+    expected_provenance: complete
+    expected_audit: n/a
+    test_file: src/tests/adapter-execution.test.ts
+    test_anchor: 'returns success for a DOI lookup'
+
+  - scenario_id: common-success-github
+    provider_id: github-public
+    capability: github_repository
+    category: common
+    scenario: success
+    fixture: github-public/repository-success.json
+    expected_result_class: success
+    expected_warning: 'limitation: star/fork counts are not identity facts'
+    expected_network_calls: 1
+    expected_cache: miss
+    expected_provenance: complete
+    expected_audit: n/a
+    test_file: src/tests/adapter-execution.test.ts
+    test_anchor: 'returns success for a repository lookup'
+
+  - scenario_id: common-success-federal-register
+    provider_id: federal-register
+    capability: federal_register_document
+    category: common
+    scenario: success
+    fixture: federal-register/document-success.json
+    expected_result_class: success
+    expected_warning: none
+    expected_network_calls: 1
+    expected_cache: miss
+    expected_provenance: complete
+    expected_audit: n/a
+    test_file: src/tests/adapter-execution.test.ts
+    test_anchor: 'returns success for a document lookup'
+
+  - scenario_id: common-invalid-request-direct-http
+    provider_id: direct-public-http
+    capability: public_http_fetch
+    category: common
+    scenario: malformed_payload (invalid destination, rejected pre-network)
+    fixture: none (unreachableHttpClient)
+    expected_result_class: invalid_request
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: miss
+    expected_provenance: none
+    expected_audit: n/a
+    test_file: src/tests/adapter-execution.test.ts
+    test_anchor: 'validates the URL before making any network call'
+
+  - scenario_id: common-success-html-direct-http
+    provider_id: direct-public-http
+    capability: public_http_fetch
+    category: common
+    scenario: success (html normalization)
+    fixture: direct-public-http/html-success.html
+    expected_result_class: success
+    expected_warning: none
+    expected_network_calls: 1
+    expected_cache: miss
+    expected_provenance: complete, content includes normalized visible text
+    expected_audit: n/a
+    test_file: src/tests/adapter-execution.test.ts
+    test_anchor: 'returns success and normalized HTML content'
+
+  - scenario_id: common-injection-detected
+    provider_id: direct-public-http
+    capability: public_http_fetch
+    category: common
+    scenario: injection_signal_detected
+    fixture: 'inline string: instruction-override sentence'
+    expected_result_class: n/a (signal-detector unit test, not a full execute())
+    expected_warning: 'block-recommended signal present'
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: n/a
+    test_file: src/tests/adapter-execution.test.ts
+    test_anchor: 'detects a script-injection instruction override attempt'
+
+  - scenario_id: common-injection-not-fabricated
+    provider_id: direct-public-http
+    capability: public_http_fetch
+    category: common
+    scenario: injection_signal_absent
+    fixture: 'inline string: ordinary financial prose'
+    expected_result_class: n/a
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: n/a
+    test_file: src/tests/adapter-execution.test.ts
+    test_anchor: 'does not flag ordinary prose as an injection signal'
+
+  # ---------------------------------------------------------------------
+  # SEC company facts — filter semantics regression coverage
+  # ---------------------------------------------------------------------
+  - scenario_id: sec-facts-empty-concepts-no-filter
+    provider_id: sec-edgar
+    capability: company_facts
+    category: sec_company_facts
+    scenario: concept_filter (empty means unfiltered)
+    fixture: sec-edgar/company-facts-success.json
+    expected_result_class: success
+    expected_warning: none
+    expected_network_calls: 1
+    expected_cache: miss
+    expected_provenance: more than one concept returned
+    expected_audit: n/a
+    test_file: src/tests/adapter-execution.test.ts
+    test_anchor: 'empty concepts array means'
+
+  - scenario_id: sec-facts-empty-taxonomies-no-filter
+    provider_id: sec-edgar
+    capability: company_facts
+    category: sec_company_facts
+    scenario: taxonomy_filter (empty means unfiltered)
+    fixture: sec-edgar/company-facts-success.json
+    expected_result_class: success
+    expected_warning: none
+    expected_network_calls: 1
+    expected_cache: miss
+    expected_provenance: facts span more than one taxonomy (us-gaap, dei)
+    expected_audit: n/a
+    test_file: src/tests/adapter-execution.test.ts
+    test_anchor: 'empty taxonomies array means'
+
+  - scenario_id: sec-facts-concept-filter-applied
+    provider_id: sec-edgar
+    capability: company_facts
+    category: sec_company_facts
+    scenario: concept_filter (non-empty restricts)
+    fixture: sec-edgar/company-facts-success.json
+    expected_result_class: success
+    expected_warning: none
+    expected_network_calls: 1
+    expected_cache: miss
+    expected_provenance: every returned fact.concept === 'Revenues'
+    expected_audit: n/a
+    test_file: src/tests/adapter-execution.test.ts
+    test_anchor: 'non-empty concepts array still filters'
+
+  - scenario_id: sec-facts-taxonomy-filter-applied
+    provider_id: sec-edgar
+    capability: company_facts
+    category: sec_company_facts
+    scenario: taxonomy_filter (non-empty restricts)
+    fixture: sec-edgar/company-facts-success.json
+    expected_result_class: success
+    expected_warning: none
+    expected_network_calls: 1
+    expected_cache: miss
+    expected_provenance: every returned fact.taxonomy === 'dei'
+    expected_audit: n/a
+    test_file: src/tests/adapter-execution.test.ts
+    test_anchor: 'non-empty taxonomies array still filters'
+
+  # ---------------------------------------------------------------------
+  # TermsGuard
+  # ---------------------------------------------------------------------
+  - scenario_id: terms-test-mode-bypasses
+    provider_id: n/a
+    capability: n/a
+    category: terms
+    scenario: fixture_mode_explicit_no_live_activation
+    fixture: none
+    expected_result_class: n/a
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: n/a
+    test_file: src/tests/terms-rate-cache-circuit.test.ts
+    test_anchor: 'bypasses live-review checks entirely in test execution mode'
+
+  - scenario_id: terms-unknown-permission-blocks
+    provider_id: n/a
+    capability: n/a
+    category: terms
+    scenario: policy_blocked (no review record)
+    fixture: none
+    expected_result_class: policy_blocked (via PolicyBlockedError)
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: n/a
+    test_file: src/tests/terms-rate-cache-circuit.test.ts
+    test_anchor: 'blocks live access with no review record'
+
+  - scenario_id: terms-pending-review-blocks
+    provider_id: n/a
+    capability: n/a
+    category: terms
+    scenario: policy_blocked (pending_review)
+    fixture: none
+    expected_result_class: policy_blocked
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: n/a
+    test_file: src/tests/terms-rate-cache-circuit.test.ts
+    test_anchor: 'blocks live access when review status is pending_review'
+
+  - scenario_id: terms-blocked-status-blocks
+    provider_id: n/a
+    capability: n/a
+    category: terms
+    scenario: policy_blocked (blocked)
+    fixture: none
+    expected_result_class: policy_blocked
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: n/a
+    test_file: src/tests/terms-rate-cache-circuit.test.ts
+    test_anchor: 'blocks live access when review status is blocked'
+
+  - scenario_id: terms-verified-allows
+    provider_id: n/a
+    capability: n/a
+    category: terms
+    scenario: allowed (verified, matching hash)
+    fixture: none
+    expected_result_class: n/a (guard-level unit test)
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: n/a
+    test_file: src/tests/terms-rate-cache-circuit.test.ts
+    test_anchor: 'allows live access only once verified'
+
+  - scenario_id: terms-changed-hash-requires-rereview
+    provider_id: n/a
+    capability: n/a
+    category: terms
+    scenario: policy_blocked (terms_hash changed since review)
+    fixture: none
+    expected_result_class: policy_blocked
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: n/a
+    test_file: src/tests/terms-rate-cache-circuit.test.ts
+    test_anchor: 'requires re-review when the terms hash has changed'
+
+  - scenario_id: terms-no-provider-production-verified
+    provider_id: all
+    capability: n/a
+    category: terms
+    scenario: no_provider_production_verified
+    fixture: none
+    expected_result_class: n/a
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: n/a
+    test_file: src/tests/terms-rate-cache-circuit.test.ts
+    test_anchor: 'no provider is production_verified'
+
+  - scenario_id: terms-adapter-zero-calls-when-unrecorded
+    provider_id: sec-edgar
+    capability: company_submissions
+    category: terms
+    scenario: policy_blocked (adapter-level, zero network calls)
+    fixture: none (unreachableHttpClient)
+    expected_result_class: policy_blocked
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: miss
+    expected_provenance: none
+    expected_audit: n/a
+    test_file: src/tests/terms-rate-cache-circuit.test.ts
+    test_anchor: 'adapters perform zero network calls when live terms review is unrecorded'
+
+  # ---------------------------------------------------------------------
+  # Rate limiting / retry / Retry-After
+  # ---------------------------------------------------------------------
+  - scenario_id: rate-token-accounting-deterministic
+    provider_id: n/a
+    capability: n/a
+    category: rate_limit
+    scenario: token_accounting
+    fixture: none
+    expected_result_class: n/a
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: n/a
+    test_file: src/tests/terms-rate-cache-circuit.test.ts
+    test_anchor: 'token accounting is deterministic under a fake clock'
+
+  - scenario_id: rate-concurrency-limit
+    provider_id: n/a
+    capability: n/a
+    category: rate_limit
+    scenario: concurrency_limit
+    fixture: none
+    expected_result_class: n/a
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: n/a
+    test_file: src/tests/terms-rate-cache-circuit.test.ts
+    test_anchor: 'enforces the configured concurrency limit'
+
+  - scenario_id: rate-backoff-monotonic-capped
+    provider_id: n/a
+    capability: n/a
+    category: rate_limit
+    scenario: backoff_growth_bounded
+    fixture: none
+    expected_result_class: n/a
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: n/a
+    test_file: src/tests/terms-rate-cache-circuit.test.ts
+    test_anchor: 'backoff growth is monotonic non-decreasing'
+
+  - scenario_id: rate-retries-stop-at-max
+    provider_id: n/a
+    capability: n/a
+    category: rate_limit
+    scenario: retryable_server_error (retries bounded)
+    fixture: none
+    expected_result_class: n/a
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: n/a
+    test_file: src/tests/terms-rate-cache-circuit.test.ts
+    test_anchor: 'retries stop at the configured maximum'
+
+  - scenario_id: rate-retry-after-seconds-cap
+    provider_id: n/a
+    capability: n/a
+    category: rate_limit
+    scenario: rate_limited (numeric Retry-After capped)
+    fixture: none
+    expected_result_class: n/a
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: n/a
+    test_file: src/tests/terms-rate-cache-circuit.test.ts
+    test_anchor: 'caps a numeric Retry-After (seconds)'
+
+  - scenario_id: rate-retry-after-delta-seconds
+    provider_id: n/a
+    capability: n/a
+    category: rate_limit
+    scenario: retry_after_delta_seconds
+    fixture: none
+    expected_result_class: n/a
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: n/a
+    test_file: src/tests/terms-rate-cache-circuit.test.ts
+    test_anchor: 'parses the delta-seconds form'
+
+  - scenario_id: rate-retry-after-future-http-date
+    provider_id: n/a
+    capability: n/a
+    category: rate_limit
+    scenario: retry_after_http_date_future
+    fixture: none
+    expected_result_class: n/a
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: n/a
+    test_file: src/tests/terms-rate-cache-circuit.test.ts
+    test_anchor: 'parses a future HTTP-date form'
+
+  - scenario_id: rate-retry-after-past-http-date
+    provider_id: n/a
+    capability: n/a
+    category: rate_limit
+    scenario: retry_after_http_date_past
+    fixture: none
+    expected_result_class: n/a
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: n/a
+    test_file: src/tests/terms-rate-cache-circuit.test.ts
+    test_anchor: 'a past HTTP-date resolves to zero'
+
+  - scenario_id: rate-retry-after-malformed-fallback
+    provider_id: n/a
+    capability: n/a
+    category: rate_limit
+    scenario: retry_after_malformed_bounded_fallback
+    fixture: none
+    expected_result_class: n/a
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: n/a
+    test_file: src/tests/terms-rate-cache-circuit.test.ts
+    test_anchor: 'a malformed Retry-After value falls back'
+
+  - scenario_id: rate-retry-after-max-cap-both-forms
+    provider_id: n/a
+    capability: n/a
+    category: rate_limit
+    scenario: retry_after_cap_enforced
+    fixture: none
+    expected_result_class: n/a
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: n/a
+    test_file: src/tests/terms-rate-cache-circuit.test.ts
+    test_anchor: 'never exceeds the configured maximum, for either form'
+
+  - scenario_id: rate-provider-isolation
+    provider_id: n/a
+    capability: n/a
+    category: rate_limit
+    scenario: policy_isolation_per_provider
+    fixture: none
+    expected_result_class: n/a
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: n/a
+    test_file: src/tests/terms-rate-cache-circuit.test.ts
+    test_anchor: 'provider rate-limit policies are isolated'
+
+  # ---------------------------------------------------------------------
+  # Circuit breaker
+  # ---------------------------------------------------------------------
+  - scenario_id: circuit-closed-to-open
+    provider_id: n/a
+    capability: n/a
+    category: circuit_breaker
+    scenario: circuit_open (closed -> open)
+    fixture: none
+    expected_result_class: n/a
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: n/a
+    test_file: src/tests/terms-rate-cache-circuit.test.ts
+    test_anchor: 'transitions closed -> open on reaching the failure threshold'
+
+  - scenario_id: circuit-open-to-half-open
+    provider_id: n/a
+    capability: n/a
+    category: circuit_breaker
+    scenario: circuit_open (open -> half_open after timeout)
+    fixture: none
+    expected_result_class: n/a
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: n/a
+    test_file: src/tests/terms-rate-cache-circuit.test.ts
+    test_anchor: 'transitions open -> half_open after the timeout elapses'
+
+  - scenario_id: circuit-half-open-to-closed
+    provider_id: n/a
+    capability: n/a
+    category: circuit_breaker
+    scenario: circuit_recovery (half_open -> closed)
+    fixture: none
+    expected_result_class: n/a
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: n/a
+    test_file: src/tests/terms-rate-cache-circuit.test.ts
+    test_anchor: 'transitions half_open -> closed after enough successes'
+
+  - scenario_id: circuit-half-open-failure-reopens
+    provider_id: n/a
+    capability: n/a
+    category: circuit_breaker
+    scenario: circuit_open (half_open failure -> open)
+    fixture: none
+    expected_result_class: n/a
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: n/a
+    test_file: src/tests/terms-rate-cache-circuit.test.ts
+    test_anchor: 'a failure while half_open reopens the circuit'
+
+  - scenario_id: circuit-provider-independence
+    provider_id: n/a
+    capability: n/a
+    category: circuit_breaker
+    scenario: circuit_independence_per_provider
+    fixture: none
+    expected_result_class: n/a
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: n/a
+    test_file: src/tests/terms-rate-cache-circuit.test.ts
+    test_anchor: 'providers have independent circuit breaker instances'
+
+  # ---------------------------------------------------------------------
+  # Cache
+  # ---------------------------------------------------------------------
+  - scenario_id: cache-key-order-independent
+    provider_id: n/a
+    capability: n/a
+    category: cache
+    scenario: cache_key_canonicalization
+    fixture: none
+    expected_result_class: n/a
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: n/a
+    test_file: src/tests/terms-rate-cache-circuit.test.ts
+    test_anchor: 'cache key is stable regardless of JSON key ordering'
+
+  - scenario_id: cache-key-materially-different
+    provider_id: n/a
+    capability: n/a
+    category: cache
+    scenario: cache_key_sensitivity
+    fixture: none
+    expected_result_class: n/a
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: n/a
+    test_file: src/tests/terms-rate-cache-circuit.test.ts
+    test_anchor: 'a materially different input changes the cache key'
+
+  - scenario_id: cache-positive-ttl
+    provider_id: n/a
+    capability: n/a
+    category: cache
+    scenario: cache_hit (within TTL)
+    fixture: none
+    expected_result_class: n/a
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: hit
+    expected_provenance: n/a
+    expected_audit: n/a
+    test_file: src/tests/terms-rate-cache-circuit.test.ts
+    test_anchor: 'enforces positive TTL'
+
+  - scenario_id: cache-stale-explicit-miss
+    provider_id: n/a
+    capability: n/a
+    category: cache
+    scenario: stale_cache (explicit miss, not silently served)
+    fixture: none
+    expected_result_class: n/a
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: miss
+    expected_provenance: n/a
+    expected_audit: n/a
+    test_file: src/tests/terms-rate-cache-circuit.test.ts
+    test_anchor: 'expired entries are explicit misses'
+
+  - scenario_id: cache-lru-eviction-deterministic
+    provider_id: n/a
+    capability: n/a
+    category: cache
+    scenario: lru_eviction
+    fixture: none
+    expected_result_class: n/a
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: n/a
+    test_file: src/tests/terms-rate-cache-circuit.test.ts
+    test_anchor: 'LRU eviction is deterministic'
+
+  - scenario_id: cache-policy-blocked-not-cached-as-absence
+    provider_id: direct-public-http
+    capability: public_http_fetch
+    category: cache
+    scenario: invalid_request_not_cached_as_absence
+    fixture: none (unreachableHttpClient)
+    expected_result_class: invalid_request
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: miss (both calls)
+    expected_provenance: none
+    expected_audit: n/a
+    test_file: src/tests/terms-rate-cache-circuit.test.ts
+    test_anchor: 'policy_blocked results are not written to the success cache'
+
+  - scenario_id: cache-hit-on-repeat
+    provider_id: sec-edgar
+    capability: company_submissions
+    category: cache
+    scenario: cache_hit (adapter-level, second identical call)
+    fixture: 'inline: minimal valid submissions payload'
+    expected_result_class: success
+    expected_warning: none
+    expected_network_calls: 1 (second call served from cache)
+    expected_cache: 'miss then hit'
+    expected_provenance: complete on first call; cached on second
+    expected_audit: n/a
+    test_file: src/tests/terms-rate-cache-circuit.test.ts
+    test_anchor: 'a successful adapter call is served from cache'
+
+  # ---------------------------------------------------------------------
+  # SSRF / URL policy
+  # ---------------------------------------------------------------------
+  - scenario_id: ssrf-ipv4-private-ranges
+    provider_id: direct-public-http
+    capability: public_http_fetch
+    category: ssrf
+    scenario: prohibited_ipv4_private_and_loopback_and_link_local_and_multicast_and_reserved
+    fixture: none
+    expected_result_class: n/a (policy-level unit test)
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: n/a
+    test_file: src/tests/http-ssrf.test.ts
+    test_anchor: 'IPv4 private range'
+
+  - scenario_id: ssrf-localhost-names
+    provider_id: direct-public-http
+    capability: public_http_fetch
+    category: ssrf
+    scenario: prohibited_localhost_hostname
+    fixture: none
+    expected_result_class: n/a
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: n/a
+    test_file: src/tests/http-ssrf.test.ts
+    test_anchor: 'localhost hostname'
+
+  - scenario_id: ssrf-ipv6-loopback-link-local
+    provider_id: direct-public-http
+    capability: public_http_fetch
+    category: ssrf
+    scenario: prohibited_ipv6_loopback_and_link_local
+    fixture: none
+    expected_result_class: n/a
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: n/a
+    test_file: src/tests/http-ssrf.test.ts
+    test_anchor: 'IPv6 loopback'
+
+  - scenario_id: ssrf-ipv6-unique-local
+    provider_id: direct-public-http
+    capability: public_http_fetch
+    category: ssrf
+    scenario: prohibited_ipv6_unique_local (fc00::/7)
+    fixture: none
+    expected_result_class: n/a
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: n/a
+    test_file: src/tests/http-ssrf.test.ts
+    test_anchor: 'fc00::/7 IPv6 unique-local'
+
+  - scenario_id: ssrf-ipv6-unique-local-fd
+    provider_id: direct-public-http
+    capability: public_http_fetch
+    category: ssrf
+    scenario: prohibited_ipv6_unique_local_fd (fd00::/8)
+    fixture: none
+    expected_result_class: n/a
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: n/a
+    test_file: src/tests/http-ssrf.test.ts
+    test_anchor: 'fd00::/8 IPv6 unique-local'
+
+  - scenario_id: ssrf-ipv4-mapped-ipv6-private
+    provider_id: direct-public-http
+    capability: public_http_fetch
+    category: ssrf
+    scenario: prohibited_ipv4_mapped_ipv6
+    fixture: none
+    expected_result_class: n/a
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: n/a
+    test_file: src/tests/http-ssrf.test.ts
+    test_anchor: 'IPv4-mapped IPv6 literal wrapping a private IPv4'
+
+  - scenario_id: ssrf-ipv4-mapped-ipv6-loopback
+    provider_id: direct-public-http
+    capability: public_http_fetch
+    category: ssrf
+    scenario: prohibited_ipv4_mapped_ipv6_loopback
+    fixture: none
+    expected_result_class: n/a
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: n/a
+    test_file: src/tests/http-ssrf.test.ts
+    test_anchor: 'IPv4-mapped IPv6 literal wrapping a loopback IPv4'
+
+  - scenario_id: ssrf-ipv4-mapped-ipv6-public-accepted
+    provider_id: direct-public-http
+    capability: public_http_fetch
+    category: ssrf
+    scenario: accepted_ipv4_mapped_ipv6_public
+    fixture: none
+    expected_result_class: n/a
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: n/a
+    test_file: src/tests/http-ssrf.test.ts
+    test_anchor: 'accepts an IPv4-mapped IPv6 literal wrapping a public'
+
+  - scenario_id: ssrf-metadata-candidate
+    provider_id: direct-public-http
+    capability: public_http_fetch
+    category: ssrf
+    scenario: cloud_metadata_endpoint_candidate
+    fixture: none
+    expected_result_class: n/a
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: n/a
+    test_file: src/tests/http-ssrf.test.ts
+    test_anchor: 'link-local (cloud metadata candidate)'
+
+  - scenario_id: ssrf-unsupported-scheme
+    provider_id: direct-public-http
+    capability: public_http_fetch
+    category: ssrf
+    scenario: unsupported_scheme
+    fixture: none
+    expected_result_class: n/a
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: n/a
+    test_file: src/tests/http-ssrf.test.ts
+    test_anchor: 'unsupported scheme'
+
+  - scenario_id: ssrf-blocked-port
+    provider_id: direct-public-http
+    capability: public_http_fetch
+    category: ssrf
+    scenario: prohibited_port
+    fixture: none
+    expected_result_class: n/a
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: n/a
+    test_file: src/tests/http-ssrf.test.ts
+    test_anchor: 'blocked port'
+
+  - scenario_id: ssrf-accepted-public-https
+    provider_id: direct-public-http
+    capability: public_http_fetch
+    category: ssrf
+    scenario: accepted_public_https
+    fixture: none
+    expected_result_class: n/a
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: n/a
+    test_file: src/tests/http-ssrf.test.ts
+    test_anchor: 'accepts a well-formed public HTTPS URL'
+
+  - scenario_id: ssrf-redirect-target-prohibited
+    provider_id: direct-public-http
+    capability: public_http_fetch
+    category: ssrf
+    scenario: redirect_into_prohibited_destination
+    fixture: none
+    expected_result_class: n/a
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: n/a
+    test_file: src/tests/http-ssrf.test.ts
+    test_anchor: 'rejects a redirect chain whose target is a prohibited address'
+
+  - scenario_id: ssrf-redirect-loop
+    provider_id: direct-public-http
+    capability: public_http_fetch
+    category: ssrf
+    scenario: redirect_loop
+    fixture: none
+    expected_result_class: n/a
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: n/a
+    test_file: src/tests/http-ssrf.test.ts
+    test_anchor: 'rejects a redirect loop'
+
+  - scenario_id: ssrf-max-redirects
+    provider_id: direct-public-http
+    capability: public_http_fetch
+    category: ssrf
+    scenario: excessive_redirects
+    fixture: none
+    expected_result_class: n/a
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: n/a
+    test_file: src/tests/http-ssrf.test.ts
+    test_anchor: 'exceeding the configured redirect bound'
+
+  - scenario_id: ssrf-redirect-chain-accepted
+    provider_id: direct-public-http
+    capability: public_http_fetch
+    category: ssrf
+    scenario: redirect_chain_accepted
+    fixture: none
+    expected_result_class: n/a
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: n/a
+    test_file: src/tests/http-ssrf.test.ts
+    test_anchor: 'accepts a short, distinct, valid redirect chain'
+
+  - scenario_id: ssrf-adapter-zero-fetch-on-prohibited
+    provider_id: direct-public-http
+    capability: public_http_fetch
+    category: ssrf
+    scenario: adapter_level_zero_fetch_calls
+    fixture: none (unreachableHttpClient)
+    expected_result_class: invalid_request
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: miss
+    expected_provenance: none
+    expected_audit: n/a
+    test_file: src/tests/http-ssrf.test.ts
+    test_anchor: 'makes no HTTP call'
+
+  # ---------------------------------------------------------------------
+  # Source-shape drift
+  # ---------------------------------------------------------------------
+  - scenario_id: drift-sec-submissions-missing-required
+    provider_id: sec-edgar
+    capability: company_submissions
+    category: drift
+    scenario: expected_field_missing
+    fixture: none (inline observed data)
+    expected_result_class: source_changed
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: review_required
+    test_file: src/drift/provider-drift.test.ts
+    test_anchor: 'flags removed required entityName as source_changed'
+
+  - scenario_id: drift-sec-submissions-identifier-format
+    provider_id: sec-edgar
+    capability: company_submissions
+    category: drift
+    scenario: identifier_format_changed
+    fixture: none
+    expected_result_class: n/a (classification-level assertion)
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: review_required
+    test_file: src/drift/provider-drift.test.ts
+    test_anchor: 'flags swapped cik identifier format'
+
+  - scenario_id: drift-sec-submissions-optional-addition
+    provider_id: sec-edgar
+    capability: company_submissions
+    category: drift
+    scenario: optional_field_added
+    fixture: none
+    expected_result_class: source_changed (policy blocks continuation in this row)
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: review_required
+    test_file: src/drift/provider-drift.test.ts
+    test_anchor: 'safe optional addition when policy blocks continuation'
+
+  - scenario_id: drift-sec-company-facts-missing-wrapper
+    provider_id: sec-edgar
+    capability: company_facts
+    category: drift
+    scenario: expected_field_missing (facts object)
+    fixture: none
+    expected_result_class: source_changed
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: review_required
+    test_file: src/drift/provider-drift.test.ts
+    test_anchor: 'flags missing facts object as source_changed'
+
+  - scenario_id: drift-sec-company-facts-unexpected-wrapper
+    provider_id: sec-edgar
+    capability: company_facts
+    category: drift
+    scenario: wrapper_added
+    fixture: none
+    expected_result_class: source_changed
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: review_required
+    test_file: src/drift/provider-drift.test.ts
+    test_anchor: 'flags wrapped payload under "data" as source_changed'
+
+  - scenario_id: drift-openalex-missing-title
+    provider_id: openalex
+    capability: openalex_work
+    category: drift
+    scenario: expected_field_missing
+    fixture: none
+    expected_result_class: source_changed
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: review_required
+    test_file: src/drift/provider-drift.test.ts
+    test_anchor: 'flags missing required title'
+
+  - scenario_id: drift-openalex-type-change
+    provider_id: openalex
+    capability: openalex_work
+    category: drift
+    scenario: field_type_changed
+    fixture: none
+    expected_result_class: n/a
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: review_required
+    test_file: src/drift/provider-drift.test.ts
+    test_anchor: 'flags cited_by_count type change to string'
+
+  - scenario_id: drift-crossref-missing-doi
+    provider_id: crossref
+    capability: crossref_doi
+    category: drift
+    scenario: expected_field_missing
+    fixture: none
+    expected_result_class: source_changed
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: review_required
+    test_file: src/drift/provider-drift.test.ts
+    test_anchor: 'flags missing required DOI'
+
+  - scenario_id: drift-crossref-array-to-object
+    provider_id: crossref
+    capability: crossref_doi
+    category: drift
+    scenario: object_array_shape_changed
+    fixture: none
+    expected_result_class: n/a
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: review_required
+    test_file: src/drift/provider-drift.test.ts
+    test_anchor: 'flags title type change from array to string'
+
+  - scenario_id: drift-github-missing-full-name
+    provider_id: github-public
+    capability: github_repository
+    category: drift
+    scenario: expected_field_missing
+    fixture: none
+    expected_result_class: n/a
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: review_required
+    test_file: src/drift/provider-drift.test.ts
+    test_anchor: 'flags missing required full_name'
+
+  - scenario_id: drift-github-metric-type-change
+    provider_id: github-public
+    capability: github_repository
+    category: drift
+    scenario: field_type_changed
+    fixture: none
+    expected_result_class: n/a
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: review_required
+    test_file: src/drift/provider-drift.test.ts
+    test_anchor: 'flags stargazers_count type change to string'
+
+  - scenario_id: drift-federal-register-missing-document-number
+    provider_id: federal-register
+    capability: federal_register_document
+    category: drift
+    scenario: expected_field_missing
+    fixture: none
+    expected_result_class: source_changed
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: review_required
+    test_file: src/drift/provider-drift.test.ts
+    test_anchor: 'flags missing required document_number'
+
+  - scenario_id: drift-federal-register-timestamp-format
+    provider_id: federal-register
+    capability: federal_register_document
+    category: drift
+    scenario: timestamp_format_changed
+    fixture: none
+    expected_result_class: n/a
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: review_required
+    test_file: src/drift/provider-drift.test.ts
+    test_anchor: 'flags publication_date timestamp format change'
+
+  # ---------------------------------------------------------------------
+  # Fast-check properties (property-based coverage, not example rows)
+  # ---------------------------------------------------------------------
+  - scenario_id: property-cik-idempotent
+    provider_id: sec-edgar
+    capability: n/a
+    category: property
+    scenario: cik_normalization_idempotent
+    fixture: none (generated)
+    expected_result_class: n/a
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: n/a
+    test_file: src/tests/fast-check.test.ts
+    test_anchor: 'is idempotent for any digit string'
+
+  - scenario_id: property-cik-invalid-remains-invalid
+    provider_id: sec-edgar
+    capability: n/a
+    category: property
+    scenario: invalid_cik_rejected
+    fixture: none (generated)
+    expected_result_class: n/a
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: n/a
+    test_file: src/tests/fast-check.test.ts
+    test_anchor: 'rejects any digit string longer than 10 digits'
+
+  - scenario_id: property-accession-idempotent
+    provider_id: sec-edgar
+    capability: n/a
+    category: property
+    scenario: accession_normalization_idempotent
+    fixture: none (generated)
+    expected_result_class: n/a
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: n/a
+    test_file: src/tests/fast-check.test.ts
+    test_anchor: 'is idempotent for any well-formed accession number'
+
+  - scenario_id: property-cache-key-order-independent
+    provider_id: n/a
+    capability: n/a
+    category: property
+    scenario: cache_key_canonicalization
+    fixture: none (generated)
+    expected_result_class: n/a
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: n/a
+    test_file: src/tests/fast-check.test.ts
+    test_anchor: 'canonical cache keys ignore object-key ordering'
+
+  - scenario_id: property-cache-key-sensitive-to-material-change
+    provider_id: n/a
+    capability: n/a
+    category: property
+    scenario: cache_key_sensitivity
+    fixture: none (generated)
+    expected_result_class: n/a
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: n/a
+    test_file: src/tests/fast-check.test.ts
+    test_anchor: 'materially different canonical inputs always change the key'
+
+  - scenario_id: property-ssrf-prohibited-ipv4
+    provider_id: direct-public-http
+    capability: public_http_fetch
+    category: property
+    scenario: prohibited_ipv4_never_passes
+    fixture: none (generated)
+    expected_result_class: n/a
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: n/a
+    test_file: src/tests/fast-check.test.ts
+    test_anchor: 'prohibited IPv4 address classes never pass'
+
+  - scenario_id: property-backoff-capped
+    provider_id: n/a
+    capability: n/a
+    category: property
+    scenario: backoff_never_exceeds_cap
+    fixture: none (generated)
+    expected_result_class: n/a
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: n/a
+    test_file: src/tests/fast-check.test.ts
+    test_anchor: 'never exceeds its configured cap'
+
+  - scenario_id: property-backoff-monotonic
+    provider_id: n/a
+    capability: n/a
+    category: property
+    scenario: backoff_growth_monotonic
+    fixture: none (generated)
+    expected_result_class: n/a
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: n/a
+    test_file: src/tests/fast-check.test.ts
+    test_anchor: 'base (pre-jitter) growth is monotonically non-decreasing'
+
+  - scenario_id: property-token-never-negative
+    provider_id: n/a
+    capability: n/a
+    category: property
+    scenario: token_accounting_never_negative
+    fixture: none (generated)
+    expected_result_class: n/a
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: n/a
+    test_file: src/tests/fast-check.test.ts
+    test_anchor: 'token counts never become negative'
+
+  - scenario_id: property-circuit-state-closed-machine
+    provider_id: n/a
+    capability: n/a
+    category: property
+    scenario: circuit_state_within_enum
+    fixture: none (generated)
+    expected_result_class: n/a
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: n/a
+    test_file: src/tests/fast-check.test.ts
+    test_anchor: 'remains within the closed state-machine enum'
+
+  - scenario_id: property-hash-identical-bytes
+    provider_id: n/a
+    capability: n/a
+    category: property
+    scenario: identical_bytes_identical_hash
+    fixture: none (generated)
+    expected_result_class: n/a
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: n/a
+    test_file: src/tests/fast-check.test.ts
+    test_anchor: 'identical bytes produce identical hashes'
+
+  - scenario_id: property-hash-changed-bytes
+    provider_id: n/a
+    capability: n/a
+    category: property
+    scenario: changed_bytes_different_hash
+    fixture: none (generated)
+    expected_result_class: n/a
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: n/a
+    test_file: src/tests/fast-check.test.ts
+    test_anchor: 'changed bytes produce a different hash'
+
+  - scenario_id: property-html-normalization-stable
+    provider_id: direct-public-http
+    capability: public_http_fetch
+    category: property
+    scenario: html_normalization_stability
+    fixture: none (generated)
+    expected_result_class: n/a
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: n/a
+    test_file: src/tests/fast-check.test.ts
+    test_anchor: 'repeated normalization of the same HTML is stable'
+
+  - scenario_id: property-locators-deterministic-nonempty
+    provider_id: n/a
+    capability: n/a
+    category: property
+    scenario: evidence_locators_deterministic
+    fixture: none (generated)
+    expected_result_class: n/a
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: n/a
+    test_file: src/tests/fast-check.test.ts
+    test_anchor: 'generated locators are deterministic and nonempty'
+
+  - scenario_id: property-decimal-facts-string-roundtrip
+    provider_id: sec-edgar
+    capability: company_facts
+    category: property
+    scenario: decimal_fact_no_float_conversion
+    fixture: none (generated)
+    expected_result_class: n/a
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: n/a
+    test_file: src/tests/fast-check.test.ts
+    test_anchor: 'every normalized fact value is a string'
+
+  - scenario_id: property-result-array-bounds
+    provider_id: sec-edgar
+    capability: company_facts
+    category: property
+    scenario: result_arrays_respect_bounds
+    fixture: none (generated)
+    expected_result_class: n/a
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: n/a
+    test_file: src/tests/fast-check.test.ts
+    test_anchor: 'never returns more concepts than exist'
+
+  # ---------------------------------------------------------------------
+  # Optional live gates (all skipped by default; see docs/guides)
+  # ---------------------------------------------------------------------
+  - scenario_id: live-gate-sec-default-skip-and-policy-block
+    provider_id: sec-edgar
+    capability: company_submissions
+    category: live_gate
+    scenario: policy_blocked (gate unset, forced-run behavior)
+    fixture: none
+    expected_result_class: policy_blocked
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: miss
+    expected_provenance: none
+    expected_audit: n/a
+    test_file: src/tests/live-gates.test.ts
+    test_anchor: 'default (gate unset): reports "skipped"'
+
+  - scenario_id: live-gate-openalex-default-skip-and-policy-block
+    provider_id: openalex
+    capability: openalex_work
+    category: live_gate
+    scenario: policy_blocked (gate unset, forced-run behavior)
+    fixture: none
+    expected_result_class: policy_blocked
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: miss
+    expected_provenance: none
+    expected_audit: n/a
+    test_file: src/tests/live-gates.test.ts
+    test_anchor: 'default (gate unset): reports "skipped"'
+
+  - scenario_id: live-gate-crossref-default-skip-and-policy-block
+    provider_id: crossref
+    capability: crossref_doi
+    category: live_gate
+    scenario: policy_blocked (gate unset, forced-run behavior)
+    fixture: none
+    expected_result_class: policy_blocked
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: miss
+    expected_provenance: none
+    expected_audit: n/a
+    test_file: src/tests/live-gates.test.ts
+    test_anchor: 'default (gate unset): reports "skipped"'
+
+  - scenario_id: live-gate-github-default-skip-and-policy-block
+    provider_id: github-public
+    capability: github_repository
+    category: live_gate
+    scenario: policy_blocked (gate unset, forced-run behavior)
+    fixture: none
+    expected_result_class: policy_blocked
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: miss
+    expected_provenance: none
+    expected_audit: n/a
+    test_file: src/tests/live-gates.test.ts
+    test_anchor: 'default (gate unset): reports "skipped"'
+
+  - scenario_id: live-gate-federal-register-default-skip-and-policy-block
+    provider_id: federal-register
+    capability: federal_register_document
+    category: live_gate
+    scenario: policy_blocked (gate unset, forced-run behavior)
+    fixture: none
+    expected_result_class: policy_blocked
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: miss
+    expected_provenance: none
+    expected_audit: n/a
+    test_file: src/tests/live-gates.test.ts
+    test_anchor: 'default (gate unset): reports "skipped"'
+
+  - scenario_id: live-gate-public-http-default-skip-and-policy-block
+    provider_id: direct-public-http
+    capability: public_http_fetch
+    category: live_gate
+    scenario: policy_blocked (gate unset, forced-run behavior)
+    fixture: none
+    expected_result_class: policy_blocked
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: miss
+    expected_provenance: none
+    expected_audit: n/a
+    test_file: src/tests/live-gates.test.ts
+    test_anchor: 'default (gate unset): reports "skipped"'
+
+  # ---------------------------------------------------------------------
+  # HTML runtime / Worker-vs-JSDOM parity
+  # ---------------------------------------------------------------------
+  - scenario_id: html-worker-runtime-no-jsdom-required
+    provider_id: direct-public-http
+    capability: public_http_fetch
+    category: html_runtime
+    scenario: worker_entry_no_jsdom_import
+    fixture: none
+    expected_result_class: n/a
+    expected_warning: none
+    expected_network_calls: 0
+    expected_cache: n/a
+    expected_provenance: n/a
+    expected_audit: n/a
+    test_file: src/html/html-worker-runtime.test.ts
+    test_anchor: 'HTMLRewriter-backed normalization'

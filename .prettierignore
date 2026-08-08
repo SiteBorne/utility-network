@@ -1,0 +1,25 @@
+# Mirrors .gitignore for the categories that trip up `prettier --check .`
+# when run after Python/Vitest/pnpm produce local generated artifacts.
+# Keeps root `pnpm format:check` (and therefore `pnpm check`) green
+# regardless of what generated caches happen to exist locally.
+
+node_modules
+.pnpm-store
+dist
+build
+*.tsbuildinfo
+coverage
+.nyc_output
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+.venv
+.mypy_cache
+.ruff_cache
+
+# Lockfiles (auto-generated; not hand-formatted)
+pnpm-lock.yaml
