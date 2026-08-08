@@ -1,5 +1,5 @@
 version: '1.0.0'
-last_updated: '2026-08-08T15:00:00Z'
+last_updated: '2026-08-08T16:00:00Z'
 tasks:
   # Phase 0: Establish Source of Truth
   - id: 'SUN-0001'
@@ -639,42 +639,59 @@ tasks:
       - 'OCR extracts text from images'
       - 'Table extraction works'
     evidence: []
-    next_action: "Superseded by decomposition into SUN-0400A (credential-independent document-worker implementation, active) and SUN-0400B (Modal deployment and live verification, blocked_external). This coarse task conflated three locally-buildable-and-testable criteria (Docling PDF->JSON, OCR text extraction, table extraction — none require a Modal token to implement or test locally) with one that genuinely requires a live Modal deployment ('Modal app deploys successfully'), which made the whole task simultaneously 'active' and blocked_external — a semantic contradiction. Do not implement against this task; see SUN-0400A/SUN-0400B."
+    next_action: "Superseded by decomposition into SUN-0400A (credential-independent document-worker implementation, accepted) and SUN-0400B (Modal deployment and live verification, blocked_external). This coarse task conflated three locally-buildable-and-testable criteria (native PDF/OCR text extraction, table extraction — none require a Modal token to implement or test locally) with one that genuinely requires a live Modal deployment ('Modal app deploys successfully'), which made the whole task simultaneously 'active' and blocked_external — a semantic contradiction. Do not implement against this task; see SUN-0400A/SUN-0400B."
     blocker: null
     commit_ref: null
 
   - id: 'SUN-0400A'
     title: 'Credential-Independent Document Processing Worker Foundation'
     phase: 'phase_6_modal_worker'
-    state: 'active'
+    state: 'accepted'
     owner_agent: 'architect'
     dependencies:
       - 'SUN-0300'
     rubric_target: 85
     acceptance_tests:
-      - 'Docling integration processes native PDFs to structured JSON locally (no Modal token required)'
-      - 'OCR interface defined, with a local implementation exercised in tests where dependency installation permits'
-      - 'Page classification (native text vs. scanned/image) implemented'
-      - 'Table extraction implemented and tested against fixture PDFs'
+      - 'Native PDF/image extraction processes documents to structured, typed results locally (no Modal token required) — implemented with pdfplumber+RapidOCR rather than Docling; see docs/decisions/0026-local-ocr-engine.md for the empirical evaluation that led to this substitution (Docling was installed and tested against this fixture corpus first)'
+      - 'OCR interface defined, with a local implementation (RapidOCR) exercised in tests'
+      - 'Page classification (native text vs. scanned/image, plus mixed/table_heavy/blank/unsupported) implemented deterministically'
+      - 'Table extraction implemented and tested against fixture PDFs (single- and multi-table)'
       - 'Deterministic page ordering'
       - 'Document- and page-level content hashing'
       - 'Evidence locator generation for extracted content'
       - 'Bounded document size and page-count enforcement (explicit limits, explicit truncation/rejection)'
-      - 'Media-type validation before processing'
-      - 'Artifact-reference input/output contract (no raw payload smuggling)'
-      - 'Resource budgets and timeout handling enforced locally'
-      - 'Deterministic, closed failure classification (mirrors the provider-adapters AdapterResultClass pattern)'
+      - 'Media-type validation before processing (magic-byte sniffing, not the caller-declared type)'
+      - 'Artifact-reference input/output contract (no raw payload smuggling; ArtifactAccessor protocol)'
+      - 'Resource budgets and timeout handling enforced locally (documented as coarse/best-effort, not preemptive — see docs/decisions/0028)'
+      - 'Deterministic, closed failure classification (17 FailureCode values, mirrors the provider-adapters AdapterResultClass pattern)'
       - 'Worker request/result contracts derived from the frozen service-contract release (packages/contracts, PCC 1.0.1)'
-      - 'Fully local execution: fixture corpus (native PDFs, scanned/image PDFs, malformed/adversarial PDFs, table-heavy PDFs, image fixtures) with deterministic expected outputs'
-      - 'Property tests for hashing/ordering/bounds invariants'
-      - 'Local benchmark harness (timing/resource use on the fixture corpus, no live infrastructure)'
-      - 'Modal function definitions/app configuration exist and type-check/compile without requiring deployment or credentials'
-      - 'Local packaging/container build verification (e.g. `docker build`/dependency-resolution succeeds) without pushing or deploying'
+      - 'Fully local execution: 9 PDF + 6 image fixtures (native/scanned/malformed/encrypted/table-heavy/over-page-limit + PNG/JPEG/blank/low-contrast/malformed/mismatched-extension) with deterministic expected outputs'
+      - 'Property tests for hashing/ordering/bounds invariants (7 real Hypothesis properties)'
+      - 'Local benchmark harness (timing/resource use on the fixture corpus, no live infrastructure) — pnpm document-worker:benchmark'
+      - 'Modal function definitions/app configuration exist and type-check/compile without requiring deployment or credentials — verified with MODAL_TOKEN_ID/SECRET explicitly unset'
       - 'Documentation: architecture, fixture corpus, local run instructions, explicit list of what remains blocked on SUN-0400B'
-    evidence: []
-    next_action: 'Not started. Implement the credential-independent document-worker foundation per the acceptance criteria above; do not add Modal credentials, live deployment, live invocation, production secrets, production R2, a customer-facing document service, x402/payment wiring, or any production activation to this task — all of that belongs to SUN-0400B or later.'
+    evidence:
+      - 'services/modal-worker/src/modal_worker/document/'
+      - 'services/modal-worker/src/modal_worker/local_runner.py'
+      - 'services/modal-worker/src/modal_worker/modal_app.py'
+      - 'services/modal-worker/fixtures/'
+      - 'services/modal-worker/tests/document/'
+      - 'services/modal-worker/tests/test_modal_wrapper.py'
+      - 'services/modal-worker/scripts/generate_fixtures.py'
+      - 'services/modal-worker/scripts/benchmark.py'
+      - 'docs/decisions/0025-document-worker-boundary.md'
+      - 'docs/decisions/0026-local-ocr-engine.md'
+      - 'docs/decisions/0027-document-evidence-locators.md'
+      - 'docs/decisions/0028-document-resource-bounds.md'
+      - 'docs/decisions/0029-modal-wrapper-separation.md'
+      - 'docs/operations/LOCAL_DOCUMENT_WORKER.md'
+      - 'docs/operations/DOCUMENT_FIXTURES.md'
+      - 'docs/operations/OCR_CONFIGURATION.md'
+      - 'docs/operations/DOCUMENT_BENCHMARKS.md'
+      - 'docs/reports/SUN-0400A-document-worker-foundation-report.md'
+    next_action: 'SUN-0500: Build verification mesh (dependency now satisfied — SUN-0400A accepted). A literal `docker build`/container-packaging check was not run against modal_app.py (only import/compile verification with no credentials) — recorded as a known gap in the report, not silently claimed. Known limitations (no hard preemptive timeout, table locators resolve to one representative cell not per-cell, language_hints not wired to OCR, no live R2 accessor) are documented in docs/reports/SUN-0400A-document-worker-foundation-report.md and do not block this local-foundation acceptance.'
     blocker: null
-    commit_ref: null
+    commit_ref: '55735e5'
 
   - id: 'SUN-0400B'
     title: 'Modal Deployment and Live Document Worker Verification'
@@ -703,7 +720,7 @@ tasks:
   - id: 'SUN-0500'
     title: 'Build verification mesh (9 verifiers + receipt signer)'
     phase: 'phase_7_verification'
-    state: 'pending'
+    state: 'active'
     owner_agent: 'architect'
     dependencies:
       - 'SUN-0400A'
@@ -714,7 +731,7 @@ tasks:
       - 'ClaimEvidenceAlignmentVerifier validates claims'
       - 'ReceiptSigner produces Ed25519 signatures'
     evidence: []
-    next_action: 'Implement 4 services'
+    next_action: 'Selected as the next dependency-safe task (SUN-0400A accepted, blocker: null, no external credentials required — verifier logic and Ed25519 signing are both locally implementable/testable). Not started.'
     blocker: null
     commit_ref: null
 

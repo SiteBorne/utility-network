@@ -10,9 +10,9 @@ source_directive:
 execution:
   mode: 'serial'
   active_mutation_tasks: 1
-  current_increment: 'SUN-0400A'
-  current_phase: 'phase_6_modal_worker'
-  last_completed_increment: 'SUN-0300'
+  current_increment: 'SUN-0500'
+  current_phase: 'phase_7_verification'
+  last_completed_increment: 'SUN-0400A'
 
 implemented:
   - 'governance_validation'
@@ -60,6 +60,15 @@ implemented:
   - 'provider_adapters_rate_limit_circuit_breaker_cache'
   - 'provider_adapters_ssrf_protection'
   - 'provider_adapters_html_worker_runtime_isolation'
+  - 'document_worker_native_pdf_extraction'
+  - 'document_worker_deterministic_table_extraction'
+  - 'document_worker_local_ocr'
+  - 'document_worker_page_classification'
+  - 'document_worker_evidence_locators'
+  - 'document_worker_content_hashing'
+  - 'document_worker_failure_taxonomy'
+  - 'document_worker_internal_verification'
+  - 'document_worker_modal_wrapper_scaffolded'
 
 not_implemented:
   - 'company_evidence_graph'
@@ -75,6 +84,9 @@ not_implemented:
   - 'production_deployment'
   - 'provider_adapters_live_activation' # all six providers: pending_review terms, policy_blocked
   - 'provider_adapters_dns_rebinding_protection' # connection pinning not proven; see ADR 0004
+  - 'document_worker_modal_deployment' # SUN-0400B, blocked_external (Modal token)
+  - 'document_worker_live_r2_artifact_access' # placeholder only; see ADR 0029
+  - 'document_worker_hard_preemptive_timeout' # best-effort checkpoint timeout only; see ADR 0028
 
 blocked_external:
   - 'cloudflare_account_configuration'
@@ -158,4 +170,4 @@ pcc_schema:
   extension_namespace: 'reverse-domain-qualified'
   drift_check: 'enabled'
 
-last_updated: '2026-08-08T15:00:00Z'
+last_updated: '2026-08-08T16:00:00Z'
