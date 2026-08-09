@@ -10,9 +10,9 @@ source_directive:
 execution:
   mode: 'serial'
   active_mutation_tasks: 1
-  current_increment: 'SUN-0600'
-  current_phase: 'phase_8_services'
-  last_completed_increment: 'SUN-0500'
+  current_increment: 'SUN-0700A'
+  current_phase: 'phase_9_x402'
+  last_completed_increment: 'SUN-0600'
 
 implemented:
   - 'governance_validation'
@@ -83,12 +83,18 @@ implemented:
   - 'verification_receipt_canonical_binding'
   - 'verification_receipt_ed25519_signing'
   - 'verification_key_registry'
+  - 'company_evidence_graph_identity_and_sec_and_website_field_groups'
+  - 'web_context_verified_direct_mode'
+  - 'document_evidence_json_artifact_reference_mode'
+  - 'verify_agent_output_standard_and_independent_reproduction_modes'
+  - 'service_runtime_pcc_builder_and_verify_and_sign'
+  - 'service_runtime_registry_and_dispatcher'
 
 not_implemented:
-  - 'company_evidence_graph'
-  - 'web_context_verified'
-  - 'document_evidence_json'
-  - 'verify_agent_output'
+  - 'company_evidence_graph_xbrl_facts_regulatory_mentions_repository_signals_field_groups'
+  - 'web_context_verified_rendered_mode' # Browser Rendering blocked_external
+  - 'document_evidence_json_upload_reference_and_url_input_modes'
+  - 'verify_agent_output_signature_valid_evidence_resolves_no_pii_no_secrets_checks'
   - 'x402'
   - 'mcp'
   - 'a2a'
