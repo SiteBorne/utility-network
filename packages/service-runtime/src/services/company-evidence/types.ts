@@ -25,7 +25,9 @@ export type FieldGroup =
 export const IMPLEMENTED_FIELD_GROUPS: readonly FieldGroup[] = [
   'identity',
   'sec_submissions',
+  'recent_filings',
   'website_evidence',
+  'regulatory_mentions',
 ];
 
 export type IdentityConfidence = 'exact' | 'corroborated' | 'ambiguous' | 'unresolved';
@@ -60,6 +62,25 @@ export interface CompanyEvidenceExtension {
     url?: string;
     extracted_at?: string;
     content_hash?: string;
+    evidence_ids?: string[];
+  }>;
+  regulatory_references?: Array<{
+    source?: string;
+    reference_id?: string;
+    date?: string;
+    description?: string;
+    evidence_ids?: string[];
+  }>;
+  /** A bounded, scoped absence finding — never a broad claim like "company
+   * has no regulatory issues" (see docs/operations/VERIFIED_ABSENCE.md).
+   * Matches the frozen `verified_absences` extension shape exactly. */
+  verified_absences?: Array<{
+    claim: string;
+    scope: string;
+    sources_checked: string[];
+    search_window?: string;
+    confidence: number;
+    limitations?: string;
     evidence_ids?: string[];
   }>;
   limitations?: string[];

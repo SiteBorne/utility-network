@@ -103,21 +103,79 @@ Given the scale of the full four-service directive, this increment implements a
 representative, real, but narrower slice than every scenario enumerated in the
 source directive:
 
-- `company_evidence_graph.v1` implements 3 of 7 field groups for real
-  (`identity`, `sec_submissions`/`recent_filings`, `website_evidence`); the
-  other 4 are recognized-but-unavailable.
-- `verified_absent` claim construction is implemented and unit-tested
-  (`src/claims/builder.test.ts`) but not yet exercised end-to-end by any service
-  — no field group in this increment performs a genuine bounded absence search
-  (see ADR 0038).
-- The fixture matrix covers 11 representative scenarios (identity resolution,
-  field-group selection, direct/rendered web modes, prompt injection,
-  native/table/malformed documents, standard/independent verification), not the
-  full ~70-scenario enumeration in the source directive's per-service test
-  gates.
+- `company_evidence_graph.v1` implements 4 of 7 field groups for real
+  (`identity`, `sec_submissions`/`recent_filings`, `website_evidence`,
+  `regulatory_mentions` — see the closure pass below); the other 3
+  (`xbrl_facts`, `public_repository_signals`, and the two not listed) are
+  recognized-but-unavailable.
 - Cross-service, chaos, and property test suites are each a focused set (4, 3,
   and 3 respectively) proving the stated invariants concretely, not an
   exhaustive enumeration of every listed scenario.
+- Not covered even after the closure pass: ticker-only/domain-only identity
+  fixtures beyond the CIK-exact path, `xbrl_facts`/GitHub signal field groups,
+  document-service table/page hash tampering and byte/page-limit fixtures,
+  agent-verification signer-failure/receipt-tamper at the service level
+  (SUN-0500 already covers signer/receipt tamper directly — 15 tests in
+  `packages/verification/src/tests/receipt.test.ts`), and a literal "stale
+  evidence" service-level fixture (freshness scoring is exercised at the
+  SUN-0500 verifier level —
+  `packages/verification/src/tests/freshness-verifier.test.ts` — and is
+  orthogonal-by-construction from absence, since an absence claim carries no
+  freshness override; constructing a genuinely stale end-to-end fixture would
+  require advancing the injected clock strictly between a service's adapter call
+  and its mesh run, which the current synchronous `execute()` does not expose a
+  seam for).
+
+## Closure pass: verified-absence end-to-end + fixture-matrix audit
+
+A first acceptance pass left two gaps disclosed above the original
+scope-reduction list: (1) verified-absence was tested only at the shared
+claim-builder level, not through an actual service, and (2) the fixture matrix
+(11 rows) could not represent the required per-service and cross-service
+acceptance surface. Both are closed here:
+
+1. **`regulatory_mentions` field group implemented for real**
+   (`company-evidence/service.ts`), composing SUN-0300's
+   `FederalRegisterAdapter` in `search` mode with an explicit, bounded,
+   deterministic date window (730 days trailing the injected clock). A genuine
+   zero-match search now produces a `verified_absences` entry via
+   `buildVerifiedAbsentClaim` — the entry's `claim` text is scoped to exactly
+   what was searched (term + window), never a broad proposition like "no
+   regulatory issues" that a finite search cannot support. A non-empty search
+   instead produces `regulatory_references` entries and an ordinary claim; a
+   source failure (`not_found`, `retryable_failure`, `policy_blocked`,
+   `source_changed`) never produces an absence claim — proven by 4 dedicated
+   tests using a stub adapter to reach each result class deterministically.
+2. **`packages/service-runtime/src/services/company-evidence/verified-absence.test.ts`**
+   (7 new tests) exercises the full pipeline — service input → real adapter
+   observation → PCC builder → SUN-0500 mesh → signed receipt → frozen-schema
+   validation — for the bounded-absence case, the positive-result case, the
+   no-dependency-wired case, and all four disqualifying result classes.
+3. **Two real gaps this surfaced and fixed**:
+   - `verify-and-sign.ts` never threaded a service's declared
+     `freshness_seconds` into the mesh's `freshness_requirement_ms` (freshness
+     scoring silently defaulted to 24h regardless of what a service's contract
+     declared). Fixed as a one-line addition.
+   - `recent_filings` was listed in `company-evidence`'s `DEFAULT_FIELD_GROUPS`
+     and had real handling code (bundled with `sec_submissions`), but was
+     missing from `IMPLEMENTED_FIELD_GROUPS` — the top-level dispatch gate
+     checked that list first, so every default-mode request silently routed
+     `recent_filings` into the "not implemented" branch and never reached its
+     own working code. Fixed by adding it to `IMPLEMENTED_FIELD_GROUPS`;
+     confirmed via manual verification that a default-groups request now
+     populates `recent_filings` correctly. All existing tests still pass after
+     both fixes.
+4. **Fixture matrix expanded from 11 to 48 rows**, cataloging effectively every
+   distinct scenario across all `packages/service-runtime` test files (company,
+   web, document, agent, registry/dispatcher, cross-service, chaos, property),
+   not only the ones re-executed by `scripts/verify-fixtures.ts`. Each row
+   carries `test_reference` (verified to exist by the script) and
+   `executed_by_script` (13 rows re-executed live as a regression gate; the
+   remainder covered by their referenced vitest file, which
+   `pnpm services-runtime:test` runs on every check). This is a coverage
+   correction, not an arbitrary count target — the matrix still does not claim
+   the full ~90-item checklist from the closure directive; the residual gaps are
+   listed explicitly above.
 
 ## Validation performed
 
@@ -125,13 +183,13 @@ All from repo root unless noted:
 
 - `pnpm format:check`, `pnpm lint`, `pnpm typecheck` — pass (18/18 turbo
   packages, including the new `@siteborne/service-runtime`).
-- `pnpm test` — 657 tests passed, 6 skipped (pre-existing live-gate opt-ins), 0
-  failed, across 52 test files including all 12 new `packages/service-runtime`
+- `pnpm test` — 664 tests passed, 6 skipped (pre-existing live-gate opt-ins), 0
+  failed, across 53 test files including all 13 `packages/service-runtime`
   files.
 - `pnpm services-runtime:check` — format/lint/typecheck/test/
-  test:property/fixtures:verify, all pass (45 unit/integration tests + 3
-  property tests + 1 real subprocess integration test + 11-scenario
-  fixture-matrix regression gate).
+  test:property/fixtures:verify, all pass (52 unit/integration tests + 3
+  property tests + 1 real subprocess integration test + 13-scenario live fixture
+  regression gate against a 48-row documented matrix).
 - `pnpm verification:check` — unaffected by the SUN-0600 integration beyond the
   disclosed `policy_id` fix; 76/76 tests, 5/5 fixtures, 3/3 properties.
 - `pnpm pcc:generate:check`, `services:generate:check`, `openapi:generate:check`

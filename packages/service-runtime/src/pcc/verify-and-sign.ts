@@ -67,6 +67,11 @@ export async function verifyAndSign<TExtensionKey extends string, TExtension>(
       supported_fields: draft.completeness.supported_fields,
       missing_fields: draft.completeness.missing_fields,
     },
+    // Threads the contract's declared freshness_seconds into the mesh's
+    // freshness_verifier, which otherwise defaults to 24h — without this,
+    // a service's own freshness_seconds input would be silently ignored
+    // by verification scoring.
+    freshness_requirement_ms: draft.contract.freshness_seconds * 1000,
   };
 
   const mode: VerificationMode = context.mode;

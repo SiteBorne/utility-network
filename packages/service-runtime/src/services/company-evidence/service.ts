@@ -8,7 +8,8 @@ import { createHash } from 'node:crypto';
 import type { InjectedHttpClient } from '@siteborne/provider-adapters';
 import type { SecSubmissionsAdapter } from '@siteborne/provider-adapters';
 import type { PublicHttpAdapter } from '@siteborne/provider-adapters';
-import { buildClaim } from '../../claims/builder';
+import type { FederalRegisterAdapter } from '@siteborne/provider-adapters';
+import { buildClaim, buildVerifiedAbsentClaim } from '../../claims/builder';
 import { buildEvidence } from '../../evidence/builder';
 import { buildDraftDocument, defaultProvenance, verifyAndSign } from '../../pcc';
 import type { Signer } from '@siteborne/verification';
@@ -23,6 +24,11 @@ export interface CompanyEvidenceServiceDeps {
   httpClient: InjectedHttpClient;
   secSubmissions: SecSubmissionsAdapter;
   publicHttp: PublicHttpAdapter;
+  /** Optional: powers the `regulatory_mentions` field group (Federal
+   * Register search). Existing callers that never request that field
+   * group don't need to supply it — requesting it without a wired
+   * dependency is reported `unavailable`, never fabricated. */
+  federalRegister?: FederalRegisterAdapter;
   signer: Signer;
 }
 
@@ -67,8 +73,12 @@ export class CompanyEvidenceGraphService
     const limitations: string[] = [];
     const filingSummaries: NonNullable<CompanyEvidenceExtension['filing_summaries']> = [];
     const websiteObservations: NonNullable<CompanyEvidenceExtension['website_observations']> = [];
+    const regulatoryReferences: NonNullable<CompanyEvidenceExtension['regulatory_references']> = [];
+    const verifiedAbsences: NonNullable<CompanyEvidenceExtension['verified_absences']> = [];
+    const verifiedAbsentClaimIds = new Set<string>();
     let secCovered = false;
     let websiteCovered = false;
+    let regulatoryCovered = false;
 
     const canonicalName = identity.companyName ?? identity.domain ?? identity.cik ?? 'unknown';
 
@@ -223,6 +233,121 @@ export class CompanyEvidenceGraphService
         websiteCovered = true;
         continue;
       }
+
+      if (group === 'regulatory_mentions') {
+        if (regulatoryCovered) continue;
+        if (!this.deps.federalRegister) {
+          fieldGroups.regulatory_mentions = { status: 'unavailable', source_count: 0 };
+          limitations.push(
+            'field group "regulatory_mentions" requires a Federal Register dependency, which was not supplied to this service instance'
+          );
+          regulatoryCovered = true;
+          continue;
+        }
+        const searchTerm = identity.companyName ?? canonicalName;
+        // Bounded search window: the trailing 730 days from the injected
+        // clock — deterministic given a fixed clock, and an explicit,
+        // reportable scope (never an unbounded "ever" search).
+        const nowMs = context.clock.nowMs();
+        const startDate = new Date(nowMs - 730 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+        const endDate = new Date(nowMs).toISOString().slice(0, 10);
+
+        dependencyCalls++;
+        const adapterContext = buildAdapterContext(context, this.deps.httpClient);
+        const result = await this.deps.federalRegister.execute(
+          { mode: 'search', searchTerm, startDate, endDate },
+          adapterContext
+        );
+
+        if (result.resultClass !== 'success' || !result.observations?.length) {
+          // A source failure (retryable_failure/policy_blocked/source_changed/
+          // rate_limited/...) is never treated as absence — see
+          // docs/decisions/0038-verified-absence-and-partial-result-policy.md.
+          fieldGroups.regulatory_mentions = {
+            status: result.resultClass === 'policy_blocked' ? 'unavailable' : 'empty',
+            source_count: 0,
+          };
+          limitations.push(
+            `federal-register search returned ${result.resultClass} for "${searchTerm}" (${startDate}..${endDate})`
+          );
+          regulatoryCovered = true;
+          continue;
+        }
+
+        const observation = result.observations[0]!;
+        const normalized = observation.normalized_value as {
+          results: Array<Record<string, unknown>>;
+          meta: { count: number };
+        };
+        const searchEvidence = buildEvidence({
+          seed: `federal-register:search:${searchTerm}:${startDate}:${endDate}`,
+          sourceUri: observation.source_uri,
+          retrievedAtIso: observation.retrieved_at,
+          contentHash: observation.contentHash,
+          mediaType: observation.media_type,
+          locator: observation.evidence_locators[0] ?? { type: 'json_pointer', value: '/results' },
+          authorizationClassification: observation.authorization_classification,
+          freshnessStatus: observation.freshness_status,
+        });
+        evidence.push(searchEvidence);
+
+        if (normalized.results.length === 0) {
+          // A genuine bounded-absence finding: an authoritative source
+          // (Federal Register), an explicit search term, an explicit date
+          // range, a successful (not failed) query, zero matches. The
+          // claim states exactly this bounded scope — never a broad
+          // proposition like "company has no regulatory issues", which a
+          // finite search can never actually support.
+          const absentClaim = buildVerifiedAbsentClaim({
+            seed: `company_evidence_graph.v1:no_federal_register_match:${searchTerm}:${startDate}:${endDate}`,
+            predicate: 'no_federal_register_match_in_window',
+            absenceEvidenceIds: [searchEvidence.evidence_id],
+          });
+          claims.push(absentClaim);
+          verifiedAbsentClaimIds.add(absentClaim.claim_id);
+          verifiedAbsences.push({
+            claim: `No Federal Register document matched search term "${searchTerm}" within ${startDate}..${endDate}`,
+            scope: `federal-register search, term="${searchTerm}"`,
+            sources_checked: ['federal-register'],
+            search_window: `${startDate}/${endDate}`,
+            confidence: 0.9,
+            limitations:
+              'Search results do not imply enforcement or adverse regulatory events; absence is bounded to the stated term and window only.',
+            evidence_ids: [searchEvidence.evidence_id],
+          });
+          fieldGroups.regulatory_mentions = {
+            status: 'complete',
+            source_count: 1,
+            evidence_ids: [searchEvidence.evidence_id],
+          };
+        } else {
+          for (const doc of normalized.results.slice(0, 5)) {
+            regulatoryReferences.push({
+              source: 'federal-register',
+              reference_id: doc.document_number as string | undefined,
+              date: (doc.publication_date as string | undefined) ?? undefined,
+              description: (doc.title as string | undefined)?.slice(0, 256),
+              evidence_ids: [searchEvidence.evidence_id],
+            });
+          }
+          claims.push(
+            buildClaim({
+              seed: `company_evidence_graph.v1:federal_register_match_count:${searchTerm}:${startDate}:${endDate}`,
+              predicate: 'federal_register_match_count_in_window',
+              value: normalized.results.length,
+              confidence: 0.9,
+              evidenceIds: [searchEvidence.evidence_id],
+            })
+          );
+          fieldGroups.regulatory_mentions = {
+            status: 'complete',
+            source_count: 1,
+            evidence_ids: [searchEvidence.evidence_id],
+          };
+        }
+        regulatoryCovered = true;
+        continue;
+      }
     }
 
     const requestedCount = requestedGroups.length;
@@ -248,11 +373,13 @@ export class CompanyEvidenceGraphService
       field_groups: fieldGroups,
       filing_summaries: filingSummaries.length ? filingSummaries : undefined,
       website_observations: websiteObservations.length ? websiteObservations : undefined,
+      regulatory_references: regulatoryReferences.length ? regulatoryReferences : undefined,
+      verified_absences: verifiedAbsences.length ? verifiedAbsences : undefined,
       limitations: limitations.length ? limitations : undefined,
       source_coverage_summary: {
         sec: secCovered,
         website: websiteCovered,
-        regulatory: false,
+        regulatory: regulatoryCovered,
         repositories: false,
       },
     };
@@ -301,7 +428,12 @@ export class CompanyEvidenceGraphService
       extensionPayload: extension,
     });
 
-    const signed = await verifyAndSign({ draft, context, signer: this.deps.signer });
+    const signed = await verifyAndSign({
+      draft,
+      context,
+      signer: this.deps.signer,
+      verifiedAbsentClaimIds,
+    });
 
     const resultClass =
       signed.verdict.decision === 'pass'

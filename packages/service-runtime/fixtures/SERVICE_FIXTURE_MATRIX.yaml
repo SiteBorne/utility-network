@@ -1,102 +1,362 @@
-# Service fixture matrix (SUN-0600).
+# Service fixture matrix (SUN-0600, closure pass).
 #
-# Each row documents a scenario exercised by scripts/verify-fixtures.ts.
-# Because these services depend on injected adapters/worker bridges (not
-# pure JSON-in/JSON-out functions like the SUN-0500 mesh), the actual
-# scenario *execution* lives in TypeScript
-# (scripts/verify-fixtures.ts::SCENARIOS), not as data-driven YAML alone —
-# this file is the traceable, human-readable index cross-checked against
-# that scenario list by the script itself (fails if a scenario_id here has
-# no matching TS scenario, or vice versa).
+# Each row documents one distinct, executable test scenario. Because these
+# services depend on injected adapters/worker bridges (not pure
+# JSON-in/JSON-out functions like the SUN-0500 mesh), scenario *execution*
+# lives in the referenced test files, not as data-driven YAML alone — this
+# file is the traceable, human-readable index. scripts/verify-fixtures.ts
+# additionally executes a representative subset of these scenarios directly
+# (the `executed_by_script: true` rows) as its own regression gate, and
+# fails if any of those drift from the documented result_class; the
+# remaining rows are covered by their referenced vitest file, which
+# `pnpm services-runtime:test` already runs on every check.
+#
+# There is no minimum row-count target. This matrix reflects actual
+# behavior coverage, not an arbitrary count — see
+# docs/reports/SUN-0600-local-services-report.md's coverage audit for the
+# explicit list of source-directive scenarios NOT covered here (and why).
 
 fixtures:
+  # ---- company_evidence_graph.v1 ----
   - scenario_id: company-identity-exact-cik-sec-submissions
     service_id: company_evidence_graph.v1
     category: identity_and_source_composition
-    dependency_fixtures: [packages/provider-adapters/fixtures/sec-edgar/submissions-success.json]
     expected_result_class: success
-    expected_receipt_valid: true
+    executed_by_script: true
     test_reference: src/services/company-evidence/service.test.ts
 
   - scenario_id: company-no-identity-signal-rejected
     service_id: company_evidence_graph.v1
     category: input_validation
-    dependency_fixtures: []
     expected_result_class: rejected
-    expected_receipt_valid: false
+    executed_by_script: true
     test_reference: src/services/company-evidence/service.test.ts
 
   - scenario_id: company-unimplemented-field-group-truthful-unavailable
     service_id: company_evidence_graph.v1
     category: partial_completeness
-    dependency_fixtures: []
     expected_result_class: partial
-    expected_receipt_valid: true
+    executed_by_script: true
     test_reference: src/services/company-evidence/service.test.ts
+
+  - scenario_id: company-website-evidence-missing-buyer-urls
+    service_id: company_evidence_graph.v1
+    category: partial_completeness
+    expected_result_class: null
+    executed_by_script: false
+    test_reference: src/services/company-evidence/service.test.ts
+
+  - scenario_id: company-website-evidence-success
+    service_id: company_evidence_graph.v1
+    category: identity_and_source_composition
+    expected_result_class: null
+    executed_by_script: false
+    test_reference: src/services/company-evidence/service.test.ts
+
+  - scenario_id: company-regulatory-bounded-absence
+    service_id: company_evidence_graph.v1
+    category: verified_absence
+    expected_result_class: success
+    executed_by_script: true
+    test_reference: src/services/company-evidence/verified-absence.test.ts
+
+  - scenario_id: company-regulatory-positive-result
+    service_id: company_evidence_graph.v1
+    category: verified_absence
+    expected_result_class: success
+    executed_by_script: true
+    test_reference: src/services/company-evidence/verified-absence.test.ts
+
+  - scenario_id: company-regulatory-no-dependency-wired
+    service_id: company_evidence_graph.v1
+    category: partial_completeness
+    expected_result_class: null
+    executed_by_script: false
+    test_reference: src/services/company-evidence/verified-absence.test.ts
+
+  - scenario_id: company-regulatory-not-found-not-absence
+    service_id: company_evidence_graph.v1
+    category: verified_absence
+    expected_result_class: null
+    executed_by_script: false
+    test_reference: src/services/company-evidence/verified-absence.test.ts
+
+  - scenario_id: company-regulatory-retryable-failure-not-absence
+    service_id: company_evidence_graph.v1
+    category: verified_absence
+    expected_result_class: null
+    executed_by_script: false
+    test_reference: src/services/company-evidence/verified-absence.test.ts
+
+  - scenario_id: company-regulatory-policy-blocked-not-absence
+    service_id: company_evidence_graph.v1
+    category: verified_absence
+    expected_result_class: null
+    executed_by_script: false
+    test_reference: src/services/company-evidence/verified-absence.test.ts
+
+  - scenario_id: company-regulatory-source-changed-not-absence
+    service_id: company_evidence_graph.v1
+    category: verified_absence
+    expected_result_class: null
+    executed_by_script: false
+    test_reference: src/services/company-evidence/verified-absence.test.ts
+
+  - scenario_id: company-claim-builder-absence-guard
+    service_id: company_evidence_graph.v1
+    category: verified_absence
+    expected_result_class: null
+    executed_by_script: false
+    test_reference: src/claims/builder.test.ts
+
+  # ---- web_context_verified.v1 ----
+  - scenario_id: web-missing-target-url-rejected
+    service_id: web_context_verified.v1
+    category: input_validation
+    expected_result_class: rejected
+    executed_by_script: false
+    test_reference: src/services/web-context/service.test.ts
 
   - scenario_id: web-direct-mode-success
     service_id: web_context_verified.v1
     category: direct_http_composition
-    dependency_fixtures: []
     expected_result_class: success
-    expected_receipt_valid: true
+    executed_by_script: true
     test_reference: src/services/web-context/service.test.ts
 
   - scenario_id: web-rendered-mode-dependency-unavailable
     service_id: web_context_verified.v1
     category: deferred_capability
-    dependency_fixtures: []
     expected_result_class: dependency_unavailable
-    expected_receipt_valid: false
+    executed_by_script: true
     test_reference: src/services/web-context/service.test.ts
 
   - scenario_id: web-confirmed-injection-quarantined
     service_id: web_context_verified.v1
     category: prompt_injection
-    dependency_fixtures: []
     expected_result_class: internal_verification_failed
-    expected_receipt_valid: false
+    executed_by_script: true
     test_reference: src/services/web-context/service.test.ts
+
+  # ---- document_evidence_json.v1 ----
+  - scenario_id: document-no-artifact-reference-dependency-unavailable
+    service_id: document_evidence_json.v1
+    category: input_validation
+    expected_result_class: dependency_unavailable
+    executed_by_script: false
+    test_reference: src/services/document-evidence/service.test.ts
+
+  - scenario_id: document-artifact-not-in-store-rejected
+    service_id: document_evidence_json.v1
+    category: input_validation
+    expected_result_class: rejected
+    executed_by_script: false
+    test_reference: src/services/document-evidence/service.test.ts
 
   - scenario_id: document-native-text-success
     service_id: document_evidence_json.v1
     category: sun0400a_composition
-    dependency_fixtures:
-      [packages/service-runtime/fixtures/document-worker-results/native-text-success.json]
     expected_result_class: success
-    expected_receipt_valid: true
+    executed_by_script: true
     test_reference: src/services/document-evidence/service.test.ts
 
   - scenario_id: document-table-heavy-success
     service_id: document_evidence_json.v1
     category: sun0400a_composition
-    dependency_fixtures:
-      [packages/service-runtime/fixtures/document-worker-results/multi-table-success.json]
     expected_result_class: success
-    expected_receipt_valid: true
+    executed_by_script: true
+    test_reference: src/services/document-evidence/service.test.ts
+
+  - scenario_id: document-scanned-ocr-success-or-partial
+    service_id: document_evidence_json.v1
+    category: sun0400a_composition
+    expected_result_class: null
+    executed_by_script: false
     test_reference: src/services/document-evidence/service.test.ts
 
   - scenario_id: document-malformed-permanent-failure
     service_id: document_evidence_json.v1
     category: worker_failure_taxonomy
-    dependency_fixtures:
-      [packages/service-runtime/fixtures/document-worker-results/malformed-failure.json]
     expected_result_class: permanent_failure
-    expected_receipt_valid: false
+    executed_by_script: true
     test_reference: src/services/document-evidence/service.test.ts
+
+  - scenario_id: document-encrypted-permanent-failure
+    service_id: document_evidence_json.v1
+    category: worker_failure_taxonomy
+    expected_result_class: permanent_failure
+    executed_by_script: false
+    test_reference: src/services/document-evidence/service.test.ts
+
+  - scenario_id: document-real-subprocess-worker-bridge
+    service_id: document_evidence_json.v1
+    category: sun0400a_composition
+    expected_result_class: null
+    executed_by_script: false
+    test_reference: src/services/document-evidence/worker-bridge.subprocess.test.ts
+
+  # ---- verify_agent_output.v1 ----
+  - scenario_id: agent-incomplete-input-rejected
+    service_id: verify_agent_output.v1
+    category: input_validation
+    expected_result_class: rejected
+    executed_by_script: false
+    test_reference: src/services/agent-verification/service.test.ts
 
   - scenario_id: agent-standard-pass
     service_id: verify_agent_output.v1
     category: sun0500_composition
-    dependency_fixtures: []
     expected_result_class: success
-    expected_receipt_valid: true
+    executed_by_script: true
+    test_reference: src/services/agent-verification/service.test.ts
+
+  - scenario_id: agent-claim-fails-conditional-partial
+    service_id: verify_agent_output.v1
+    category: sun0500_composition
+    expected_result_class: partial
+    executed_by_script: false
+    test_reference: src/services/agent-verification/service.test.ts
+
+  - scenario_id: agent-schema-invalid-deterministic-check-fails
+    service_id: verify_agent_output.v1
+    category: sun0500_composition
+    expected_result_class: null
+    executed_by_script: false
+    test_reference: src/services/agent-verification/service.test.ts
+
+  - scenario_id: agent-unimplemented-deterministic-check-unverifiable
+    service_id: verify_agent_output.v1
+    category: deferred_capability
+    expected_result_class: null
+    executed_by_script: false
+    test_reference: src/services/agent-verification/service.test.ts
+
+  - scenario_id: agent-independent-reproduction-unavailable-fails-closed
+    service_id: verify_agent_output.v1
+    category: independent_reproduction
+    expected_result_class: internal_verification_failed
+    executed_by_script: false
+    test_reference: src/services/agent-verification/service.test.ts
+
+  - scenario_id: agent-independent-reproduction-match
+    service_id: verify_agent_output.v1
+    category: independent_reproduction
+    expected_result_class: success
+    executed_by_script: false
     test_reference: src/services/agent-verification/service.test.ts
 
   - scenario_id: agent-independent-reproduction-mismatch
     service_id: verify_agent_output.v1
     category: independent_reproduction
-    dependency_fixtures: []
     expected_result_class: internal_verification_failed
-    expected_receipt_valid: false
+    executed_by_script: true
     test_reference: src/services/agent-verification/service.test.ts
+
+  # ---- registry / dispatcher ----
+  - scenario_id: registry-duplicate-service-id-rejected
+    service_id: company_evidence_graph.v1
+    category: registry_dispatcher
+    expected_result_class: null
+    executed_by_script: false
+    test_reference: src/registry.test.ts
+
+  - scenario_id: registry-production-enabled-true-rejected
+    service_id: company_evidence_graph.v1
+    category: registry_dispatcher
+    expected_result_class: null
+    executed_by_script: false
+    test_reference: src/registry.test.ts
+
+  - scenario_id: dispatcher-unknown-service-rejected
+    service_id: company_evidence_graph.v1
+    category: registry_dispatcher
+    expected_result_class: rejected
+    executed_by_script: false
+    test_reference: src/registry.test.ts
+
+  - scenario_id: dispatcher-service-exception-closed
+    service_id: company_evidence_graph.v1
+    category: registry_dispatcher
+    expected_result_class: internal_verification_failed
+    executed_by_script: false
+    test_reference: src/registry.test.ts
+
+  - scenario_id: dispatcher-service-timeout-closed
+    service_id: company_evidence_graph.v1
+    category: registry_dispatcher
+    expected_result_class: null
+    executed_by_script: false
+    test_reference: src/registry.test.ts
+
+  # ---- cross-service invariants ----
+  - scenario_id: cross-service-production-disabled-for-all-four
+    service_id: company_evidence_graph.v1
+    category: cross_service_invariant
+    expected_result_class: null
+    executed_by_script: false
+    test_reference: src/tests/cross-service.test.ts
+
+  - scenario_id: cross-service-unknown-service-fails-closed
+    service_id: company_evidence_graph.v1
+    category: cross_service_invariant
+    expected_result_class: rejected
+    executed_by_script: false
+    test_reference: src/tests/cross-service.test.ts
+
+  - scenario_id: cross-service-output-mutation-changes-output-hash
+    service_id: company_evidence_graph.v1
+    category: cross_service_invariant
+    expected_result_class: null
+    executed_by_script: false
+    test_reference: src/tests/cross-service.test.ts
+
+  - scenario_id: cross-service-distinct-output-hash-namespaces
+    service_id: web_context_verified.v1
+    category: cross_service_invariant
+    expected_result_class: null
+    executed_by_script: false
+    test_reference: src/tests/cross-service.test.ts
+
+  # ---- chaos ----
+  - scenario_id: chaos-adapter-throws-never-success
+    service_id: company_evidence_graph.v1
+    category: chaos
+    expected_result_class: null
+    executed_by_script: false
+    test_reference: src/tests/chaos.test.ts
+
+  - scenario_id: chaos-document-worker-throws-closed
+    service_id: document_evidence_json.v1
+    category: chaos
+    expected_result_class: internal_verification_failed
+    executed_by_script: false
+    test_reference: src/tests/chaos.test.ts
+
+  - scenario_id: chaos-signer-fails-no-fabricated-receipt
+    service_id: company_evidence_graph.v1
+    category: chaos
+    expected_result_class: null
+    executed_by_script: false
+    test_reference: src/tests/chaos.test.ts
+
+  # ---- properties ----
+  - scenario_id: property-agent-input-hash-deterministic
+    service_id: verify_agent_output.v1
+    category: property
+    expected_result_class: null
+    executed_by_script: false
+    test_reference: src/tests/properties.test.ts
+
+  - scenario_id: property-company-completeness-invariant
+    service_id: company_evidence_graph.v1
+    category: property
+    expected_result_class: null
+    executed_by_script: false
+    test_reference: src/tests/properties.test.ts
+
+  - scenario_id: property-web-rendered-zero-network-calls
+    service_id: web_context_verified.v1
+    category: property
+    expected_result_class: null
+    executed_by_script: false
+    test_reference: src/tests/properties.test.ts

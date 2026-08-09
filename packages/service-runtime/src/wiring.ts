@@ -4,7 +4,11 @@
  * scripts/verify-fixtures.ts, and scripts/benchmark.ts so registry
  * construction isn't duplicated four times.
  */
-import { SecSubmissionsAdapter, PublicHttpAdapter } from '@siteborne/provider-adapters';
+import {
+  SecSubmissionsAdapter,
+  PublicHttpAdapter,
+  FederalRegisterAdapter,
+} from '@siteborne/provider-adapters';
 import type {
   AuditEventSink as AdapterAuditEventSink,
   InjectedHttpClient,
@@ -54,6 +58,12 @@ export function buildFixtureRegistry(deps: FixtureWiringDeps): ServiceRegistry {
         NOOP_ADAPTER_AUDIT
       ),
       publicHttp: new PublicHttpAdapter(
+        deps.httpClient,
+        deps.context.clock,
+        deps.context.artifact_store,
+        NOOP_ADAPTER_AUDIT
+      ),
+      federalRegister: new FederalRegisterAdapter(
         deps.httpClient,
         deps.context.clock,
         deps.context.artifact_store,

@@ -6,11 +6,15 @@
  * cross-checks the YAML scenario_id set against this script's SCENARIOS
  * list — fails on any mismatch, duplicate, or unknown service_id.
  */
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parse } from 'yaml';
-import { SecSubmissionsAdapter, PublicHttpAdapter } from '@siteborne/provider-adapters';
+import {
+  SecSubmissionsAdapter,
+  PublicHttpAdapter,
+  FederalRegisterAdapter,
+} from '@siteborne/provider-adapters';
 import type {
   AuditEventSink as AdapterAuditEventSink,
   InjectedHttpClient,
@@ -37,6 +41,7 @@ import { createHash } from 'node:crypto';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, '..', '..', '..');
 const FIXTURES_DIR = join(__dirname, '..', 'fixtures');
+const PACKAGE_ROOT = join(__dirname, '..');
 const noopAdapterAudit: AdapterAuditEventSink = { async log() {}, getEvents: () => [], clear() {} };
 
 function jsonHttpClient(body: unknown): InjectedHttpClient {
@@ -179,6 +184,89 @@ const SCENARIOS: Scenario[] = [
           company_name: 'Repo Corp',
           requested_field_groups: ['identity', 'public_repository_signals'],
         },
+        context
+      );
+      return result.result_class;
+    },
+  },
+  {
+    id: 'company-regulatory-bounded-absence',
+    serviceId: 'company_evidence_graph.v1',
+    expectedResultClass: 'success',
+    run: async (signer) => {
+      const context = buildContext('company_evidence_graph.v1');
+      const httpClient = jsonHttpClient({
+        results: [],
+        meta: { count: 0, page: 1, per_page: 20, total_pages: 0 },
+      });
+      const service = new CompanyEvidenceGraphService({
+        httpClient,
+        secSubmissions: new SecSubmissionsAdapter(
+          httpClient,
+          context.clock,
+          context.artifact_store,
+          noopAdapterAudit
+        ),
+        publicHttp: new PublicHttpAdapter(
+          httpClient,
+          context.clock,
+          context.artifact_store,
+          noopAdapterAudit
+        ),
+        federalRegister: new FederalRegisterAdapter(
+          httpClient,
+          context.clock,
+          context.artifact_store,
+          noopAdapterAudit
+        ),
+        signer,
+      });
+      const result = await service.execute(
+        { company_name: 'Fictional NoMatch Corp', requested_field_groups: ['regulatory_mentions'] },
+        context
+      );
+      return result.result_class;
+    },
+  },
+  {
+    id: 'company-regulatory-positive-result',
+    serviceId: 'company_evidence_graph.v1',
+    expectedResultClass: 'success',
+    run: async (signer) => {
+      const context = buildContext('company_evidence_graph.v1');
+      const doc = {
+        document_number: '2024-01234',
+        title: 'Cybersecurity Requirements for Financial Institutions',
+        publication_date: '2024-01-15',
+      };
+      const httpClient = jsonHttpClient({
+        results: [doc],
+        meta: { count: 1, page: 1, per_page: 20, total_pages: 1 },
+      });
+      const service = new CompanyEvidenceGraphService({
+        httpClient,
+        secSubmissions: new SecSubmissionsAdapter(
+          httpClient,
+          context.clock,
+          context.artifact_store,
+          noopAdapterAudit
+        ),
+        publicHttp: new PublicHttpAdapter(
+          httpClient,
+          context.clock,
+          context.artifact_store,
+          noopAdapterAudit
+        ),
+        federalRegister: new FederalRegisterAdapter(
+          httpClient,
+          context.clock,
+          context.artifact_store,
+          noopAdapterAudit
+        ),
+        signer,
+      });
+      const result = await service.execute(
+        { company_name: 'Acme Regulated Corp', requested_field_groups: ['regulatory_mentions'] },
         context
       );
       return result.result_class;
@@ -421,28 +509,51 @@ const SCENARIOS: Scenario[] = [
 async function main(): Promise<void> {
   const matrix = parse(
     readFileSync(join(FIXTURES_DIR, 'SERVICE_FIXTURE_MATRIX.yaml'), 'utf-8')
-  ) as { fixtures: Array<{ scenario_id: string; service_id: string }> };
+  ) as {
+    fixtures: Array<{
+      scenario_id: string;
+      service_id: string;
+      executed_by_script?: boolean;
+      test_reference: string;
+    }>;
+  };
 
   const matrixIds = new Set(matrix.fixtures.map((f) => f.scenario_id));
   const scenarioIds = new Set(SCENARIOS.map((s) => s.id));
+  const scriptRowIds = new Set(
+    matrix.fixtures.filter((f) => f.executed_by_script).map((f) => f.scenario_id)
+  );
   let failures = 0;
 
   if (matrixIds.size !== matrix.fixtures.length) {
     console.error('FIXTURE MATRIX ERROR: duplicate scenario_id in SERVICE_FIXTURE_MATRIX.yaml');
     failures++;
   }
-  for (const id of matrixIds) {
+  // Rows marked executed_by_script: true must have a matching TS scenario
+  // (and vice versa) — those are re-executed here as a live regression
+  // gate. Rows marked false only need to reference a real test file that
+  // vitest actually runs.
+  for (const id of scriptRowIds) {
     if (!scenarioIds.has(id)) {
       console.error(
-        `FIXTURE MATRIX ERROR: scenario_id "${id}" is documented in the YAML matrix but has no matching TS scenario in scripts/verify-fixtures.ts`
+        `FIXTURE MATRIX ERROR: scenario_id "${id}" is marked executed_by_script but has no matching TS scenario in scripts/verify-fixtures.ts`
       );
       failures++;
     }
   }
   for (const id of scenarioIds) {
-    if (!matrixIds.has(id)) {
+    if (!scriptRowIds.has(id)) {
       console.error(
-        `FIXTURE MATRIX ERROR: TS scenario "${id}" has no matching row in SERVICE_FIXTURE_MATRIX.yaml`
+        `FIXTURE MATRIX ERROR: TS scenario "${id}" has no matching executed_by_script: true row in SERVICE_FIXTURE_MATRIX.yaml`
+      );
+      failures++;
+    }
+  }
+  for (const row of matrix.fixtures) {
+    const testFile = join(PACKAGE_ROOT, row.test_reference);
+    if (!existsSync(testFile)) {
+      console.error(
+        `FIXTURE MATRIX ERROR: scenario "${row.scenario_id}" references test_reference "${row.test_reference}", which does not exist`
       );
       failures++;
     }
