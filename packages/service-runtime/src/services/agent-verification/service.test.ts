@@ -1,8 +1,10 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it, beforeAll } from 'vitest';
-import type { Signer } from '@siteborne/verification';
+import type { KeyRegistry } from '@siteborne/verification';
+import { type Signer, type VerificationReceipt } from '@siteborne/verification';
 import { VerifyAgentOutputService } from './service';
 import { deterministicId } from '../../pcc/ids';
+import { verifyServiceReceipt } from '../../pcc';
 import { buildTestServiceContext, createFixtureSigner } from '../../tests/support';
 import type { AgentVerificationInput } from './types';
 
@@ -25,9 +27,10 @@ function baseInput(overrides: Partial<AgentVerificationInput> = {}): AgentVerifi
 
 describe('VerifyAgentOutputService', () => {
   let signer: Signer;
+  let registry: KeyRegistry;
 
   beforeAll(async () => {
-    ({ signer } = await createFixtureSigner());
+    ({ signer, registry } = await createFixtureSigner());
   });
 
   it('rejects an incomplete input', async () => {
@@ -46,6 +49,32 @@ describe('VerifyAgentOutputService', () => {
     expect(result.result_class).toBe('success');
     expect((result.output as { outcome?: string })?.outcome).toBe('pass');
     expect(result.receipt_id).toMatch(/^rcpt_[a-f0-9]{24}$/);
+
+    // Real cryptographic verification — not just receipt_id pattern matching.
+    const verification = await verifyServiceReceipt({
+      receipt: result.receipt as VerificationReceipt,
+      keyRegistry: registry,
+      expectedServiceId: 'verify_agent_output.v1',
+      expectedOutputHash: result.output_hash,
+    });
+    expect(verification.valid).toBe(true);
+  });
+
+  it('tampering with a bound receipt field (decision) invalidates cryptographic verification of the standard-mode receipt', async () => {
+    const context = await buildTestServiceContext('verify_agent_output.v1');
+    const service = new VerifyAgentOutputService({ signer });
+    const result = await service.execute(baseInput(), context);
+
+    const tampered: VerificationReceipt = {
+      ...(result.receipt as VerificationReceipt),
+      decision: 'fail',
+    };
+    const verification = await verifyServiceReceipt({
+      receipt: tampered,
+      keyRegistry: registry,
+      expectedServiceId: 'verify_agent_output.v1',
+    });
+    expect(verification.valid).toBe(false);
   });
 
   it('reports a failed claim without letting the mesh reach a false pass', async () => {
@@ -133,6 +162,46 @@ describe('VerifyAgentOutputService', () => {
 
     expect(result.result_class).toBe('success');
     expect((result.output as { outcome?: string })?.outcome).toBe('pass');
+
+    // Independent-reproduction mode's requirements actually ran (the mesh's
+    // reproduction_verifier is mandatory only in this mode — see ADR 0034)
+    // and the resulting receipt cryptographically verifies.
+    const verification = await verifyServiceReceipt({
+      receipt: result.receipt as VerificationReceipt,
+      keyRegistry: registry,
+      expectedServiceId: 'verify_agent_output.v1',
+      expectedOutputHash: result.output_hash,
+    });
+    expect(verification.valid).toBe(true);
+  });
+
+  it('tampering with a bound receipt field (decision) invalidates cryptographic verification of the independent_reproduction receipt', async () => {
+    const context = await buildTestServiceContext('verify_agent_output.v1', {
+      mode: 'independent_reproduction',
+    });
+    const input = baseInput({ verification_mode: 'independent_reproduction' });
+    const candidateOutputHash =
+      'sha256:' + createHash('sha256').update(JSON.stringify(input.candidate_output)).digest('hex');
+    const claimId = deterministicId(
+      'clm',
+      `verify_agent_output.v1:claim:total:${candidateOutputHash}`
+    );
+    const service = new VerifyAgentOutputService({
+      signer,
+      reproduction: { claims: [{ claim_id: claimId, value: true }] },
+    });
+    const result = await service.execute(input, context);
+
+    const tampered: VerificationReceipt = {
+      ...(result.receipt as VerificationReceipt),
+      decision: 'fail',
+    };
+    const verification = await verifyServiceReceipt({
+      receipt: tampered,
+      keyRegistry: registry,
+      expectedServiceId: 'verify_agent_output.v1',
+    });
+    expect(verification.valid).toBe(false);
   });
 
   it('fails independent_reproduction mode when the reproduced value disagrees', async () => {

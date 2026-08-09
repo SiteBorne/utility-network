@@ -176,6 +176,7 @@ fixtures:
     category: direct_http_composition
     expected_result_class: success
     executed_by_script: true
+    receipt_crypto_verified: true
     test_reference: src/services/web-context/service.test.ts
 
   - scenario_id: web-rendered-mode-dependency-unavailable
@@ -212,6 +213,7 @@ fixtures:
     category: sun0400a_composition
     expected_result_class: success
     executed_by_script: true
+    receipt_crypto_verified: true
     test_reference: src/services/document-evidence/service.test.ts
 
   - scenario_id: document-table-heavy-success
@@ -262,6 +264,7 @@ fixtures:
     category: sun0500_composition
     expected_result_class: success
     executed_by_script: true
+    receipt_crypto_verified: true
     test_reference: src/services/agent-verification/service.test.ts
 
   - scenario_id: agent-claim-fails-conditional-partial
@@ -414,3 +417,176 @@ fixtures:
     expected_result_class: null
     executed_by_script: false
     test_reference: src/tests/properties.test.ts
+
+  # ---- document_evidence_json.v1 receipt crypto verification ----
+  - scenario_id: document-native-text-receipt-tamper-detected
+    service_id: document_evidence_json.v1
+    category: cryptographic_receipt_verification
+    expected_result_class: null
+    executed_by_script: false
+    receipt_crypto_verified: true
+    test_reference: src/services/document-evidence/service.test.ts
+
+  # ---- web_context_verified.v1 receipt crypto verification ----
+  - scenario_id: web-direct-mode-receipt-tamper-detected
+    service_id: web_context_verified.v1
+    category: cryptographic_receipt_verification
+    expected_result_class: null
+    executed_by_script: false
+    receipt_crypto_verified: true
+    test_reference: src/services/web-context/service.test.ts
+
+  # ---- verify_agent_output.v1 receipt crypto verification (both modes) ----
+  - scenario_id: agent-standard-receipt-tamper-detected
+    service_id: verify_agent_output.v1
+    category: cryptographic_receipt_verification
+    expected_result_class: null
+    executed_by_script: false
+    receipt_crypto_verified: true
+    test_reference: src/services/agent-verification/service.test.ts
+
+  - scenario_id: agent-independent-reproduction-receipt-verified
+    service_id: verify_agent_output.v1
+    category: cryptographic_receipt_verification
+    expected_result_class: success
+    executed_by_script: false
+    receipt_crypto_verified: true
+    test_reference: src/services/agent-verification/service.test.ts
+
+  - scenario_id: agent-independent-reproduction-receipt-tamper-detected
+    service_id: verify_agent_output.v1
+    category: cryptographic_receipt_verification
+    expected_result_class: null
+    executed_by_script: false
+    receipt_crypto_verified: true
+    test_reference: src/services/agent-verification/service.test.ts
+
+  # ---- cross-service receipt cryptographic verification (dispatcher boundary) ----
+  - scenario_id: cross-service-company-receipt-verified
+    service_id: company_evidence_graph.v1
+    category: cryptographic_receipt_verification
+    expected_result_class: success
+    executed_by_script: false
+    receipt_crypto_verified: true
+    test_reference: src/tests/receipt-verification.test.ts
+
+  - scenario_id: cross-service-web-receipt-verified
+    service_id: web_context_verified.v1
+    category: cryptographic_receipt_verification
+    expected_result_class: success
+    executed_by_script: false
+    receipt_crypto_verified: true
+    test_reference: src/tests/receipt-verification.test.ts
+
+  - scenario_id: cross-service-document-receipt-verified
+    service_id: document_evidence_json.v1
+    category: cryptographic_receipt_verification
+    expected_result_class: success
+    executed_by_script: false
+    receipt_crypto_verified: true
+    test_reference: src/tests/receipt-verification.test.ts
+
+  - scenario_id: cross-service-agent-receipt-verified
+    service_id: verify_agent_output.v1
+    category: cryptographic_receipt_verification
+    expected_result_class: success
+    executed_by_script: false
+    receipt_crypto_verified: true
+    test_reference: src/tests/receipt-verification.test.ts
+
+  - scenario_id: cross-service-company-receipt-tamper-detected
+    service_id: company_evidence_graph.v1
+    category: cryptographic_receipt_verification
+    expected_result_class: null
+    executed_by_script: false
+    receipt_crypto_verified: true
+    test_reference: src/tests/receipt-verification.test.ts
+
+  - scenario_id: cross-service-web-receipt-tamper-detected
+    service_id: web_context_verified.v1
+    category: cryptographic_receipt_verification
+    expected_result_class: null
+    executed_by_script: false
+    receipt_crypto_verified: true
+    test_reference: src/tests/receipt-verification.test.ts
+
+  - scenario_id: cross-service-document-receipt-tamper-detected
+    service_id: document_evidence_json.v1
+    category: cryptographic_receipt_verification
+    expected_result_class: null
+    executed_by_script: false
+    receipt_crypto_verified: true
+    test_reference: src/tests/receipt-verification.test.ts
+
+  - scenario_id: cross-service-agent-receipt-tamper-detected
+    service_id: verify_agent_output.v1
+    category: cryptographic_receipt_verification
+    expected_result_class: null
+    executed_by_script: false
+    receipt_crypto_verified: true
+    test_reference: src/tests/receipt-verification.test.ts
+
+  # ---- shared receipt-verification boundary closed failure modes ----
+  - scenario_id: receipt-boundary-valid-receipt-verifies
+    service_id: web_context_verified.v1
+    category: receipt_boundary_failure_modes
+    expected_result_class: null
+    executed_by_script: false
+    receipt_crypto_verified: true
+    test_reference: src/pcc/receipt-verification.test.ts
+
+  - scenario_id: receipt-boundary-invalid-signature-fails-closed
+    service_id: web_context_verified.v1
+    category: receipt_boundary_failure_modes
+    expected_result_class: null
+    executed_by_script: false
+    test_reference: src/pcc/receipt-verification.test.ts
+
+  - scenario_id: receipt-boundary-altered-payload-fails-closed
+    service_id: web_context_verified.v1
+    category: receipt_boundary_failure_modes
+    expected_result_class: null
+    executed_by_script: false
+    test_reference: src/pcc/receipt-verification.test.ts
+
+  - scenario_id: receipt-boundary-output-hash-mismatch-fails-closed
+    service_id: web_context_verified.v1
+    category: receipt_boundary_failure_modes
+    expected_result_class: null
+    executed_by_script: false
+    test_reference: src/pcc/receipt-verification.test.ts
+
+  - scenario_id: receipt-boundary-wrong-service-id-fails-closed
+    service_id: web_context_verified.v1
+    category: receipt_boundary_failure_modes
+    expected_result_class: null
+    executed_by_script: false
+    test_reference: src/pcc/receipt-verification.test.ts
+
+  - scenario_id: receipt-boundary-wrong-contract-release-fails-closed
+    service_id: web_context_verified.v1
+    category: receipt_boundary_failure_modes
+    expected_result_class: null
+    executed_by_script: false
+    test_reference: src/pcc/receipt-verification.test.ts
+
+  - scenario_id: receipt-boundary-unknown-key-fails-closed
+    service_id: web_context_verified.v1
+    category: receipt_boundary_failure_modes
+    expected_result_class: null
+    executed_by_script: false
+    test_reference: src/pcc/receipt-verification.test.ts
+
+  - scenario_id: receipt-boundary-revoked-key-fails-closed
+    service_id: web_context_verified.v1
+    category: receipt_boundary_failure_modes
+    expected_result_class: null
+    executed_by_script: false
+    test_reference: src/pcc/receipt-verification.test.ts
+
+  - scenario_id: receipt-boundary-malformed-receipt-fails-closed-not-throws
+    service_id: web_context_verified.v1
+    category: receipt_boundary_failure_modes
+    expected_result_class: null
+    executed_by_script: false
+    test_reference: src/pcc/receipt-verification.test.ts

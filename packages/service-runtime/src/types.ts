@@ -22,6 +22,18 @@ export type ServiceId =
   | 'document_evidence_json.v1'
   | 'verify_agent_output.v1';
 
+/** The single canonical inventory of implemented service IDs — every place
+ * that needs "all implemented services" (the fixture-matrix verifier, the
+ * cross-service receipt test, wiring.ts) reads this constant rather than
+ * hand-maintaining a parallel list that can silently drift. If a fifth
+ * service is implemented, add it here once. */
+export const ALL_SERVICE_IDS: readonly ServiceId[] = [
+  'company_evidence_graph.v1',
+  'web_context_verified.v1',
+  'document_evidence_json.v1',
+  'verify_agent_output.v1',
+];
+
 /** Closed service-level result classes (directive §6). Distinct from, but
  * modeled after, provider-adapters' AdapterResultClass and the document
  * worker's FailureCode taxonomy — a service result composes several

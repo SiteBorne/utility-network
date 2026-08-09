@@ -1,17 +1,20 @@
 import { describe, expect, it, beforeAll } from 'vitest';
 import { PublicHttpAdapter } from '@siteborne/provider-adapters';
 import type { AuditEventSink as AdapterAuditEventSink } from '@siteborne/provider-adapters';
-import type { Signer } from '@siteborne/verification';
+import type { KeyRegistry } from '@siteborne/verification';
+import { type Signer, type VerificationReceipt } from '@siteborne/verification';
 import { WebContextVerifiedService } from './service';
+import { verifyServiceReceipt } from '../../pcc';
 import { buildTestServiceContext, createFixtureSigner, textHttpClient } from '../../tests/support';
 
 const noopAdapterAudit: AdapterAuditEventSink = { async log() {}, getEvents: () => [], clear() {} };
 
 describe('WebContextVerifiedService', () => {
   let signer: Signer;
+  let registry: KeyRegistry;
 
   beforeAll(async () => {
-    ({ signer } = await createFixtureSigner());
+    ({ signer, registry } = await createFixtureSigner());
   });
 
   it('rejects a missing target_url', async () => {
@@ -80,6 +83,47 @@ describe('WebContextVerifiedService', () => {
       'Example Article Title'
     );
     expect(result.receipt_id).toMatch(/^rcpt_[a-f0-9]{24}$/);
+
+    // Real cryptographic verification — not just receipt_id pattern matching.
+    const verification = await verifyServiceReceipt({
+      receipt: result.receipt as VerificationReceipt,
+      keyRegistry: registry,
+      expectedServiceId: 'web_context_verified.v1',
+      expectedOutputHash: result.output_hash,
+    });
+    expect(verification.valid).toBe(true);
+  });
+
+  it('tampering with a bound receipt field (decision) invalidates cryptographic verification', async () => {
+    const context = await buildTestServiceContext('web_context_verified.v1');
+    const httpClient = textHttpClient(
+      '<html><head><title>Example Article Title</title></head><body>Hello world</body></html>'
+    );
+    const service = new WebContextVerifiedService({
+      httpClient,
+      publicHttp: new PublicHttpAdapter(
+        httpClient,
+        context.clock,
+        context.artifact_store,
+        noopAdapterAudit
+      ),
+      signer,
+    });
+    const result = await service.execute(
+      { target_url: 'https://acme.example/article', retrieval_mode: 'direct' },
+      context
+    );
+
+    const tampered: VerificationReceipt = {
+      ...(result.receipt as VerificationReceipt),
+      decision: 'fail',
+    };
+    const verification = await verifyServiceReceipt({
+      receipt: tampered,
+      keyRegistry: registry,
+      expectedServiceId: 'web_context_verified.v1',
+    });
+    expect(verification.valid).toBe(false);
   });
 
   it('quarantines confirmed prompt-injection content found in fetched page text', async () => {

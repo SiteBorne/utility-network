@@ -227,22 +227,93 @@ Both are closed here.
    test execution "live" — `executed_by_script` / `fixture_replayed` are used
    throughout; no provider live-activation status was touched by any of this.
 
+## Third closure pass: real `verifyReceipt()` coverage across all four services + shared boundary
+
+A third review found the second closure pass had only proven real cryptographic
+receipt verification for `company_evidence_graph.v1`; the other three services
+still only pattern-matched `receipt_id` (or, for `verify_agent_output.v1`'s
+`independent_reproduction` success path, checked nothing about the receipt at
+all). Closed here, using one shared boundary rather than four separate
+reimplementations:
+
+1. **`verifyServiceReceipt()`** (`src/pcc/receipt-verification.ts`) is the one
+   shared boundary every caller uses to cryptographically verify a service
+   receipt; it delegates entirely to `@siteborne/verification`'s own
+   `verifyReceipt()` against a real `KeyRegistry` — no second Ed25519
+   implementation. Its own closed-failure-mode suite
+   (`src/pcc/receipt-verification.test.ts`, 9 tests) proves every one of
+   invalid signature, altered signed payload field, output-hash mismatch,
+   wrong expected `service_id`, wrong expected `contract_release`, unknown
+   signing key, revoked key, and a malformed (empty-signature) receipt fails
+   closed — `resolves.toMatchObject({ valid: false })` in every case, so no
+   cryptographic exception ever escapes as an ordinary caller error.
+2. **Per-service coverage** — `web-context/service.test.ts`,
+   `document-evidence/service.test.ts`, and `agent-verification/service.test.ts`
+   each gained a real `verifyServiceReceipt()` assertion on their successful
+   path, plus a dedicated tamper test (mutating the receipt's bound `decision`
+   or `output_hash` field and proving verification then fails).
+   `verify_agent_output.v1` gained this for **both** `standard` and
+   `independent_reproduction` modes separately — the reproduction-mode success
+   path is not silently downgraded to the standard-mode check.
+3. **`src/tests/receipt-verification.test.ts`** establishes the invariant once
+   for the entire registry rather than once per service: a parameterized
+   (`it.each`) pair of tests drives all four registry services through the
+   real `executeLocalService(...)` dispatcher, proving (a) a deterministic
+   successful fixture's receipt cryptographically verifies, and (b) a
+   receipt tampered with after a successful dispatch can never be reported as
+   valid — success is never based on `receipt_id` pattern or signature
+   presence alone. Building this test surfaced and fixed two real scenario
+   bugs (not production defects): the `company_evidence_graph.v1` scenario
+   requested a field group that could only reach `partial` without a CIK, and
+   the `document_evidence_json.v1` scenario constructed two separate
+   `ServiceExecutionContext` instances with different `artifact_store`s so the
+   dispatcher never found the artifact. Both were fixed in the test's own
+   scenario setup; no service or dispatcher code changed.
+4. **`ALL_SERVICE_IDS`** (`src/types.ts`) is now the single canonical
+   inventory of implemented service IDs.
+   `scripts/verify-fixtures.ts` reads it in place of a hand-maintained
+   `KNOWN_SERVICE_IDS` set, and now additionally asserts every ID in
+   `ALL_SERVICE_IDS` has at least one matrix row with both
+   `executed_by_script: true` and `receipt_crypto_verified: true` — if a fifth
+   service is ever registered without a cryptographically verified success
+   fixture, this check fails automatically rather than relying on someone
+   remembering to add coverage.
+5. **Fixture matrix grew from 55 to 77 rows** (22 new rows document the new
+   per-service tamper tests, the parameterized cross-service dispatcher test's
+   8 scenarios, and the shared boundary's 9 closed-failure-mode scenarios; no
+   pre-existing row was altered or removed). Reconciled count, matrix and
+   script as source of truth: **77 total matrix rows; 22 rows carry
+   `receipt_crypto_verified: true`, covering all 4 implemented services; 7 of
+   those 22 are also `executed_by_script: true`** (one script-verified crypto
+   fixture per service, satisfying the coverage gate above).
+6. Terminology: no fixture-matrix row or script wording calls fixture-replayed
+   or in-process execution "live"; `executed_by_script` / `fixture_replayed`
+   are used throughout for locally-executed, no-network scenarios, and "live"
+   is reserved for wording that describes a real external network request
+   (none of which changed here). No provider live-activation status was
+   touched by any of this pass.
+7. `packages/service-runtime` test suite grew from 59 to 80 tests (14 test
+   files, all passing): +9 shared-boundary failure-mode tests, +8
+   cross-service dispatcher tests, +4 per-service crypto/tamper tests
+   distributed across web-context (+1), document-evidence (+1), and
+   agent-verification (+2, standard and independent_reproduction).
+
 ## Validation performed
 
 All from repo root unless noted:
 
 - `pnpm format:check`, `pnpm lint`, `pnpm typecheck` — pass (18/18 turbo
-  packages, including the new `@siteborne/service-runtime`).
-- `pnpm test` — 671 tests passed, 6 skipped (pre-existing live-gate opt-ins), 0
-  failed, across 54 test files including all 14 `packages/service-runtime`
+  packages, including `@siteborne/service-runtime`).
+- `pnpm test` — 692 tests passed, 6 skipped (pre-existing live-gate opt-ins), 0
+  failed, across 56 test files including all 14 `packages/service-runtime`
   files.
 - `pnpm services-runtime:check` — format/lint/typecheck/test/
-  test:property/fixtures:verify, all pass (59 unit/integration tests + 3
+  test:property/fixtures:verify, all pass (80 unit/integration tests + 3
   property tests + 1 real subprocess integration test + 14-scenario
-  executed_by_script fixture regression gate — including 4 with real
-  cryptographic receipt verification — against a 55-row documented matrix).
-- `pnpm verification:check` — unaffected by the SUN-0600 integration beyond the
-  disclosed `policy_id` fix; 76/76 tests, 5/5 fixtures, 3/3 properties.
+  executed_by_script fixture regression gate — including one cryptographically
+  verified success fixture per service — against a 77-row documented matrix).
+- `pnpm verification:check` — unaffected by this pass; 76/76 tests, 5/5
+  fixtures, 3/3 properties.
 - `pnpm pcc:generate:check`, `services:generate:check`, `openapi:generate:check`
   — no drift.
 - `pnpm contracts:baseline:verify`, `contracts:compat:check`,

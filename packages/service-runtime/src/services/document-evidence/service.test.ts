@@ -1,10 +1,12 @@
 import { describe, expect, it, beforeAll } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import type { Signer } from '@siteborne/verification';
+import type { KeyRegistry } from '@siteborne/verification';
+import { type Signer, type VerificationReceipt } from '@siteborne/verification';
 import { DocumentEvidenceJsonService } from './service';
 import { FixtureDocumentWorkerBridge, registerFixtureScenario } from './worker-bridge';
 import type { WorkerResult } from './worker-result-types';
+import { verifyServiceReceipt } from '../../pcc';
 import { buildTestServiceContext, createFixtureSigner } from '../../tests/support';
 
 const FIXTURES_DIR = fileURLToPath(
@@ -26,9 +28,10 @@ function bridgeFor(
 
 describe('DocumentEvidenceJsonService', () => {
   let signer: Signer;
+  let registry: KeyRegistry;
 
   beforeAll(async () => {
-    ({ signer } = await createFixtureSigner());
+    ({ signer, registry } = await createFixtureSigner());
   });
 
   it('reports dependency_unavailable when no artifact_reference is supplied (upload/url modes not implemented)', async () => {
@@ -88,6 +91,52 @@ describe('DocumentEvidenceJsonService', () => {
       worker.document!.page_count
     );
     expect(result.receipt_id).toMatch(/^rcpt_[a-f0-9]{24}$/);
+
+    // Real cryptographic verification — not just receipt_id pattern matching.
+    const verification = await verifyServiceReceipt({
+      receipt: result.receipt as VerificationReceipt,
+      keyRegistry: registry,
+      expectedServiceId: 'document_evidence_json.v1',
+      expectedOutputHash: result.output_hash,
+    });
+    expect(verification.valid).toBe(true);
+  });
+
+  it('tampering with a bound receipt field (output_hash) invalidates cryptographic verification', async () => {
+    const context = await buildTestServiceContext('document_evidence_json.v1');
+    const worker = loadWorkerResult('native-text-success');
+    const { bridge, bytes } = bridgeFor('native-text-tamper', worker);
+    await context.artifact_store.put(
+      {
+        id: 'doc/native2.pdf',
+        contentHash: worker.document!.sha256,
+        media_type: 'application/pdf',
+        byte_length: bytes.length,
+      },
+      bytes
+    );
+    const service = new DocumentEvidenceJsonService({ worker: bridge, signer });
+    const result = await service.execute(
+      {
+        artifact_reference: {
+          artifact_id: 'doc/native2.pdf',
+          media_type: 'application/pdf',
+          size_bytes: bytes.length,
+        },
+      },
+      context
+    );
+
+    const tampered: VerificationReceipt = {
+      ...(result.receipt as VerificationReceipt),
+      output_hash: 'sha256:' + 'f'.repeat(64),
+    };
+    const verification = await verifyServiceReceipt({
+      receipt: tampered,
+      keyRegistry: registry,
+      expectedServiceId: 'document_evidence_json.v1',
+    });
+    expect(verification.valid).toBe(false);
   });
 
   it('processes a table-heavy PDF and includes table claims/evidence', async () => {

@@ -43,6 +43,7 @@ import {
   createTestServiceAuditSink,
 } from '../src/context';
 import { deterministicId } from '../src/pcc/ids';
+import { ALL_SERVICE_IDS } from '../src/types';
 import { createHash } from 'node:crypto';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -657,12 +658,11 @@ async function main(): Promise<void> {
   });
   const signer: Signer = { keyId: keypair.keyId, privateKey: keypair.privateKey };
 
-  const KNOWN_SERVICE_IDS = new Set([
-    'company_evidence_graph.v1',
-    'web_context_verified.v1',
-    'document_evidence_json.v1',
-    'verify_agent_output.v1',
-  ]);
+  // ALL_SERVICE_IDS is the single canonical inventory of implemented
+  // service IDs (src/types.ts) — read here rather than a hand-maintained
+  // parallel Set, so this check and the coverage assertion below both stay
+  // correct automatically if a fifth service is ever registered.
+  const KNOWN_SERVICE_IDS = new Set<string>(ALL_SERVICE_IDS);
 
   for (const row of matrix.fixtures) {
     if (!KNOWN_SERVICE_IDS.has(row.service_id)) {
@@ -677,6 +677,24 @@ async function main(): Promise<void> {
   const cryptoVerifiedIds = new Set(
     matrix.fixtures.filter((f) => f.receipt_crypto_verified).map((f) => f.scenario_id)
   );
+
+  // Every implemented service must have at least one matrix row that is
+  // both actually re-executed by this script (executed_by_script: true)
+  // and cryptographically receipt-verified — otherwise a service could
+  // reach 'success' in the matrix without any proof its receipt is real.
+  // Deriving the requirement from ALL_SERVICE_IDS means a fifth service
+  // registered without such a fixture fails this check automatically.
+  for (const serviceId of ALL_SERVICE_IDS) {
+    const hasCryptoVerifiedScriptRow = matrix.fixtures.some(
+      (f) => f.service_id === serviceId && f.executed_by_script && f.receipt_crypto_verified
+    );
+    if (!hasCryptoVerifiedScriptRow) {
+      console.error(
+        `FIXTURE MATRIX ERROR: service "${serviceId}" has no matrix row with both executed_by_script: true and receipt_crypto_verified: true — no cryptographic proof of a successful receipt for this service`
+      );
+      failures++;
+    }
+  }
 
   for (const scenario of SCENARIOS) {
     const actual = await scenario.run(signer);
