@@ -772,7 +772,7 @@ tasks:
       - 'docs/decisions/0039-underspecified-frozen-fields-and-browser-rendered-deferral.md'
     next_action: "Accepted, including two closure passes: aaba314 (end-to-end verified-absence coverage, expanded fixture matrix) and a second pass (stale-vs-absence end-to-end via offset-clock injection, real Ed25519 receipt cryptographic verification + tamper detection, freshness-threshold and recent_filings regressions) after review found each prior pass's acceptance evidence still incomplete relative to the implementation. Residual, disclosed scope reductions remain in docs/reports/SUN-0600-local-services-report.md (e.g. xbrl_facts/public_repository_signals field groups, document-service tamper/limit fixtures, receipt cryptographic verification for the other 3 services) — not silently claimed as complete. SUN-0400B remains blocked_external; SUN-0700A remains the selected next dependency-safe task, not started."
     blocker: null
-    commit_ref: 'aaba314'
+    commit_ref: '852d202'
 
   - id: 'SUN-0700A'
     title: 'x402 protocol logic (exact + upto payment construction, replay protection, Bazaar metadata) — credential-independent'
