@@ -19,7 +19,14 @@ import type {
   AuditEventSink as AdapterAuditEventSink,
   InjectedHttpClient,
 } from '@siteborne/provider-adapters';
-import { generateTestKeypair, KeyRegistry, type Signer } from '@siteborne/verification';
+import {
+  generateTestKeypair,
+  KeyRegistry,
+  verifyReceipt,
+  type Signer,
+  type VerificationReceipt,
+} from '@siteborne/verification';
+import type { InjectedClock as AdapterClock } from '@siteborne/provider-adapters';
 import { CompanyEvidenceGraphService } from '../src/services/company-evidence/service';
 import { WebContextVerifiedService } from '../src/services/web-context/service';
 import { DocumentEvidenceJsonService } from '../src/services/document-evidence/service';
@@ -75,11 +82,16 @@ function loadWorkerResult(name: string): WorkerResult {
   ) as WorkerResult;
 }
 
+interface ScenarioRunResult {
+  resultClass: string;
+  receipt?: VerificationReceipt;
+}
+
 interface Scenario {
   id: string;
   serviceId: string;
   expectedResultClass: string;
-  run: (signer: Signer) => Promise<string>;
+  run: (signer: Signer) => Promise<ScenarioRunResult>;
 }
 
 function buildContext(
@@ -93,6 +105,21 @@ function buildContext(
     execution_mode: 'fixture',
     ...overrides,
   });
+}
+
+/** Real wall-clock time plus a fixed offset, applied consistently to every
+ * call — never sleeps, never mutates the system clock. See
+ * src/services/company-evidence/freshness.test.ts for the full rationale. */
+function buildOffsetClock(offsetMs: number): AdapterClock {
+  return {
+    now: () => new Date(Date.now() + offsetMs),
+    nowMs: () => Date.now() + offsetMs,
+    setTimeout: (cb: () => void, delay: number) => setTimeout(cb, delay),
+    clearTimeout: (id: unknown) => clearTimeout(id as ReturnType<typeof setTimeout>),
+    advance: () => {},
+    getCurrentTime: () => Date.now() + offsetMs,
+    setTime: () => {},
+  };
 }
 
 const SCENARIOS: Scenario[] = [
@@ -126,7 +153,7 @@ const SCENARIOS: Scenario[] = [
         },
         context
       );
-      return result.result_class;
+      return { resultClass: result.result_class, receipt: result.receipt };
     },
   },
   {
@@ -153,7 +180,7 @@ const SCENARIOS: Scenario[] = [
         signer,
       });
       const result = await service.execute({}, context);
-      return result.result_class;
+      return { resultClass: result.result_class, receipt: result.receipt };
     },
   },
   {
@@ -186,7 +213,7 @@ const SCENARIOS: Scenario[] = [
         },
         context
       );
-      return result.result_class;
+      return { resultClass: result.result_class, receipt: result.receipt };
     },
   },
   {
@@ -225,7 +252,7 @@ const SCENARIOS: Scenario[] = [
         { company_name: 'Fictional NoMatch Corp', requested_field_groups: ['regulatory_mentions'] },
         context
       );
-      return result.result_class;
+      return { resultClass: result.result_class, receipt: result.receipt };
     },
   },
   {
@@ -269,7 +296,62 @@ const SCENARIOS: Scenario[] = [
         { company_name: 'Acme Regulated Corp', requested_field_groups: ['regulatory_mentions'] },
         context
       );
-      return result.result_class;
+      return { resultClass: result.result_class, receipt: result.receipt };
+    },
+  },
+  {
+    id: 'company-regulatory-stale-evidence-not-absence',
+    serviceId: 'company_evidence_graph.v1',
+    expectedResultClass: 'success',
+    run: async (signer) => {
+      const context = buildContext('company_evidence_graph.v1', {
+        clock: buildOffsetClock(60 * 60 * 1000),
+      });
+      const doc = {
+        document_number: '2024-01234',
+        title: 'Cybersecurity Requirements for Financial Institutions',
+        publication_date: '2024-01-15',
+      };
+      const httpClient = jsonHttpClient({
+        results: [doc],
+        meta: { count: 1, page: 1, per_page: 20, total_pages: 1 },
+      });
+      const service = new CompanyEvidenceGraphService({
+        httpClient,
+        secSubmissions: new SecSubmissionsAdapter(
+          httpClient,
+          context.clock,
+          context.artifact_store,
+          noopAdapterAudit
+        ),
+        publicHttp: new PublicHttpAdapter(
+          httpClient,
+          context.clock,
+          context.artifact_store,
+          noopAdapterAudit
+        ),
+        federalRegister: new FederalRegisterAdapter(
+          httpClient,
+          context.clock,
+          context.artifact_store,
+          noopAdapterAudit
+        ),
+        signer,
+      });
+      const result = await service.execute(
+        {
+          company_name: 'Acme Regulated Corp',
+          requested_field_groups: ['regulatory_mentions'],
+          freshness_seconds: 60,
+        },
+        context
+      );
+      if (result.verification && result.verification.freshness >= 1) {
+        throw new Error(
+          'expected stale evidence (freshness < 1), but freshness_verifier scored it fresh'
+        );
+      }
+      return { resultClass: result.result_class, receipt: result.receipt };
     },
   },
   {
@@ -295,7 +377,7 @@ const SCENARIOS: Scenario[] = [
         { target_url: 'https://acme.example/', retrieval_mode: 'direct' },
         context
       );
-      return result.result_class;
+      return { resultClass: result.result_class, receipt: result.receipt };
     },
   },
   {
@@ -319,7 +401,7 @@ const SCENARIOS: Scenario[] = [
         { target_url: 'https://acme.example/', retrieval_mode: 'rendered' },
         context
       );
-      return result.result_class;
+      return { resultClass: result.result_class, receipt: result.receipt };
     },
   },
   {
@@ -345,7 +427,7 @@ const SCENARIOS: Scenario[] = [
         { target_url: 'https://malicious.example/', retrieval_mode: 'direct' },
         context
       );
-      return result.result_class;
+      return { resultClass: result.result_class, receipt: result.receipt };
     },
   },
   {
@@ -379,7 +461,7 @@ const SCENARIOS: Scenario[] = [
         },
         context
       );
-      return result.result_class;
+      return { resultClass: result.result_class, receipt: result.receipt };
     },
   },
   {
@@ -413,7 +495,7 @@ const SCENARIOS: Scenario[] = [
         },
         context
       );
-      return result.result_class;
+      return { resultClass: result.result_class, receipt: result.receipt };
     },
   },
   {
@@ -447,7 +529,7 @@ const SCENARIOS: Scenario[] = [
         },
         context
       );
-      return result.result_class;
+      return { resultClass: result.result_class, receipt: result.receipt };
     },
   },
   {
@@ -469,7 +551,7 @@ const SCENARIOS: Scenario[] = [
         },
         context
       );
-      return result.result_class;
+      return { resultClass: result.result_class, receipt: result.receipt };
     },
   },
   {
@@ -501,7 +583,7 @@ const SCENARIOS: Scenario[] = [
         },
         context
       );
-      return result.result_class;
+      return { resultClass: result.result_class, receipt: result.receipt };
     },
   },
 ];
@@ -514,6 +596,7 @@ async function main(): Promise<void> {
       scenario_id: string;
       service_id: string;
       executed_by_script?: boolean;
+      receipt_crypto_verified?: boolean;
       test_reference: string;
     }>;
   };
@@ -530,7 +613,7 @@ async function main(): Promise<void> {
     failures++;
   }
   // Rows marked executed_by_script: true must have a matching TS scenario
-  // (and vice versa) — those are re-executed here as a live regression
+  // (and vice versa) — those are re-executed here as an executed_by_script regression
   // gate. Rows marked false only need to reference a real test file that
   // vitest actually runs.
   for (const id of scriptRowIds) {
@@ -591,15 +674,42 @@ async function main(): Promise<void> {
     }
   }
 
+  const cryptoVerifiedIds = new Set(
+    matrix.fixtures.filter((f) => f.receipt_crypto_verified).map((f) => f.scenario_id)
+  );
+
   for (const scenario of SCENARIOS) {
     const actual = await scenario.run(signer);
-    if (actual !== scenario.expectedResultClass) {
+    if (actual.resultClass !== scenario.expectedResultClass) {
       failures++;
       console.error(
-        `FIXTURE MISMATCH [${scenario.id}]: expected result_class "${scenario.expectedResultClass}", got "${actual}"`
+        `FIXTURE MISMATCH [${scenario.id}]: expected result_class "${scenario.expectedResultClass}", got "${actual.resultClass}"`
+      );
+      continue;
+    }
+    if (cryptoVerifiedIds.has(scenario.id)) {
+      if (!actual.receipt) {
+        failures++;
+        console.error(
+          `FIXTURE MISMATCH [${scenario.id}]: matrix declares receipt_crypto_verified: true but no receipt was returned`
+        );
+        continue;
+      }
+      const verification = await verifyReceipt(actual.receipt, registry, {
+        service_id: scenario.serviceId,
+      });
+      if (verification.status !== 'valid') {
+        failures++;
+        console.error(
+          `FIXTURE MISMATCH [${scenario.id}]: receipt cryptographic verification failed (${verification.status})`
+        );
+        continue;
+      }
+      console.log(
+        `ok [${scenario.id}]: result_class=${actual.resultClass}, receipt cryptographically verified`
       );
     } else {
-      console.log(`ok [${scenario.id}]: result_class=${actual}`);
+      console.log(`ok [${scenario.id}]: result_class=${actual.resultClass}`);
     }
   }
 

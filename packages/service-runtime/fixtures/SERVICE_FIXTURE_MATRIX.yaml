@@ -23,6 +23,7 @@ fixtures:
     category: identity_and_source_composition
     expected_result_class: success
     executed_by_script: true
+    receipt_crypto_verified: true
     test_reference: src/services/company-evidence/service.test.ts
 
   - scenario_id: company-no-identity-signal-rejected
@@ -58,6 +59,15 @@ fixtures:
     category: verified_absence
     expected_result_class: success
     executed_by_script: true
+    receipt_crypto_verified: true
+    test_reference: src/services/company-evidence/verified-absence.test.ts
+
+  - scenario_id: company-regulatory-bounded-absence-receipt-tamper-detected
+    service_id: company_evidence_graph.v1
+    category: verified_absence
+    expected_result_class: null
+    executed_by_script: false
+    receipt_crypto_verified: true
     test_reference: src/services/company-evidence/verified-absence.test.ts
 
   - scenario_id: company-regulatory-positive-result
@@ -65,6 +75,7 @@ fixtures:
     category: verified_absence
     expected_result_class: success
     executed_by_script: true
+    receipt_crypto_verified: true
     test_reference: src/services/company-evidence/verified-absence.test.ts
 
   - scenario_id: company-regulatory-no-dependency-wired
@@ -108,6 +119,49 @@ fixtures:
     expected_result_class: null
     executed_by_script: false
     test_reference: src/claims/builder.test.ts
+
+  - scenario_id: company-regulatory-stale-evidence-not-absence
+    service_id: company_evidence_graph.v1
+    category: freshness
+    expected_result_class: success
+    executed_by_script: true
+    receipt_crypto_verified: true
+    test_reference: src/services/company-evidence/freshness.test.ts
+
+  - scenario_id: company-regulatory-stale-evidence-deterministic-repeat
+    service_id: company_evidence_graph.v1
+    category: freshness
+    expected_result_class: null
+    executed_by_script: false
+    test_reference: src/services/company-evidence/freshness.test.ts
+
+  - scenario_id: company-freshness-threshold-fresh
+    service_id: company_evidence_graph.v1
+    category: freshness
+    expected_result_class: null
+    executed_by_script: false
+    test_reference: src/services/company-evidence/freshness.test.ts
+
+  - scenario_id: company-freshness-threshold-stale
+    service_id: company_evidence_graph.v1
+    category: freshness
+    expected_result_class: null
+    executed_by_script: false
+    test_reference: src/services/company-evidence/freshness.test.ts
+
+  - scenario_id: company-recent-filings-requested-and-populated
+    service_id: company_evidence_graph.v1
+    category: field_group_dispatch_regression
+    expected_result_class: success
+    executed_by_script: false
+    test_reference: src/services/company-evidence/freshness.test.ts
+
+  - scenario_id: company-recent-filings-not-requested-not-fetched
+    service_id: company_evidence_graph.v1
+    category: field_group_dispatch_regression
+    expected_result_class: null
+    executed_by_script: false
+    test_reference: src/services/company-evidence/freshness.test.ts
 
   # ---- web_context_verified.v1 ----
   - scenario_id: web-missing-target-url-rejected

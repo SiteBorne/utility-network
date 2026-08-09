@@ -16,7 +16,8 @@ import type {
   AuditEventSink as AdapterAuditEventSink,
   AdapterResult,
 } from '@siteborne/provider-adapters';
-import type { Signer } from '@siteborne/verification';
+import type { KeyRegistry } from '@siteborne/verification';
+import { verifyReceipt, type Signer, type VerificationReceipt } from '@siteborne/verification';
 import { CompanyEvidenceGraphService } from './service';
 import { buildTestServiceContext, createFixtureSigner, jsonHttpClient } from '../../tests/support';
 import type { CompanyEvidenceExtension } from './types';
@@ -57,8 +58,9 @@ function baseResult(resultClass: AdapterResult['resultClass']): AdapterResult {
 
 describe('company_evidence_graph.v1 — verified-absence end-to-end (real adapter)', () => {
   let signer: Signer;
+  let registry: KeyRegistry;
   beforeAll(async () => {
-    ({ signer } = await createFixtureSigner());
+    ({ signer, registry } = await createFixtureSigner());
   });
 
   it('a genuine bounded absence (authoritative search, explicit scope, zero matches) produces a schema-valid, mesh-passing, receipt-signed result', async () => {
@@ -109,6 +111,55 @@ describe('company_evidence_graph.v1 — verified-absence end-to-end (real adapte
     expect(absence.sources_checked).toEqual(['federal-register']);
     expect(absence.evidence_ids?.length).toBeGreaterThan(0);
     expect(result.completeness?.supported_fields).toBe(1);
+
+    // Real cryptographic verification — not just receipt_id pattern matching.
+    const verification = await verifyReceipt(result.receipt as VerificationReceipt, registry, {
+      service_id: 'company_evidence_graph.v1',
+    });
+    expect(verification.status).toBe('valid');
+  });
+
+  it('tampering with a bound receipt field (decision) invalidates cryptographic verification of the bounded-absence receipt', async () => {
+    const context = await buildTestServiceContext('company_evidence_graph.v1');
+    const httpClient = jsonHttpClient({
+      results: [],
+      meta: { count: 0, page: 1, per_page: 20, total_pages: 0 },
+    });
+    const service = new CompanyEvidenceGraphService({
+      httpClient,
+      secSubmissions: new SecSubmissionsAdapter(
+        httpClient,
+        context.clock,
+        context.artifact_store,
+        noopAdapterAudit
+      ),
+      publicHttp: new PublicHttpAdapter(
+        httpClient,
+        context.clock,
+        context.artifact_store,
+        noopAdapterAudit
+      ),
+      federalRegister: new FederalRegisterAdapter(
+        httpClient,
+        context.clock,
+        context.artifact_store,
+        noopAdapterAudit
+      ),
+      signer,
+    });
+    const result = await service.execute(
+      { company_name: 'Fictional NoMatch Corp', requested_field_groups: ['regulatory_mentions'] },
+      context
+    );
+
+    const tampered: VerificationReceipt = {
+      ...(result.receipt as VerificationReceipt),
+      decision: 'fail',
+    };
+    const verification = await verifyReceipt(tampered, registry, {
+      service_id: 'company_evidence_graph.v1',
+    });
+    expect(verification.status).not.toBe('valid');
   });
 
   it('a positive regulatory search result produces regulatory_references, not an absence claim', async () => {
@@ -150,6 +201,11 @@ describe('company_evidence_graph.v1 — verified-absence end-to-end (real adapte
     expect(output.verified_absences).toBeUndefined();
     expect(output.regulatory_references).toHaveLength(1);
     expect(output.regulatory_references![0]!.reference_id).toBe('2024-01234');
+
+    const verification = await verifyReceipt(result.receipt as VerificationReceipt, registry, {
+      service_id: 'company_evidence_graph.v1',
+    });
+    expect(verification.status).toBe('valid');
   });
 
   it('requesting regulatory_mentions without a wired Federal Register dependency is truthfully unavailable, never fabricated', async () => {

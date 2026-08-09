@@ -4,7 +4,8 @@ import type {
   AuditEventSink as AdapterAuditEventSink,
   InjectedHttpClient,
 } from '@siteborne/provider-adapters';
-import type { Signer } from '@siteborne/verification';
+import type { KeyRegistry } from '@siteborne/verification';
+import { verifyReceipt, type Signer, type VerificationReceipt } from '@siteborne/verification';
 import { CompanyEvidenceGraphService } from './service';
 import {
   buildTestServiceContext,
@@ -42,9 +43,10 @@ async function buildService(
 
 describe('CompanyEvidenceGraphService', () => {
   let signer: Signer;
+  let registry: KeyRegistry;
 
   beforeAll(async () => {
-    ({ signer } = await createFixtureSigner());
+    ({ signer, registry } = await createFixtureSigner());
   });
 
   it('rejects an input with no identity signal at all', async () => {
@@ -74,6 +76,15 @@ describe('CompanyEvidenceGraphService', () => {
     expect(result.receipt_id).toMatch(/^rcpt_[a-f0-9]{24}$/);
     expect(result.completeness?.supported_fields).toBe(2);
     expect(httpClient.callCount).toBeGreaterThan(0);
+
+    // Real cryptographic receipt verification for this "complete" fixture
+    // — not just receipt_id pattern matching.
+    const verification = await verifyReceipt(result.receipt as VerificationReceipt, registry, {
+      service_id: 'company_evidence_graph.v1',
+      contract_release: '1.0.0',
+      output_hash: result.output_hash,
+    });
+    expect(verification.status).toBe('valid');
   });
 
   it('produces a truthful limitation when website_evidence is requested without buyer_urls', async () => {

@@ -18,6 +18,7 @@ import {
   type ReproductionInput,
   type Signer,
   type VerificationMode,
+  type VerificationReceipt,
 } from '@siteborne/verification';
 import { toVerificationAuditSink, toVerificationClock } from '../context';
 import { toCandidateClaims, toCandidateEvidence } from './candidate-conversion';
@@ -40,6 +41,11 @@ export interface VerifyAndSignResult<TExtensionKey extends string, TExtension> {
   verdict: MeshVerdict;
   outputHash: string;
   receiptId: string;
+  /** The full signed receipt object — callers that need real cryptographic
+   * verification (not just pattern-matching receipt_id) use this with
+   * @siteborne/verification's verifyReceipt() directly, never a
+   * service-runtime-local reimplementation of Ed25519 verification. */
+  receipt: VerificationReceipt;
   schemaValidAfterFinalization: boolean;
   schemaErrors: string[];
 }
@@ -125,7 +131,25 @@ export async function verifyAndSign<TExtensionKey extends string, TExtension>(
     verdict,
     outputHash: receipt.output_hash,
     receiptId: receipt.receipt_id,
+    receipt,
     schemaValidAfterFinalization,
     schemaErrors,
+  };
+}
+
+/** Builds the `ServiceExecutionResult.verification` summary from a mesh
+ * verdict — shared by every service so the field is populated
+ * identically everywhere. */
+export function toVerificationSummary(verdict: MeshVerdict) {
+  return {
+    schema_valid: verdict.verification.schema_valid,
+    material_claims_supported: verdict.verification.material_claims_supported,
+    evidence_accessibility: verdict.verification.evidence_accessibility,
+    freshness: verdict.verification.freshness,
+    completeness: verdict.verification.completeness,
+    cross_source_agreement: verdict.verification.cross_source_agreement,
+    provenance_valid: verdict.verification.provenance_valid,
+    decision: verdict.decision,
+    score: verdict.verification.score,
   };
 }

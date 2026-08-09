@@ -111,20 +111,15 @@ source directive:
 - Cross-service, chaos, and property test suites are each a focused set (4, 3,
   and 3 respectively) proving the stated invariants concretely, not an
   exhaustive enumeration of every listed scenario.
-- Not covered even after the closure pass: ticker-only/domain-only identity
+- Not covered even after both closure passes: ticker-only/domain-only identity
   fixtures beyond the CIK-exact path, `xbrl_facts`/GitHub signal field groups,
-  document-service table/page hash tampering and byte/page-limit fixtures,
+  document-service table/page hash tampering and byte/page-limit fixtures, and
   agent-verification signer-failure/receipt-tamper at the service level
   (SUN-0500 already covers signer/receipt tamper directly — 15 tests in
-  `packages/verification/src/tests/receipt.test.ts`), and a literal "stale
-  evidence" service-level fixture (freshness scoring is exercised at the
-  SUN-0500 verifier level —
-  `packages/verification/src/tests/freshness-verifier.test.ts` — and is
-  orthogonal-by-construction from absence, since an absence claim carries no
-  freshness override; constructing a genuinely stale end-to-end fixture would
-  require advancing the injected clock strictly between a service's adapter call
-  and its mesh run, which the current synchronous `execute()` does not expose a
-  seam for).
+  `packages/verification/src/tests/receipt.test.ts`; this package's own
+  cryptographic-verification and tamper coverage, added in the second closure
+  pass below, covers `company_evidence_graph.v1` specifically, not yet the other
+  three services).
 
 ## Closure pass: verified-absence end-to-end + fixture-matrix audit
 
@@ -170,12 +165,67 @@ acceptance surface. Both are closed here:
    web, document, agent, registry/dispatcher, cross-service, chaos, property),
    not only the ones re-executed by `scripts/verify-fixtures.ts`. Each row
    carries `test_reference` (verified to exist by the script) and
-   `executed_by_script` (13 rows re-executed live as a regression gate; the
-   remainder covered by their referenced vitest file, which
+   `executed_by_script` (13 rows re-executed by the script itself as a
+   regression gate; the remainder covered by their referenced vitest file, which
    `pnpm services-runtime:test` runs on every check). This is a coverage
-   correction, not an arbitrary count target — the matrix still does not claim
-   the full ~90-item checklist from the closure directive; the residual gaps are
-   listed explicitly above.
+   correction, not an arbitrary count target.
+
+## Second closure pass: stale-vs-absence end-to-end + cryptographic receipt verification
+
+A second review found two further gaps in the first closure pass's own evidence:
+(1) "stale source != verified absence" was disclosed as untested above, with a
+stated architectural reason; and (2) every "receipt verified" assertion in the
+new tests only pattern-matched `receipt_id` against `/^rcpt_[a-f0-9]{24}$/`,
+never calling SUN-0500's actual `verifyReceipt()` against a real `KeyRegistry`.
+Both are closed here.
+
+1. **The architectural reason for "no seam to inject staleness" turned out to be
+   surmountable.** `FederalRegisterAdapter` stamps evidence `retrieved_at` from
+   a real `new Date()` call (not the injected `ServiceExecutionContext` clock —
+   a pre-existing SUN-0300 characteristic). Rather than needing to advance a
+   clock _between_ the adapter call and the mesh run within one synchronous
+   `execute()`, `freshness.test.ts` injects an **offset clock**: `nowMs()`
+   always returns real wall-clock time plus a fixed, test-chosen offset. Since
+   the adapter's `retrieved_at` is anchored to real time and the mesh's
+   `nowMs()` is real time plus the offset, the age delta the
+   `freshness_verifier` computes is deterministic and fully test-controlled — no
+   sleeping, no system-clock mutation, no post-hoc editing of a "stale" flag;
+   the service and mesh derive staleness themselves from ordinary real
+   timestamps.
+2. **`company-evidence/freshness.test.ts`** (6 tests) proves, through the real
+   service pipeline: stale evidence is scored stale by the mesh
+   (`result.verification.freshness < 1`) yet the result stays `success` with a
+   valid, cryptographically-verified receipt and no `verified_absences` entry
+   (freshness is a reported score, never itself a blocking gate, per the mesh's
+   existing non-voting design); a fresh/stale threshold regression (same
+   observation, `freshness_seconds` large → score `1`, small → score `0`);
+   deterministic repeatability; and the `recent_filings` regression (requested →
+   SEC dependency runs and populates a contract-valid result; not requested →
+   zero dependency calls).
+3. **Real cryptographic receipt verification** added to the highest-value
+   existing scenarios (identity+SEC success, bounded absence, positive
+   regulatory result, stale-evidence result) via `@siteborne/verification`'s
+   actual `verifyReceipt(receipt, registry, expectedContext)` against the same
+   `KeyRegistry` the fixture signer registered with — not a
+   service-runtime-local reimplementation of Ed25519 verification. A new tamper
+   test mutates a signed receipt's `decision` field and proves verification then
+   fails. `verifyAndSign`'s result type and `ServiceExecutionResult` both gained
+   a `receipt` field (the full `VerificationReceipt`, not just its ID) and a
+   `verification` summary (mesh decision/scores) to make this possible — a
+   small, shared API addition used identically by all four services, not a
+   one-off.
+4. **`scripts/verify-fixtures.ts`** gained its own live cryptographic
+   verification step: rows marked `receipt_crypto_verified: true` (5 of the
+   matrix's 55 rows; 4 of them also `executed_by_script: true`) are verified
+   against a real `KeyRegistry` as part of the script's own regression gate, not
+   just inside vitest.
+5. **Fixture matrix grew from 48 to 55 rows** (7 new: the stale scenario, its
+   deterministic-repeat variant, the fresh/stale threshold pair, the two
+   `recent_filings` regression scenarios, and the receipt-tamper scenario);
+   `executed_by_script: true` rows grew from 13 to 14.
+6. Terminology correction: no fixture-matrix or script wording calls in-process
+   test execution "live" — `executed_by_script` / `fixture_replayed` are used
+   throughout; no provider live-activation status was touched by any of this.
 
 ## Validation performed
 
@@ -183,13 +233,14 @@ All from repo root unless noted:
 
 - `pnpm format:check`, `pnpm lint`, `pnpm typecheck` — pass (18/18 turbo
   packages, including the new `@siteborne/service-runtime`).
-- `pnpm test` — 664 tests passed, 6 skipped (pre-existing live-gate opt-ins), 0
-  failed, across 53 test files including all 13 `packages/service-runtime`
+- `pnpm test` — 671 tests passed, 6 skipped (pre-existing live-gate opt-ins), 0
+  failed, across 54 test files including all 14 `packages/service-runtime`
   files.
 - `pnpm services-runtime:check` — format/lint/typecheck/test/
-  test:property/fixtures:verify, all pass (52 unit/integration tests + 3
-  property tests + 1 real subprocess integration test + 13-scenario live fixture
-  regression gate against a 48-row documented matrix).
+  test:property/fixtures:verify, all pass (59 unit/integration tests + 3
+  property tests + 1 real subprocess integration test + 14-scenario
+  executed_by_script fixture regression gate — including 4 with real
+  cryptographic receipt verification — against a 55-row documented matrix).
 - `pnpm verification:check` — unaffected by the SUN-0600 integration beyond the
   disclosed `policy_id` fix; 76/76 tests, 5/5 fixtures, 3/3 properties.
 - `pnpm pcc:generate:check`, `services:generate:check`, `openapi:generate:check`

@@ -13,7 +13,7 @@ import type {
   ArtifactStore,
   AuditEventSink as AdapterAuditEventSink,
 } from '@siteborne/provider-adapters';
-import type { VerificationMode } from '@siteborne/verification';
+import type { VerificationMode, VerificationReceipt } from '@siteborne/verification';
 
 /** The four frozen v1 service IDs this package implements. */
 export type ServiceId =
@@ -77,6 +77,27 @@ export interface ServiceExecutionResult<TOutput = unknown> {
   output_hash?: string;
   pcc_hash?: string;
   receipt_id?: string;
+  /** The full signed receipt — present whenever the mesh actually ran
+   * (i.e. every result past input validation), regardless of decision, so
+   * even a failed/quarantined verdict has a verifiable signed record.
+   * Callers needing real cryptographic proof (not just receipt_id
+   * pattern-matching) pass this to @siteborne/verification's
+   * verifyReceipt() directly. */
+  receipt?: VerificationReceipt;
+  /** A summary of the mesh's verification block — present whenever
+   * verifyAndSign ran. Mirrors the frozen PCC `verification` shape's
+   * scored/decision fields (not the full findings list). */
+  verification?: {
+    schema_valid: boolean;
+    material_claims_supported: boolean;
+    evidence_accessibility: number;
+    freshness: number;
+    completeness: number;
+    cross_source_agreement: number;
+    provenance_valid: boolean;
+    decision: 'pass' | 'conditional' | 'fail' | 'quarantined';
+    score: number;
+  };
   warnings: string[];
   limitations: string[];
   completeness?: {

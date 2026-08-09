@@ -11,7 +11,12 @@ import type { PublicHttpAdapter } from '@siteborne/provider-adapters';
 import type { FederalRegisterAdapter } from '@siteborne/provider-adapters';
 import { buildClaim, buildVerifiedAbsentClaim } from '../../claims/builder';
 import { buildEvidence } from '../../evidence/builder';
-import { buildDraftDocument, defaultProvenance, verifyAndSign } from '../../pcc';
+import {
+  buildDraftDocument,
+  defaultProvenance,
+  verifyAndSign,
+  toVerificationSummary,
+} from '../../pcc';
 import type { Signer } from '@siteborne/verification';
 import type { LocalService, ServiceExecutionContext, ServiceExecutionResult } from '../../types';
 import { buildAdapterContext } from '../adapter-context';
@@ -460,6 +465,8 @@ export class CompanyEvidenceGraphService
       output_hash: signed.outputHash,
       pcc_hash: signed.outputHash,
       receipt_id: signed.receiptId,
+      receipt: signed.receipt,
+      verification: toVerificationSummary(signed.verdict),
       warnings: [],
       limitations,
       completeness: {

@@ -15,7 +15,12 @@ import addFormats from 'ajv-formats';
 import type { ReproductionInput, Signer } from '@siteborne/verification';
 import { buildClaim } from '../../claims/builder';
 import { buildEvidence } from '../../evidence/builder';
-import { buildDraftDocument, defaultProvenance, verifyAndSign } from '../../pcc';
+import {
+  buildDraftDocument,
+  defaultProvenance,
+  verifyAndSign,
+  toVerificationSummary,
+} from '../../pcc';
 import type { PccClaim, PccEvidenceItem } from '../../pcc/document-types';
 import type { LocalService, ServiceExecutionContext, ServiceExecutionResult } from '../../types';
 import { evaluateClaim } from './claim-evaluation';
@@ -222,6 +227,8 @@ export class VerifyAgentOutputService
       output_hash: signed.outputHash,
       pcc_hash: signed.outputHash,
       receipt_id: signed.receiptId,
+      receipt: signed.receipt,
+      verification: toVerificationSummary(signed.verdict),
       warnings: [],
       limitations: unverifiableAssertions,
       completeness: {

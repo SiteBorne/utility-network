@@ -761,7 +761,8 @@ tasks:
       - 'verify_agent_output.v1: composes SUN-0500 runMesh/issueReceipt directly for standard and independent_reproduction modes; real schema_valid/hash_match deterministic checks; local_fixture_verified'
       - 'Verified-absence proven end-to-end through the real service pipeline (service input -> adapter observation -> PCC builder -> mesh -> receipt -> schema validation), scoped bounded-absence claims, all 4 disqualifying result classes proven to never produce absence'
       - 'Shared PCC builder + verify-and-sign step used identically by all four services; ServiceRegistry enforces unique IDs and production_enabled: false; dispatcher fails closed on exception/timeout'
-      - '664 total root tests (52 service-runtime unit/integration + 3 property + 1 real subprocess + 13-scenario live fixture regression gate against a 48-row documented matrix), 0 network calls in default test path, full root pnpm check passes'
+      - '671 total root tests (59 service-runtime unit/integration + 3 property + 1 real subprocess + 14-scenario executed_by_script fixture regression gate, 4 with real cryptographic receipt verification, against a 55-row documented matrix), 0 network calls in default test path, full root pnpm check passes'
+      - 'Stale evidence proven distinct from verified absence end-to-end (offset-clock injection, no sleeping/clock mutation), freshness threshold regression, recent_filings dispatch regression, and real Ed25519 receipt verification (not just receipt_id pattern-matching) plus tamper-detection, all through the actual company_evidence_graph.v1 service pipeline'
       - 'Discovered and fixed three real defects during implementation/closure: verification.policy policy_id vs policy_hash (SUN-0500, ADR 0036, separate commit), freshness_seconds not threaded into mesh freshness_requirement_ms, recent_filings missing from IMPLEMENTED_FIELD_GROUPS'
     evidence:
       - 'docs/reports/SUN-0600-local-services-report.md'
@@ -769,7 +770,7 @@ tasks:
       - 'docs/decisions/0037-service-runtime-composition-boundary.md'
       - 'docs/decisions/0038-verified-absence-and-partial-result-policy.md'
       - 'docs/decisions/0039-underspecified-frozen-fields-and-browser-rendered-deferral.md'
-    next_action: 'Accepted, including a closure pass (commit aaba314) that added end-to-end verified-absence coverage and expanded the fixture matrix after a first-pass review found the acceptance evidence incomplete relative to the implementation. Residual, disclosed scope reductions remain in docs/reports/SUN-0600-local-services-report.md (e.g. xbrl_facts/public_repository_signals field groups, document-service tamper/limit fixtures, a literal stale-evidence service fixture) — not silently claimed as complete. SUN-0400B remains blocked_external; SUN-0700A remains the selected next dependency-safe task, not started.'
+    next_action: "Accepted, including two closure passes: aaba314 (end-to-end verified-absence coverage, expanded fixture matrix) and a second pass (stale-vs-absence end-to-end via offset-clock injection, real Ed25519 receipt cryptographic verification + tamper detection, freshness-threshold and recent_filings regressions) after review found each prior pass's acceptance evidence still incomplete relative to the implementation. Residual, disclosed scope reductions remain in docs/reports/SUN-0600-local-services-report.md (e.g. xbrl_facts/public_repository_signals field groups, document-service tamper/limit fixtures, receipt cryptographic verification for the other 3 services) — not silently claimed as complete. SUN-0400B remains blocked_external; SUN-0700A remains the selected next dependency-safe task, not started."
     blocker: null
     commit_ref: 'aaba314'
 
