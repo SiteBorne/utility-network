@@ -1,0 +1,30 @@
+{
+  "worker_result_version": "1.0.0",
+  "job_id": "ace768a5-5789-407f-9343-fcb06389155d",
+  "status": "failed",
+  "document": null,
+  "pages": [],
+  "warnings": [],
+  "limitations": [],
+  "metrics": {
+    "input_bytes": 0,
+    "page_count": 0,
+    "native_pages": 0,
+    "ocr_pages": 0,
+    "table_heavy_pages": 0,
+    "elapsed_ms": 0.04783400800079107,
+    "extracted_characters": 0,
+    "table_count": 0,
+    "table_cell_count": 0,
+    "output_bytes": 0,
+    "warnings_count": 0
+  },
+  "provenance": [],
+  "failure": {
+    "code": "malformed_document",
+    "message": "The document could not be parsed.",
+    "retryable": false,
+    "stage": "inspection",
+    "partial_result_available": false
+  }
+}

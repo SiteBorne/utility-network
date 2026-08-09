@@ -1,0 +1,102 @@
+# Service fixture matrix (SUN-0600).
+#
+# Each row documents a scenario exercised by scripts/verify-fixtures.ts.
+# Because these services depend on injected adapters/worker bridges (not
+# pure JSON-in/JSON-out functions like the SUN-0500 mesh), the actual
+# scenario *execution* lives in TypeScript
+# (scripts/verify-fixtures.ts::SCENARIOS), not as data-driven YAML alone —
+# this file is the traceable, human-readable index cross-checked against
+# that scenario list by the script itself (fails if a scenario_id here has
+# no matching TS scenario, or vice versa).
+
+fixtures:
+  - scenario_id: company-identity-exact-cik-sec-submissions
+    service_id: company_evidence_graph.v1
+    category: identity_and_source_composition
+    dependency_fixtures: [packages/provider-adapters/fixtures/sec-edgar/submissions-success.json]
+    expected_result_class: success
+    expected_receipt_valid: true
+    test_reference: src/services/company-evidence/service.test.ts
+
+  - scenario_id: company-no-identity-signal-rejected
+    service_id: company_evidence_graph.v1
+    category: input_validation
+    dependency_fixtures: []
+    expected_result_class: rejected
+    expected_receipt_valid: false
+    test_reference: src/services/company-evidence/service.test.ts
+
+  - scenario_id: company-unimplemented-field-group-truthful-unavailable
+    service_id: company_evidence_graph.v1
+    category: partial_completeness
+    dependency_fixtures: []
+    expected_result_class: partial
+    expected_receipt_valid: true
+    test_reference: src/services/company-evidence/service.test.ts
+
+  - scenario_id: web-direct-mode-success
+    service_id: web_context_verified.v1
+    category: direct_http_composition
+    dependency_fixtures: []
+    expected_result_class: success
+    expected_receipt_valid: true
+    test_reference: src/services/web-context/service.test.ts
+
+  - scenario_id: web-rendered-mode-dependency-unavailable
+    service_id: web_context_verified.v1
+    category: deferred_capability
+    dependency_fixtures: []
+    expected_result_class: dependency_unavailable
+    expected_receipt_valid: false
+    test_reference: src/services/web-context/service.test.ts
+
+  - scenario_id: web-confirmed-injection-quarantined
+    service_id: web_context_verified.v1
+    category: prompt_injection
+    dependency_fixtures: []
+    expected_result_class: internal_verification_failed
+    expected_receipt_valid: false
+    test_reference: src/services/web-context/service.test.ts
+
+  - scenario_id: document-native-text-success
+    service_id: document_evidence_json.v1
+    category: sun0400a_composition
+    dependency_fixtures:
+      [packages/service-runtime/fixtures/document-worker-results/native-text-success.json]
+    expected_result_class: success
+    expected_receipt_valid: true
+    test_reference: src/services/document-evidence/service.test.ts
+
+  - scenario_id: document-table-heavy-success
+    service_id: document_evidence_json.v1
+    category: sun0400a_composition
+    dependency_fixtures:
+      [packages/service-runtime/fixtures/document-worker-results/multi-table-success.json]
+    expected_result_class: success
+    expected_receipt_valid: true
+    test_reference: src/services/document-evidence/service.test.ts
+
+  - scenario_id: document-malformed-permanent-failure
+    service_id: document_evidence_json.v1
+    category: worker_failure_taxonomy
+    dependency_fixtures:
+      [packages/service-runtime/fixtures/document-worker-results/malformed-failure.json]
+    expected_result_class: permanent_failure
+    expected_receipt_valid: false
+    test_reference: src/services/document-evidence/service.test.ts
+
+  - scenario_id: agent-standard-pass
+    service_id: verify_agent_output.v1
+    category: sun0500_composition
+    dependency_fixtures: []
+    expected_result_class: success
+    expected_receipt_valid: true
+    test_reference: src/services/agent-verification/service.test.ts
+
+  - scenario_id: agent-independent-reproduction-mismatch
+    service_id: verify_agent_output.v1
+    category: independent_reproduction
+    dependency_fixtures: []
+    expected_result_class: internal_verification_failed
+    expected_receipt_valid: false
+    test_reference: src/services/agent-verification/service.test.ts

@@ -33,6 +33,7 @@ export default defineConfig({
       '@siteborne/pcc-schema': path.resolve(__dirname, 'packages/pcc-schema/src'),
       '@siteborne/provider-adapters': path.resolve(__dirname, 'packages/provider-adapters/src'),
       '@siteborne/verification': path.resolve(__dirname, 'packages/verification/src'),
+      '@siteborne/service-runtime': path.resolve(__dirname, 'packages/service-runtime/src'),
       '@siteborne/pricing': path.resolve(__dirname, 'packages/pricing/src'),
       '@siteborne/policy': path.resolve(__dirname, 'packages/policy/src'),
       '@siteborne/test-fixtures': path.resolve(__dirname, 'packages/test-fixtures/src'),

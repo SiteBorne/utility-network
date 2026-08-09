@@ -59,6 +59,9 @@ jobs:
       - name: Verification mesh checks (format, lint, typecheck, tests, property tests, fixtures, policy)
         run: pnpm verification:check
 
+      - name: Service runtime checks (format, lint, typecheck, tests, property tests, fixtures)
+        run: pnpm services-runtime:check
+
   python-validate:
     name: Validate (Python)
     runs-on: ubuntu-latest

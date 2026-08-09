@@ -21,6 +21,7 @@
       "@siteborne/pcc-schema": ["packages/pcc-schema/src"],
       "@siteborne/provider-adapters": ["packages/provider-adapters/src"],
       "@siteborne/verification": ["packages/verification/src"],
+      "@siteborne/service-runtime": ["packages/service-runtime/src"],
       "@siteborne/knowledge-graph": ["packages/knowledge-graph/src"],
       "@siteborne/protocol-x402": ["packages/protocol-x402/src"],
       "@siteborne/protocol-mcp": ["packages/protocol-mcp/src"],

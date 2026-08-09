@@ -1,0 +1,73 @@
+{
+  "worker_result_version": "1.0.0",
+  "job_id": "da8d9c6e-13d2-45ee-b41a-c630ed5cbe82",
+  "status": "success",
+  "document": {
+    "sha256": "sha256:af5f34786d9173fdff66be623b93060226aeaa79851a627b85177e3e2d323599",
+    "byte_length": 24265,
+    "media_type": "application/pdf",
+    "page_count": 1,
+    "processing_timestamp": "2026-08-08T20:12:35.967664+00:00",
+    "extraction_engine": "pdfplumber+pypdf",
+    "extraction_engine_version": "0.11+6.0",
+    "ocr_engine": "rapidocr",
+    "ocr_engine_version": "unknown",
+    "processing_policy_version": "1.0.0"
+  },
+  "pages": [
+    {
+      "page_number": 1,
+      "page_hash": "sha256:18d28c1ec63825517aee62c9253140152fe4f42d41ca1f0e19d6333f400015b6",
+      "classification": "scanned_image",
+      "classification_reasons": ["image_coverage=1.000 >= 0.6, char_count=0 < 20"],
+      "extraction_method": "ocr",
+      "normalized_text": "SUN-0400A Fixture: Scanned Page OCR Text",
+      "text_blocks": [
+        {
+          "ordinal": 0,
+          "text": "SUN-0400A Fixture: Scanned Page OCR Text",
+          "bbox": null,
+          "locator": {
+            "locator_type": "ocr_text",
+            "page": 1,
+            "ordinal": 0,
+            "quote": "SUN-0400A Fixture: Scanned Page OCR Text",
+            "bbox": null,
+            "table_ordinal": null,
+            "row": null,
+            "column": null
+          }
+        }
+      ],
+      "tables": [],
+      "ocr_used": true,
+      "ocr_result": {
+        "engine": "rapidocr",
+        "engine_version": "unknown",
+        "language": "en",
+        "mean_confidence": 0.99025
+      },
+      "truncated": false,
+      "width": 612.0,
+      "height": 792.0,
+      "warnings": []
+    }
+  ],
+  "warnings": [],
+  "limitations": [],
+  "metrics": {
+    "input_bytes": 24265,
+    "page_count": 1,
+    "native_pages": 0,
+    "ocr_pages": 1,
+    "table_heavy_pages": 0,
+    "elapsed_ms": 1912.113541009603,
+    "extracted_characters": 40,
+    "table_count": 0,
+    "table_cell_count": 0,
+    "output_bytes": 40,
+    "warnings_count": 0
+  },
+  "provenance": ["artifact:local/scanned_page.pdf", "engine:pdfplumber+pypdf:0.11+6.0"],
+  "failure": null
+}

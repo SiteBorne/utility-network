@@ -1,0 +1,132 @@
+{
+  "worker_result_version": "1.0.0",
+  "job_id": "56a80f22-8fe8-46c8-972a-1fb9d2f8361d",
+  "status": "success",
+  "document": {
+    "sha256": "sha256:b5ff030b293b177e59290fe4576a49e5cda20375a12250337a437d6aac6cfb9c",
+    "byte_length": 1812,
+    "media_type": "application/pdf",
+    "page_count": 1,
+    "processing_timestamp": "2026-08-08T20:12:33.869887+00:00",
+    "extraction_engine": "pdfplumber+pypdf",
+    "extraction_engine_version": "0.11+6.0",
+    "ocr_engine": null,
+    "ocr_engine_version": null,
+    "processing_policy_version": "1.0.0"
+  },
+  "pages": [
+    {
+      "page_number": 1,
+      "page_hash": "sha256:35c11debb893fd12cf9f8010730db95a5d9fa708fa76a8c1adf807c18b0ae428",
+      "classification": "table_heavy",
+      "classification_reasons": ["table_count=2 dominates page content"],
+      "extraction_method": "native",
+      "normalized_text": "Table One\nA B\n1 2\nTable Two\nX Y Z\na b c\nd e f",
+      "text_blocks": [
+        {
+          "ordinal": 0,
+          "text": "Table One\nA B\n1 2\nTable Two\nX Y Z\na b c\nd e f",
+          "bbox": null,
+          "locator": {
+            "locator_type": "native_text",
+            "page": 1,
+            "ordinal": 0,
+            "quote": "Table One\nA B\n1 2\nTable Two\nX Y Z\na b c\nd e f",
+            "bbox": null,
+            "table_ordinal": null,
+            "row": null,
+            "column": null
+          }
+        }
+      ],
+      "tables": [
+        {
+          "page": 1,
+          "table_ordinal": 0,
+          "headers": ["A", "B"],
+          "rows": [["1", "2"]],
+          "bbox": {
+            "left": 287.33,
+            "top": 102.0,
+            "right": 324.66999999999996,
+            "bottom": 138.0
+          },
+          "extraction_method": "native",
+          "table_hash": "sha256:8a5e1a84a39032e469ca6de4dac51ae948412c4e9cff461bbff39bffb9c3c300",
+          "truncated": false,
+          "locator": {
+            "locator_type": "table_cell",
+            "page": 1,
+            "ordinal": 0,
+            "quote": "A",
+            "bbox": {
+              "left": 287.33,
+              "top": 102.0,
+              "right": 324.66999999999996,
+              "bottom": 138.0
+            },
+            "table_ordinal": 0,
+            "row": 0,
+            "column": 0
+          }
+        },
+        {
+          "page": 1,
+          "table_ordinal": 1,
+          "headers": ["X", "Y", "Z"],
+          "rows": [
+            ["a", "b", "c"],
+            ["d", "e", "f"]
+          ],
+          "bbox": {
+            "left": 278.275,
+            "top": 174.0,
+            "right": 333.72499999999997,
+            "bottom": 228.0
+          },
+          "extraction_method": "native",
+          "table_hash": "sha256:0cc91c65109b169169c4e3d39f5bac7fe7298ea1285525f560a53a7215c9e669",
+          "truncated": false,
+          "locator": {
+            "locator_type": "table_cell",
+            "page": 1,
+            "ordinal": 1,
+            "quote": "X",
+            "bbox": {
+              "left": 278.275,
+              "top": 174.0,
+              "right": 333.72499999999997,
+              "bottom": 228.0
+            },
+            "table_ordinal": 1,
+            "row": 0,
+            "column": 0
+          }
+        }
+      ],
+      "ocr_used": false,
+      "ocr_result": null,
+      "truncated": false,
+      "width": 612.0,
+      "height": 792.0,
+      "warnings": []
+    }
+  ],
+  "warnings": [],
+  "limitations": [],
+  "metrics": {
+    "input_bytes": 1812,
+    "page_count": 1,
+    "native_pages": 0,
+    "ocr_pages": 0,
+    "table_heavy_pages": 1,
+    "elapsed_ms": 5.127707991050556,
+    "extracted_characters": 45,
+    "table_count": 2,
+    "table_cell_count": 8,
+    "output_bytes": 45,
+    "warnings_count": 0
+  },
+  "provenance": ["artifact:local/multi_table.pdf", "engine:pdfplumber+pypdf:0.11+6.0"],
+  "failure": null
+}

@@ -1,0 +1,30 @@
+{
+  "worker_result_version": "1.0.0",
+  "job_id": "1a5c63f6-d8b9-4362-a4a7-82f43f5bb0b5",
+  "status": "failed",
+  "document": null,
+  "pages": [],
+  "warnings": [],
+  "limitations": [],
+  "metrics": {
+    "input_bytes": 0,
+    "page_count": 0,
+    "native_pages": 0,
+    "ocr_pages": 0,
+    "table_heavy_pages": 0,
+    "elapsed_ms": 1.6061670030467212,
+    "extracted_characters": 0,
+    "table_count": 0,
+    "table_cell_count": 0,
+    "output_bytes": 0,
+    "warnings_count": 0
+  },
+  "provenance": [],
+  "failure": {
+    "code": "encrypted_document",
+    "message": "The document is encrypted and cannot be processed without authorized credentials.",
+    "retryable": false,
+    "stage": "inspection",
+    "partial_result_available": false
+  }
+}
