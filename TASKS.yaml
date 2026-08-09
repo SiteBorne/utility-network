@@ -803,7 +803,8 @@ tasks:
     rubric_target: 85
     acceptance_tests:
       - 'CDP facilitator verify/settle works against a live environment'
-      - 'End-to-end payment settles for at least one real transaction'
+      - 'Exact payment flow settles end-to-end against a live facilitator for at least one real transaction'
+      - 'Upto payment flow settles end-to-end against a live facilitator for at least one real transaction'
     evidence: []
     next_action: 'Blocked until CDP credentials/wallet and a live settlement environment are available. Do not execute against this task before then.'
     blocker: 'Requires CDP credentials and a wallet (blocked_external)'
