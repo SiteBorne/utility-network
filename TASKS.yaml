@@ -755,22 +755,23 @@ tasks:
       - 'SUN-0500'
     rubric_target: 85
     acceptance_tests:
-      - 'company_evidence_graph.v1: composes real SecSubmissionsAdapter/PublicHttpAdapter calls for identity/sec_submissions/recent_filings/website_evidence; unimplemented field groups reported unavailable, never fabricated; local_fixture_verified'
+      - 'company_evidence_graph.v1: composes real SecSubmissionsAdapter/PublicHttpAdapter/FederalRegisterAdapter calls for identity/sec_submissions/recent_filings/website_evidence/regulatory_mentions; unimplemented field groups reported unavailable, never fabricated; local_fixture_verified'
       - 'web_context_verified.v1: composes real PublicHttpAdapter for direct mode; rendered mode truthfully dependency_unavailable (zero network calls), never faked via direct HTTP; local_fixture_verified'
       - 'document_evidence_json.v1: composes SUN-0400A via DocumentWorkerBridge (real SubprocessDocumentWorkerBridge + one real gated subprocess integration test; fixture tests replay captured real WorkerResult JSON); local_fixture_verified'
       - 'verify_agent_output.v1: composes SUN-0500 runMesh/issueReceipt directly for standard and independent_reproduction modes; real schema_valid/hash_match deterministic checks; local_fixture_verified'
+      - 'Verified-absence proven end-to-end through the real service pipeline (service input -> adapter observation -> PCC builder -> mesh -> receipt -> schema validation), scoped bounded-absence claims, all 4 disqualifying result classes proven to never produce absence'
       - 'Shared PCC builder + verify-and-sign step used identically by all four services; ServiceRegistry enforces unique IDs and production_enabled: false; dispatcher fails closed on exception/timeout'
-      - '103 total tests (45 unit/integration + 3 property + 1 real subprocess + 11-scenario fixture-matrix regression gate), 0 network calls in default test path, full root pnpm check passes'
-      - 'Discovered and fixed a genuine SUN-0500 compatibility defect (verification.policy policy_id vs policy_hash) as a separate, disclosed fix commit before this one — see ADR 0036'
+      - '664 total root tests (52 service-runtime unit/integration + 3 property + 1 real subprocess + 13-scenario live fixture regression gate against a 48-row documented matrix), 0 network calls in default test path, full root pnpm check passes'
+      - 'Discovered and fixed three real defects during implementation/closure: verification.policy policy_id vs policy_hash (SUN-0500, ADR 0036, separate commit), freshness_seconds not threaded into mesh freshness_requirement_ms, recent_filings missing from IMPLEMENTED_FIELD_GROUPS'
     evidence:
       - 'docs/reports/SUN-0600-local-services-report.md'
       - 'docs/decisions/0036-mesh-policy-id-vs-policy-hash-fix.md'
       - 'docs/decisions/0037-service-runtime-composition-boundary.md'
       - 'docs/decisions/0038-verified-absence-and-partial-result-policy.md'
       - 'docs/decisions/0039-underspecified-frozen-fields-and-browser-rendered-deferral.md'
-    next_action: 'Accepted. Scope reductions relative to the full source directive are disclosed in docs/reports/SUN-0600-local-services-report.md (3 of 7 company field groups implemented; verified_absent claim construction unit-tested but not yet exercised end-to-end by any service; an 11-scenario fixture matrix rather than the full ~70-scenario enumeration) — not silently claimed as complete. SUN-0400B remains blocked_external; select the next dependency-safe, credential-independent task after SUN-0600 from TASKS.yaml.'
+    next_action: 'Accepted, including a closure pass (commit aaba314) that added end-to-end verified-absence coverage and expanded the fixture matrix after a first-pass review found the acceptance evidence incomplete relative to the implementation. Residual, disclosed scope reductions remain in docs/reports/SUN-0600-local-services-report.md (e.g. xbrl_facts/public_repository_signals field groups, document-service tamper/limit fixtures, a literal stale-evidence service fixture) — not silently claimed as complete. SUN-0400B remains blocked_external; SUN-0700A remains the selected next dependency-safe task, not started.'
     blocker: null
-    commit_ref: '8cae972'
+    commit_ref: 'aaba314'
 
   - id: 'SUN-0700A'
     title: 'x402 protocol logic (exact + upto payment construction, replay protection, Bazaar metadata) — credential-independent'
