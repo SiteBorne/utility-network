@@ -13,7 +13,7 @@ import { buildStandardVerifiers } from '../src/index';
 import type { CandidateResult } from '../src/types';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const POLICY_HASH = 'sha256:' + '0'.repeat(64);
+const POLICY_ID = 'pol_' + '0'.repeat(24);
 const ITERATIONS = 200;
 
 function percentile(sorted: number[], p: number): number {
@@ -30,7 +30,7 @@ async function main(): Promise<void> {
   for (let i = 0; i < ITERATIONS; i++) {
     const context = buildContext({ clock: createTestClock(), mode: 'standard' });
     const start = performance.now();
-    await runMesh(buildStandardVerifiers(), candidate, context, { policyHash: POLICY_HASH });
+    await runMesh(buildStandardVerifiers(), candidate, context, { policyId: POLICY_ID });
     durationsMs.push(performance.now() - start);
   }
 

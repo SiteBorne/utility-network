@@ -16,7 +16,7 @@ import type { CandidateResult, VerificationDecision } from '../src/types';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FIXTURES_DIR = join(__dirname, '..', 'fixtures');
-const POLICY_HASH = 'sha256:' + '0'.repeat(64);
+const POLICY_ID = 'pol_' + '0'.repeat(24);
 
 interface MatrixRow {
   id: string;
@@ -39,7 +39,7 @@ async function main(): Promise<void> {
     ) as CandidateResult;
     const context = buildContext({ clock: createTestClock(), mode: 'standard' });
     const verdict = await runMesh(buildStandardVerifiers(), candidate, context, {
-      policyHash: POLICY_HASH,
+      policyId: POLICY_ID,
     });
 
     if (verdict.decision !== row.expected_decision) {

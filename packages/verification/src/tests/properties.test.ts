@@ -11,7 +11,7 @@ import { buildContext, createTestClock } from '../context';
 import { validCandidate } from './fixtures';
 import type { Verifier, VerificationResult, VerificationStatus, Severity } from '../types';
 
-const POLICY_HASH = 'sha256:' + '0'.repeat(64);
+const POLICY_ID = 'pol_' + '0'.repeat(24);
 const VERIFIER_IDS = [
   'schema_verifier',
   'evidence_accessibility_verifier',
@@ -98,7 +98,7 @@ describe('runMesh property: non-voting fail-closed guarantee', () => {
         );
         const context = buildContext({ clock: createTestClock(), mode: 'standard' });
         const verdict = await runMesh(verifiers, validCandidate(), context, {
-          policyHash: POLICY_HASH,
+          policyId: POLICY_ID,
         });
 
         const anyBlockingFail = outcomes.some(
@@ -131,7 +131,7 @@ describe('runMesh property: non-voting fail-closed guarantee', () => {
         );
         const context = buildContext({ clock: createTestClock(), mode: 'standard' });
         const verdict = await runMesh(verifiers, validCandidate(), context, {
-          policyHash: POLICY_HASH,
+          policyId: POLICY_ID,
         });
         expect(verdict.decision).not.toBe('pass');
       }),

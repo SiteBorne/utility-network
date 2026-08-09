@@ -150,7 +150,11 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
 }
 
 export interface MeshOptions {
-  policyHash: string;
+  /** The frozen PCC `verification.policy` field is a `policy_id`
+   * (`^pol_[a-z0-9]{24}$`), not a hash — see ADR 0036. Callers that also
+   * need a policy *hash* for receipt binding pass that separately via
+   * VerificationContext.policy_hash (packages/verification/src/policy.ts::hashPolicy). */
+  policyId: string;
   /** Verifiers not in this set (for the active mode) are treated as
    * optional — their findings can only ever be warnings, never blocking. */
   requireAllMandatory?: boolean;
@@ -264,7 +268,7 @@ export async function runMesh(
       prompt_injection_result: { checked: true, result: injectionResult },
       deterministic_failures: deterministicFailures,
       verifier_versions: verifierVersions,
-      policy: options.policyHash,
+      policy: options.policyId,
       decision,
       score,
       failed_requirements: failedRequirements,

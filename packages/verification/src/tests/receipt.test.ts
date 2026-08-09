@@ -9,7 +9,7 @@ import { buildStandardVerifiers } from '../index';
 import { validCandidate } from './fixtures';
 import type { VerificationReceipt } from '../receipt/models';
 
-const POLICY_HASH = 'sha256:' + '0'.repeat(64);
+const POLICY_ID = 'pol_' + '0'.repeat(24);
 
 describe('Ed25519 signer', () => {
   it('signs and verifies a message', async () => {
@@ -91,7 +91,7 @@ describe('issueReceipt + verifyReceipt (end-to-end and tamper-evidence)', () => 
 
     const context = buildContext({ clock: createTestClock(), mode: 'standard' });
     const verdict = await runMesh(buildStandardVerifiers(), validCandidate(), context, {
-      policyHash: POLICY_HASH,
+      policyId: POLICY_ID,
     });
     receipt = await issueReceipt(validCandidate(), context, verdict, signer);
   });
@@ -154,7 +154,7 @@ describe('issueReceipt + verifyReceipt (end-to-end and tamper-evidence)', () => 
       request_id: 'req_fixedforidentitytest',
     });
     const verdict = await runMesh(buildStandardVerifiers(), validCandidate(), context, {
-      policyHash: POLICY_HASH,
+      policyId: POLICY_ID,
     });
     const firstReceipt = await issueReceipt(validCandidate(), context, verdict, signer);
     const secondReceipt = await issueReceipt(validCandidate(), context, verdict, signer);
