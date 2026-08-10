@@ -20,6 +20,7 @@ import {
   PAYMENT_IDENTIFIER,
   PAYMENT_ID_MAX_LENGTH,
   PAYMENT_ID_MIN_LENGTH,
+  appendPaymentIdentifierToExtensions,
   declarePaymentIdentifierExtension,
   extractAndValidatePaymentIdentifier,
   generatePaymentId,
@@ -75,6 +76,23 @@ export function parsePaymentIdentifier(
  * package never acts as a buyer). */
 export function generateSiteborneePaymentId(prefix?: string): string {
   return generatePaymentId(prefix);
+}
+
+/** Buyer-side helper (test/fixture use only — see
+ * `generateSiteborneePaymentId`'s note above): fills in a payment
+ * identifier on a `PaymentPayload.extensions` object that already
+ * contains the server's declared `payment-identifier` extension (echoed
+ * back from a `PaymentRequired.extensions`, per the official wire flow —
+ * `appendPaymentIdentifierToExtensions` mutates in place onto that
+ * declaration, it does not construct a fresh one). Re-exported so callers
+ * outside this package (e.g. `apps/edge-api`'s HTTP integration tests)
+ * never need their own direct `@x402/extensions/payment-identifier`
+ * dependency just to build a buyer-side test fixture. */
+export function buildBuyerPaymentIdentifierExtensions(
+  declaredExtensions: Record<string, unknown>,
+  id?: string
+): Record<string, unknown> {
+  return appendPaymentIdentifierToExtensions({ ...declaredExtensions }, id ?? generatePaymentId());
 }
 
 /** Whether a `PaymentRequired` challenge declares the payment-identifier

@@ -29,6 +29,7 @@ export * from './evidence/policy';
 export * from './evidence/verification';
 export * from './evidence/settlement';
 export * from './evidence/fixtures';
+export * from './evidence/provider';
 export * from './linkage/usage-result';
 export * from './linkage/payment-service-link';
 export * from './lifecycle/stage';

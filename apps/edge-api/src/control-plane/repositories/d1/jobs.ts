@@ -1,12 +1,12 @@
 import type { D1Database } from '@cloudflare/workers-types';
-import type { Job, JobAttempt, StateEvent } from '../types';
+import type { Job, JobAttempt, StateEvent } from '../../types';
 import type {
   JobsRepository,
   JobAttemptsRepository,
   StateEventsRepository,
   RepositoryResponse,
-} from './interfaces';
-import { ok, err } from './interfaces';
+} from '../interfaces';
+import { ok, err } from '../interfaces';
 import {
   mapJob,
   mapJobAttempt,
@@ -64,7 +64,20 @@ export class D1JobsRepository implements JobsRepository {
       }
       return ok(job);
     } catch (e) {
-      return err('DATABASE_ERROR', e instanceof Error ? e.message : 'Unknown error');
+      // Real D1/Miniflare throws on a UNIQUE constraint violation rather
+      // than returning `{ success: false }` — see the identical fix in
+      // ./services.ts's create() and ADR 0045.
+      const message = e instanceof Error ? e.message : 'Unknown error';
+      if (message.includes('UNIQUE constraint')) {
+        if (message.includes('idx_jobs_idempotency_key')) {
+          return err('DUPLICATE_IDEMPOTENCY_KEY', 'Idempotency key already exists');
+        }
+        if (message.includes('idx_jobs_marketplace_external')) {
+          return err('DUPLICATE_MARKETPLACE_JOB', 'Marketplace job already exists');
+        }
+        return err('DUPLICATE_JOB', 'Job already exists');
+      }
+      return err('DATABASE_ERROR', message);
     }
   }
 

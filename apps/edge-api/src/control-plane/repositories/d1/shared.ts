@@ -11,9 +11,9 @@ import type {
   SecurityEvent,
   ServiceMetadata,
   ServiceVersion,
-} from '../types';
-import type { RepositoryResponse } from './interfaces';
-import { ok, err } from './interfaces';
+} from '../../types';
+import type { RepositoryResponse } from '../interfaces';
+import { ok, err } from '../interfaces';
 
 export interface D1Bindings {
   DB: D1Database;

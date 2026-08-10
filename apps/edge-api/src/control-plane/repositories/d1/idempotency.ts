@@ -1,7 +1,7 @@
 import type { D1Database } from '@cloudflare/workers-types';
-import type { IdempotencyRecord } from '../types';
-import type { IdempotencyRepository, RepositoryResponse } from './interfaces';
-import { ok, err } from './interfaces';
+import type { IdempotencyRecord } from '../../types';
+import type { IdempotencyRepository, RepositoryResponse } from '../interfaces';
+import { ok, err } from '../interfaces';
 import { mapIdempotencyRecord, toSingleRepositoryResponse } from './shared';
 
 export class D1IdempotencyRepository implements IdempotencyRepository {

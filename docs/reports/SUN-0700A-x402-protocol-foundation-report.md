@@ -1,4 +1,118 @@
-# SUN-0700A — Checkpoints 2, 3 & 4: Upto Authorization, Payment Lifecycle Evidence, and Bazaar Discovery
+# SUN-0700A — Checkpoints 2 through 5: Upto Authorization, Payment Lifecycle Evidence, Bazaar Discovery, and the HTTP Vertical Slice
+
+## Checkpoint 5: Real HTTP Vertical Slice + Final SUN-0700A Acceptance
+
+Builds on checkpoints 1-4 (`0256f34`, `8ac329f`, `e6e2fc4`, `c518106`,
+`e4cd038`). This is the final credential-independent SUN-0700A checkpoint. No
+facilitator was called, no wallet was configured, no chain RPC occurred, no real
+payment was settled, and no revenue exists from this checkpoint.
+
+### What was built
+
+`apps/edge-api/src/control-plane/routes/x402-service.ts`'s
+`createX402ServiceRoute` — one reusable route boundary (directive §4), never
+four unrelated handlers — wires:
+
+- Input validation against the frozen contract schema (Bazaar's bundled schemas,
+  checkpoint 4).
+- Quote/requirement construction and persistence (`X402QuoteRepository`,
+  migration `0004_x402_quotes.sql` — a new table, not the pre-existing but
+  incompatible `payment_quotes` table; see
+  [ADR 0051](../decisions/0051-http-vertical-slice-architecture.md)).
+- The 402 challenge, PAYMENT-SIGNATURE decoding, Payment-Identifier acquisition
+  against real D1 (`D1PaymentAttemptRepository`, checkpoint 2 closure).
+- The verification/settlement evidence gates (checkpoint 3) via a new
+  `PaymentEvidenceProvider` seam
+  (`packages/protocol-x402/src/evidence/provider.ts`) —
+  `FixturePaymentEvidenceProvider` is the only implementation;
+  `resolvePaymentEvidenceProvider('production', ...)` always throws, regardless
+  of what provider a caller supplies.
+- The existing `JobState` lifecycle (SUN-0200) — one logical `jobs` row per
+  first-seen payment identifier (used as `idempotency_key`), driven through the
+  real `AllowedTransitions` graph via `createStateEvent` — never a second state
+  machine.
+- `PaymentServiceLink` construction (checkpoint 3) and retry reconstruction via
+  a new `X402ServiceResultRepository` (same migration) — never a process-local
+  cache.
+- The PAYMENT-RESPONSE.
+
+`apps/edge-api/src/control-plane/routes/paid-services.ts` wires all four frozen
+services onto it at their real accepted OpenAPI paths
+(`/v1/company/evidence-graph`, `/v1/web/context`, `/v1/document/evidence-json`,
+`/v1/verify/agent-output`), using the exact fixture data
+`packages/service-runtime/scripts/verify-fixtures.ts` already uses for its own
+accepted scenarios. Mounted in `apps/edge-api/src/index.ts` behind an explicit,
+additive `PAID_ROUTES_ENABLED === 'true'` gate (unset everywhere today — `/v1/*`
+is a plain 404 by default).
+
+`@x402/hono` was inspected (package pulled and its types read directly) and
+**not used** — every entry point requires a `FacilitatorClient` object and
+defaults to syncing with a facilitator on startup, which is incompatible with a
+credential-independent checkpoint. See ADR 0051.
+
+### Two real pre-existing defects this checkpoint's D1 integration surfaced and fixed
+
+Directive-consistent with the checkpoint-2-closure precedent ("exactly the class
+of defect an in-memory-only proof cannot catch") — both were in SUN-0200-era
+code that had never been exercised by any real loader/typechecker before now
+(edge-api's own `typecheck` script is a documented no-op):
+
+1. Every file in `apps/edge-api/src/control-plane/repositories/d1/` imported
+   `../interfaces`/`../types` one directory level too shallow — fixed across all
+   seven affected files.
+2. `D1ServicesRepository.create` and `D1JobsRepository.create` only detected a
+   UNIQUE-constraint violation on the `result.success === false` path, but real
+   D1/Miniflare throws instead (the same defect class ADR 0045 already fixed for
+   `D1PaymentAttemptRepository`) — fixed identically in both `catch` blocks.
+
+### Results
+
+All 28 tests in `apps/edge-api/tests/x402-service-route.test.ts` pass against
+real D1/Miniflare (never the in-memory repository), plus 3 in
+`apps/edge-api/tests/paid-routes-mounting.test.ts` and 5 in
+`packages/protocol-x402/src/evidence/provider.test.ts`. Coverage includes:
+missing-payment 402 for all four services; PAYMENT-REQUIRED/ PAYMENT-SIGNATURE
+codec round-trips; exact and upto synthetic 402→pay→success lifecycles;
+`duplicate_same`/`duplicate_conflict`/ `already_consumed` (binding-checked — a
+consumed identifier reused with a different binding is rejected `409`, never
+returns the original result); 20-way concurrent same-binding requests (exactly
+one execution); 10-way concurrent conflicting-binding requests (no cross-leaked
+result); D1 state surviving a brand-new app/repository instance; an `upto`
+executor fabricating an over-authorization actual amount (rejected,
+`authorization_exceeded`, never silently clipped); a Bazaar (checkpoint 4)
+discovery declaration's `resourceUrl` proven to match the real mounted route,
+then driving a full 402→pay→success cycle; the production-disabled gate (both
+`evidenceMode: 'production'` at route-construction time and
+`PAID_ROUTES_ENABLED` unset at the app-mounting level); 8 adversarial
+malformed-request cases; 3 bounded HTTP-layer property tests; and a no-network
+proof extended over the whole HTTP flow.
+
+### SUN-0700A original-criteria audit (directive §37)
+
+The original, unsplit SUN-0700 criteria (exact flow, upto flow, CDP facilitator
+verify/settle, Bazaar metadata, replay rejection) were split at task-creation
+time into SUN-0700A (credential-independent halves + Bazaar + replay) and
+SUN-0700B (live CDP settlement). That split remains truthful after this
+checkpoint:
+
+| Original criterion                  | Where it lives now                   | Status                                                                                                                                                     |
+| ----------------------------------- | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Exact payment flow works end-to-end | SUN-0700A (checkpoints 1, 5)         | Credential-independent half complete: real quote→402→pay→structural-verify→**synthetic**-verify→execute→**synthetic**-settle→response, over real HTTP + D1 |
+| Upto payment flow works end-to-end  | SUN-0700A (checkpoints 2-3, 5)       | Same, plus the authorization/usage-result split and the over-authorization rejection path                                                                  |
+| CDP facilitator verify/settle works | **SUN-0700B exclusively**            | Not started; no facilitator client, wallet, or CDP credential exists anywhere in SUN-0700A                                                                 |
+| Bazaar discovery metadata included  | SUN-0700A (checkpoint 4)             | Complete: local declaration + validation for all four services, now proven to match the real mounted route (checkpoint 5)                                  |
+| Replay attacks rejected             | SUN-0700A (checkpoints 2 closure, 5) | Complete: real D1 `payment_attempts`, now proven through the real HTTP boundary including concurrent and conflicting-binding cases                         |
+
+No B-class criterion (live CDP verify/settle) is claimed satisfied anywhere in
+this document.
+
+### Validation
+
+Full root `pnpm check` passes (`pnpm test`: 1157 passed, 6 skipped, 93 files —
+up from 1121/6/90 at checkpoint 4). `pnpm migrations:verify`, `pnpm d1:test`,
+`pnpm control-plane:check`, `pnpm x402:check`, Python suites,
+governance/state/tasks validation, and `pnpm secrets:scan` (~697 MB scanned) all
+pass. Tree clean at commit time.
 
 ## Checkpoint 4: Bazaar Discovery Metadata + Signed Offers & Receipts Decision
 

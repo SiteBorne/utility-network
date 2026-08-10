@@ -10,7 +10,7 @@ import type {
   SecurityRepository,
   ServicesRepository,
   ServiceVersionsRepository,
-} from './interfaces';
+} from '../interfaces';
 import type { D1Bindings, Clock } from './shared';
 import { createInMemoryRepositories } from '../in-memory';
 

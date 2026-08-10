@@ -18,6 +18,14 @@ export interface Env {
   MODAL_TOKEN_ID: string;
   MODAL_TOKEN_SECRET: string;
   SENTRY_DSN: string;
+  /** SUN-0700A checkpoint 5 (directive §6): explicit, additive config
+   * gate for mounting the local paid-service routes at all. Optional and
+   * additive so existing Env-shaped fixtures/tests are unaffected.
+   * Absent/unset (the default everywhere today) means the routes are not
+   * mounted — no default configuration can accidentally expose them.
+   * This is independent of, and does not itself enable, real payment
+   * execution: `production_enabled` remains `false` regardless. */
+  PAID_ROUTES_ENABLED?: string;
 }
 
 export interface ControlPlaneConfig {

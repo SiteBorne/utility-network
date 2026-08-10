@@ -1,11 +1,11 @@
 import type { D1Database } from '@cloudflare/workers-types';
-import type { ServiceMetadata, ServiceVersion } from '../types';
+import type { ServiceMetadata, ServiceVersion } from '../../types';
 import type {
   ServicesRepository,
   ServiceVersionsRepository,
   RepositoryResponse,
-} from './interfaces';
-import { ok, err } from './interfaces';
+} from '../interfaces';
+import { ok, err } from '../interfaces';
 import {
   mapServiceMetadata,
   mapServiceVersion,
@@ -45,7 +45,17 @@ export class D1ServicesRepository implements ServicesRepository {
       }
       return ok(service);
     } catch (e) {
-      return err('DATABASE_ERROR', e instanceof Error ? e.message : 'Unknown error');
+      // Real D1/Miniflare throws a JS exception on a UNIQUE constraint
+      // violation rather than returning `{ success: false }` — the same
+      // defect class documented in ADR 0045 for
+      // D1PaymentAttemptRepository, surfaced here in SUN-0700A checkpoint
+      // 5 the first time this method was actually exercised against real
+      // D1 (no prior test ever called it).
+      const message = e instanceof Error ? e.message : 'Unknown error';
+      if (message.includes('UNIQUE constraint')) {
+        return err('DUPLICATE_SERVICE', 'Service already exists');
+      }
+      return err('DATABASE_ERROR', message);
     }
   }
 

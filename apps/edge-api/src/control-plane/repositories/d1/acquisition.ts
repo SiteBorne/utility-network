@@ -1,5 +1,5 @@
 import type { D1Database } from '@cloudflare/workers-types';
-import type { Job, JobAttempt, StateEvent, IdempotencyRecord, AuditEvent } from '../types';
+import type { Job, JobAttempt, StateEvent, IdempotencyRecord, AuditEvent } from '../../types';
 import type { Clock } from './shared';
 import { systemClock } from './shared';
 import { randomUUID } from 'crypto';

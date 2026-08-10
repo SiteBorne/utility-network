@@ -1,11 +1,11 @@
 import type { D1Database } from '@cloudflare/workers-types';
-import type { ArtifactRecord, QueueDispatch } from '../types';
+import type { ArtifactRecord, QueueDispatch } from '../../types';
 import type {
   ArtifactsRepository,
   QueueDispatchRepository,
   RepositoryResponse,
-} from './interfaces';
-import { ok, err } from './interfaces';
+} from '../interfaces';
+import { ok, err } from '../interfaces';
 import {
   mapArtifactRecord,
   mapQueueDispatch,

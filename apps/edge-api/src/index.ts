@@ -19,6 +19,7 @@ import { InMemoryArtifactStore } from './control-plane/artifacts/store';
 import { InMemoryQueueProducer } from './control-plane/queue/dispatch';
 import { QueueDispatchHandler } from './control-plane/queue/dispatch';
 import { AuditLogger } from './control-plane/audit/events';
+import { buildPaidServicesApp } from './control-plane/routes/paid-services';
 import type { Env } from './control-plane/config/env';
 
 export { ControlPlaneConfig };
@@ -65,6 +66,45 @@ app.route('/catalog', catalogRoute);
 app.route('/services', serviceMetadataRoute);
 app.route('/schemas', schemasRoute);
 app.route('/', openapiRoute);
+
+/**
+ * SUN-0700A checkpoint 5's local x402 paid-service routes (directive §6:
+ * "no default configuration may accidentally enable payment execution").
+ * Mounted ONLY when `PAID_ROUTES_ENABLED === 'true'` AND a real D1
+ * binding is present — both absent by default in every environment
+ * today, so `/v1/*` is a plain 404 unless explicitly opted in.
+ * `evidenceMode` is hardcoded `'fixture'` here (never `'production'` —
+ * `resolvePaymentEvidenceProvider` has no production provider to satisfy
+ * that mode regardless). This gate does not itself change
+ * `production_ready`/`production_enabled`, which remain `false`
+ * everywhere else in the system.
+ */
+let cachedPaidServicesApp: Awaited<ReturnType<typeof buildPaidServicesApp>> | undefined;
+let cachedPaidServicesDb: Env['DB'] | undefined;
+
+app.all('/v1/*', async (c) => {
+  if (c.env?.PAID_ROUTES_ENABLED !== 'true') {
+    return c.notFound();
+  }
+  if (!c.env.DB) {
+    return c.json(
+      {
+        error: 'configuration_error',
+        message: 'PAID_ROUTES_ENABLED is set but no D1 database binding is configured',
+      },
+      500
+    );
+  }
+  if (!cachedPaidServicesApp || cachedPaidServicesDb !== c.env.DB) {
+    cachedPaidServicesApp = await buildPaidServicesApp({
+      db: c.env.DB,
+      evidenceMode: 'fixture',
+      payTo: c.env.SELLER_WALLET_ADDRESS || undefined,
+    });
+    cachedPaidServicesDb = c.env.DB;
+  }
+  return cachedPaidServicesApp.fetch(c.req.raw, c.env);
+});
 
 app.get('/', (c) => {
   return c.json({

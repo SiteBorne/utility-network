@@ -60,6 +60,18 @@ importers:
       '@siteborne/protocol-x402':
         specifier: workspace:*
         version: link:../../packages/protocol-x402
+      '@siteborne/provider-adapters':
+        specifier: workspace:*
+        version: link:../../packages/provider-adapters
+      '@siteborne/service-runtime':
+        specifier: workspace:*
+        version: link:../../packages/service-runtime
+      '@siteborne/verification':
+        specifier: workspace:*
+        version: link:../../packages/verification
+      ajv:
+        specifier: ^8.17.1
+        version: 8.17.1
       hono:
         specifier: ^4.5.0
         version: 4.13.0
@@ -70,6 +82,9 @@ importers:
       eslint:
         specifier: ^9.0.0
         version: 9.18.0
+      fast-check:
+        specifier: ^3.17.0
+        version: 3.23.2
       miniflare:
         specifier: 5.20260801.0-alpha
         version: 5.20260801.0-alpha

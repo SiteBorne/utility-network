@@ -18,15 +18,16 @@ upstream packages/versions this is pinned against and why the heavier
 `x402`/`@coinbase/x402` packages (and the `offer-receipt` subpath — see
 ADR 0050) were not used.
 
-## Checkpoints (all credential-independent; SUN-0700A remains `active`, not `accepted`)
+## Checkpoints (all credential-independent)
 
-| Checkpoint | Commit            | What it built                                                                                                                                                        |
-| ---------- | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1          | `0256f34`         | Core V2 types, `exact` requirements, header codecs, payload structural validation, deterministic quotes.                                                             |
-| 2          | `8ac329f`         | `upto` authorization, official Payment-Identifier extension, replay/idempotency classification (in-memory).                                                          |
-| 2 closure  | `e6e2fc4`         | Real D1-backed payment-attempt replay persistence, proving the checkpoint-2 semantics hold under real concurrency.                                                   |
-| 3          | `c518106`         | Payment lifecycle evidence gates (verification vs. settlement, never collapsed), usage-result and `PaymentServiceLink` binding, real D1 lifecycle-stage persistence. |
-| 4          | (this checkpoint) | Local Bazaar discovery metadata for all four services (mandatory); Signed Offers & Receipts evaluated and deliberately deferred (decision-gated).                    |
+| Checkpoint | Commit            | What it built                                                                                                                                                                            |
+| ---------- | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1          | `0256f34`         | Core V2 types, `exact` requirements, header codecs, payload structural validation, deterministic quotes.                                                                                 |
+| 2          | `8ac329f`         | `upto` authorization, official Payment-Identifier extension, replay/idempotency classification (in-memory).                                                                              |
+| 2 closure  | `e6e2fc4`         | Real D1-backed payment-attempt replay persistence, proving the checkpoint-2 semantics hold under real concurrency.                                                                       |
+| 3          | `c518106`         | Payment lifecycle evidence gates (verification vs. settlement, never collapsed), usage-result and `PaymentServiceLink` binding, real D1 lifecycle-stage persistence.                     |
+| 4          | `e4cd038`         | Local Bazaar discovery metadata for all four services (mandatory); Signed Offers & Receipts evaluated and deliberately deferred (decision-gated).                                        |
+| 5          | (this checkpoint) | Real local Hono HTTP vertical slice wiring the full protocol/lifecycle/service-runtime stack; synthetic 402→pay→success cycles for all four services; SUN-0700A original-criteria audit. |
 
 ## Where to read more
 
@@ -43,6 +44,8 @@ ADR 0050) were not used.
   `PaymentServiceLink`, the immutable payment-attempt ↔ service-receipt chain.
 - [X402_BAZAAR_METADATA.md](X402_BAZAAR_METADATA.md) — local Bazaar discovery
   declarations, truthfulness boundary, drift guard.
+- [X402_HTTP_VERTICAL_SLICE.md](X402_HTTP_VERTICAL_SLICE.md) — the real local
+  Hono HTTP boundary, mounting gate, fixture-mode service wiring.
 - [SUN-0700A-checkpoint-1-report.md](../reports/SUN-0700A-checkpoint-1-report.md),
   [SUN-0700A-x402-protocol-foundation-report.md](../reports/SUN-0700A-x402-protocol-foundation-report.md)
   — detailed per-checkpoint acceptance evidence.
