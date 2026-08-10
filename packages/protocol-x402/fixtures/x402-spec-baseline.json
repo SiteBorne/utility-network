@@ -1,0 +1,69 @@
+{
+  "recorded_at": "2026-08-09",
+  "protocol": {
+    "targeted_major_version": 2,
+    "headers": {
+      "PAYMENT-REQUIRED": "server -> client, Base64-encoded PaymentRequired JSON",
+      "PAYMENT-SIGNATURE": "client -> server, Base64-encoded PaymentPayload JSON",
+      "PAYMENT-RESPONSE": "server -> client, Base64-encoded SettleResponse JSON"
+    },
+    "schemes": {
+      "exact": "fixed-price, settles immediately, works on all supported networks",
+      "upto": "usage-based (buyer authorizes a maximum, seller settles actual usage up to it), currently EVM-only (Permit2)",
+      "batch-settlement": "off-chain vouchers settled in batches, not targeted by SUN-0700A"
+    },
+    "network_identifier_format": "CAIP-2 (namespace:reference), e.g. eip155:84532, solana:devnet",
+    "amount_representation": "atomic-unit integer string, never binary floating point",
+    "extensions_referenced": {
+      "payment-identifier": "extensions['payment-identifier'], 16-128 char [a-zA-Z0-9_-]+, idempotency/retry protection — not yet integrated (SUN-0700A checkpoint 2)",
+      "bazaar": "discovery metadata extension — not yet integrated (SUN-0700A later checkpoint)",
+      "signed-offers-and-receipts": "not yet evaluated (SUN-0700A later checkpoint, ADR required)"
+    }
+  },
+  "sources": [
+    {
+      "url": "https://docs.x402.org/core-concepts/http-402",
+      "retrieved_via": "WebFetch, 2026-08-09",
+      "notes": "confirmed 3 header names, Base64+JSON encoding, exact/upto/batch-settlement scheme names"
+    },
+    {
+      "url": "https://docs.x402.org/getting-started/quickstart-for-sellers",
+      "retrieved_via": "WebFetch, 2026-08-09",
+      "notes": "confirmed exact vs upto semantics and the EVM-only (Permit2) restriction on upto"
+    },
+    {
+      "url": "https://docs.x402.org/extensions/payment-identifier",
+      "retrieved_via": "WebFetch, 2026-08-09",
+      "notes": "confirmed payment-identifier extension shape and idempotency semantics for SUN-0700A checkpoint 2"
+    }
+  ],
+  "npm_packages_inspected": [
+    {
+      "name": "x402",
+      "version": "1.2.0",
+      "used": false,
+      "reason": "heavy transitive dependency surface (viem, wagmi, @solana/kit, wallet-standard packages) — inappropriate for a credential-independent, wallet-free protocol core"
+    },
+    {
+      "name": "@coinbase/x402",
+      "version": "2.1.0",
+      "used": false,
+      "reason": "bundles @coinbase/cdp-sdk and viem — a facilitator/wallet SDK, not a pure protocol-core package"
+    },
+    {
+      "name": "@x402/core",
+      "version": "2.21.0",
+      "used": true,
+      "dependencies": ["zod@^3.24.2"],
+      "reason": "pure protocol-core package (zod as its only dependency), exports V1/V2 Zod schemas, TS types, and Base64/JSON header codec primitives with no wallet/facilitator client — matches the SUN-0700A directive's 'no facilitator client belongs in the pure core' boundary",
+      "top_level_export": "x402Version = 2 (this package's SUPPORTED_X402_VERSION is sourced directly from this constant)",
+      "subpath_exports_used": ["@x402/core/types", "@x402/core/schemas"],
+      "known_gaps_verified_by_inspecting_dist": [
+        "decodePaymentRequiredHeader/decodePaymentSignatureHeader/decodePaymentResponseHeader (from @x402/core/http) throw on invalid input rather than returning a closed result",
+        "those same decoders call JSON.parse with no size bound and no prototype-pollution guard",
+        "no exported Zod schema exists for SettleResponse (PAYMENT-RESPONSE payload) — only a plain TS type",
+        "@siteborne/protocol-x402's src/codec/headers.ts wraps the safe validating parsers (parsePaymentRequired/parsePaymentPayload) with its own bounded, pollution-safe decode step, and hand-maintains the one schema (SettleResponse) upstream does not export"
+      ]
+    }
+  ]
+}

@@ -160,7 +160,42 @@ importers:
 
   packages/protocol-nevermined: {}
 
-  packages/protocol-x402: {}
+  packages/protocol-x402:
+    dependencies:
+      '@siteborne/pricing':
+        specifier: workspace:*
+        version: link:../pricing
+      '@siteborne/verification':
+        specifier: workspace:*
+        version: link:../verification
+      '@x402/core':
+        specifier: ^2.21.0
+        version: 2.21.0
+      yaml:
+        specifier: ^2.5.0
+        version: 2.7.0
+      zod:
+        specifier: ^3.23.0
+        version: 3.24.1
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.10.5
+      eslint:
+        specifier: ^9.0.0
+        version: 9.18.0
+      fast-check:
+        specifier: ^3.17.0
+        version: 3.23.2
+      tsx:
+        specifier: ^4.16.0
+        version: 4.23.7
+      typescript:
+        specifier: ^5.5.0
+        version: 5.7.3
+      vitest:
+        specifier: ^2.0.0
+        version: 2.1.8(@types/node@22.10.5)(jsdom@26.0.0)
 
   packages/provider-adapters:
     dependencies:
@@ -1134,6 +1169,9 @@ packages:
   '@vitest/utils@2.1.8':
     resolution: {integrity: sha512-dwSoui6djdwbfFmIgbIjX2ZhIoG7Ex/+xpxyiEgIGzjliY8xGkcpITKTlp6B4MgtGkF2ilvm97cPM96XZaAgcA==}
 
+  '@x402/core@2.21.0':
+    resolution: {integrity: sha512-0djKE7V5/JKDMrjRe5he3DoMFzlbVnUcvMmLAb2j6OoAJDamupkFh6fFrXeoHwjkBIxOFUzjGI4FVixz2dMxSA==}
+
   acorn-jsx@5.3.2:
     resolution: {integrity: sha512-rq9s+JNhf0IChjtDXxllJ7g41oZk5SlXtp0LHwyA5cejwn7vKmKp4pPri6YEePv2PU65sAsegbXtIinmDFDXgQ==}
     peerDependencies:
@@ -2060,6 +2098,9 @@ packages:
   zod@3.24.1:
     resolution: {integrity: sha512-muH7gBL9sI1nciMZV67X5fTKKBLtwpZ5VBp1vsOQzj1MhrBZ4wlVCm3gedKZWLp0Oyel8sIGfeiz54Su+OVT+A==}
 
+  zod@3.25.76:
+    resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
+
 snapshots:
 
   '@asamuzakjp/css-color@2.8.3':
@@ -2692,6 +2733,10 @@ snapshots:
       '@vitest/pretty-format': 2.1.8
       loupe: 3.1.2
       tinyrainbow: 1.2.0
+
+  '@x402/core@2.21.0':
+    dependencies:
+      zod: 3.25.76
 
   acorn-jsx@5.3.2(acorn@8.14.0):
     dependencies:
@@ -3635,3 +3680,5 @@ snapshots:
       youch-core: 0.3.3
 
   zod@3.24.1: {}
+
+  zod@3.25.76: {}

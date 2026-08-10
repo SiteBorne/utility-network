@@ -788,8 +788,11 @@ tasks:
       - 'Replay-attack rejection logic is deterministic and locally testable (fixture-based, no live facilitator)'
       - 'Bazaar discovery metadata is generated correctly against the frozen contract'
       - 'CDP facilitator verify/settle integration itself is out of scope for this sub-task (SUN-0700B)'
-    evidence: []
-    next_action: 'Selected as the next dependency-safe task after SUN-0600 (accepted). Decomposed from the original SUN-0700 the same way SUN-0400 was split into SUN-0400A/SUN-0400B: this sub-task is exactly the x402 protocol/message-construction logic buildable and testable without live CDP credentials; SUN-0700B is the live facilitator settlement portion, which remains blocked_external. Not started.'
+    evidence:
+      - 'docs/reports/SUN-0700A-checkpoint-1-report.md'
+      - 'docs/decisions/0041-x402-v2-protocol-boundary.md'
+      - 'packages/protocol-x402/fixtures/x402-spec-baseline.json'
+    next_action: 'In progress, not accepted. Checkpoint 1 of SUN-0700A complete: x402 V2 spec/package baseline recorded, packages/protocol-x402 established (replacing the SUN-0001 placeholder), protocol version binding, exact payment requirements, the PAYMENT-REQUIRED challenge builder, all three V2 header codecs, structural payment-payload validation, deterministic quote identity, service/resource binding, pricing integration, expiration validation, and a closed error taxonomy — 106 tests (unit/integration/property/adversarial/no-network), pnpm x402:check passes, full root pnpm check passes. Still not started: upto requirements, payment-identifier/idempotency, replay-protection persistence, settlement-evidence model, payment state machine, SITEBORNE receipt/payment linkage, Bazaar metadata, Signed Offers/Receipts evaluation. Not accepted until those checkpoints land.'
     blocker: null
     commit_ref: null
 
