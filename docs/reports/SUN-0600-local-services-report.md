@@ -306,12 +306,16 @@ not prove the **runtime execution boundary** itself (`executeLocalService(...)`
 `success` for a receipt that fails cryptographic verification. Every service
 computed `result_class` purely from `signed.verdict.decision`, which was set
 from the mesh's verdict alone — the receipt's own cryptographic validity was
-never itself a precondition for `success`. `5525f31` itself was, correctly,
-test/fixture/script/doc-only — this pass is the one that changes real
-service-runtime implementation code, so it is reported and committed as such
-rather than continuing to describe receipt verification as a test-only concern.
-See [ADR 0040](../decisions/0040-runtime-receipt-verification-boundary.md) for
-the full design.
+never itself a precondition for `success`. `5525f31` added
+`src/pcc/receipt-verification.ts` (the shared `verifyServiceReceipt()` boundary)
+alongside its tests/fixtures/scripts/docs, so it is more accurately described as
+**receipt-verification coverage and shared verification helper** than as purely
+test/fixture/script/doc-only — the helper it added was correct and is reused
+unchanged by this pass, but it was not itself wired into the runtime success
+path until now. This pass is the one that changes service-runtime implementation
+code to actually call that helper before reporting success. See
+[ADR 0040](../decisions/0040-runtime-receipt-verification-boundary.md) for the
+full design.
 
 1. **`verifyAndSign()`** (`src/pcc/verify-and-sign.ts`) — the one shared
    finalization step every service already called identically — now
