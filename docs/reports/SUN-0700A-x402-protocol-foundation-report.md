@@ -1,4 +1,110 @@
-# SUN-0700A — Checkpoints 2 & 3: Upto Authorization, Payment-Identifier/Replay Foundation, and Payment Lifecycle Evidence
+# SUN-0700A — Checkpoints 2, 3 & 4: Upto Authorization, Payment Lifecycle Evidence, and Bazaar Discovery
+
+## Checkpoint 4: Bazaar Discovery Metadata + Signed Offers & Receipts Decision
+
+Builds on checkpoints 1-3 (`0256f34`, `8ac329f`, `e6e2fc4`, `c518106`).
+SUN-0700A remains `active`, not `accepted`. No facilitator was contacted, no
+live Bazaar was queried, no listing was published, no payment wallet was
+configured, no payment was settled, no chain RPC occurred, and no live
+middleware/route was implemented anywhere in this checkpoint.
+
+### Part A (mandatory): Bazaar discovery metadata
+
+Existing accepted state was inspected first (directive requirement): the
+installed `@x402/core`/`@x402/extensions` baseline (both pinned `2.21.0`), the
+`@x402/extensions/bazaar` subpath's compiled implementation (narrow runtime
+imports — `ajv/dist/2020.js`, `@x402/core/server`, `url` — verified directly,
+matching the `payment-identifier` narrow-import discipline from checkpoint 1-2),
+`registry/services/*.json`, `contracts/releases/1.0.0/schemas/...` (frozen
+contract schemas), and
+`contracts/releases/1.0.0/openapi/ service-contracts.openapi.json` (the real
+planned route/method per service, `x-implementation-status: "not_implemented"`
+on every path today).
+
+`packages/protocol-x402/src/bazaar/` (new):
+
+- `schema-bundle.ts` — `bundleLocalRefs`, a generic local-`$ref` inliner (fails
+  closed on any unresolvable ref); `frozen-inputs.ts` statically imports the
+  four frozen input/output schemas plus the two common schemas they `$ref`
+  (`money.schema.json`, `authorized-artifact-reference.schema.json`) and bundles
+  them — proven identical-modulo-refs to the frozen source and ajv-valid against
+  the frozen schema's own `examples[0]` (`frozen-inputs.test.ts`, 20 tests).
+  Output schemas are deliberately **not** bundled — all four `$ref` a large
+  (55-internal-`$ref`), separately-owned PCC schema; only each output schema's
+  own frozen `examples[0]` is used (`output.example`, no `output.schema` — a
+  supported, not invented, shape).
+- `registry-source.ts`, `routes.ts`, `capability.ts` — statically import
+  `registry/services/*.json` and the OpenAPI document; no second manually
+  maintained list of service metadata/routes exists.
+- `discovery.ts` — `buildSiteborneDiscoveryDeclaration` composes checkpoint
+  1-2's
+  `buildQuote`/`buildExactPaymentRequirement`/`buildUptoPaymentRequirement` with
+  the official `declareDiscoveryExtension`. `document_evidence_json.v1` uses
+  `upto` bound at the governance maximum; the other three use `exact` — never
+  silently swapped (property-tested). `PAYTO_NOT_CONFIGURED` is a deliberately
+  non-address-shaped sentinel (directive §12: no fake wallet presented as
+  production-ready); `status: 'not_live'`/`production_enabled: false` are
+  literal constants, not caller-settable.
+- `validator.ts` — `validateSiteborneDiscoveryResource` layers SITEBORNE
+  truthfulness checks over the official `validateDiscoveryExtension`/
+  `validateDiscoveryExtensionSpec`; unknown service fails closed.
+- `catalog-status.ts` — `BazaarCatalogStatus` type only (directive: no D1 table
+  added without genuine need); SUN-0700A can only ever assert `'not_submitted'`
+  (`assertCatalogStatusIsEvidenced` throws otherwise).
+
+**Results**: all four services build a valid, locally-validated discovery
+declaration (`discovery.test.ts`, 10 tests); 15 adversarial cases fail closed
+(`validator.test.ts`); a machine-discovery round trip (`roundtrip.test.ts`, 4
+tests) proves an unknown buyer program — using only the official
+`extractDiscoveryInfoFromExtension` and `@x402/core` wire-schema functions, zero
+SITEBORNE-specific hardcoding — can discover the schema, choose a payment
+option, and build a structurally valid request from the declaration alone. 4 new
+deterministic-identity property tests (`src/tests/properties.test.ts`) and 2 new
+no-network assertions (`src/tests/no-network.test.ts`) extend existing coverage
+rather than duplicating it. `fixtures/x402-spec-baseline.json` gained a
+`bazaar_extension` entry (package/version/extension-key/dependency baseline)
+feeding a new `x402:spec:verify` drift-guard check — the upstream Bazaar
+extension is documented as early/evolving, so this check exists specifically to
+catch a future incompatible package/type change rather than discovering it
+silently. See
+[ADR 0048](../decisions/0048-bazaar-discovery-as-canonical-extension.md),
+[ADR 0049](../decisions/0049-discovery-truthfulness-boundary.md), and
+[X402_BAZAAR_METADATA.md](../operations/X402_BAZAAR_METADATA.md).
+
+### Part B (decision-gated): Signed Offers & Receipts
+
+Formally evaluated against a full rubric (interoperability, implementation
+complexity, Cloudflare Workers runtime compatibility, key-isolation quality,
+key-rotation story, external verification, domain/service identity binding,
+secret-management burden, dependency weight, production deployment dependencies,
+PCC overlap, actual value to autonomous buyers today) — **decision C, defer
+entirely**: no live route, wallet, facilitator, or deployed `did:web` document
+exists yet to make a real offer/receipt meaningful; implementing it now would
+only exercise the upstream package's own crypto, not a real SITEBORNE
+integration. JWS/Ed25519/`did:web` is recorded as the leading candidate for a
+future revisit (aligns with SITEBORNE's existing Ed25519 verification-signer
+infrastructure, gives a domain-bound identity explicitly distinct from a payment
+wallet, matching the official recommendation) — EIP-712's heavier
+`viem`/`secp256k1` surface and lack of a domain-identity story make it the
+weaker default. The `offer-receipt` subpath
+(`jose`/`viem`/`@noble/curves`/`@scure/base`) is never imported anywhere —
+proven by both a static source-grep and a `no-network.test.ts` assertion. The
+three receipt classes (x402 settlement/payment response; x402 Signed Offer &
+Receipt; SITEBORNE PCC verification receipt) are kept explicitly distinct in
+naming and documentation, never merged into one type. See
+[ADR 0050](../decisions/0050-signed-offers-and-receipts-decision.md).
+
+### Validation
+
+`packages/protocol-x402` test count: **384** (up from 317; +67 across
+`schema-bundle.test.ts`, `frozen-inputs.test.ts`, `discovery.test.ts`,
+`validator.test.ts`, `roundtrip.test.ts`, `catalog-status.test.ts`, plus
+extensions to `properties.test.ts`/`no-network.test.ts`). `pnpm x402:check`,
+`pnpm x402:test:property`, `pnpm x402:fixtures:verify`, `pnpm x402:spec:verify`,
+and the full root `pnpm check` all pass with zero regressions. Secret scan
+clean. Tree clean at commit time. SUN-0700A remains `active`; SUN-0700B remains
+`blocked_external`. Checkpoint 4 is complete; no HTTP route wiring or live
+facilitator work was started.
 
 ## Checkpoint 3: Payment Lifecycle + External Evidence + SITEBORNE Receipt Linkage
 

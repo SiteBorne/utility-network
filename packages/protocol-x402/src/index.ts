@@ -32,3 +32,4 @@ export * from './evidence/fixtures';
 export * from './linkage/usage-result';
 export * from './linkage/payment-service-link';
 export * from './lifecycle/stage';
+export * from './bazaar';

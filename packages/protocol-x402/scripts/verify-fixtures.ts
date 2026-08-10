@@ -10,13 +10,20 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parse } from 'yaml';
 import { x402Version } from '@x402/core';
+import { BAZAAR } from '@x402/extensions/bazaar';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = join(__dirname, '..');
 
 interface SpecBaseline {
   protocol: { targeted_major_version: number };
-  npm_packages_inspected: Array<{ name: string; version: string; used: boolean }>;
+  npm_packages_inspected: Array<{
+    name: string;
+    version: string;
+    used: boolean;
+    used_subpaths?: string[];
+  }>;
+  bazaar_extension?: { package: string; version: string; subpath: string; extension_key: string };
 }
 
 let failures = 0;
@@ -78,6 +85,24 @@ function main(): void {
       installedExtensionsVersionSpec!.replace('^', '').split('.')[0] ===
         extensionsEntry.version.split('.')[0],
     `package.json's @x402/extensions dependency spec (${installedExtensionsVersionSpec}) is major-version-compatible with the recorded baseline (${extensionsEntry?.version})`
+  );
+  assert(
+    Boolean(extensionsEntry?.used_subpaths?.includes('@x402/extensions/bazaar')),
+    'fixtures/x402-spec-baseline.json records @x402/extensions/bazaar as a used subpath (SUN-0700A checkpoint 4)'
+  );
+
+  console.log('\nVerifying Bazaar extension baseline (directive §18 drift guard)...\n');
+  assert(
+    Boolean(baseline.bazaar_extension),
+    'fixtures/x402-spec-baseline.json records a bazaar_extension entry'
+  );
+  assert(
+    baseline.bazaar_extension?.version === extensionsEntry?.version,
+    `recorded bazaar_extension.version (${baseline.bazaar_extension?.version}) matches the recorded @x402/extensions entry version (${extensionsEntry?.version})`
+  );
+  assert(
+    baseline.bazaar_extension?.extension_key === BAZAAR.key,
+    `recorded bazaar_extension.extension_key ("${baseline.bazaar_extension?.extension_key}") matches @x402/extensions/bazaar's own exported BAZAAR.key ("${BAZAAR.key}")`
   );
 
   console.log('\nVerifying X402_SCENARIO_MATRIX.yaml test_reference coverage...\n');

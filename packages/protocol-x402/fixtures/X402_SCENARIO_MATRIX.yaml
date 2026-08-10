@@ -63,3 +63,23 @@ scenarios:
     test_reference: src/tests/upto-lifecycle.test.ts
   - category: d1_lifecycle_stage_persistence_and_concurrency
     test_reference: ../../apps/edge-api/tests/d1-payment-attempts.test.ts
+  - category: bazaar_schema_bundling
+    test_reference: src/bazaar/schema-bundle.test.ts
+  - category: bazaar_frozen_schema_fidelity
+    test_reference: src/bazaar/frozen-inputs.test.ts
+  - category: bazaar_discovery_declaration_company_valid
+    test_reference: src/bazaar/discovery.test.ts
+  - category: bazaar_discovery_declaration_web_valid
+    test_reference: src/bazaar/discovery.test.ts
+  - category: bazaar_discovery_declaration_document_upto_valid
+    test_reference: src/bazaar/discovery.test.ts
+  - category: bazaar_discovery_declaration_agent_verification_valid
+    test_reference: src/bazaar/discovery.test.ts
+  - category: bazaar_discovery_adversarial
+    test_reference: src/bazaar/validator.test.ts
+  - category: bazaar_machine_discovery_round_trip
+    test_reference: src/bazaar/roundtrip.test.ts
+  - category: bazaar_catalog_status_not_submitted
+    test_reference: src/bazaar/catalog-status.test.ts
+  - category: bazaar_discovery_properties
+    test_reference: src/tests/properties.test.ts

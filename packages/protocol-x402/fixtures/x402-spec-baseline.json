@@ -17,9 +17,30 @@
     "amount_representation": "atomic-unit integer string, never binary floating point",
     "extensions_referenced": {
       "payment-identifier": "extensions['payment-identifier'], 16-128 char [a-zA-Z0-9_-]+, idempotency/retry protection — integrated in SUN-0700A checkpoint 2 via @x402/extensions/payment-identifier (see src/identifier/payment-identifier.ts)",
-      "bazaar": "discovery metadata extension — not yet integrated (SUN-0700A later checkpoint)",
-      "signed-offers-and-receipts": "not yet evaluated (SUN-0700A later checkpoint, ADR required)"
+      "bazaar": "resource-server discovery metadata extension (key 'bazaar') — integrated in SUN-0700A checkpoint 4 via @x402/extensions/bazaar's declareDiscoveryExtension/validateDiscoveryExtension/validateDiscoveryExtensionSpec (see src/bazaar/discovery.ts, src/bazaar/validator.ts). Local declaration + local validation only — no facilitator catalog submission, no /discovery/resources query, no withBazaar()/listResources()/search() call anywhere in this package.",
+      "signed-offers-and-receipts": "evaluated in SUN-0700A checkpoint 4 and deliberately deferred — see docs/decisions/0050-signed-offers-and-receipts-decision.md. Not implemented; the offer-receipt subpath is never imported (proven in src/tests/no-network.test.ts)."
     }
+  },
+  "bazaar_extension": {
+    "checkpoint_4_recorded_at": "2026-08-10",
+    "package": "@x402/extensions",
+    "version": "2.21.0",
+    "subpath": "@x402/extensions/bazaar",
+    "extension_key": "bazaar",
+    "declaration_api": "declareDiscoveryExtension(config): Record<'bazaar', DiscoveryExtension> — returns { bazaar: { info, schema } } keyed by BAZAAR.key ('bazaar')",
+    "local_validators_used": ["validateDiscoveryExtension", "validateDiscoveryExtensionSpec"],
+    "service_metadata_helpers_used": ["isValidServiceName", "sanitizeTags"],
+    "runtime_imports_verified_by_inspecting_dist": ["ajv/dist/2020.js", "@x402/core/server", "url"],
+    "explicitly_not_used": [
+      "withBazaar (facilitator client extension — would query a live catalog)",
+      "bazaarResourceServerExtension (live server middleware hook — no live route exists yet)",
+      ".listResources()/.search() (facilitator catalog query functions)"
+    ],
+    "known_shape_notes": [
+      "declareDiscoveryExtension's public TS input type omits `method` (documented as normally filled in later by server-framework route enrichment) — this package supplies it directly since the real route/method is already known from the accepted OpenAPI source (src/bazaar/routes.ts); verified against the compiled implementation that it is accepted and used identically.",
+      "validateDiscoveryExtension rejects ANY $id/$ref in extension.schema not starting with '#' (hasExternalSchemaReference) — bundled input schemas must have their own top-level $id stripped before embedding (see schema-bundle.ts's stripDocumentIdentity), not just their inlined $refs."
+    ],
+    "upstream_maturity_note": "the Bazaar extension is documented upstream as early/evolving (docs.x402.org/extensions/bazaar) — this baseline entry exists so x402:spec:verify can detect an incompatible future package/type change rather than silently drifting."
   },
   "sources": [
     {
@@ -80,7 +101,7 @@
       "name": "@x402/extensions",
       "version": "2.21.0",
       "used": true,
-      "used_subpath_only": "@x402/extensions/payment-identifier",
+      "used_subpaths": ["@x402/extensions/payment-identifier", "@x402/extensions/bazaar"],
       "package_level_dependencies": [
         "@x402/core@~2.21.0",
         "ajv@^8.17.1",
@@ -91,7 +112,12 @@
         "zod@^3.24.2"
       ],
       "runtime_imports_of_payment_identifier_subpath_verified_by_inspecting_dist": ["ajv"],
-      "reason": "the parent @x402/extensions package bundles viem/jose/tweetnacl/siwe for OTHER subpaths (sign-in-with-x, offer-receipt) — but the payment-identifier subpath's own compiled chunk imports only ajv (verified directly in dist/esm/chunk-*.mjs), so it is safe to consume for the official wire-level idempotency extension without pulling wallet/crypto code into this package's actual runtime. src/tests/no-network.test.ts statically asserts no other @x402/extensions subpath is ever imported.",
+      "runtime_imports_of_bazaar_subpath_verified_by_inspecting_dist": [
+        "ajv/dist/2020.js",
+        "@x402/core/server",
+        "url"
+      ],
+      "reason": "the parent @x402/extensions package bundles viem/jose/tweetnacl/siwe/@noble/curves/@scure/base for OTHER subpaths (sign-in-with-x, offer-receipt) — but the payment-identifier and bazaar subpaths' own compiled chunks import only ajv (+ @x402/core/server for bazaar), so both are safe to consume without pulling wallet/crypto code into this package's actual runtime. src/tests/no-network.test.ts statically asserts no other @x402/extensions subpath is ever imported (sign-in-with-x, offer-receipt, and builder-code remain explicitly excluded — see docs/decisions/0050-signed-offers-and-receipts-decision.md for why offer-receipt specifically was evaluated and deferred).",
       "functions_used": [
         "declarePaymentIdentifierExtension",
         "extractAndValidatePaymentIdentifier",
@@ -99,8 +125,30 @@
         "isValidPaymentId",
         "PAYMENT_IDENTIFIER",
         "PAYMENT_ID_MIN_LENGTH",
-        "PAYMENT_ID_MAX_LENGTH"
+        "PAYMENT_ID_MAX_LENGTH",
+        "declareDiscoveryExtension",
+        "validateDiscoveryExtension",
+        "validateDiscoveryExtensionSpec",
+        "isValidServiceName",
+        "sanitizeTags",
+        "BAZAAR"
       ]
+    }
+  ],
+  "extensions_evaluated_but_not_used": [
+    {
+      "subpath": "@x402/extensions/offer-receipt",
+      "evaluated_in": "SUN-0700A checkpoint 4",
+      "decision": "deferred, not implemented — see docs/decisions/0050-signed-offers-and-receipts-decision.md",
+      "runtime_dependencies_verified_by_inspecting_dist": [
+        "jose",
+        "viem",
+        "@noble/curves/nist",
+        "@noble/curves/secp256k1",
+        "@scure/base",
+        "@x402/core/http"
+      ],
+      "reason_not_used": "heavy signing-crypto dependency surface for both supported formats (EIP-712 needs a secp256k1 signer distinct from the payment wallet; JWS needs jose + did:web resolution/hosting) with no live facilitator, wallet, or deployed did:web document to actually exercise it against in this checkpoint — see ADR 0050's rubric for the full comparison."
     }
   ]
 }

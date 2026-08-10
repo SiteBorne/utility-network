@@ -153,6 +153,25 @@ describe('no-network proof', () => {
 
     expect(fetchSpy).not.toHaveBeenCalled();
   });
+
+  it('directive §36 (checkpoint 4): building and locally validating all four Bazaar discovery declarations performs zero fetch calls — no facilitator request, no Bazaar listing query/search, no DID resolution, no wallet/RPC/CDP call', async () => {
+    const { buildSiteborneDiscoveryDeclaration } = await import('../bazaar/discovery');
+    const { validateSiteborneDiscoveryResource } = await import('../bazaar/validator');
+    const { ALL_BAZAAR_SERVICE_IDS } = await import('../bazaar/registry-source');
+
+    for (const serviceId of ALL_BAZAAR_SERVICE_IDS) {
+      const resource = await buildSiteborneDiscoveryDeclaration({
+        serviceId,
+        nowIso: '2026-08-10T00:00:00.000Z',
+        expiresInSeconds: 300,
+        maxTimeoutSeconds: 120,
+      });
+      const validation = validateSiteborneDiscoveryResource(serviceId, resource);
+      expect(validation.valid).toBe(true);
+    }
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
 });
 
 describe('no-credential proof (static source audit)', () => {
@@ -189,14 +208,37 @@ describe('no-credential proof (static source audit)', () => {
     }
   });
 
-  it('the only @x402/extensions subpath imported anywhere in this package is payment-identifier — not sign-in-with-x, offer-receipt, bazaar, or builder-code (those pull in viem/jose/tweetnacl/siwe transitively)', () => {
+  it('the only @x402/extensions subpaths imported anywhere in this package are payment-identifier and bazaar — never sign-in-with-x, offer-receipt, or builder-code (those pull in viem/jose/tweetnacl/@noble/curves/@scure/base transitively; bazaar itself was verified to import only ajv — see fixtures/x402-spec-baseline.json)', () => {
     const files = collectTsFiles(SRC_DIR);
+    const allowedSubpaths = new Set([
+      '@x402/extensions/payment-identifier',
+      '@x402/extensions/bazaar',
+    ]);
     for (const file of files) {
       const content = readFileSync(file, 'utf-8');
       const matches = content.match(/@x402\/extensions\/[a-z-]+/g) ?? [];
       for (const match of matches) {
-        expect(match).toBe('@x402/extensions/payment-identifier');
+        expect(allowedSubpaths.has(match)).toBe(true);
       }
+    }
+  });
+
+  it('no source file in this package imports the offer-receipt extension subpath (jose/viem/@noble/curves) — SUN-0700A checkpoint 4 deliberately defers Signed Offers & Receipts, see docs/decisions/0050-signed-offers-and-receipts-decision.md', () => {
+    const files = collectTsFiles(SRC_DIR);
+    for (const file of files) {
+      const content = readFileSync(file, 'utf-8');
+      expect(content).not.toMatch(/@x402\/extensions\/offer-receipt/);
+      expect(content).not.toMatch(/from ['"]jose['"]/);
+    }
+  });
+
+  it('no source file in this package calls the Bazaar client-query functions (withBazaar, .listResources, .search) — SUN-0700A only ever declares/validates discovery metadata locally, never queries a live Bazaar catalog', () => {
+    const files = collectTsFiles(SRC_DIR);
+    for (const file of files) {
+      const content = readFileSync(file, 'utf-8');
+      expect(content).not.toMatch(/\bwithBazaar\b/);
+      expect(content).not.toMatch(/\.listResources\s*\(/);
+      expect(content).not.toMatch(/extensions\.bazaar\.search\s*\(/);
     }
   });
 

@@ -20,6 +20,9 @@ import { syntheticSettlementEvidenceSuccess } from '../evidence/fixtures';
 import type { PaymentEvidenceContext } from '../evidence/types';
 import { buildUsageResult } from '../linkage/usage-result';
 import { buildPaymentServiceLink } from '../linkage/payment-service-link';
+import { buildSiteborneDiscoveryDeclaration } from '../bazaar/discovery';
+import { validateSiteborneDiscoveryResource } from '../bazaar/validator';
+import { ALL_BAZAAR_SERVICE_IDS } from '../bazaar/registry-source';
 
 const hexAddress = () => fc.hexaString({ minLength: 40, maxLength: 40 }).map((h) => `0x${h}`);
 const usdAmount = () =>
@@ -444,6 +447,99 @@ describe('protocol-x402 properties', () => {
         }
       ),
       { numRuns: 20 }
+    );
+  });
+
+  // Directive §34 — Bazaar discovery properties (checkpoint 4).
+  it('property: Bazaar discovery generation is deterministic — one service, one nowIso/window -> one canonical quote/requirement identity', async () => {
+    await fc.assert(
+      fc.asyncProperty(
+        fc.constantFrom(...ALL_BAZAAR_SERVICE_IDS),
+        fc.constant('2026-08-10T00:00:00.000Z'),
+        async (serviceId, nowIso) => {
+          const a = await buildSiteborneDiscoveryDeclaration({
+            serviceId,
+            nowIso,
+            expiresInSeconds: 300,
+            maxTimeoutSeconds: 120,
+          });
+          const b = await buildSiteborneDiscoveryDeclaration({
+            serviceId,
+            nowIso,
+            expiresInSeconds: 300,
+            maxTimeoutSeconds: 120,
+          });
+          expect(a.accepts[0].extra?.quote_id).toBe(b.accepts[0].extra?.quote_id);
+          expect(a.resourceUrl).toBe(b.resourceUrl);
+        }
+      ),
+      { numRuns: 8 }
+    );
+  });
+
+  it('property: two different services never produce the same discovery identity', async () => {
+    await fc.assert(
+      fc.asyncProperty(fc.constant('2026-08-10T00:00:00.000Z'), async (nowIso) => {
+        const declarations = await Promise.all(
+          ALL_BAZAAR_SERVICE_IDS.map((serviceId) =>
+            buildSiteborneDiscoveryDeclaration({
+              serviceId,
+              nowIso,
+              expiresInSeconds: 300,
+              maxTimeoutSeconds: 120,
+            })
+          )
+        );
+        const quoteIds = declarations.map((d) => d.accepts[0].extra?.quote_id);
+        expect(new Set(quoteIds).size).toBe(quoteIds.length);
+      }),
+      { numRuns: 5 }
+    );
+  });
+
+  it('property: exact and upto discovery never silently swap — each service always advertises the same scheme every generation', async () => {
+    await fc.assert(
+      fc.asyncProperty(
+        fc.constantFrom(...ALL_BAZAAR_SERVICE_IDS),
+        fc.constantFrom(
+          '2026-08-10T00:00:00.000Z',
+          '2026-08-11T12:30:00.000Z',
+          '2026-09-01T00:00:00.000Z'
+        ),
+        async (serviceId, nowIso) => {
+          const resource = await buildSiteborneDiscoveryDeclaration({
+            serviceId,
+            nowIso,
+            expiresInSeconds: 300,
+            maxTimeoutSeconds: 120,
+          });
+          const expectedScheme = serviceId === 'document_evidence_json.v1' ? 'upto' : 'exact';
+          expect(resource.accepts[0].scheme).toBe(expectedScheme);
+        }
+      ),
+      { numRuns: 12 }
+    );
+  });
+
+  it('property: every generated discovery declaration is valid and always reports production_enabled: false / status: not_live', async () => {
+    await fc.assert(
+      fc.asyncProperty(
+        fc.constantFrom(...ALL_BAZAAR_SERVICE_IDS),
+        fc.constantFrom(60, 300, 900, 3600),
+        async (serviceId, expiresInSeconds) => {
+          const resource = await buildSiteborneDiscoveryDeclaration({
+            serviceId,
+            nowIso: '2026-08-10T00:00:00.000Z',
+            expiresInSeconds,
+            maxTimeoutSeconds: 120,
+          });
+          expect(resource.production_enabled).toBe(false);
+          expect(resource.status).toBe('not_live');
+          const validation = validateSiteborneDiscoveryResource(serviceId, resource);
+          expect(validation.valid).toBe(true);
+        }
+      ),
+      { numRuns: 12 }
     );
   });
 });
