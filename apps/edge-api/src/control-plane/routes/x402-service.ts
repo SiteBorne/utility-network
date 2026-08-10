@@ -29,10 +29,13 @@ import type {
   PaymentEvidenceMode,
   PaymentEvidenceProvider,
   PaymentPayload,
+  PaymentSettlementContext,
+  PaymentVerificationContext,
   PricingKey,
   Quote,
   SettleResponse,
   SiteborneServiceId,
+  UsageResult,
 } from '@siteborne/protocol-x402';
 import {
   FixturePaymentEvidenceProvider,
@@ -471,7 +474,19 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
       expiresAt: stored.quote.expires_at,
     };
 
-    const verificationEvidence = await evidenceProvider.verify(evidenceContext);
+    // The provider boundary must receive the exact `payload`/
+    // `payload.accepted` objects `validatePaymentPayloadStructure` above
+    // already checked field-by-field against `stored.quote` — never a
+    // re-decoded or re-derived copy (SUN-0700B checkpoint 1 preflight
+    // closure, directive §7), so a real facilitator's VerifyRequest is
+    // built from what was actually validated, not from a reconstruction
+    // of it.
+    const verificationContext: PaymentVerificationContext = {
+      ...evidenceContext,
+      paymentPayload: payload,
+      paymentRequirements: payload.accepted,
+    };
+    const verificationEvidence = await evidenceProvider.verify(verificationContext);
     await audit('payment_verification_requested', { payment_identifier: paymentIdentifier });
     const verifyGate = canAdvanceToVerified(
       verificationEvidence,
@@ -538,6 +553,11 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
 
     let actualAmount = stored.quote.amount;
     let usageResultHash: string | undefined;
+    // Full object (not just its hash) hoisted out of the `upto` branch so
+    // it can also reach the settlement provider boundary below — a real
+    // facilitator settling an `upto` payment needs the post-execution
+    // usage binding itself, not merely its hash (directive §5, §16).
+    let usageResult: UsageResult | undefined;
     if (config.scheme === 'upto') {
       if (!outcome.actualAmountAtomic) {
         await transition(jobId, 'VERIFYING', 'REJECTED', 'VERIFICATION_FAILED');
@@ -550,7 +570,7 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
       }
       actualAmount = outcome.actualAmountAtomic;
       try {
-        const usageResult = await buildUsageResult({
+        const builtUsageResult = await buildUsageResult({
           quote_id: stored.quote.quote_id,
           requirement_id: stored.requirement_id,
           payment_identifier: paymentIdentifier,
@@ -563,7 +583,8 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
           actual_amount: actualAmount,
           authorized_maximum: stored.quote.amount,
         });
-        usageResultHash = usageResult.usage_result_hash;
+        usageResult = builtUsageResult;
+        usageResultHash = builtUsageResult.usage_result_hash;
       } catch (e) {
         if (e instanceof UsageExceedsAuthorizationError) {
           await transition(jobId, 'VERIFYING', 'REJECTED', 'VERIFICATION_FAILED');
@@ -581,8 +602,17 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
     await audit('payment_settlement_requested', { payment_identifier: paymentIdentifier });
 
     const verificationEvidenceHash = await hashPaymentObject(verificationEvidence);
+    // Same object-identity discipline as the verify() boundary above —
+    // the exact `payload`/`payload.accepted` already validated, plus the
+    // `upto` usage-result binding when one was computed (directive §5).
+    const settlementContext: PaymentSettlementContext = {
+      ...evidenceContext,
+      paymentPayload: payload,
+      paymentRequirements: payload.accepted,
+      ...(usageResult ? { usageResult } : {}),
+    };
     const settlementEvidence = await evidenceProvider.settle(
-      evidenceContext,
+      settlementContext,
       verificationEvidence,
       actualAmount
     );
