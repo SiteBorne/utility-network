@@ -360,6 +360,129 @@ describe('D1PaymentAttemptRepository — authoritative persistence (SUN-0700A ch
     });
   });
 
+  describe('payment lifecycle stage — real D1 guarded transitions (SUN-0700A checkpoint 3, directive §18, §25-28)', () => {
+    it('a fresh payment attempt starts in the acquired stage', async () => {
+      const binding = baseBinding();
+      await acquirePaymentAttempt(repo, { binding, nowIso: NOW, ttlMs: TTL_MS });
+      const stage = await repo.getLifecycleStage(binding.payment_identifier);
+      expect(stage).toBe('acquired');
+    });
+
+    it('acquired -> verified persists and is readable by a fresh repository instance', async () => {
+      const binding = baseBinding();
+      await acquirePaymentAttempt(repo, { binding, nowIso: NOW, ttlMs: TTL_MS });
+      const result = await repo.transitionLifecycleStage(
+        binding.payment_identifier,
+        'acquired',
+        'verified'
+      );
+      expect(result.status).toBe('transitioned');
+
+      const freshRepo = new D1PaymentAttemptRepository(db);
+      const stage = await freshRepo.getLifecycleStage(binding.payment_identifier);
+      expect(stage).toBe('verified');
+    });
+
+    it('verified -> settled persists and is readable by yet another fresh repository instance', async () => {
+      const binding = baseBinding();
+      await acquirePaymentAttempt(repo, { binding, nowIso: NOW, ttlMs: TTL_MS });
+      await repo.transitionLifecycleStage(binding.payment_identifier, 'acquired', 'verified');
+      const result = await repo.transitionLifecycleStage(
+        binding.payment_identifier,
+        'verified',
+        'settled'
+      );
+      expect(result.status).toBe('transitioned');
+
+      const freshRepo = new D1PaymentAttemptRepository(db);
+      const stage = await freshRepo.getLifecycleStage(binding.payment_identifier);
+      expect(stage).toBe('settled');
+    });
+
+    it('an illegal transition (acquired -> settled, skipping verified) is rejected and leaves the authoritative state unchanged', async () => {
+      const binding = baseBinding();
+      await acquirePaymentAttempt(repo, { binding, nowIso: NOW, ttlMs: TTL_MS });
+      const result = await repo.transitionLifecycleStage(
+        binding.payment_identifier,
+        'acquired',
+        'settled'
+      );
+      expect(result.status).toBe('illegal_transition');
+
+      const stage = await repo.getLifecycleStage(binding.payment_identifier);
+      expect(stage).toBe('acquired'); // unchanged
+    });
+
+    it('a transition from the wrong current stage (state drifted since the caller last read it) is rejected, not silently applied', async () => {
+      const binding = baseBinding();
+      await acquirePaymentAttempt(repo, { binding, nowIso: NOW, ttlMs: TTL_MS });
+      await repo.transitionLifecycleStage(binding.payment_identifier, 'acquired', 'verified');
+      // Caller still thinks it's 'acquired' and tries to move straight to
+      // verification_failed from there — but it's already 'verified'.
+      const result = await repo.transitionLifecycleStage(
+        binding.payment_identifier,
+        'acquired',
+        'verification_failed'
+      );
+      expect(result.status).toBe('illegal_transition');
+      expect(await repo.getLifecycleStage(binding.payment_identifier)).toBe('verified');
+    });
+
+    it('a terminal stage never accepts a further transition', async () => {
+      const binding = baseBinding();
+      await acquirePaymentAttempt(repo, { binding, nowIso: NOW, ttlMs: TTL_MS });
+      await repo.transitionLifecycleStage(
+        binding.payment_identifier,
+        'acquired',
+        'verification_failed'
+      );
+      const result = await repo.transitionLifecycleStage(
+        binding.payment_identifier,
+        'verification_failed',
+        'verified'
+      );
+      expect(result.status).toBe('illegal_transition');
+    });
+
+    describe('concurrent lifecycle transitions (directive §28)', () => {
+      it('two concurrent verified->settled attempts: exactly one transitions, the other is illegal_transition, and the authoritative state is coherent', async () => {
+        const binding = baseBinding();
+        await acquirePaymentAttempt(repo, { binding, nowIso: NOW, ttlMs: TTL_MS });
+        await repo.transitionLifecycleStage(binding.payment_identifier, 'acquired', 'verified');
+
+        const results = await Promise.all([
+          repo.transitionLifecycleStage(binding.payment_identifier, 'verified', 'settled'),
+          repo.transitionLifecycleStage(binding.payment_identifier, 'verified', 'settled'),
+        ]);
+        const transitioned = results.filter((r) => r.status === 'transitioned');
+        const illegal = results.filter((r) => r.status === 'illegal_transition');
+        expect(transitioned).toHaveLength(1);
+        expect(illegal).toHaveLength(1);
+        expect(await repo.getLifecycleStage(binding.payment_identifier)).toBe('settled');
+      });
+
+      it('settlement success vs settlement failure racing from the same verified state: exactly one coherent outcome, never both', async () => {
+        const binding = baseBinding();
+        await acquirePaymentAttempt(repo, { binding, nowIso: NOW, ttlMs: TTL_MS });
+        await repo.transitionLifecycleStage(binding.payment_identifier, 'acquired', 'verified');
+
+        const results = await Promise.all([
+          repo.transitionLifecycleStage(binding.payment_identifier, 'verified', 'settled'),
+          repo.transitionLifecycleStage(
+            binding.payment_identifier,
+            'verified',
+            'settlement_failed'
+          ),
+        ]);
+        const transitioned = results.filter((r) => r.status === 'transitioned');
+        expect(transitioned).toHaveLength(1);
+
+        const finalStage = await repo.getLifecycleStage(binding.payment_identifier);
+        expect(['settled', 'settlement_failed']).toContain(finalStage);
+      });
+    });
+  });
+
   describe('model-based parity: bounded operation sequences produce identical classifications on InMemory and D1', () => {
     type Op =
       | { kind: 'acquire'; bindingTag: 'A' | 'B'; nowIso: string }

@@ -32,7 +32,9 @@ import type {
   PaymentAttemptBinding,
   PaymentAttemptRecord,
   PaymentAttemptRepository,
+  PaymentLifecycleStage,
 } from '@siteborne/protocol-x402';
+import { isLegalLifecycleTransition } from '@siteborne/protocol-x402';
 
 function mapRow(row: Record<string, unknown>): PaymentAttemptRecord {
   const binding: PaymentAttemptBinding = {
@@ -223,6 +225,61 @@ export class D1PaymentAttemptRepository implements PaymentAttemptRepository {
     if (!row) return null;
     const mapped = tryMapRow(row);
     return 'error' in mapped ? null : mapped;
+  }
+
+  /**
+   * SUN-0700A checkpoint 3 (directive §25, §27-28): atomically transitions
+   * a payment attempt's own summary lifecycle stage
+   * (`payment_attempts.lifecycle_stage`, migration
+   * 0003_payment_lifecycle_stage.sql). Guarded at the database layer — the
+   * UPDATE's `WHERE lifecycle_stage = ?` clause means it can only affect a
+   * row that is still in the expected `from` stage; if another concurrent
+   * caller already moved it, `meta.changes` is 0 and this returns
+   * `illegal_transition` without touching the row, never silently
+   * overwriting a state another transition already claimed.
+   */
+  async transitionLifecycleStage(
+    paymentIdentifier: string,
+    from: PaymentLifecycleStage,
+    to: PaymentLifecycleStage
+  ): Promise<
+    | { status: 'transitioned' }
+    | { status: 'illegal_transition' }
+    | { status: 'error'; reason: string }
+  > {
+    if (!isLegalLifecycleTransition(from, to)) {
+      return { status: 'illegal_transition' };
+    }
+    try {
+      const result = await this.db
+        .prepare(
+          `UPDATE payment_attempts SET lifecycle_stage = ? WHERE payment_identifier = ? AND lifecycle_stage = ?`
+        )
+        .bind(to, paymentIdentifier, from)
+        .run();
+      if (!result.success) {
+        return { status: 'error', reason: result.error ?? 'update failed for an unknown reason' };
+      }
+      if ((result.meta?.changes ?? 0) === 0) {
+        // Either the identifier doesn't exist, or it is no longer in the
+        // expected `from` stage (a concurrent transition already moved
+        // it) — both are `illegal_transition` from this call's point of
+        // view: it did not, and could not, apply.
+        return { status: 'illegal_transition' };
+      }
+      return { status: 'transitioned' };
+    } catch (e) {
+      return {
+        status: 'error',
+        reason: e instanceof Error ? e.message : 'unknown transition error',
+      };
+    }
+  }
+
+  async getLifecycleStage(paymentIdentifier: string): Promise<PaymentLifecycleStage | null> {
+    const row = await this.getRawByIdentifier(paymentIdentifier);
+    if (!row || typeof row.lifecycle_stage !== 'string') return null;
+    return row.lifecycle_stage as PaymentLifecycleStage;
   }
 
   async markConsumed(paymentIdentifier: string): Promise<void> {

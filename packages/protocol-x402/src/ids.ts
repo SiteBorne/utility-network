@@ -11,6 +11,9 @@ function hex24(seed: string): string {
   return createHash('sha256').update(seed).digest('hex').slice(0, 24);
 }
 
-export function deterministicId(prefix: 'qte' | 'req' | 'pid', seed: string): string {
+export function deterministicId(
+  prefix: 'qte' | 'req' | 'pid' | 'usg' | 'lnk',
+  seed: string
+): string {
   return `${prefix}_${hex24(seed)}`;
 }

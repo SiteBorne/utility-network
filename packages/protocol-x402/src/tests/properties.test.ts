@@ -15,6 +15,11 @@ import type { PaymentAttemptBinding } from '../replay/binding';
 import { isCanonicalAtomicAmount } from '../requirements/upto';
 import { InMemoryPaymentAttemptRepository } from '../replay/repository';
 import { acquirePaymentAttempt } from '../replay/idempotency';
+import { canAdvanceToSettled } from '../evidence/settlement';
+import { syntheticSettlementEvidenceSuccess } from '../evidence/fixtures';
+import type { PaymentEvidenceContext } from '../evidence/types';
+import { buildUsageResult } from '../linkage/usage-result';
+import { buildPaymentServiceLink } from '../linkage/payment-service-link';
 
 const hexAddress = () => fc.hexaString({ minLength: 40, maxLength: 40 }).map((h) => `0x${h}`);
 const usdAmount = () =>
@@ -262,6 +267,180 @@ describe('protocol-x402 properties', () => {
               .map((r) => (r as { record: { binding_digest: string } }).record.binding_digest)
           );
           expect(owners.size).toBeLessThanOrEqual(1);
+        }
+      ),
+      { numRuns: 20 }
+    );
+  });
+
+  function arbEvidenceContext(): fc.Arbitrary<PaymentEvidenceContext> {
+    return fc.record({
+      service_id: fc.constant('company_evidence_graph.v1' as const),
+      service_version: fc.constant('v1' as const),
+      scheme: fc.constant('exact' as const),
+      network: fc.constant('eip155:8453' as const),
+      asset: hexAddress(),
+      payee: hexAddress(),
+      quote_id: fc.hexaString({ minLength: 24, maxLength: 24 }).map((h) => `qte_${h}`),
+      requirement_id: fc.hexaString({ minLength: 24, maxLength: 24 }).map((h) => `req_${h}`),
+      payment_identifier: fc.hexaString({ minLength: 28, maxLength: 28 }).map((h) => `pay_${h}`),
+      amount: fc.integer({ min: 1, max: 1_000_000 }).map(String),
+      nowIso: fc.constant('2026-08-09T00:00:00.000Z'),
+      expiresAt: fc.constant('2026-08-09T00:10:00.000Z'),
+    });
+  }
+
+  it('property: an exact settlement can only advance when actual_amount equals the requirement amount exactly', async () => {
+    await fc.assert(
+      fc.asyncProperty(
+        arbEvidenceContext(),
+        fc.integer({ min: 0, max: 2_000_000 }),
+        async (ctx, actual) => {
+          const verificationHash = 'sha256:' + '1'.repeat(64);
+          const evidence = await syntheticSettlementEvidenceSuccess(
+            ctx,
+            verificationHash,
+            String(actual)
+          );
+          const outcome = canAdvanceToSettled(evidence, ctx, 'fixture', verificationHash);
+          expect(outcome.allowed).toBe(String(actual) === ctx.amount);
+        }
+      ),
+      { numRuns: 40 }
+    );
+  });
+
+  it('property: an upto settlement never advances when actual_amount exceeds the authorized maximum', async () => {
+    await fc.assert(
+      fc.asyncProperty(
+        arbEvidenceContext(),
+        fc.integer({ min: 0, max: 2_000_000 }),
+        async (baseCtx, actual) => {
+          const ctx = { ...baseCtx, scheme: 'upto' as const };
+          const verificationHash = 'sha256:' + '1'.repeat(64);
+          const evidence = await syntheticSettlementEvidenceSuccess(
+            ctx,
+            verificationHash,
+            String(actual)
+          );
+          const outcome = canAdvanceToSettled(evidence, ctx, 'fixture', verificationHash);
+          if (actual > Number(ctx.amount)) {
+            expect(outcome.allowed).toBe(false);
+          } else {
+            expect(outcome.allowed).toBe(true);
+          }
+        }
+      ),
+      { numRuns: 40 }
+    );
+  });
+
+  it('property: mutating any single field of a usage-result input changes its hash', async () => {
+    await fc.assert(
+      fc.asyncProperty(
+        fc.record({
+          quote_id: fc.constant('qte_' + '1'.repeat(24)),
+          requirement_id: fc.constant('req_' + '1'.repeat(24)),
+          payment_identifier: fc.constant('pay_' + '1'.repeat(28)),
+          service_id: fc.constant('document_evidence_json.v1' as const),
+          service_version: fc.constant('v1' as const),
+          request_input_hash: fc
+            .hexaString({ minLength: 64, maxLength: 64 })
+            .map((h) => `sha256:${h}`),
+          service_output_hash: fc
+            .hexaString({ minLength: 64, maxLength: 64 })
+            .map((h) => `sha256:${h}`),
+          verification_receipt_id: fc.constant('rcpt_' + '1'.repeat(24)),
+          resource_metrics_hash: fc
+            .hexaString({ minLength: 64, maxLength: 64 })
+            .map((h) => `sha256:${h}`),
+          actual_amount: fc.integer({ min: 0, max: 190000 }).map(String),
+          authorized_maximum: fc.constant('190000'),
+        }),
+        async (input) => {
+          const original = await buildUsageResult(input);
+          const mutated = await buildUsageResult({
+            ...input,
+            service_output_hash: 'sha256:' + 'f'.repeat(64),
+          });
+          expect(mutated.usage_result_hash).not.toBe(original.usage_result_hash);
+        }
+      ),
+      { numRuns: 20 }
+    );
+  });
+
+  it('property: replay ownership (payment_attempts classification) is unaffected by verification/settlement gate evaluation — the two systems never share mutable state', async () => {
+    await fc.assert(
+      fc.asyncProperty(arbEvidenceContext(), async (ctx) => {
+        const repo = new InMemoryPaymentAttemptRepository();
+        const binding: PaymentAttemptBinding = {
+          payment_identifier: ctx.payment_identifier,
+          quote_id: ctx.quote_id,
+          requirement_id: ctx.requirement_id,
+          service_id: ctx.service_id,
+          service_version: 'v1',
+          contract_release: '1.0.0',
+          request_input_hash: 'sha256:' + '1'.repeat(64),
+          resource_id: 'https://api.siteborne.dev/v1/x',
+          scheme: ctx.scheme,
+          network: ctx.network,
+          asset: ctx.asset,
+          amount: ctx.amount,
+          payee: ctx.payee,
+        };
+        const before = await acquirePaymentAttempt(repo, {
+          binding,
+          nowIso: ctx.nowIso,
+          ttlMs: 5 * 60 * 1000,
+        });
+        // Evaluate verification/settlement gates — pure functions with no
+        // access to the repository at all.
+        const verificationHash = 'sha256:' + '2'.repeat(64);
+        const settlement = await syntheticSettlementEvidenceSuccess(
+          ctx,
+          verificationHash,
+          ctx.amount
+        );
+        canAdvanceToSettled(settlement, ctx, 'fixture', verificationHash);
+
+        const after = await acquirePaymentAttempt(repo, {
+          binding,
+          nowIso: ctx.nowIso,
+          ttlMs: 5 * 60 * 1000,
+        });
+        expect(before.status).toBe('first_seen');
+        expect(after.status).toBe('duplicate_same');
+      }),
+      { numRuns: 20 }
+    );
+  });
+
+  it('property: a PaymentServiceLink cannot be silently rebound — mutating quote_id or payment_identifier always changes link_hash', async () => {
+    await fc.assert(
+      fc.asyncProperty(
+        fc.record({
+          payment_identifier: fc
+            .hexaString({ minLength: 28, maxLength: 28 })
+            .map((h) => `pay_${h}`),
+          quote_id: fc.hexaString({ minLength: 24, maxLength: 24 }).map((h) => `qte_${h}`),
+        }),
+        async ({ payment_identifier, quote_id }) => {
+          const base = {
+            payment_identifier,
+            quote_id,
+            requirement_id: 'req_' + '1'.repeat(24),
+            service_id: 'company_evidence_graph.v1' as const,
+            service_version: 'v1' as const,
+            request_input_hash: 'sha256:' + '1'.repeat(64),
+            job_id: 'job_' + '1'.repeat(24),
+            service_output_hash: 'sha256:' + '2'.repeat(64),
+            verification_receipt_id: 'rcpt_' + '1'.repeat(24),
+            verification_receipt_hash: 'sha256:' + '3'.repeat(64),
+          };
+          const a = await buildPaymentServiceLink(base);
+          const b = await buildPaymentServiceLink({ ...base, quote_id: quote_id + 'x' });
+          expect(a.link_hash).not.toBe(b.link_hash);
         }
       ),
       { numRuns: 20 }

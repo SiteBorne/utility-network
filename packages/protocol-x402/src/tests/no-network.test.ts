@@ -23,6 +23,7 @@ import {
 } from '../codec/headers';
 import { validatePaymentPayloadStructure } from '../payload/parser';
 import { resolveServiceMaxPriceUsd, usdToAtomicUnits } from '../pricing/mapping';
+import type { PaymentEvidenceContext } from '../evidence/types';
 
 describe('no-network proof', () => {
   let fetchSpy: ReturnType<typeof vi.fn>;
@@ -84,6 +85,71 @@ describe('no-network proof', () => {
         now_iso: '2026-08-09T00:01:00.000Z',
       }
     );
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('directive §33: the checkpoint-3 evidence/linkage lifecycle path (canAdvanceToVerified, canAdvanceToSettled, usage-result, PaymentServiceLink) performs zero fetch calls — "verify"/"settle" here mean local structural validation against modeled evidence only, never a real facilitator /verify or /settle call', async () => {
+    const ctx: PaymentEvidenceContext = {
+      service_id: 'company_evidence_graph.v1',
+      service_version: 'v1',
+      scheme: 'exact',
+      network: 'eip155:8453',
+      asset: '0xUSDC',
+      payee: '0xPayee',
+      quote_id: 'qte_' + '1'.repeat(24),
+      requirement_id: 'req_' + '1'.repeat(24),
+      payment_identifier: 'pay_' + '1'.repeat(28),
+      amount: '39000',
+      nowIso: '2026-08-09T00:00:00.000Z',
+      expiresAt: '2026-08-09T00:05:00.000Z',
+    };
+    const { syntheticVerificationEvidenceSuccess, syntheticSettlementEvidenceSuccess } =
+      await import('../evidence/fixtures');
+    const { canAdvanceToVerified } = await import('../evidence/verification');
+    const { canAdvanceToSettled } = await import('../evidence/settlement');
+    const { buildUsageResult } = await import('../linkage/usage-result');
+    const { buildPaymentServiceLink } = await import('../linkage/payment-service-link');
+    const { hashPaymentObject } = await import('../canonical');
+
+    const verificationEvidence = await syntheticVerificationEvidenceSuccess(ctx);
+    expect(canAdvanceToVerified(verificationEvidence, ctx, 'fixture')).toEqual({ allowed: true });
+
+    const verificationHash = await hashPaymentObject(verificationEvidence);
+    const settlementEvidence = await syntheticSettlementEvidenceSuccess(
+      ctx,
+      verificationHash,
+      ctx.amount
+    );
+    expect(canAdvanceToSettled(settlementEvidence, ctx, 'fixture', verificationHash)).toEqual({
+      allowed: true,
+    });
+
+    const usageResult = await buildUsageResult({
+      quote_id: ctx.quote_id,
+      requirement_id: ctx.requirement_id,
+      payment_identifier: ctx.payment_identifier,
+      service_id: ctx.service_id,
+      service_version: 'v1',
+      request_input_hash: 'sha256:' + '1'.repeat(64),
+      service_output_hash: 'sha256:' + '2'.repeat(64),
+      verification_receipt_id: 'rcpt_' + '1'.repeat(24),
+      resource_metrics_hash: 'sha256:' + '3'.repeat(64),
+      actual_amount: '1',
+      authorized_maximum: '1',
+    });
+    await buildPaymentServiceLink({
+      payment_identifier: ctx.payment_identifier,
+      quote_id: ctx.quote_id,
+      requirement_id: ctx.requirement_id,
+      service_id: ctx.service_id,
+      service_version: 'v1',
+      request_input_hash: 'sha256:' + '1'.repeat(64),
+      job_id: 'job_' + '1'.repeat(24),
+      service_output_hash: usageResult.service_output_hash,
+      verification_receipt_id: usageResult.verification_receipt_id,
+      verification_receipt_hash: 'sha256:' + '4'.repeat(64),
+    });
 
     expect(fetchSpy).not.toHaveBeenCalled();
   });

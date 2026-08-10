@@ -45,3 +45,21 @@ scenarios:
     test_reference: src/tests/properties.test.ts
   - category: replay_and_binding_adversarial
     test_reference: src/tests/adversarial.test.ts
+  - category: verification_evidence_validation
+    test_reference: src/evidence/verification.test.ts
+  - category: settlement_evidence_validation
+    test_reference: src/evidence/settlement.test.ts
+  - category: evidence_trust_policy
+    test_reference: src/evidence/policy.test.ts
+  - category: usage_result_binding
+    test_reference: src/linkage/usage-result.test.ts
+  - category: payment_service_link
+    test_reference: src/linkage/payment-service-link.test.ts
+  - category: lifecycle_stage_transition_graph
+    test_reference: src/lifecycle/stage.test.ts
+  - category: exact_synthetic_end_to_end_lifecycle
+    test_reference: src/tests/exact-lifecycle.test.ts
+  - category: upto_synthetic_end_to_end_lifecycle
+    test_reference: src/tests/upto-lifecycle.test.ts
+  - category: d1_lifecycle_stage_persistence_and_concurrency
+    test_reference: ../../apps/edge-api/tests/d1-payment-attempts.test.ts

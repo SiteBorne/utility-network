@@ -1,3 +1,107 @@
+# SUN-0700A — Checkpoints 2 & 3: Upto Authorization, Payment-Identifier/Replay Foundation, and Payment Lifecycle Evidence
+
+## Checkpoint 3: Payment Lifecycle + External Evidence + SITEBORNE Receipt Linkage
+
+Builds on checkpoints 1-2 and their D1 closure (`0256f34`, `8ac329f`,
+`e6e2fc4`). SUN-0700A remains `active`, not `accepted`. No facilitator was
+called, no wallet was configured, no blockchain RPC occurred, no real payment
+was verified or settled, and no production payment route exists anywhere in this
+checkpoint.
+
+### State authority (directive §3, §6)
+
+Before writing any new code, existing control-plane state was inspected and
+found to already implement the required payment lifecycle:
+`apps/edge-api/src/control-plane/state-machine`'s `JobState` (SUN-0200, already
+accepted) already has `PAYMENT_CHALLENGED` / `PAYMENT_VERIFIED` /
+`PAYMENT_FAILED` / `SETTLING` / `DELIVERED` / `REFUND_REQUIRED`. **No second,
+competing payment state machine was created.** `JobState` remains the sole
+authority; SUN-0700A adds gates a caller consults before invoking an existing
+`JobState` transition. Full mapping and rationale:
+[ADR 0046](../decisions/0046-payment-lifecycle-authority-and-evidence-distinction.md).
+
+### What was built
+
+- **Three-way distinction, never collapsed** (directive §4):
+  `src/evidence/verification.ts`'s `canAdvanceToVerified` and
+  `src/evidence/settlement.ts`'s `canAdvanceToSettled` — neither ever advances
+  merely because a caller set `verified`/`success: true`. Both additionally
+  require structural/binding validity and an allowed evidence trust class
+  (`src/evidence/policy.ts`); settlement additionally requires its
+  `verification_evidence_hash` to match an already-accepted verification
+  (settlement-before-verification always fails).
+- **Verification/settlement evidence models** (`src/evidence/types.ts`):
+  `ExternalVerificationEvidence`/`ExternalSettlementEvidence`, bound to x402
+  version/scheme/network/quote/requirement/payment-identifier/payee, with a
+  closed `EvidenceTrustClass` (`synthetic_fixture` /
+  `locally_derived_structure_only` / `external_unverified` /
+  `external_verified`) — SUN-0700A may only ever produce/consume the first two.
+- **Exact ordering, confirmed not invented**: verify-before-execute,
+  settle-after-execute — already encoded by the existing `JobState` graph (ADR
+  0046).
+- **Upto two-phase lifecycle**
+  ([ADR 0047](../decisions/0047-upto-two-phase-lifecycle-and-receipt-linkage.md)):
+  `src/linkage/usage-result.ts`'s `buildUsageResult` throws
+  `UsageExceedsAuthorizationError` if actual usage would exceed the
+  pre-execution authorization — enforced at construction, never checked after
+  the fact.
+- **SITEBORNE receipt linkage**: `src/linkage/payment-service-link.ts`'s
+  `PaymentServiceLink`, separate from the signed PCC/service receipt,
+  referencing it by ID/hash only. `buildPaymentServiceLink` can be called before
+  settlement evidence exists; `extendWithSettlement` produces a new link object
+  rather than mutating the original — no circular hash dependency.
+- **Real D1 lifecycle-stage persistence** (directive §18, §25-28):
+  `migrations/0003_payment_lifecycle_stage.sql` adds one `lifecycle_stage`
+  column to checkpoint-2's `payment_attempts` table (chosen over a new
+  event-sourcing table or reusing `JobState` directly — see ADR 0046's dedicated
+  section). `D1PaymentAttemptRepository.transitionLifecycleStage` guards every
+  transition at the database layer (`UPDATE ... WHERE lifecycle_stage = ?`,
+  checking `meta.changes`) — proven with real Miniflare-backed D1 in
+  `apps/edge-api/tests/d1-payment-attempts.test.ts`: illegal transitions
+  rejected with state unchanged, and concurrent racing transitions
+  (verified→settled ×2; settled vs. settlement_failed) resolve to exactly one
+  coherent winner.
+- **Synthetic end-to-end lifecycles** (directive §23-24):
+  `src/tests/exact-lifecycle.test.ts` and `src/tests/upto-lifecycle.test.ts`
+  walk quote → requirement → payload → payment-identifier acquisition →
+  verification evidence → (upto: real per-page usage calculation → usage-result)
+  → settlement evidence → `PaymentServiceLink` → consumed, proving every
+  identity/binding lines up. Synthetic protocol fixtures, never real payments.
+
+### Explicitly not implemented in this checkpoint
+
+Bazaar discovery metadata, the Signed Offers & Receipts extension, any live
+facilitator call, wallet configuration, blockchain RPC, or a production-enabled
+paid HTTP route. These remain later SUN-0700A checkpoints or SUN-0700B.
+
+### Validation
+
+- `packages/protocol-x402`: **317 tests, 26 files, all pass** (up from 223/18).
+  `pnpm x402:check` and `pnpm x402:fixtures:verify` (now 28 scenario-matrix
+  rows, including one pointing at the new D1 test file) pass.
+- `apps/edge-api/tests/d1-payment-attempts.test.ts`: **27 tests** (up from 19) —
+  8 new real-D1 lifecycle-stage tests.
+- `migrations:verify` / `d1:test` pass with the new migration applied; the
+  existing `payment_attempts` UNIQUE-constraint test and all pre-existing D1
+  constraint/transaction/concurrency tests are unaffected.
+- Full root `pnpm check` (format/lint/typecheck/test, contracts, migrations, D1,
+  control-plane, adapters, document-worker, verification, services-runtime,
+  python tests, governance/state/tasks validate, secrets:scan) passes end to
+  end.
+
+### No stub counted as complete
+
+Every guard/validator has both an acceptance and a rejection path tested,
+including: settlement bound to no verification, or to the wrong verification
+hash (both fail); exact under/overpayment; upto exceeding its authorized maximum
+(both at the settlement-evidence layer and at `buildUsageResult`'s
+construction-time throw); every binding mismatch
+(quote/requirement/payment-identifier/scheme/network/asset/payee) for both
+evidence types; fixture evidence rejected under `production` mode; illegal
+lifecycle-stage transitions and racing concurrent transitions against real D1.
+
+---
+
 # SUN-0700A — Checkpoint 2: Upto Authorization + Payment-Identifier + Replay/Idempotency Foundation
 
 ## Status
