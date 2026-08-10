@@ -2,6 +2,7 @@ import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import { parse } from 'yaml';
 import { z } from 'zod';
+import { validateExecutionFrontier } from './lib/task-frontier';
 
 const TASKS_PATH = resolve(__dirname, '../TASKS.yaml');
 
@@ -70,14 +71,23 @@ if (!result.success) {
   passed++;
 }
 
-// Check exactly one active mutation task (state === "active" or "in_progress")
-const activeTasks = data.tasks.filter(
-  (t: any) => t.state === 'active' || t.state === 'in_progress'
-);
-assert(
-  activeTasks.length === 1,
-  `Exactly one active mutation task (found ${activeTasks.length}: ${activeTasks.map((t) => t.id).join(', ')})`
-);
+// Execution-frontier validation (governance-model fix, SUN-0700A
+// blocked-frontier closure — see scripts/lib/task-frontier.ts). Exactly
+// two legitimate frontier shapes: one active dependency-ready task, or
+// zero active tasks where every dependency-ready unfinished task is
+// explicitly blocked_external with a genuine blocker. Anything else
+// (2+ active, an active task that's also blocked, unclaimed executable
+// work while zero tasks are active, a blocked_external task with no real
+// reason) fails closed — this does NOT simply relax "exactly one active"
+// to "zero or one active" unconditionally.
+const frontier = validateExecutionFrontier(data.tasks);
+if (frontier.failures.length === 0) {
+  assert(true, `Execution frontier is legitimate (${frontier.frontierStatus})`);
+} else {
+  for (const failure of frontier.failures) {
+    assert(false, failure);
+  }
+}
 
 // Check SUN-0001 is accepted
 const sun0001 = data.tasks.find((t: any) => t.id === 'SUN-0001');

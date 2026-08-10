@@ -17,9 +17,22 @@ const ProjectStateSchema = z.object({
   }),
   execution: z.object({
     mode: z.literal('serial'),
-    active_mutation_tasks: z.number().int().max(1),
-    current_increment: z.string(),
+    active_mutation_tasks: z.number().int().min(0).max(1),
+    // Nullable, not just `z.string()`: when the execution frontier is
+    // legitimately blocked (SUN-0700A blocked-frontier governance fix —
+    // see scripts/lib/task-frontier.ts), there is no active increment to
+    // name truthfully. `null` here must never be silently coerced into a
+    // task ID that isn't actually active.
+    current_increment: z.string().nullable(),
     current_phase: z.string(),
+    last_completed_increment: z.string(),
+    // Mirrors scripts/lib/task-frontier.ts's `FrontierValidationResult
+    // .frontierStatus` — the authoritative computation lives in
+    // TASKS.yaml/validate-tasks.ts; this is PROJECT_STATE.yaml's own
+    // truthful record of the same fact, cross-checked below.
+    frontier_status: z.enum(['executable', 'blocked_external']),
+    blocked_on: z.array(z.string()).optional(),
+    reason: z.string().optional(),
   }),
   implemented: z.array(z.string()),
   not_implemented: z.array(z.string()),
@@ -133,6 +146,41 @@ assert(
   data.execution.active_mutation_tasks <= 1,
   `Active mutation tasks: ${data.execution.active_mutation_tasks} (max 1)`
 );
+
+// Execution-frontier self-consistency (SUN-0700A blocked-frontier
+// governance fix): a blocked frontier must never simultaneously claim an
+// active increment, and an executable frontier must always name one.
+// The authoritative frontier computation itself lives in
+// scripts/lib/task-frontier.ts against TASKS.yaml — this only checks
+// that PROJECT_STATE.yaml's own record is not self-contradictory.
+if (data.execution.frontier_status === 'blocked_external') {
+  assert(
+    data.execution.active_mutation_tasks === 0,
+    'Blocked-frontier execution record has active_mutation_tasks === 0'
+  );
+  assert(
+    data.execution.current_increment === null,
+    'Blocked-frontier execution record has current_increment === null (never a false active-task name)'
+  );
+  assert(
+    Array.isArray(data.execution.blocked_on) && data.execution.blocked_on.length > 0,
+    'Blocked-frontier execution record names at least one blocked_on task'
+  );
+  assert(
+    typeof data.execution.reason === 'string' && data.execution.reason.trim().length > 0,
+    'Blocked-frontier execution record has a non-empty reason'
+  );
+} else {
+  assert(
+    data.execution.active_mutation_tasks === 1,
+    'Executable-frontier execution record has active_mutation_tasks === 1'
+  );
+  assert(
+    typeof data.execution.current_increment === 'string' &&
+      data.execution.current_increment.length > 0,
+    'Executable-frontier execution record names a non-empty current_increment'
+  );
+}
 
 // Check source directive hash matches
 const expectedHash = '03ccdebd57ab228502606c7fabdac57443267e66ab85bb6497a22dcd8f1f3af4';

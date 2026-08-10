@@ -10,9 +10,13 @@ source_directive:
 execution:
   mode: 'serial'
   active_mutation_tasks: 0
-  current_increment: 'none — every remaining TASKS.yaml entry (SUN-0700B, SUN-0800, SUN-0900, SUN-1000, SUN-1100, SUN-1200) is transitively blocked_external on CDP or Nevermined credentials/registry accounts; see SUN-0700A next_action for the disclosed scripts/validate-tasks.ts governance-model conflict this leaves (it requires exactly one active/in_progress task unconditionally)'
+  current_increment: null
   current_phase: 'phase_9_x402'
   last_completed_increment: 'SUN-0700A'
+  frontier_status: 'blocked_external'
+  blocked_on:
+    - 'SUN-0700B'
+  reason: 'SUN-0700A is accepted. SUN-0700B (its only dependent) is blocked_external on CDP credentials and a wallet/live settlement environment, and every task downstream of it (SUN-0800..SUN-1200) is transitively blocked_external on CDP or Nevermined credentials/registry accounts. No credential-independent dependency-ready task remains — see scripts/lib/task-frontier.ts for the governance-model rule this satisfies.'
 
 implemented:
   - 'governance_validation'
