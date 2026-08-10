@@ -1,13 +1,34 @@
 title = "Gitleaks configuration for SITEBORNE Utility Network"
 
+# CRITICAL: without [extend], a gitleaks config file that defines no
+# [[rules]] of its own runs with ZERO detection rules — only the
+# [allowlist] below, which allowlists nothing when there is nothing to
+# match against. This file previously omitted [extend] entirely, so
+# every `pnpm secrets:scan` / CI gitleaks run silently detected nothing
+# at all (verified directly: a synthetic GitHub PAT and Slack bot token
+# were NOT flagged with the old config, but WERE flagged once this
+# [extend] block was added, using gitleaks' own default ruleset).
+[extend]
+useDefault = true
+
 [allowlist]
 description = "Allowlisted paths and patterns for test fixtures and examples"
 paths = [
   "schemas/common/request-envelope.schema.json",
   "packages/contracts/src/semantic/validators.test.ts",
   "packages/contracts/src/semantic/test_validators.py",
+  # Frozen-release checksum report — every "finding" here is a public
+  # SHA-256 content hash of a committed schema file, not a secret; high
+  # entropy hex strings are exactly what a checksum report is supposed to
+  # contain. See docs/decisions/... contract-freeze ADRs.
+  "docs/reports/SUN-0102-contract-freeze-report.md",
 ]
 regexes = [
   '''idem_[a-z0-9]{24}''',
   '''idem_abc123xyz[a-z0-9]*''',
+  # Deterministic verification-mesh test fixture idempotency key, reused
+  # identically across packages/verification/fixtures/candidates/*.json
+  # and packages/verification/src/tests/fixtures.ts — a fixture literal,
+  # never a real idempotency key issued by any live system.
+  '''idk_verificationfixture01aaa''',
 ]

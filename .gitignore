@@ -21,7 +21,23 @@ Thumbs.db
 .env
 .env.local
 .env.*.local
-.wrangler/secrets
+# Wrangler's local-dev secret/env file (dotenv-style, read automatically
+# by `wrangler dev`) — this is where real CDP/wallet/Nevermined/Modal/
+# Sentry secret VALUES belong for local development, never in
+# wrangler.toml's [vars] (which IS committed to git) or any .env* file
+# above. See docs/operations/CLOUDFLARE_PROVISIONING_CHECKLIST.md.
+.dev.vars
+.dev.vars.*
+# ...except the committed, values-free template every real .dev.vars is
+# copied from (.dev.vars.example) — a negation must come after the
+# broader pattern above to take effect.
+!.dev.vars.example
+
+# Wrangler's local state directory (D1/KV/R2 local persistence, build
+# cache) — .wrangler/secrets was previously the only entry here, which
+# left the rest of .wrangler/ (including local D1 SQLite files that may
+# contain test data) untracked by this rule.
+.wrangler/
 
 # Logs
 *.log

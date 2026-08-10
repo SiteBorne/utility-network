@@ -1,0 +1,43 @@
+# Local-dev secret/env template for `wrangler dev` (apps/edge-api).
+#
+# Copy this file to `.dev.vars` (already gitignored — see .gitignore) and
+# fill in real values there. Never fill in real values here, and never
+# rename this file to remove the `.example` suffix. `wrangler dev` reads
+# `.dev.vars` automatically and merges it into `env`, the same object
+# apps/edge-api/src/control-plane/config/env.ts's `Env` interface
+# describes — these names are not invented here, they are copied
+# verbatim from that interface and from
+# docs/operations/CLOUDFLARE_PROVISIONING_CHECKLIST.md's "Secrets"
+# section.
+#
+# For a deployed Worker (not local dev), provision the same names with
+# `wrangler secret put <NAME>` instead — never wrangler.toml's [vars],
+# which is committed to git in plaintext.
+#
+# SUN-0700B (live CDP facilitator settlement) — blocked_external until
+# these are provisioned:
+SELLER_WALLET_ADDRESS=
+CDP_API_KEY_NAME=
+CDP_API_KEY_PRIVATE_KEY=
+CDP_WALLET_SECRET=
+
+# Nevermined (SUN-0900, blocked_external):
+NEVERMINED_API_KEY=
+
+# Voyage AI:
+VOYAGE_API_KEY=
+
+# Modal document-worker deployment (SUN-0400B, blocked_external):
+MODAL_TOKEN_ID=
+MODAL_TOKEN_SECRET=
+
+# Sentry error reporting (optional):
+SENTRY_DSN=
+
+# Explicit, additive opt-in gate for mounting SUN-0700A's local x402 paid
+# routes at all (see apps/edge-api/src/index.ts) — unrelated to any
+# secret above; only "true" mounts /v1/*, and payment execution itself
+# still only ever uses synthetic fixture evidence (see
+# docs/operations/X402_HTTP_VERTICAL_SLICE.md). Leave unset/false unless
+# you are deliberately exercising that local HTTP flow.
+PAID_ROUTES_ENABLED=false
