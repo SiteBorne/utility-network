@@ -12,7 +12,7 @@
 import { createHash } from 'node:crypto';
 import Ajv2020 from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
-import type { ReproductionInput, Signer } from '@siteborne/verification';
+import type { KeyRegistry, ReproductionInput, Signer } from '@siteborne/verification';
 import { buildClaim } from '../../claims/builder';
 import { buildEvidence } from '../../evidence/builder';
 import {
@@ -32,6 +32,10 @@ import type {
 
 export interface AgentVerificationServiceDeps {
   signer: Signer;
+  /** The registry `signer`'s key is registered in — verifyAndSign uses this
+   * to cryptographically self-verify the receipt before this service can
+   * report success (see ADR 0040). */
+  keyRegistry: KeyRegistry;
   /** Only consulted when verification_mode === 'independent_reproduction'.
    * SUN-0600 does not perform any live independent reproduction — this is
    * always a caller-supplied fixture/local result (or null, in which case
@@ -191,6 +195,7 @@ export class VerifyAgentOutputService
       draft,
       context,
       signer: this.deps.signer,
+      keyRegistry: this.deps.keyRegistry,
       reproduction:
         input.verification_mode === 'independent_reproduction'
           ? (this.deps.reproduction ?? null)

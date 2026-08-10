@@ -590,3 +590,63 @@ fixtures:
     expected_result_class: null
     executed_by_script: false
     test_reference: src/pcc/receipt-verification.test.ts
+
+  # ---- runtime receipt-verification boundary: success cannot be produced
+  # from a receipt that fails cryptographic self-verification (proves the
+  # verifyAndSign() finalization step itself, not merely a test-time
+  # postcondition — see docs/decisions/0040) ----
+  - scenario_id: runtime-boundary-company-mismatched-signer-rejected
+    service_id: company_evidence_graph.v1
+    category: runtime_receipt_verification_boundary
+    expected_result_class: internal_verification_failed
+    executed_by_script: false
+    test_reference: src/tests/receipt-verification.test.ts
+
+  - scenario_id: runtime-boundary-web-mismatched-signer-rejected
+    service_id: web_context_verified.v1
+    category: runtime_receipt_verification_boundary
+    expected_result_class: internal_verification_failed
+    executed_by_script: false
+    test_reference: src/tests/receipt-verification.test.ts
+
+  - scenario_id: runtime-boundary-document-mismatched-signer-rejected
+    service_id: document_evidence_json.v1
+    category: runtime_receipt_verification_boundary
+    expected_result_class: internal_verification_failed
+    executed_by_script: false
+    test_reference: src/tests/receipt-verification.test.ts
+
+  - scenario_id: runtime-boundary-agent-mismatched-signer-rejected
+    service_id: verify_agent_output.v1
+    category: runtime_receipt_verification_boundary
+    expected_result_class: internal_verification_failed
+    executed_by_script: false
+    test_reference: src/tests/receipt-verification.test.ts
+
+  - scenario_id: runtime-boundary-company-unknown-key-registry-rejected
+    service_id: company_evidence_graph.v1
+    category: runtime_receipt_verification_boundary
+    expected_result_class: internal_verification_failed
+    executed_by_script: false
+    test_reference: src/tests/receipt-verification.test.ts
+
+  - scenario_id: runtime-boundary-web-unknown-key-registry-rejected
+    service_id: web_context_verified.v1
+    category: runtime_receipt_verification_boundary
+    expected_result_class: internal_verification_failed
+    executed_by_script: false
+    test_reference: src/tests/receipt-verification.test.ts
+
+  - scenario_id: runtime-boundary-document-unknown-key-registry-rejected
+    service_id: document_evidence_json.v1
+    category: runtime_receipt_verification_boundary
+    expected_result_class: internal_verification_failed
+    executed_by_script: false
+    test_reference: src/tests/receipt-verification.test.ts
+
+  - scenario_id: runtime-boundary-agent-unknown-key-registry-rejected
+    service_id: verify_agent_output.v1
+    category: runtime_receipt_verification_boundary
+    expected_result_class: internal_verification_failed
+    executed_by_script: false
+    test_reference: src/tests/receipt-verification.test.ts

@@ -21,7 +21,8 @@ const noopAdapterAudit: AdapterAuditEventSink = { async log() {}, getEvents: () 
 async function buildService(
   httpClient: InjectedHttpClient,
   context: ServiceExecutionContext,
-  signer: Signer
+  signer: Signer,
+  keyRegistry: KeyRegistry
 ): Promise<CompanyEvidenceGraphService> {
   return new CompanyEvidenceGraphService({
     httpClient,
@@ -38,6 +39,7 @@ async function buildService(
       noopAdapterAudit
     ),
     signer,
+    keyRegistry,
   });
 }
 
@@ -51,7 +53,7 @@ describe('CompanyEvidenceGraphService', () => {
 
   it('rejects an input with no identity signal at all', async () => {
     const context = await buildTestServiceContext('company_evidence_graph.v1');
-    const service = await buildService(jsonHttpClient({}), context, signer);
+    const service = await buildService(jsonHttpClient({}), context, signer, registry);
     const result = await service.execute({}, context);
     expect(result.result_class).toBe('rejected');
     expect(result.failure?.code).toBe('invalid_request');
@@ -61,7 +63,7 @@ describe('CompanyEvidenceGraphService', () => {
     const fixture = loadAdapterFixture('sec-edgar/submissions-success.json');
     const httpClient = jsonHttpClient(fixture);
     const context = await buildTestServiceContext('company_evidence_graph.v1');
-    const service = await buildService(httpClient, context, signer);
+    const service = await buildService(httpClient, context, signer, registry);
 
     const result = await service.execute(
       {
@@ -89,7 +91,7 @@ describe('CompanyEvidenceGraphService', () => {
 
   it('produces a truthful limitation when website_evidence is requested without buyer_urls', async () => {
     const context = await buildTestServiceContext('company_evidence_graph.v1');
-    const service = await buildService(jsonHttpClient({}), context, signer);
+    const service = await buildService(jsonHttpClient({}), context, signer, registry);
 
     const result = await service.execute(
       { company_name: 'Partial Corp', requested_field_groups: ['identity', 'website_evidence'] },
@@ -101,7 +103,7 @@ describe('CompanyEvidenceGraphService', () => {
 
   it('reports an unimplemented field group as unavailable rather than fabricating data', async () => {
     const context = await buildTestServiceContext('company_evidence_graph.v1');
-    const service = await buildService(jsonHttpClient({}), context, signer);
+    const service = await buildService(jsonHttpClient({}), context, signer, registry);
 
     const result = await service.execute(
       {
@@ -122,7 +124,7 @@ describe('CompanyEvidenceGraphService', () => {
       '<html><head><title>Acme</title></head><body>Hello</body></html>'
     );
     const context = await buildTestServiceContext('company_evidence_graph.v1');
-    const service = await buildService(httpClient, context, signer);
+    const service = await buildService(httpClient, context, signer, registry);
 
     const result = await service.execute(
       {

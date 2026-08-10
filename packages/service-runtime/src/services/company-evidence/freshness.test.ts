@@ -117,6 +117,7 @@ describe('company_evidence_graph.v1 — freshness end-to-end (real service, real
         noopAdapterAudit
       ),
       signer,
+      keyRegistry: registry,
     });
 
     const result = await service.execute(
@@ -184,6 +185,7 @@ describe('company_evidence_graph.v1 — freshness end-to-end (real service, real
           noopAdapterAudit
         ),
         signer,
+        keyRegistry: registry,
       });
       return service.execute(
         {
@@ -205,8 +207,9 @@ describe('company_evidence_graph.v1 — freshness end-to-end (real service, real
 
 describe('company_evidence_graph.v1 — freshness threshold regression (fresh vs stale, same observation)', () => {
   let signer: Signer;
+  let registry: KeyRegistry;
   beforeAll(async () => {
-    ({ signer } = await createFixtureSigner());
+    ({ signer, registry } = await createFixtureSigner());
   });
 
   async function runWithFreshnessSeconds(freshnessSeconds: number) {
@@ -239,6 +242,7 @@ describe('company_evidence_graph.v1 — freshness threshold regression (fresh vs
         noopAdapterAudit
       ),
       signer,
+      keyRegistry: registry,
     });
     return service.execute(
       {
@@ -263,8 +267,9 @@ describe('company_evidence_graph.v1 — freshness threshold regression (fresh vs
 
 describe('company_evidence_graph.v1 — recent_filings regression (previously unreachable via IMPLEMENTED_FIELD_GROUPS)', () => {
   let signer: Signer;
+  let registry: KeyRegistry;
   beforeAll(async () => {
-    ({ signer } = await createFixtureSigner());
+    ({ signer, registry } = await createFixtureSigner());
   });
 
   it('requesting recent_filings runs the SEC dependency and populates a contract-valid recent-filings result', async () => {
@@ -302,6 +307,7 @@ describe('company_evidence_graph.v1 — recent_filings regression (previously un
         noopAdapterAudit
       ),
       signer,
+      keyRegistry: registry,
     });
 
     const result = await service.execute(
@@ -337,6 +343,7 @@ describe('company_evidence_graph.v1 — recent_filings regression (previously un
         noopAdapterAudit
       ),
       signer,
+      keyRegistry: registry,
     });
 
     const result = await service.execute(

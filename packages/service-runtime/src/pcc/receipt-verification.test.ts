@@ -17,7 +17,10 @@ import { deterministicId } from './ids';
 import { createFixtureSigner } from './test-signer';
 import { buildServiceContext } from '../context';
 
-async function buildSampleReceipt(signer: Signer): Promise<VerificationReceipt> {
+async function buildSampleReceipt(
+  signer: Signer,
+  keyRegistry: KeyRegistry
+): Promise<VerificationReceipt> {
   const context = buildServiceContext('web_context_verified.v1');
   const draft = buildDraftDocument({
     seed: 'receipt-verification-test',
@@ -47,7 +50,7 @@ async function buildSampleReceipt(signer: Signer): Promise<VerificationReceipt> 
     extensionKey: 'net.siteborne.web-context.v1',
     extensionPayload: {},
   });
-  const signed = await verifyAndSign({ draft, context, signer });
+  const signed = await verifyAndSign({ draft, context, signer, keyRegistry });
   return signed.receipt;
 }
 
@@ -58,7 +61,7 @@ describe('verifyServiceReceipt — closed failure modes', () => {
 
   beforeAll(async () => {
     ({ signer, registry } = await createFixtureSigner());
-    receipt = await buildSampleReceipt(signer);
+    receipt = await buildSampleReceipt(signer, registry);
   });
 
   it('a genuinely valid receipt verifies', async () => {
@@ -131,7 +134,11 @@ describe('verifyServiceReceipt — closed failure modes', () => {
       environment: 'test',
     });
     const revokableSigner: Signer = { keyId: keypair.keyId, privateKey: keypair.privateKey };
-    const revocableReceipt = await buildSampleReceipt(revokableSigner);
+    // Built against a registry where the key is still active, so
+    // verifyAndSign's own runtime self-check succeeds at issuance time —
+    // this test is specifically about verifyServiceReceipt (the boundary),
+    // not the runtime enforcement path, and revokes the key only afterward.
+    const revocableReceipt = await buildSampleReceipt(revokableSigner, revocableRegistry);
 
     revocableRegistry.revoke(keypair.keyId);
     const result = await verifyServiceReceipt({

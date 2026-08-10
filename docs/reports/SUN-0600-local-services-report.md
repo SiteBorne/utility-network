@@ -296,20 +296,78 @@ reimplementations:
    web-context (+1), document-evidence (+1), and agent-verification (+2,
    standard and independent_reproduction).
 
+## Fourth closure pass: runtime receipt-verification boundary (not merely a test postcondition)
+
+A fourth review found a genuine architectural gap the third closure pass's own
+report undersold: `5525f31` proved that a **test** could call
+`verifyServiceReceipt()` on a receipt a service had already returned — it did
+not prove the **runtime execution boundary** itself (`executeLocalService(...)`
+-> `service.execute(...)` -> `verifyAndSign(...)`) ever refused to report
+`success` for a receipt that fails cryptographic verification. Every service
+computed `result_class` purely from `signed.verdict.decision`, which was set
+from the mesh's verdict alone — the receipt's own cryptographic validity was
+never itself a precondition for `success`. `5525f31` itself was, correctly,
+test/fixture/script/doc-only — this pass is the one that changes real
+service-runtime implementation code, so it is reported and committed as such
+rather than continuing to describe receipt verification as a test-only concern.
+See [ADR 0040](../decisions/0040-runtime-receipt-verification-boundary.md) for
+the full design.
+
+1. **`verifyAndSign()`** (`src/pcc/verify-and-sign.ts`) — the one shared
+   finalization step every service already called identically — now
+   self-verifies the receipt it just issued immediately after `issueReceipt()`,
+   using the same `verifyServiceReceipt()` boundary every test already used. On
+   failure, `verdict.decision` is forced to `'fail'` before it is returned;
+   since every service derives `result_class` from that decision, **no
+   service-specific success/failure logic had to change** — enforcement is
+   concentrated entirely in the one shared step.
+2. `VerifyAndSignParams` gained a required `keyRegistry: KeyRegistry`; all four
+   services' `Deps` interfaces gained a matching field, threaded identically to
+   how `signer` already was; `wiring.ts::buildFixtureRegistry` threads one
+   shared `keyRegistry` to all four services.
+3. **Runtime failure-injection tests**
+   (`src/tests/receipt-verification.test.ts`, +8 tests, parameterized across all
+   4 registry services): a signer whose key doesn't match its declared
+   `KeyRegistry` entry, and a `KeyRegistry` that doesn't contain the signing key
+   at all, both force `executeLocalService(...)` to return
+   `result_class: 'internal_verification_failed'` — proven through the real
+   dispatcher path, not a post-hoc assertion on an already-returned receipt. A
+   genuine runtime _context_ mismatch (wrong `service_id`/`contract_release`
+   reaching the self-check) cannot be manufactured through normal execution,
+   since the self-check's expected values are derived from the same candidate
+   that was just signed; that failure mode is proven at
+   `verifyServiceReceipt()`'s own unit level instead (already covered in
+   `src/pcc/receipt-verification.test.ts`).
+4. This boundary is reached both by `executeLocalService(...)` and by calling
+   any service's `execute()` directly — the self-check lives inside
+   `verifyAndSign`, which every service's `execute()` calls itself, not merely
+   inside the dispatcher wrapper. `executeLocalService(...)` remains the only
+   _supported_ service execution entry point; no service exposes an independent
+   success path that bypasses it.
+5. **Fixture matrix grew from 77 to 85 rows** (8 new rows document the runtime
+   failure-injection scenarios, 2 defect types × 4 services; no pre-existing row
+   was altered or removed). Matrix and script as source of truth: **85 total
+   matrix rows; 22 rows carry `receipt_crypto_verified: true`, covering all 4
+   implemented services; 7 of those 22 are also `executed_by_script: true`**
+   (unchanged from the third closure pass — the 8 new rows are runtime rejection
+   scenarios, not additional successful crypto-verified fixtures).
+6. `packages/service-runtime` test suite grew from 80 to 88 tests (14 test
+   files, all passing).
+
 ## Validation performed
 
 All from repo root unless noted:
 
 - `pnpm format:check`, `pnpm lint`, `pnpm typecheck` — pass (18/18 turbo
   packages, including `@siteborne/service-runtime`).
-- `pnpm test` — 692 tests passed, 6 skipped (pre-existing live-gate opt-ins), 0
+- `pnpm test` — 700 tests passed, 6 skipped (pre-existing live-gate opt-ins), 0
   failed, across 56 test files including all 14 `packages/service-runtime`
   files.
 - `pnpm services-runtime:check` — format/lint/typecheck/test/
-  test:property/fixtures:verify, all pass (80 unit/integration tests + 3
+  test:property/fixtures:verify, all pass (88 unit/integration tests + 3
   property tests + 1 real subprocess integration test + 14-scenario
   executed_by_script fixture regression gate — including one cryptographically
-  verified success fixture per service — against a 77-row documented matrix).
+  verified success fixture per service — against an 85-row documented matrix).
 - `pnpm verification:check` — unaffected by this pass; 76/76 tests, 5/5
   fixtures, 3/3 properties.
 - `pnpm pcc:generate:check`, `services:generate:check`, `openapi:generate:check`

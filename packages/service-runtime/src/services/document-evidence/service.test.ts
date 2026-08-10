@@ -37,7 +37,11 @@ describe('DocumentEvidenceJsonService', () => {
   it('reports dependency_unavailable when no artifact_reference is supplied (upload/url modes not implemented)', async () => {
     const context = await buildTestServiceContext('document_evidence_json.v1');
     const { bridge } = bridgeFor('unused', loadWorkerResult('native-text-success'));
-    const service = new DocumentEvidenceJsonService({ worker: bridge, signer });
+    const service = new DocumentEvidenceJsonService({
+      worker: bridge,
+      signer,
+      keyRegistry: registry,
+    });
     const result = await service.execute({}, context);
     expect(result.result_class).toBe('dependency_unavailable');
   });
@@ -45,7 +49,11 @@ describe('DocumentEvidenceJsonService', () => {
   it('rejects when the referenced artifact is not in the artifact store', async () => {
     const context = await buildTestServiceContext('document_evidence_json.v1');
     const { bridge } = bridgeFor('unused', loadWorkerResult('native-text-success'));
-    const service = new DocumentEvidenceJsonService({ worker: bridge, signer });
+    const service = new DocumentEvidenceJsonService({
+      worker: bridge,
+      signer,
+      keyRegistry: registry,
+    });
     const result = await service.execute(
       {
         artifact_reference: {
@@ -73,7 +81,11 @@ describe('DocumentEvidenceJsonService', () => {
       bytes
     );
 
-    const service = new DocumentEvidenceJsonService({ worker: bridge, signer });
+    const service = new DocumentEvidenceJsonService({
+      worker: bridge,
+      signer,
+      keyRegistry: registry,
+    });
     const result = await service.execute(
       {
         artifact_reference: {
@@ -115,7 +127,11 @@ describe('DocumentEvidenceJsonService', () => {
       },
       bytes
     );
-    const service = new DocumentEvidenceJsonService({ worker: bridge, signer });
+    const service = new DocumentEvidenceJsonService({
+      worker: bridge,
+      signer,
+      keyRegistry: registry,
+    });
     const result = await service.execute(
       {
         artifact_reference: {
@@ -153,7 +169,11 @@ describe('DocumentEvidenceJsonService', () => {
       bytes
     );
 
-    const service = new DocumentEvidenceJsonService({ worker: bridge, signer });
+    const service = new DocumentEvidenceJsonService({
+      worker: bridge,
+      signer,
+      keyRegistry: registry,
+    });
     const result = await service.execute(
       {
         artifact_reference: {
@@ -183,7 +203,11 @@ describe('DocumentEvidenceJsonService', () => {
       bytes
     );
 
-    const service = new DocumentEvidenceJsonService({ worker: bridge, signer });
+    const service = new DocumentEvidenceJsonService({
+      worker: bridge,
+      signer,
+      keyRegistry: registry,
+    });
     const result = await service.execute(
       {
         artifact_reference: {
@@ -213,7 +237,11 @@ describe('DocumentEvidenceJsonService', () => {
       bytes
     );
 
-    const service = new DocumentEvidenceJsonService({ worker: bridge, signer });
+    const service = new DocumentEvidenceJsonService({
+      worker: bridge,
+      signer,
+      keyRegistry: registry,
+    });
     const result = await service.execute(
       {
         artifact_reference: {
@@ -244,7 +272,11 @@ describe('DocumentEvidenceJsonService', () => {
       bytes
     );
 
-    const service = new DocumentEvidenceJsonService({ worker: bridge, signer });
+    const service = new DocumentEvidenceJsonService({
+      worker: bridge,
+      signer,
+      keyRegistry: registry,
+    });
     const result = await service.execute(
       {
         artifact_reference: {

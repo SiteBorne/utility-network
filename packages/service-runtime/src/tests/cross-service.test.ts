@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeAll } from 'vitest';
-import type { Signer } from '@siteborne/verification';
+import type { KeyRegistry, Signer } from '@siteborne/verification';
 import { buildFixtureRegistry } from '../wiring';
 import { executeLocalService } from '../dispatcher';
 import {
@@ -26,8 +26,9 @@ function loadWorkerResult(name: string): WorkerResult {
 
 describe('Cross-service invariants', () => {
   let signer: Signer;
+  let keyRegistry: KeyRegistry;
   beforeAll(async () => {
-    ({ signer } = await createFixtureSigner());
+    ({ signer, registry: keyRegistry } = await createFixtureSigner());
   });
 
   it('every registered service reports production_enabled: false', async () => {
@@ -41,6 +42,7 @@ describe('Cross-service invariants', () => {
       context,
       worker,
       signer,
+      keyRegistry,
     });
 
     for (const entry of registry.list()) {
@@ -57,6 +59,7 @@ describe('Cross-service invariants', () => {
       context,
       worker,
       signer,
+      keyRegistry,
     });
     const result = await executeLocalService(registry, 'not_a_real_service.v1', {}, context);
     expect(result.result_class).toBe('rejected');
@@ -66,7 +69,7 @@ describe('Cross-service invariants', () => {
     const context = await buildTestServiceContext('company_evidence_graph.v1');
     const httpClient = jsonHttpClient(loadAdapterFixture('sec-edgar/submissions-success.json'));
     const worker = new FixtureDocumentWorkerBridge(new Map());
-    const registry = buildFixtureRegistry({ httpClient, context, worker, signer });
+    const registry = buildFixtureRegistry({ httpClient, context, worker, signer, keyRegistry });
 
     const resultA = await executeLocalService(
       registry,
@@ -96,12 +99,14 @@ describe('Cross-service invariants', () => {
       context: context1,
       worker,
       signer,
+      keyRegistry,
     });
     const registryB = buildFixtureRegistry({
       httpClient: jsonHttpClient({}),
       context: context2,
       worker,
       signer,
+      keyRegistry,
     });
 
     const webResult = await executeLocalService(

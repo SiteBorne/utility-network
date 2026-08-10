@@ -115,6 +115,7 @@ async function main(): Promise<void> {
         noopAdapterAudit
       ),
       signer,
+      keyRegistry: registry,
     });
     return service.execute(
       {
@@ -149,6 +150,7 @@ async function main(): Promise<void> {
         noopAdapterAudit
       ),
       signer,
+      keyRegistry: registry,
     });
     return service.execute(
       { target_url: 'https://acme.example/', retrieval_mode: 'direct' },
@@ -177,6 +179,7 @@ async function main(): Promise<void> {
     const service = new DocumentEvidenceJsonService({
       worker: new FixtureDocumentWorkerBridge(new Map([['bench-native', worker]])),
       signer,
+      keyRegistry: registry,
     });
     return service.execute(
       {
@@ -197,7 +200,7 @@ async function main(): Promise<void> {
       audit: createTestServiceAuditSink(),
       execution_mode: 'fixture',
     });
-    const service = new VerifyAgentOutputService({ signer });
+    const service = new VerifyAgentOutputService({ signer, keyRegistry: registry });
     return service.execute(
       {
         verification_contract: {

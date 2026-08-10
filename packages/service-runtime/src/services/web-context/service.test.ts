@@ -29,6 +29,7 @@ describe('WebContextVerifiedService', () => {
         noopAdapterAudit
       ),
       signer,
+      keyRegistry: registry,
     });
     const result = await service.execute({ target_url: '', retrieval_mode: 'direct' }, context);
     expect(result.result_class).toBe('rejected');
@@ -46,6 +47,7 @@ describe('WebContextVerifiedService', () => {
         noopAdapterAudit
       ),
       signer,
+      keyRegistry: registry,
     });
     const result = await service.execute(
       { target_url: 'https://acme.example/', retrieval_mode: 'rendered' },
@@ -70,6 +72,7 @@ describe('WebContextVerifiedService', () => {
         noopAdapterAudit
       ),
       signer,
+      keyRegistry: registry,
     });
 
     const result = await service.execute(
@@ -108,6 +111,7 @@ describe('WebContextVerifiedService', () => {
         noopAdapterAudit
       ),
       signer,
+      keyRegistry: registry,
     });
     const result = await service.execute(
       { target_url: 'https://acme.example/article', retrieval_mode: 'direct' },
@@ -140,6 +144,7 @@ describe('WebContextVerifiedService', () => {
         noopAdapterAudit
       ),
       signer,
+      keyRegistry: registry,
     });
 
     const result = await service.execute(

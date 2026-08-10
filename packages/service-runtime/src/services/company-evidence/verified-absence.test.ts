@@ -90,6 +90,7 @@ describe('company_evidence_graph.v1 — verified-absence end-to-end (real adapte
         noopAdapterAudit
       ),
       signer,
+      keyRegistry: registry,
     });
 
     const result = await service.execute(
@@ -146,6 +147,7 @@ describe('company_evidence_graph.v1 — verified-absence end-to-end (real adapte
         noopAdapterAudit
       ),
       signer,
+      keyRegistry: registry,
     });
     const result = await service.execute(
       { company_name: 'Fictional NoMatch Corp', requested_field_groups: ['regulatory_mentions'] },
@@ -189,6 +191,7 @@ describe('company_evidence_graph.v1 — verified-absence end-to-end (real adapte
         noopAdapterAudit
       ),
       signer,
+      keyRegistry: registry,
     });
 
     const result = await service.execute(
@@ -226,6 +229,7 @@ describe('company_evidence_graph.v1 — verified-absence end-to-end (real adapte
         noopAdapterAudit
       ),
       signer,
+      keyRegistry: registry,
     });
     const result = await service.execute(
       { company_name: 'Acme', requested_field_groups: ['regulatory_mentions'] },
@@ -241,8 +245,9 @@ describe('company_evidence_graph.v1 — verified-absence end-to-end (real adapte
 
 describe('company_evidence_graph.v1 — verified-absence end-to-end (stubbed failure classes)', () => {
   let signer: Signer;
+  let registry: KeyRegistry;
   beforeAll(async () => {
-    ({ signer } = await createFixtureSigner());
+    ({ signer, registry } = await createFixtureSigner());
   });
 
   async function runWith(resultClass: AdapterResult['resultClass']) {
@@ -264,6 +269,7 @@ describe('company_evidence_graph.v1 — verified-absence end-to-end (stubbed fai
       ),
       federalRegister: stubFederalRegister(baseResult(resultClass)),
       signer,
+      keyRegistry: registry,
     });
     return service.execute(
       { company_name: 'Acme', requested_field_groups: ['regulatory_mentions'] },

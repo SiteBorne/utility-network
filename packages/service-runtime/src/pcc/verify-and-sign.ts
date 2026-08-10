@@ -14,6 +14,7 @@ import {
   issueReceipt,
   runMesh,
   type CandidateResult,
+  type KeyRegistry,
   type MeshVerdict,
   type ReproductionInput,
   type Signer,
@@ -24,12 +25,19 @@ import { toVerificationAuditSink, toVerificationClock } from '../context';
 import { toCandidateClaims, toCandidateEvidence } from './candidate-conversion';
 import type { PccDocument } from './document-types';
 import { toPccReceiptBlock } from './receipt-mapping';
+import { verifyServiceReceipt } from './receipt-verification';
 import type { ServiceExecutionContext } from '../types';
 
 export interface VerifyAndSignParams<TExtensionKey extends string, TExtension> {
   draft: PccDocument<TExtensionKey, TExtension>;
   context: ServiceExecutionContext;
   signer: Signer;
+  /** The registry `signer`'s key is (or should be) registered in. Used
+   * immediately after receipt issuance to cryptographically self-verify
+   * the receipt this step is about to hand back to the caller — this is
+   * the runtime enforcement boundary, not merely a test-time postcondition.
+   * See docs/decisions/0040-runtime-receipt-verification-boundary.md. */
+  keyRegistry: KeyRegistry;
   reproduction?: ReproductionInput | null;
   /** claim_ids that should be treated as verified-absent by the mesh; see
    * pcc/document-types.ts's PccClaim doc comment. */
@@ -48,6 +56,16 @@ export interface VerifyAndSignResult<TExtensionKey extends string, TExtension> {
   receipt: VerificationReceipt;
   schemaValidAfterFinalization: boolean;
   schemaErrors: string[];
+  /** Whether the receipt this step just issued cryptographically
+   * self-verified against `keyRegistry` (signature valid, key known and
+   * not revoked, service_id/contract_release match the candidate this
+   * receipt was issued for). When this is false, `verdict.decision` has
+   * already been forced to `'fail'` — every service's result_class
+   * computation derives from `verdict.decision`, so a service can never
+   * report `success` off the back of a receipt that doesn't actually
+   * verify. See the runtime-boundary ADR referenced above. */
+  receiptCryptographicallyValid: boolean;
+  receiptVerificationStatus: string;
 }
 
 export async function verifyAndSign<TExtensionKey extends string, TExtension>(
@@ -106,9 +124,39 @@ export async function verifyAndSign<TExtensionKey extends string, TExtension>(
 
   const receipt = await issueReceipt(candidate, verificationContext, verdict, params.signer);
 
+  // Runtime receipt-verification boundary: cryptographically self-verify
+  // the receipt just issued, against the same shared boundary
+  // (verifyServiceReceipt -> @siteborne/verification's verifyReceipt) every
+  // test already uses — never a second Ed25519 implementation. If this
+  // fails, the verdict itself is forced to 'fail' below, so no service can
+  // derive a 'success' result_class from an invalid receipt: every service
+  // computes result_class from verdict.decision, and this is the one
+  // shared place all four services' finalization passes through.
+  const receiptCheck = await verifyServiceReceipt({
+    receipt,
+    keyRegistry: params.keyRegistry,
+    expectedServiceId: candidate.service_id,
+    expectedContractRelease: candidate.contract_release,
+  });
+
+  const effectiveVerdict: MeshVerdict = receiptCheck.valid
+    ? verdict
+    : {
+        ...verdict,
+        decision: 'fail',
+        verification: {
+          ...verdict.verification,
+          decision: 'fail',
+          deterministic_failures: [
+            ...verdict.verification.deterministic_failures,
+            `receipt_cryptographic_verification_failed: ${receiptCheck.status}`,
+          ],
+        },
+      };
+
   const finalized: PccDocument<TExtensionKey, TExtension> = {
     ...draft,
-    verification: verdict.verification,
+    verification: effectiveVerdict.verification,
     receipt: toPccReceiptBlock(receipt),
   };
 
@@ -128,12 +176,14 @@ export async function verifyAndSign<TExtensionKey extends string, TExtension>(
 
   return {
     document: finalized,
-    verdict,
+    verdict: effectiveVerdict,
     outputHash: receipt.output_hash,
     receiptId: receipt.receipt_id,
     receipt,
     schemaValidAfterFinalization,
     schemaErrors,
+    receiptCryptographicallyValid: receiptCheck.valid,
+    receiptVerificationStatus: receiptCheck.status,
   };
 }
 

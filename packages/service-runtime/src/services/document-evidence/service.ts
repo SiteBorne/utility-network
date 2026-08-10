@@ -7,7 +7,7 @@
  * truthfully, never faked).
  */
 import { createHash } from 'node:crypto';
-import type { Signer } from '@siteborne/verification';
+import type { KeyRegistry, Signer } from '@siteborne/verification';
 import { buildClaim } from '../../claims/builder';
 import { buildEvidence } from '../../evidence/builder';
 import {
@@ -25,6 +25,10 @@ import type { WorkerResult } from './worker-result-types';
 export interface DocumentEvidenceServiceDeps {
   worker: DocumentWorkerBridge;
   signer: Signer;
+  /** The registry `signer`'s key is registered in — verifyAndSign uses this
+   * to cryptographically self-verify the receipt before this service can
+   * report success (see ADR 0040). */
+  keyRegistry: KeyRegistry;
 }
 
 const CLASSIFICATION_MAP: Record<string, string> = {
@@ -228,7 +232,12 @@ export class DocumentEvidenceJsonService
       extensionPayload: extension,
     });
 
-    const signed = await verifyAndSign({ draft, context, signer: this.deps.signer });
+    const signed = await verifyAndSign({
+      draft,
+      context,
+      signer: this.deps.signer,
+      keyRegistry: this.deps.keyRegistry,
+    });
     const resultClass =
       signed.verdict.decision !== 'pass'
         ? 'internal_verification_failed'

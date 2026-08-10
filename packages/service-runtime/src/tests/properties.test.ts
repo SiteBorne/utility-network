@@ -9,7 +9,7 @@ import fc from 'fast-check';
 import { createHash } from 'node:crypto';
 import { SecSubmissionsAdapter, PublicHttpAdapter } from '@siteborne/provider-adapters';
 import type { AuditEventSink as AdapterAuditEventSink } from '@siteborne/provider-adapters';
-import type { Signer } from '@siteborne/verification';
+import type { KeyRegistry, Signer } from '@siteborne/verification';
 import { CompanyEvidenceGraphService } from '../services/company-evidence/service';
 import { WebContextVerifiedService } from '../services/web-context/service';
 import { VerifyAgentOutputService } from '../services/agent-verification/service';
@@ -25,8 +25,9 @@ const noopAdapterAudit: AdapterAuditEventSink = { async log() {}, getEvents: () 
 
 describe('service-runtime properties', () => {
   let signer: Signer;
+  let keyRegistry: KeyRegistry;
   beforeAll(async () => {
-    ({ signer } = await createFixtureSigner());
+    ({ signer, registry: keyRegistry } = await createFixtureSigner());
   });
 
   it('property: identical AgentVerificationInput always produces the identical input_hash', async () => {
@@ -38,7 +39,7 @@ describe('service-runtime properties', () => {
         ),
         async (candidateOutput) => {
           const context = await buildTestServiceContext('verify_agent_output.v1');
-          const service = new VerifyAgentOutputService({ signer });
+          const service = new VerifyAgentOutputService({ signer, keyRegistry });
           const input: AgentVerificationInput = {
             verification_contract: { claims: [], deterministic_requirements: [] },
             candidate_output: candidateOutput,
@@ -94,6 +95,7 @@ describe('service-runtime properties', () => {
               noopAdapterAudit
             ),
             signer,
+            keyRegistry,
           });
 
           const result = await service.execute(
@@ -123,6 +125,7 @@ describe('service-runtime properties', () => {
             noopAdapterAudit
           ),
           signer,
+          keyRegistry,
         });
 
         const result = await service.execute(

@@ -17,7 +17,7 @@ import {
   verifyAndSign,
   toVerificationSummary,
 } from '../../pcc';
-import type { Signer } from '@siteborne/verification';
+import type { KeyRegistry, Signer } from '@siteborne/verification';
 import type { LocalService, ServiceExecutionContext, ServiceExecutionResult } from '../../types';
 import { buildAdapterContext } from '../adapter-context';
 import { resolveIdentity } from './identity';
@@ -35,6 +35,10 @@ export interface CompanyEvidenceServiceDeps {
    * dependency is reported `unavailable`, never fabricated. */
   federalRegister?: FederalRegisterAdapter;
   signer: Signer;
+  /** The registry `signer`'s key is registered in — verifyAndSign uses this
+   * to cryptographically self-verify the receipt before this service can
+   * report success (see ADR 0040). */
+  keyRegistry: KeyRegistry;
 }
 
 const DEFAULT_FIELD_GROUPS: FieldGroup[] = [
@@ -437,6 +441,7 @@ export class CompanyEvidenceGraphService
       draft,
       context,
       signer: this.deps.signer,
+      keyRegistry: this.deps.keyRegistry,
       verifiedAbsentClaimIds,
     });
 

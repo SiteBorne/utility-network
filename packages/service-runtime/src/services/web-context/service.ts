@@ -7,7 +7,7 @@
  */
 import { createHash } from 'node:crypto';
 import type { InjectedHttpClient, PublicHttpAdapter } from '@siteborne/provider-adapters';
-import type { Signer } from '@siteborne/verification';
+import type { KeyRegistry, Signer } from '@siteborne/verification';
 import { buildClaim } from '../../claims/builder';
 import { buildEvidence } from '../../evidence/builder';
 import {
@@ -25,6 +25,10 @@ export interface WebContextServiceDeps {
   httpClient: InjectedHttpClient;
   publicHttp: PublicHttpAdapter;
   signer: Signer;
+  /** The registry `signer`'s key is registered in — verifyAndSign uses this
+   * to cryptographically self-verify the receipt before this service can
+   * report success (see ADR 0040). */
+  keyRegistry: KeyRegistry;
 }
 
 function extractTitle(html: string): string | undefined {
@@ -198,7 +202,12 @@ export class WebContextVerifiedService
       extensionPayload: extension,
     });
 
-    const signed = await verifyAndSign({ draft, context, signer: this.deps.signer });
+    const signed = await verifyAndSign({
+      draft,
+      context,
+      signer: this.deps.signer,
+      keyRegistry: this.deps.keyRegistry,
+    });
 
     return {
       result_class:

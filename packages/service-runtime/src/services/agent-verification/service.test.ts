@@ -35,7 +35,7 @@ describe('VerifyAgentOutputService', () => {
 
   it('rejects an incomplete input', async () => {
     const context = await buildTestServiceContext('verify_agent_output.v1');
-    const service = new VerifyAgentOutputService({ signer });
+    const service = new VerifyAgentOutputService({ signer, keyRegistry: registry });
     // @ts-expect-error deliberately incomplete for the test
     const result = await service.execute({}, context);
     expect(result.result_class).toBe('rejected');
@@ -43,7 +43,7 @@ describe('VerifyAgentOutputService', () => {
 
   it('passes standard verification when the claim and deterministic requirement both hold', async () => {
     const context = await buildTestServiceContext('verify_agent_output.v1');
-    const service = new VerifyAgentOutputService({ signer });
+    const service = new VerifyAgentOutputService({ signer, keyRegistry: registry });
     const result = await service.execute(baseInput(), context);
 
     expect(result.result_class).toBe('success');
@@ -62,7 +62,7 @@ describe('VerifyAgentOutputService', () => {
 
   it('tampering with a bound receipt field (decision) invalidates cryptographic verification of the standard-mode receipt', async () => {
     const context = await buildTestServiceContext('verify_agent_output.v1');
-    const service = new VerifyAgentOutputService({ signer });
+    const service = new VerifyAgentOutputService({ signer, keyRegistry: registry });
     const result = await service.execute(baseInput(), context);
 
     const tampered: VerificationReceipt = {
@@ -79,7 +79,7 @@ describe('VerifyAgentOutputService', () => {
 
   it('reports a failed claim without letting the mesh reach a false pass', async () => {
     const context = await buildTestServiceContext('verify_agent_output.v1');
-    const service = new VerifyAgentOutputService({ signer });
+    const service = new VerifyAgentOutputService({ signer, keyRegistry: registry });
     const result = await service.execute(
       baseInput({
         verification_contract: {
@@ -96,7 +96,7 @@ describe('VerifyAgentOutputService', () => {
 
   it('fails schema_valid when candidate_output violates required_schema, and does not fabricate a pass', async () => {
     const context = await buildTestServiceContext('verify_agent_output.v1');
-    const service = new VerifyAgentOutputService({ signer });
+    const service = new VerifyAgentOutputService({ signer, keyRegistry: registry });
     const result = await service.execute(
       baseInput({ candidate_output: { total: 'not-a-number' } }),
       context
@@ -112,7 +112,7 @@ describe('VerifyAgentOutputService', () => {
 
   it('marks unimplemented deterministic checks as unverifiable rather than a silent pass', async () => {
     const context = await buildTestServiceContext('verify_agent_output.v1');
-    const service = new VerifyAgentOutputService({ signer });
+    const service = new VerifyAgentOutputService({ signer, keyRegistry: registry });
     const result = await service.execute(
       baseInput({
         verification_contract: {
@@ -132,7 +132,11 @@ describe('VerifyAgentOutputService', () => {
     const context = await buildTestServiceContext('verify_agent_output.v1', {
       mode: 'independent_reproduction',
     });
-    const service = new VerifyAgentOutputService({ signer, reproduction: null });
+    const service = new VerifyAgentOutputService({
+      signer,
+      keyRegistry: registry,
+      reproduction: null,
+    });
     const result = await service.execute(
       baseInput({ verification_mode: 'independent_reproduction' }),
       context
@@ -156,6 +160,7 @@ describe('VerifyAgentOutputService', () => {
 
     const service = new VerifyAgentOutputService({
       signer,
+      keyRegistry: registry,
       reproduction: { claims: [{ claim_id: claimId, value: true }] },
     });
     const result = await service.execute(input, context);
@@ -188,6 +193,7 @@ describe('VerifyAgentOutputService', () => {
     );
     const service = new VerifyAgentOutputService({
       signer,
+      keyRegistry: registry,
       reproduction: { claims: [{ claim_id: claimId, value: true }] },
     });
     const result = await service.execute(input, context);
@@ -218,6 +224,7 @@ describe('VerifyAgentOutputService', () => {
 
     const service = new VerifyAgentOutputService({
       signer,
+      keyRegistry: registry,
       reproduction: { claims: [{ claim_id: claimId, value: false }] },
     });
     const result = await service.execute(input, context);

@@ -13,7 +13,7 @@ import type {
   AuditEventSink as AdapterAuditEventSink,
   InjectedHttpClient,
 } from '@siteborne/provider-adapters';
-import type { ReproductionInput, Signer } from '@siteborne/verification';
+import type { KeyRegistry, ReproductionInput, Signer } from '@siteborne/verification';
 import { ServiceRegistry } from './registry';
 import { CompanyEvidenceGraphService } from './services/company-evidence/service';
 import { WebContextVerifiedService } from './services/web-context/service';
@@ -27,6 +27,11 @@ export interface FixtureWiringDeps {
   context: ServiceExecutionContext;
   worker: DocumentWorkerBridge;
   signer: Signer;
+  /** The registry `signer`'s key is (or, for a deliberately-broken test
+   * fixture, is not) registered in — threaded to every service so
+   * verifyAndSign can cryptographically self-verify each receipt before
+   * reporting success (see ADR 0040). */
+  keyRegistry: KeyRegistry;
   reproduction?: ReproductionInput | null;
 }
 
@@ -70,6 +75,7 @@ export function buildFixtureRegistry(deps: FixtureWiringDeps): ServiceRegistry {
         NOOP_ADAPTER_AUDIT
       ),
       signer: deps.signer,
+      keyRegistry: deps.keyRegistry,
     }),
   });
 
@@ -90,6 +96,7 @@ export function buildFixtureRegistry(deps: FixtureWiringDeps): ServiceRegistry {
         NOOP_ADAPTER_AUDIT
       ),
       signer: deps.signer,
+      keyRegistry: deps.keyRegistry,
     }),
   });
 
@@ -101,7 +108,11 @@ export function buildFixtureRegistry(deps: FixtureWiringDeps): ServiceRegistry {
     outputSchemaHash: SCHEMA_HASH_PLACEHOLDER_B,
     implementationStatus: 'local_fixture_verified',
     productionEnabled: false,
-    service: new DocumentEvidenceJsonService({ worker: deps.worker, signer: deps.signer }),
+    service: new DocumentEvidenceJsonService({
+      worker: deps.worker,
+      signer: deps.signer,
+      keyRegistry: deps.keyRegistry,
+    }),
   });
 
   registry.register({
@@ -112,7 +123,11 @@ export function buildFixtureRegistry(deps: FixtureWiringDeps): ServiceRegistry {
     outputSchemaHash: SCHEMA_HASH_PLACEHOLDER_B,
     implementationStatus: 'local_fixture_verified',
     productionEnabled: false,
-    service: new VerifyAgentOutputService({ signer: deps.signer, reproduction: deps.reproduction }),
+    service: new VerifyAgentOutputService({
+      signer: deps.signer,
+      keyRegistry: deps.keyRegistry,
+      reproduction: deps.reproduction,
+    }),
   });
 
   return registry;

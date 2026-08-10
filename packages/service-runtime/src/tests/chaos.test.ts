@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeAll } from 'vitest';
-import type { Signer } from '@siteborne/verification';
+import type { KeyRegistry, Signer } from '@siteborne/verification';
 import { SecSubmissionsAdapter, PublicHttpAdapter } from '@siteborne/provider-adapters';
 import type {
   AuditEventSink as AdapterAuditEventSink,
@@ -22,8 +22,9 @@ const throwingHttpClient: InjectedHttpClient = {
 
 describe('Chaos: dependency/internal failures never produce a false success', () => {
   let signer: Signer;
+  let keyRegistry: KeyRegistry;
   beforeAll(async () => {
-    ({ signer } = await createFixtureSigner());
+    ({ signer, registry: keyRegistry } = await createFixtureSigner());
   });
 
   it('an adapter that throws during company_evidence_graph.v1 never crashes the dispatcher and never returns success', async () => {
@@ -52,6 +53,7 @@ describe('Chaos: dependency/internal failures never produce a false success', ()
         noopAdapterAudit
       ),
       signer,
+      keyRegistry,
     });
     const registry = new ServiceRegistry();
     registry.register({
@@ -91,7 +93,11 @@ describe('Chaos: dependency/internal failures never produce a false success', ()
       },
       new Uint8Array([1, 2, 3])
     );
-    const service = new DocumentEvidenceJsonService({ worker: throwingWorker, signer });
+    const service = new DocumentEvidenceJsonService({
+      worker: throwingWorker,
+      signer,
+      keyRegistry,
+    });
     const registry = new ServiceRegistry();
     registry.register({
       serviceId: 'document_evidence_json.v1',
@@ -157,6 +163,7 @@ describe('Chaos: dependency/internal failures never produce a false success', ()
         noopAdapterAudit
       ),
       signer: failingSigner,
+      keyRegistry,
     });
     const registry = new ServiceRegistry();
     registry.register({

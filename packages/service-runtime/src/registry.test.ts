@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeAll } from 'vitest';
-import type { Signer } from '@siteborne/verification';
+import type { KeyRegistry, Signer } from '@siteborne/verification';
 import { ServiceRegistry } from './registry';
 import { executeLocalService } from './dispatcher';
 import { CompanyEvidenceGraphService } from './services/company-evidence/service';
@@ -11,8 +11,9 @@ const noopAdapterAudit: AdapterAuditEventSink = { async log() {}, getEvents: () 
 
 describe('ServiceRegistry', () => {
   let signer: Signer;
+  let keyRegistry: KeyRegistry;
   beforeAll(async () => {
-    ({ signer } = await createFixtureSigner());
+    ({ signer, registry: keyRegistry } = await createFixtureSigner());
   });
 
   it('rejects registering the same service_id twice', async () => {
@@ -33,6 +34,7 @@ describe('ServiceRegistry', () => {
         noopAdapterAudit
       ),
       signer,
+      keyRegistry,
     });
     const registry = new ServiceRegistry();
     const entry = {
@@ -84,6 +86,7 @@ describe('ServiceRegistry', () => {
         noopAdapterAudit
       ),
       signer,
+      keyRegistry,
     });
     const registry = new ServiceRegistry();
     registry.register({
@@ -104,8 +107,9 @@ describe('ServiceRegistry', () => {
 
 describe('executeLocalService (dispatcher)', () => {
   let signer: Signer;
+  let keyRegistry: KeyRegistry;
   beforeAll(async () => {
-    ({ signer } = await createFixtureSigner());
+    ({ signer, registry: keyRegistry } = await createFixtureSigner());
   });
 
   it('fails closed with unknown_service for an unregistered service_id', async () => {
@@ -134,6 +138,7 @@ describe('executeLocalService (dispatcher)', () => {
         noopAdapterAudit
       ),
       signer,
+      keyRegistry,
     });
     const registry = new ServiceRegistry();
     registry.register({
