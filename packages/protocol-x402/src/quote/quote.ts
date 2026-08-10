@@ -8,10 +8,16 @@
  */
 import { hashPaymentObject } from '../canonical';
 import { deterministicId } from '../ids';
+import { SUPPORTED_X402_VERSION } from '../version';
 import type { SiteborneServiceId } from '../types';
 import type { Network } from '@x402/core/types';
 
 export interface QuoteInput {
+  /** Defaults to SUPPORTED_X402_VERSION when omitted — bound into the
+   * quote identity either way, so a future protocol major-version bump
+   * (which changes SUPPORTED_X402_VERSION) automatically changes every
+   * new quote's identity rather than silently reusing the old binding. */
+  x402_version?: number;
   service_id: SiteborneServiceId;
   service_version: 'v1';
   contract_release: string;
@@ -20,6 +26,14 @@ export interface QuoteInput {
    * service. */
   input_hash: string;
   pricing_key: string;
+  /** governance/RISK_LIMITS.yaml's own `version` field (see
+   * @siteborne/pricing's resolvePricingSourceVersion) — binds the
+   * *pricing rule version*, not just a resolved price value, so a
+   * governance repricing revision is itself a bound, detectable change.
+   * Optional for callers that construct a quote from a price obtained
+   * another way (e.g. a synthetic test fixture); when omitted it is not
+   * part of the binding. */
+  pricing_source_version?: string;
   scheme: 'exact' | 'upto';
   network: Network;
   asset: string;
@@ -47,11 +61,13 @@ export interface Quote extends QuoteInput {
  * and therefore quote_id. */
 function bindingPayload(input: QuoteInput): Record<string, unknown> {
   return {
+    x402_version: input.x402_version ?? SUPPORTED_X402_VERSION,
     service_id: input.service_id,
     service_version: input.service_version,
     contract_release: input.contract_release,
     input_hash: input.input_hash,
     pricing_key: input.pricing_key,
+    pricing_source_version: input.pricing_source_version ?? null,
     scheme: input.scheme,
     network: input.network,
     asset: input.asset,

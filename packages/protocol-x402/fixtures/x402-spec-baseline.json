@@ -1,5 +1,6 @@
 {
   "recorded_at": "2026-08-09",
+  "checkpoint_2_updated_at": "2026-08-10",
   "protocol": {
     "targeted_major_version": 2,
     "headers": {
@@ -8,14 +9,14 @@
       "PAYMENT-RESPONSE": "server -> client, Base64-encoded SettleResponse JSON"
     },
     "schemes": {
-      "exact": "fixed-price, settles immediately, works on all supported networks",
-      "upto": "usage-based (buyer authorizes a maximum, seller settles actual usage up to it), currently EVM-only (Permit2)",
+      "exact": "fixed-price, settles immediately. Upstream x402 itself supports substantially more network families than SITEBORNE's own launch-scoped subset (docs.x402.org/schemes/exact) — see SITEBORNE_SUPPORTED_X402_SCHEMES in src/network/schemes.ts for SITEBORNE's deliberate initial subset (eip155, solana), which is a product choice, not a spec limitation.",
+      "upto": "usage-based (buyer authorizes a maximum, seller settles actual usage up to it), currently EVM-only (Permit2) upstream — this IS a real upstream constraint SITEBORNE mirrors exactly, not a SITEBORNE-specific narrowing (docs.x402.org/faq; getting-started/quickstart-for-sellers)",
       "batch-settlement": "off-chain vouchers settled in batches, not targeted by SUN-0700A"
     },
     "network_identifier_format": "CAIP-2 (namespace:reference), e.g. eip155:84532, solana:devnet",
     "amount_representation": "atomic-unit integer string, never binary floating point",
     "extensions_referenced": {
-      "payment-identifier": "extensions['payment-identifier'], 16-128 char [a-zA-Z0-9_-]+, idempotency/retry protection — not yet integrated (SUN-0700A checkpoint 2)",
+      "payment-identifier": "extensions['payment-identifier'], 16-128 char [a-zA-Z0-9_-]+, idempotency/retry protection — integrated in SUN-0700A checkpoint 2 via @x402/extensions/payment-identifier (see src/identifier/payment-identifier.ts)",
       "bazaar": "discovery metadata extension — not yet integrated (SUN-0700A later checkpoint)",
       "signed-offers-and-receipts": "not yet evaluated (SUN-0700A later checkpoint, ADR required)"
     }
@@ -35,6 +36,16 @@
       "url": "https://docs.x402.org/extensions/payment-identifier",
       "retrieved_via": "WebFetch, 2026-08-09",
       "notes": "confirmed payment-identifier extension shape and idempotency semantics for SUN-0700A checkpoint 2"
+    },
+    {
+      "url": "https://docs.x402.org/schemes/exact",
+      "retrieved_via": "user-supplied reference, checkpoint 2 correction",
+      "notes": "confirmed upstream x402's exact scheme supports substantially more network families than SITEBORNE's launch-scoped subset — SITEBORNE's eip155/solana restriction is a deliberate product choice, not a spec limitation; terminology corrected in src/network/schemes.ts"
+    },
+    {
+      "url": "https://docs.x402.org/faq",
+      "retrieved_via": "user-supplied reference, checkpoint 2 correction",
+      "notes": "confirmed upto remains documented as EVM-only, consistent with the quickstart-for-sellers page already recorded above"
     }
   ],
   "npm_packages_inspected": [
@@ -63,6 +74,32 @@
         "those same decoders call JSON.parse with no size bound and no prototype-pollution guard",
         "no exported Zod schema exists for SettleResponse (PAYMENT-RESPONSE payload) — only a plain TS type",
         "@siteborne/protocol-x402's src/codec/headers.ts wraps the safe validating parsers (parsePaymentRequired/parsePaymentPayload) with its own bounded, pollution-safe decode step, and hand-maintains the one schema (SettleResponse) upstream does not export"
+      ]
+    },
+    {
+      "name": "@x402/extensions",
+      "version": "2.21.0",
+      "used": true,
+      "used_subpath_only": "@x402/extensions/payment-identifier",
+      "package_level_dependencies": [
+        "@x402/core@~2.21.0",
+        "ajv@^8.17.1",
+        "jose@^5.9.6",
+        "@signinwithethereum/siwe@^4.1.0",
+        "tweetnacl@^1.0.3",
+        "viem@^2.48.11",
+        "zod@^3.24.2"
+      ],
+      "runtime_imports_of_payment_identifier_subpath_verified_by_inspecting_dist": ["ajv"],
+      "reason": "the parent @x402/extensions package bundles viem/jose/tweetnacl/siwe for OTHER subpaths (sign-in-with-x, offer-receipt) — but the payment-identifier subpath's own compiled chunk imports only ajv (verified directly in dist/esm/chunk-*.mjs), so it is safe to consume for the official wire-level idempotency extension without pulling wallet/crypto code into this package's actual runtime. src/tests/no-network.test.ts statically asserts no other @x402/extensions subpath is ever imported.",
+      "functions_used": [
+        "declarePaymentIdentifierExtension",
+        "extractAndValidatePaymentIdentifier",
+        "generatePaymentId",
+        "isValidPaymentId",
+        "PAYMENT_IDENTIFIER",
+        "PAYMENT_ID_MIN_LENGTH",
+        "PAYMENT_ID_MAX_LENGTH"
       ]
     }
   ]

@@ -790,9 +790,16 @@ tasks:
       - 'CDP facilitator verify/settle integration itself is out of scope for this sub-task (SUN-0700B)'
     evidence:
       - 'docs/reports/SUN-0700A-checkpoint-1-report.md'
+      - 'docs/reports/SUN-0700A-x402-protocol-foundation-report.md'
       - 'docs/decisions/0041-x402-v2-protocol-boundary.md'
+      - 'docs/decisions/0042-x402-pricing-boundary-correction.md'
+      - 'docs/decisions/0043-x402-payment-identifier-and-replay-persistence.md'
+      - 'docs/decisions/0044-upto-authorization-vs-usage-binding.md'
+      - 'docs/operations/PAYMENT_QUOTES.md'
+      - 'docs/operations/PAYMENT_REPLAY_PROTECTION.md'
       - 'packages/protocol-x402/fixtures/x402-spec-baseline.json'
-    next_action: 'In progress, not accepted. Checkpoint 1 of SUN-0700A complete: x402 V2 spec/package baseline recorded, packages/protocol-x402 established (replacing the SUN-0001 placeholder), protocol version binding, exact payment requirements, the PAYMENT-REQUIRED challenge builder, all three V2 header codecs, structural payment-payload validation, deterministic quote identity, service/resource binding, pricing integration, expiration validation, and a closed error taxonomy — 106 tests (unit/integration/property/adversarial/no-network), pnpm x402:check passes, full root pnpm check passes. Still not started: upto requirements, payment-identifier/idempotency, replay-protection persistence, settlement-evidence model, payment state machine, SITEBORNE receipt/payment linkage, Bazaar metadata, Signed Offers/Receipts evaluation. Not accepted until those checkpoints land.'
+      - 'packages/protocol-x402/fixtures/X402_SCENARIO_MATRIX.yaml'
+    next_action: "In progress, not accepted. Checkpoint 2 of SUN-0700A complete, on top of checkpoint 1: corrected the pricing boundary (protocol-x402 no longer reads governance/RISK_LIMITS.yaml directly — @siteborne/pricing/src/service-prices.ts now owns it, see ADR 0042), audited and fixed the quote binding (added x402_version and pricing_source_version, previously missing), corrected SITEBORNE-subset-vs-upstream-spec terminology in the scheme/network matrix, implemented real upto authorization (requirements/upto.ts) with the authorization-vs-usage split (ADR 0044) and a document_evidence_json.v1 usage calculator, integrated the official @x402/extensions/payment-identifier extension (ADR 0043), and built deterministic replay/idempotency classification (first_seen/duplicate_same/duplicate_conflict/already_consumed/expired) on an atomic in-memory repository modeled on SUN-0200's real D1IdempotencyRepository (no new migration needed) with proven concurrency safety. 223 tests (up from 106), pnpm x402:check passes, full root pnpm check passes (pnpm test: 933 passed, 6 skipped, 75 files). Still not started: SITEBORNE receipt/payment linkage, Bazaar metadata, Signed Offers/Receipts evaluation, a real D1-backed PaymentAttemptRepository adapter, and all of SUN-0700B (facilitator verification/settlement). Not accepted until those land."
     blocker: null
     commit_ref: null
 

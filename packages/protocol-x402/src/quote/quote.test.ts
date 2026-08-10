@@ -55,10 +55,12 @@ describe('buildQuote', () => {
   });
 
   it.each([
+    ['x402_version', 3],
     ['service_id', 'web_context_verified.v1'],
     ['contract_release', '2.0.0'],
     ['input_hash', 'sha256:' + '2'.repeat(64)],
     ['pricing_key', 'other_key'],
+    ['pricing_source_version', '2.0.0'],
     ['scheme', 'upto'],
     ['network', 'eip155:1'],
     ['asset', '0xOtherAsset'],
@@ -70,6 +72,30 @@ describe('buildQuote', () => {
     const original = await buildQuote(baseInput());
     const mutated = await buildQuote(baseInput({ [field]: value } as Partial<QuoteInput>));
     expect(mutated.quote_id).not.toBe(original.quote_id);
+  });
+
+  it('binds x402_version even when omitted (defaults to SUPPORTED_X402_VERSION, still part of the hash)', async () => {
+    const implicit = await buildQuote(baseInput());
+    const explicit = await buildQuote(baseInput({ x402_version: 2 }));
+    expect(implicit.quote_id).toBe(explicit.quote_id);
+  });
+
+  it('directive §3 regression: same resource URL context, different request input -> different quote_id', async () => {
+    const a = await buildQuote(baseInput({ input_hash: 'sha256:' + 'a'.repeat(64) }));
+    const b = await buildQuote(baseInput({ input_hash: 'sha256:' + 'b'.repeat(64) }));
+    expect(a.quote_id).not.toBe(b.quote_id);
+  });
+
+  it('directive §3 regression: same input, different service -> different quote_id', async () => {
+    const a = await buildQuote(baseInput({ service_id: 'company_evidence_graph.v1' }));
+    const b = await buildQuote(baseInput({ service_id: 'web_context_verified.v1' }));
+    expect(a.quote_id).not.toBe(b.quote_id);
+  });
+
+  it('directive §3 regression: same input/service, different contract_release -> different quote_id', async () => {
+    const a = await buildQuote(baseInput({ contract_release: '1.0.0' }));
+    const b = await buildQuote(baseInput({ contract_release: '1.1.0' }));
+    expect(a.quote_id).not.toBe(b.quote_id);
   });
 });
 

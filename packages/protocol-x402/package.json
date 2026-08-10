@@ -28,6 +28,7 @@
     "@siteborne/pricing": "workspace:*",
     "@siteborne/verification": "workspace:*",
     "@x402/core": "^2.21.0",
+    "@x402/extensions": "^2.21.0",
     "yaml": "^2.5.0",
     "zod": "^3.23.0"
   },

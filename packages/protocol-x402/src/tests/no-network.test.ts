@@ -122,4 +122,24 @@ describe('no-credential proof (static source audit)', () => {
       expect(content).not.toMatch(/@x402\/core\/facilitator|from ['"]viem|from ['"]wagmi/);
     }
   });
+
+  it('the only @x402/extensions subpath imported anywhere in this package is payment-identifier — not sign-in-with-x, offer-receipt, bazaar, or builder-code (those pull in viem/jose/tweetnacl/siwe transitively)', () => {
+    const files = collectTsFiles(SRC_DIR);
+    for (const file of files) {
+      const content = readFileSync(file, 'utf-8');
+      const matches = content.match(/@x402\/extensions\/[a-z-]+/g) ?? [];
+      for (const match of matches) {
+        expect(match).toBe('@x402/extensions/payment-identifier');
+      }
+    }
+  });
+
+  it('no source file in this package directly opens governance/RISK_LIMITS.yaml — pricing must be consumed through @siteborne/pricing (see docs/decisions/0042); documenting the boundary in a comment is fine, actually opening the file is not', () => {
+    const files = collectTsFiles(SRC_DIR);
+    for (const file of files) {
+      const content = readFileSync(file, 'utf-8');
+      expect(content).not.toMatch(/readFileSync\([^)]*RISK_LIMITS/);
+      expect(content).not.toMatch(/new URL\([^)]*RISK_LIMITS/);
+    }
+  });
 });

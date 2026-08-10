@@ -130,6 +130,8 @@ export function applyScarcityMultiplier(baseCostMicro: number, remainingQuotaPct
   return Math.ceil(baseCostMicro * multiplier);
 }
 
+export * from './service-prices';
+
 export function applyFailureRiskMultiplier(costMicro: number, providerReliability: number): number {
   let multiplier: number;
   if (providerReliability >= 0.99) multiplier = 1.0;

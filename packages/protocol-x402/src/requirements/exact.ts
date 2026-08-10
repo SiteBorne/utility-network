@@ -9,7 +9,10 @@
 import type { PaymentRequirements } from '@x402/core/types';
 import { hashPaymentObject } from '../canonical';
 import { deterministicId } from '../ids';
-import { isSchemeSupportedOnNetwork } from '../network/schemes';
+import {
+  isSchemeSupportedOnNetwork,
+  UnsupportedSchemeNetworkCombinationError,
+} from '../network/schemes';
 import type { Quote } from '../quote/quote';
 import type { RequirementValidationFailureReason } from '../errors';
 
@@ -33,17 +36,6 @@ export class UnsupportedSchemeForExactBuilderError extends Error {
   constructor(scheme: string) {
     super(`buildExactPaymentRequirement called with quote.scheme "${scheme}", expected "exact"`);
     this.name = 'UnsupportedSchemeForExactBuilderError';
-  }
-}
-
-export class UnsupportedSchemeNetworkCombinationError extends Error {
-  constructor(
-    scheme: string,
-    network: string,
-    public readonly reason: string
-  ) {
-    super(`scheme "${scheme}" is not supported on network "${network}" (${reason})`);
-    this.name = 'UnsupportedSchemeNetworkCombinationError';
   }
 }
 

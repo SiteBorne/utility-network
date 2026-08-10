@@ -5,8 +5,8 @@ import {
   buildExactPaymentRequirement,
   validateExactRequirementBinding,
   UnsupportedSchemeForExactBuilderError,
-  UnsupportedSchemeNetworkCombinationError,
 } from './exact';
+import { UnsupportedSchemeNetworkCombinationError } from '../network/schemes';
 
 function baseQuoteInput(overrides: Partial<QuoteInput> = {}): QuoteInput {
   return {

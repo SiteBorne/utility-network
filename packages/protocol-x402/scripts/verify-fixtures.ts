@@ -5,9 +5,10 @@
  * (package.json's @x402/core version) and with SUPPORTED_X402_VERSION.
  * Not a network call — reads only already-committed, local files.
  */
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { parse } from 'yaml';
 import { x402Version } from '@x402/core';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -62,6 +63,34 @@ function main(): void {
     unusedHeavyPackages.length === 2,
     'both heavier x402/@coinbase-x402 packages remain explicitly recorded as evaluated-but-not-used'
   );
+
+  const extensionsEntry = baseline.npm_packages_inspected.find(
+    (p) => p.name === '@x402/extensions'
+  );
+  const installedExtensionsVersionSpec = pkg.dependencies['@x402/extensions'];
+  assert(
+    Boolean(extensionsEntry) && extensionsEntry?.used === true,
+    'fixtures/x402-spec-baseline.json records @x402/extensions as actually used'
+  );
+  assert(
+    Boolean(installedExtensionsVersionSpec) &&
+      extensionsEntry !== undefined &&
+      installedExtensionsVersionSpec!.replace('^', '').split('.')[0] ===
+        extensionsEntry.version.split('.')[0],
+    `package.json's @x402/extensions dependency spec (${installedExtensionsVersionSpec}) is major-version-compatible with the recorded baseline (${extensionsEntry?.version})`
+  );
+
+  console.log('\nVerifying X402_SCENARIO_MATRIX.yaml test_reference coverage...\n');
+  const matrix = parse(
+    readFileSync(join(PACKAGE_ROOT, 'fixtures', 'X402_SCENARIO_MATRIX.yaml'), 'utf-8')
+  ) as { scenarios: Array<{ category: string; test_reference: string }> };
+  for (const scenario of matrix.scenarios) {
+    const exists = existsSync(join(PACKAGE_ROOT, scenario.test_reference));
+    assert(
+      exists,
+      `scenario "${scenario.category}" test_reference "${scenario.test_reference}" exists`
+    );
+  }
 
   if (failures > 0) {
     console.error(`\n${failures} spec-baseline consistency check(s) failed.`);

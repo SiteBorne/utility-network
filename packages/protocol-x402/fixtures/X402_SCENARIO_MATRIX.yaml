@@ -1,0 +1,47 @@
+# Directive §30 fixture matrix — catalogs the required scenario categories
+# for SUN-0700A checkpoint 2 and the test file that actually exercises
+# each one. scripts/verify-fixtures.ts asserts every row's test_reference
+# exists on disk; it is not a runtime-behavior regression gate the way
+# @siteborne/service-runtime's SERVICE_FIXTURE_MATRIX.yaml is (this
+# package's own vitest suite is that gate) — this matrix exists so no
+# required scenario category can be silently missing a test file.
+version: '1.0.0'
+scenarios:
+  - category: exact_with_payment_identifier
+    test_reference: src/identifier/payment-identifier.test.ts
+  - category: upto_valid
+    test_reference: src/requirements/upto.test.ts
+  - category: upto_exact_boundary
+    test_reference: src/requirements/upto.test.ts
+  - category: upto_over_max
+    test_reference: src/requirements/upto.test.ts
+  - category: upto_unsupported_network
+    test_reference: src/requirements/upto.test.ts
+  - category: first_seen
+    test_reference: src/replay/idempotency.test.ts
+  - category: duplicate_same
+    test_reference: src/replay/idempotency.test.ts
+  - category: duplicate_conflict
+    test_reference: src/replay/idempotency.test.ts
+  - category: expired
+    test_reference: src/replay/idempotency.test.ts
+  - category: consumed
+    test_reference: src/replay/idempotency.test.ts
+  - category: concurrent_same
+    test_reference: src/replay/repository.test.ts
+  - category: concurrent_conflicting
+    test_reference: src/replay/repository.test.ts
+  - category: document_usage_result
+    test_reference: src/pricing/document-usage.test.ts
+  - category: exact_upto_separation
+    test_reference: src/tests/exact-upto-separation.test.ts
+  - category: pricing_boundary_regression
+    test_reference: src/pricing/mapping.test.ts
+  - category: quote_binding_regression
+    test_reference: src/quote/quote.test.ts
+  - category: no_network_no_credential_proof
+    test_reference: src/tests/no-network.test.ts
+  - category: replay_and_binding_properties
+    test_reference: src/tests/properties.test.ts
+  - category: replay_and_binding_adversarial
+    test_reference: src/tests/adversarial.test.ts

@@ -1,23 +1,28 @@
-import { describe, expect, it, afterEach } from 'vitest';
+/**
+ * Proves protocol-x402's pricing re-export is identical to
+ * @siteborne/pricing's own canonical values — not a second, potentially
+ * divergent pricing source. protocol-x402 owns no YAML/filesystem access
+ * of its own (see docs/decisions/0042).
+ */
+import { describe, expect, it } from 'vitest';
+import * as siteborneePricing from '@siteborne/pricing';
 import {
   resolveServiceMaxPriceUsd,
+  resolvePricingSourceVersion,
   usdToAtomicUnits,
-  UnknownPricingKeyError,
-  __setRiskLimitsForTesting,
 } from './mapping';
+import { buildQuote } from '../quote/quote';
 
-describe('resolveServiceMaxPriceUsd', () => {
-  afterEach(() => {
-    __setRiskLimitsForTesting(undefined); // restore real governance file for other tests
+describe('protocol-x402 pricing re-export == @siteborne/pricing canonical values', () => {
+  it('resolveServiceMaxPriceUsd is the exact same function object as @siteborne/pricing exports', () => {
+    expect(resolveServiceMaxPriceUsd).toBe(siteborneePricing.resolveServiceMaxPriceUsd);
   });
 
-  it('resolves company_evidence_graph against the real governance/RISK_LIMITS.yaml source of truth', () => {
-    // Not hardcoded here — this assertion documents the currently-accepted
-    // value so a real governance change is caught, not silently absorbed.
-    expect(resolveServiceMaxPriceUsd('company_evidence_graph')).toBe('0.039');
+  it('usdToAtomicUnits is the exact same function object as @siteborne/pricing exports', () => {
+    expect(usdToAtomicUnits).toBe(siteborneePricing.usdToAtomicUnits);
   });
 
-  it('resolves all nine pricing keys the current governance file defines', () => {
+  it('every pricing key resolves to the identical value through both import paths', () => {
     const keys = [
       'company_evidence_graph',
       'web_context_verified_direct',
@@ -30,47 +35,33 @@ describe('resolveServiceMaxPriceUsd', () => {
       'verify_agent_output_reproduction',
     ] as const;
     for (const key of keys) {
-      expect(() => resolveServiceMaxPriceUsd(key)).not.toThrow();
-      expect(typeof resolveServiceMaxPriceUsd(key)).toBe('string');
+      expect(resolveServiceMaxPriceUsd(key)).toBe(siteborneePricing.resolveServiceMaxPriceUsd(key));
     }
   });
 
-  it('throws UnknownPricingKeyError for a key not present in the loaded document, rather than fabricating a price', () => {
-    __setRiskLimitsForTesting({ financial_limits: { max_price_usd_per_service: {} } });
-    expect(() => resolveServiceMaxPriceUsd('company_evidence_graph')).toThrow(
-      UnknownPricingKeyError
-    );
-  });
+  it('an x402 quote built from a resolved price carries the canonical pricing package amount, not a duplicated constant', async () => {
+    const priceUsd = resolveServiceMaxPriceUsd('company_evidence_graph');
+    const canonicalPriceUsd = siteborneePricing.resolveServiceMaxPriceUsd('company_evidence_graph');
+    expect(priceUsd).toBe(canonicalPriceUsd);
 
-  it('reads from an injected synthetic document when substituted for testing', () => {
-    __setRiskLimitsForTesting({
-      financial_limits: { max_price_usd_per_service: { company_evidence_graph: 0.5 } },
+    const amount = usdToAtomicUnits(priceUsd, 6);
+    const pricingSourceVersion = resolvePricingSourceVersion();
+    const quote = await buildQuote({
+      service_id: 'company_evidence_graph.v1',
+      service_version: 'v1',
+      contract_release: '1.0.0',
+      input_hash: 'sha256:' + '1'.repeat(64),
+      pricing_key: 'company_evidence_graph',
+      pricing_source_version: pricingSourceVersion,
+      scheme: 'exact',
+      network: 'eip155:8453',
+      asset: '0xUSDC',
+      amount,
+      payee: '0xPayee',
+      issued_at: '2026-08-09T00:00:00.000Z',
+      expires_at: '2026-08-09T00:05:00.000Z',
     });
-    expect(resolveServiceMaxPriceUsd('company_evidence_graph')).toBe('0.5');
-  });
-});
-
-describe('usdToAtomicUnits', () => {
-  it('converts to 6-decimal atomic units (USDC) without floating-point corruption', () => {
-    expect(usdToAtomicUnits('0.01', 6)).toBe('10000');
-    expect(usdToAtomicUnits('0.019', 6)).toBe('19000');
-    expect(usdToAtomicUnits('0.029', 6)).toBe('29000');
-    expect(usdToAtomicUnits('0.039', 6)).toBe('39000');
-    expect(usdToAtomicUnits('0.049', 6)).toBe('49000');
-  });
-
-  it('converts to 18-decimal atomic units (e.g. an 18-decimal ERC-20)', () => {
-    expect(usdToAtomicUnits('0.01', 18)).toBe(String(10000n * 10n ** 12n));
-  });
-
-  it('converts to fewer-than-6-decimal atomic units by flooring, never overstating the amount', () => {
-    // 0.019 USD == 19000 micro-USD; at 2 decimals that's 1.9 units, floored to 1.
-    expect(usdToAtomicUnits('0.019', 2)).toBe('1');
-  });
-
-  it('is deterministic: repeated conversion of the same input is byte-identical', () => {
-    const a = usdToAtomicUnits('0.039', 6);
-    const b = usdToAtomicUnits('0.039', 6);
-    expect(a).toBe(b);
+    expect(quote.amount).toBe(siteborneePricing.usdToAtomicUnits(canonicalPriceUsd, 6));
+    expect(quote.pricing_source_version).toBe(siteborneePricing.resolvePricingSourceVersion());
   });
 });

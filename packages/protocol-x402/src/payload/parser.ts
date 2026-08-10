@@ -11,6 +11,7 @@ import type { PaymentPayload } from '@x402/core/types';
 import { checkSupportedVersion, SUPPORTED_X402_VERSION } from '../version';
 import { isSchemeSupportedOnNetwork, isSupportedScheme } from '../network/schemes';
 import { validateExactRequirementBinding } from '../requirements/exact';
+import { validateUptoRequirementBinding } from '../requirements/upto';
 import { isQuoteExpired } from '../quote/quote';
 import type { Quote } from '../quote/quote';
 import type { PaymentPayloadValidationResult, PaymentPayloadValidationStatus } from '../errors';
@@ -89,18 +90,22 @@ export function validatePaymentPayloadStructure(
     );
   }
 
-  if (context.quote.scheme === 'exact') {
-    const binding = validateExactRequirementBinding(accepted, context.quote, context.now_iso);
-    if (!binding.valid) {
-      if (binding.failures.includes('quote_expired')) {
-        return result('expired', binding.failures.join(','));
-      }
-      return result('requirement_mismatch', binding.failures.join(','));
+  // Both exact and upto route through the same shape of check
+  // (validate*RequirementBinding), each scheme's own module — this
+  // function never re-derives amount/asset/network/payee comparisons
+  // itself, and never lets a scheme's requirement satisfy the other
+  // scheme's binding function (the scheme-equality check above already
+  // rejected any cross-scheme payload before reaching here).
+  const binding =
+    context.quote.scheme === 'exact'
+      ? validateExactRequirementBinding(accepted, context.quote, context.now_iso)
+      : validateUptoRequirementBinding(accepted, context.quote, context.now_iso);
+  if (!binding.valid) {
+    if (binding.failures.includes('quote_expired')) {
+      return result('expired', binding.failures.join(','));
     }
+    return result('requirement_mismatch', binding.failures.join(','));
   }
-  // 'upto' binding validation is a later checkpoint (directive §9) — this
-  // checkpoint's quote/requirement layer only builds and validates
-  // `exact`.
 
   return result('valid_structure');
 }
