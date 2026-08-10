@@ -62,6 +62,7 @@ async function verifySchema(db: any) {
     'queue_dispatches',
     'audit_events',
     'security_events',
+    'payment_attempts',
   ];
 
   for (const table of tables) {
@@ -323,6 +324,73 @@ async function runConstraintTests(db: any) {
   } catch (e) {
     if (e instanceof Error && e.message.includes('not stored exactly')) throw e;
     console.log('✓ Monetary values stored exactly');
+  }
+
+  // Test: duplicate payment_identifier on payment_attempts (SUN-0700A
+  // checkpoint 2 closure) — the authoritative one-identifier-one-binding
+  // ownership rule must be enforced by the database's own unique index,
+  // not application logic. See migrations/0002_payment_attempt_replay.sql.
+  try {
+    const insertAttempt = () =>
+      db.prepare(`
+        INSERT INTO payment_attempts (
+          id, payment_identifier, binding_digest, quote_id, requirement_id,
+          service_id, service_version, contract_release, request_input_hash,
+          resource_id, scheme, network, asset, amount, payee, created_at, expires_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+
+    await insertAttempt()
+      .bind(
+        crypto.randomUUID(),
+        'pay_constraint_test_0000000001',
+        'sha256:' + '1'.repeat(64),
+        'qte_' + '1'.repeat(24),
+        'req_' + '1'.repeat(24),
+        'company_evidence_graph.v1',
+        'v1',
+        '1.0.0',
+        'sha256:' + '2'.repeat(64),
+        'https://api.siteborne.dev/v1/x',
+        'exact',
+        'eip155:8453',
+        '0xUSDC',
+        '39000',
+        '0xPayee',
+        now,
+        expires
+      )
+      .run();
+
+    const dupeResult = await insertAttempt()
+      .bind(
+        crypto.randomUUID(),
+        'pay_constraint_test_0000000001', // same identifier
+        'sha256:' + '9'.repeat(64), // different binding
+        'qte_' + '9'.repeat(24),
+        'req_' + '9'.repeat(24),
+        'web_context_verified.v1',
+        'v1',
+        '1.0.0',
+        'sha256:' + '9'.repeat(64),
+        'https://api.siteborne.dev/v1/y',
+        'exact',
+        'eip155:8453',
+        '0xUSDC',
+        '1',
+        '0xOther',
+        now,
+        expires
+      )
+      .run();
+
+    if (dupeResult.success) {
+      throw new Error('Duplicate payment_identifier should have failed');
+    }
+    console.log('✓ Duplicate payment_identifier constraint enforced');
+  } catch (e) {
+    if (e instanceof Error && e.message.includes('should have failed')) throw e;
+    console.log('✓ Duplicate payment_identifier constraint enforced');
   }
 
   console.log('All constraint tests passed!');

@@ -12,6 +12,7 @@ export default defineConfig({
     ],
     exclude: [
       'node_modules/**',
+      '**/node_modules/**',
       'dist/**',
       'services/modal-worker/**',
       'packages/**/node_modules/**',
@@ -37,6 +38,7 @@ export default defineConfig({
       '@siteborne/pricing': path.resolve(__dirname, 'packages/pricing/src'),
       '@siteborne/policy': path.resolve(__dirname, 'packages/policy/src'),
       '@siteborne/test-fixtures': path.resolve(__dirname, 'packages/test-fixtures/src'),
+      '@siteborne/protocol-x402': path.resolve(__dirname, 'packages/protocol-x402/src'),
     },
     typecheck: {
       tsconfig: 'tsconfig.base.json',

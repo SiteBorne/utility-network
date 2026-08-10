@@ -24,7 +24,10 @@ export type IdempotencyOutcome =
   | { status: 'duplicate_same'; record: PaymentAttemptRecord }
   | { status: 'duplicate_conflict'; existing: PaymentAttemptRecord }
   | { status: 'already_consumed'; existing: PaymentAttemptRecord }
-  | { status: 'expired'; existing: PaymentAttemptRecord };
+  | { status: 'expired'; existing: PaymentAttemptRecord }
+  /** A genuine repository/persistence failure — never interpreted as
+   * `first_seen` or a safe duplicate (directive §16). Fails closed. */
+  | { status: 'repository_error'; reason: string };
 
 export interface AcquirePaymentAttemptInput {
   binding: PaymentAttemptBinding;
@@ -59,6 +62,9 @@ export async function acquirePaymentAttempt(
   const result = await repository.acquire(candidate);
   if (result.status === 'acquired') {
     return { status: 'first_seen', record: result.record };
+  }
+  if (result.status === 'error') {
+    return { status: 'repository_error', reason: result.reason };
   }
 
   const { existing } = result;

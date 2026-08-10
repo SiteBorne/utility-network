@@ -57,6 +57,9 @@ importers:
 
   apps/edge-api:
     dependencies:
+      '@siteborne/protocol-x402':
+        specifier: workspace:*
+        version: link:../../packages/protocol-x402
       hono:
         specifier: ^4.5.0
         version: 4.13.0
@@ -67,6 +70,9 @@ importers:
       eslint:
         specifier: ^9.0.0
         version: 9.18.0
+      miniflare:
+        specifier: 5.20260801.0-alpha
+        version: 5.20260801.0-alpha
       typescript:
         specifier: ^5.5.0
         version: 5.7.3

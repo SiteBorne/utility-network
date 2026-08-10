@@ -44,6 +44,7 @@ export async function verifyMigrations(db: D1Database): Promise<MigrationVerific
       'queue_dispatches',
       'audit_events',
       'security_events',
+      'payment_attempts',
     ];
 
     for (const table of requiredTables) {

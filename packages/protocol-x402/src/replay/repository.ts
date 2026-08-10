@@ -26,7 +26,14 @@ export interface PaymentAttemptRecord {
 
 export type AcquireOutcome =
   | { status: 'acquired'; record: PaymentAttemptRecord }
-  | { status: 'conflict'; existing: PaymentAttemptRecord };
+  | { status: 'conflict'; existing: PaymentAttemptRecord }
+  /** A genuine persistence failure (database unavailable, a transaction
+   * error, a corrupted stored row that cannot be safely mapped back to a
+   * PaymentAttemptRecord) — closed, never thrown across this boundary. A
+   * caller must never interpret this as `acquired` (first_seen) or as a
+   * safe duplicate; `acquirePaymentAttempt` (replay/idempotency.ts) maps
+   * this directly to a `repository_error` outcome. */
+  | { status: 'error'; reason: string };
 
 /** Atomic acquire-or-detect-conflict, mirroring
  * `D1IdempotencyRepository.acquire()`'s real semantics: a unique-key

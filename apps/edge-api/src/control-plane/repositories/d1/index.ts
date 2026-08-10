@@ -20,6 +20,15 @@ export { D1JobsRepository, D1JobAttemptsRepository, D1StateEventsRepository } fr
 
 export { D1IdempotencyRepository } from './idempotency';
 
+// SUN-0700A checkpoint 2 closure — the authoritative D1-backed
+// PaymentAttemptRepository (payment-identifier/replay persistence). Not
+// yet wired into any HTTP route (that remains a later checkpoint) — see
+// apps/edge-api/tests/d1-payment-attempts.test.ts for its proof and
+// docs/decisions/0045-d1-payment-attempt-persistence.md for why this is a
+// dedicated table rather than an adapter over idempotency_records/
+// payment_quotes.
+export { D1PaymentAttemptRepository } from './payment-attempts';
+
 export { D1ArtifactsRepository } from './artifacts';
 export { D1QueueDispatchRepository } from './artifacts';
 
