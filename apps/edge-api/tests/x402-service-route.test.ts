@@ -185,6 +185,37 @@ describe('x402 HTTP vertical slice (SUN-0700A checkpoint 5)', () => {
       });
       expect(a.accepts[0].extra?.quote_id).not.toBe(b.accepts[0].extra?.quote_id);
     });
+
+    it('preserves official EVM token-domain metadata in the payment requirement extra slot', async () => {
+      const metadataApp = new Hono();
+      createX402ServiceRoute(metadataApp, {
+        serviceId: 'web_context_verified.v1',
+        scheme: 'exact',
+        pricingKey: 'web_context_verified_direct',
+        network: 'eip155:84532',
+        asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+        paymentRequirementExtra: { name: 'USDC', version: '2' },
+        path: '/v1/web/context-domain-metadata',
+        inputSchema: { type: 'object' },
+        contractRelease: '1.0.0',
+        inputSchemaHash: 'sha256:' + '1'.repeat(64),
+        outputSchemaHash: 'sha256:' + '2'.repeat(64),
+        pccDependency: '1.0.0',
+        db,
+        clock: () => clockValue,
+        evidenceMode: 'fixture',
+        executor: async () => ({ result: { result_class: 'rejected' } }),
+      });
+
+      const challenge = await get402(metadataApp, '/v1/web/context-domain-metadata', {
+        probe: true,
+      });
+      expect(challenge.accepts[0].extra).toMatchObject({
+        name: 'USDC',
+        version: '2',
+      });
+      expect(challenge.accepts[0].extra?.quote_id).toMatch(/^qte_[a-f0-9]{24}$/);
+    });
   });
 
   describe('exact synthetic end-to-end lifecycle (company_evidence_graph.v1)', () => {

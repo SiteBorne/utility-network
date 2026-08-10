@@ -105,6 +105,11 @@ export interface X402ServiceRouteConfig {
   pricingKey: PricingKey;
   network: Network;
   asset: string;
+  /** Official scheme/asset metadata carried in PaymentRequirements.extra
+   * (for example an EVM token's EIP-712 domain name/version). The route
+   * remains protocol-generic; its CDP/EVM integration supplies values
+   * from the official x402 implementation rather than duplicating them. */
+  paymentRequirementExtra?: Record<string, unknown>;
   /** The real planned route path, from the accepted OpenAPI source —
    * never invented (directive §5). */
   path: string;
@@ -254,11 +259,13 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
               quote,
               resource_id: resourceUrl,
               maxTimeoutSeconds,
+              extra: config.paymentRequirementExtra,
             })
           : await buildUptoPaymentRequirement({
               quote,
               resource_id: resourceUrl,
               maxTimeoutSeconds,
+              extra: config.paymentRequirementExtra,
             });
 
       await quotes.create(quote, built.requirement, built.requirement_id, resourceUrl);
@@ -494,8 +501,11 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
       config.evidenceMode
     );
     if (!verifyGate.allowed) {
-      await transition(jobId, 'PAYMENT_CHALLENGED', 'PAYMENT_FAILED', 'PAYMENT_FAILED');
-      await transition(jobId, 'PAYMENT_FAILED', 'REJECTED', 'RETRY_EXHAUSTED');
+      // `PAYMENT_FAILED` is a transition reason, not a canonical JobState.
+      // The accepted state machine permits PAYMENT_CHALLENGED -> REJECTED
+      // directly; using the reason as an intermediate state fails schema
+      // validation and would turn a facilitator rejection into HTTP 500.
+      await transition(jobId, 'PAYMENT_CHALLENGED', 'REJECTED', 'PAYMENT_FAILED');
       await paymentAttempts.transitionLifecycleStage(
         paymentIdentifier,
         'acquired',
@@ -674,7 +684,7 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
       success: true,
       transaction: settlementEvidence.transaction_reference ?? 'synthetic-tx:unknown',
       network: config.network,
-      payer: 'synthetic:buyer',
+      ...(settlementEvidence.payer ? { payer: settlementEvidence.payer } : {}),
       amount: actualAmount,
       extra: { link_id: link.link_id, payment_identifier: paymentIdentifier },
     };

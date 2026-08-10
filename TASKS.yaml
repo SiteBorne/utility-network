@@ -1,5 +1,5 @@
 version: '1.0.0'
-last_updated: '2026-08-10T15:00:00Z'
+last_updated: '2026-08-10T23:06:00Z'
 tasks:
   # Phase 0: Establish Source of Truth
   - id: 'SUN-0001'
@@ -830,7 +830,7 @@ tasks:
   - id: 'SUN-0700B'
     title: 'Live CDP facilitator payment settlement (x402 verify/settle against a real facilitator)'
     phase: 'phase_9_x402'
-    state: 'blocked_external'
+    state: 'active'
     owner_agent: 'operator'
     dependencies:
       - 'SUN-0700A'
@@ -839,9 +839,14 @@ tasks:
       - 'CDP facilitator verify/settle works against a live environment'
       - 'Exact payment flow settles end-to-end against a live facilitator for at least one real transaction'
       - 'Upto payment flow settles end-to-end against a live facilitator for at least one real transaction'
-    evidence: []
-    next_action: 'Blocked until CDP credentials/wallet and a live settlement environment are available. Do not execute against this task before then.'
-    blocker: 'Requires CDP credentials and a wallet (blocked_external)'
+    evidence:
+      - 'docs/reports/SUN-0700B-checkpoint-1-live-exact-report.md'
+      - 'apps/edge-api/src/control-plane/evidence/cdp-provider.ts'
+      - 'apps/edge-api/tests/cdp-provider.test.ts'
+      - 'apps/edge-api/tests/live/x402-live-exact.test.ts'
+      - 'apps/edge-api/tests/x402-evidence-provider-boundary.test.ts'
+    next_action: 'Checkpoint 1 complete: one controlled Base Sepolia exact payment settled, replay reconstructed from D1 with zero second execution/settlement/job, real facilitator rejection and local negatives passed, and sanitized evidence is recorded. SUN-0700B remains active for separately authorized checkpoint 2. Do not start real upto in this checkpoint.'
+    blocker: null
     commit_ref: null
 
   - id: 'SUN-0800'

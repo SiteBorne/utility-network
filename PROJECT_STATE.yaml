@@ -9,14 +9,13 @@ source_directive:
 
 execution:
   mode: 'serial'
-  active_mutation_tasks: 0
-  current_increment: null
+  active_mutation_tasks: 1
+  current_increment: 'SUN-0700B'
   current_phase: 'phase_9_x402'
   last_completed_increment: 'SUN-0700A'
-  frontier_status: 'blocked_external'
-  blocked_on:
-    - 'SUN-0700B'
-  reason: 'SUN-0700A is accepted. SUN-0700B (its only dependent) is blocked_external on CDP credentials and a wallet/live settlement environment, and every task downstream of it (SUN-0800..SUN-1200) is transitively blocked_external on CDP or Nevermined credentials/registry accounts. No credential-independent dependency-ready task remains — see scripts/lib/task-frontier.ts for the governance-model rule this satisfies.'
+  frontier_status: 'executable'
+  blocked_on: []
+  reason: 'SUN-0700B checkpoint 1 completed: one controlled Base Sepolia exact payment verified and settled through the live CDP facilitator, D1 replay caused zero second execution/settlement/job, and live/deterministic negatives fail closed. SUN-0700B remains active for separately authorized checkpoint 2; real upto has not started. Production remains disabled and not ready.'
 
 implemented:
   - 'governance_validation'
@@ -97,13 +96,14 @@ implemented:
   - 'x402_v2_credential_independent_protocol_core' # SUN-0700A checkpoints 1-3
   - 'x402_bazaar_discovery_metadata' # SUN-0700A checkpoint 4, local declaration/validation only
   - 'x402_http_vertical_slice' # SUN-0700A checkpoint 5, real Hono boundary over real D1, opt-in PAID_ROUTES_ENABLED gate, synthetic evidence only
+  - 'x402_live_exact_facilitator_verification_and_settlement' # SUN-0700B checkpoint 1, controlled Base Sepolia validation only
 
 not_implemented:
   - 'company_evidence_graph_xbrl_facts_and_repository_signals_field_groups'
   - 'web_context_verified_rendered_mode' # Browser Rendering blocked_external
   - 'document_evidence_json_upload_reference_and_url_input_modes'
   - 'verify_agent_output_signature_valid_evidence_resolves_no_pii_no_secrets_checks'
-  - 'x402_live_facilitator_verification_and_settlement' # SUN-0700B, blocked_external (CDP credentials + wallet)
+  - 'x402_live_upto_facilitator_verification_and_settlement' # SUN-0700B checkpoint 2, not started
   - 'x402_signed_offers_and_receipts' # evaluated and deliberately deferred, see ADR 0050
   - 'x402_bazaar_facilitator_cataloging' # local declaration/validation only, see ADR 0049
   - 'mcp'
@@ -124,8 +124,6 @@ blocked_external:
   - 'cloudflare_account_configuration'
   - 'cloudflare_production_provisioning'
   - 'ionos_dns_migration'
-  - 'seller_wallet'
-  - 'cdp_credentials'
   - 'nevermined_credentials'
   - 'registry_publication'
   - 'modal_deployment_token'
@@ -202,4 +200,4 @@ pcc_schema:
   extension_namespace: 'reverse-domain-qualified'
   drift_check: 'enabled'
 
-last_updated: '2026-08-10T15:00:00Z'
+last_updated: '2026-08-10T23:06:00Z'

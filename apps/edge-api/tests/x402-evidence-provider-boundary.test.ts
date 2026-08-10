@@ -26,6 +26,7 @@ import type {
 } from '@siteborne/protocol-x402';
 import {
   buildBuyerPaymentIdentifierExtensions,
+  decodePaymentResponseHeaderSafe,
   decodePaymentRequiredHeaderSafe,
   encodePaymentSignatureHeaderSafe,
   hashPaymentObject,
@@ -118,6 +119,7 @@ class RecordingProvider implements PaymentEvidenceProvider {
       scheme: context.scheme,
       network: context.network,
       asset: context.asset,
+      payer: '0xRecordedExternalBuyer',
       payee: context.payee,
       actual_amount: actualAmount,
       quote_id: context.quote_id,
@@ -130,6 +132,26 @@ class RecordingProvider implements PaymentEvidenceProvider {
       verification_evidence_hash: verificationEvidenceHash,
       trust_class: 'synthetic_fixture',
     };
+  }
+}
+
+class SettlementFailureProvider extends RecordingProvider {
+  override async settle(
+    context: PaymentSettlementContext,
+    verificationEvidence: ExternalVerificationEvidence,
+    actualAmount: string
+  ): Promise<ExternalSettlementEvidence> {
+    const evidence = await super.settle(context, verificationEvidence, actualAmount);
+    return { ...evidence, success: false, reason: 'forced_settlement_failure' };
+  }
+}
+
+class VerificationFailureProvider extends RecordingProvider {
+  override async verify(
+    context: PaymentVerificationContext
+  ): Promise<ExternalVerificationEvidence> {
+    const evidence = await super.verify(context);
+    return { ...evidence, verified: false, reason: 'forced_verification_failure' };
   }
 }
 
@@ -211,6 +233,10 @@ describe('PaymentEvidenceProvider HTTP boundary wiring (SUN-0700B checkpoint 1 p
       body: JSON.stringify(input),
     });
     expect(res.status).toBe(200);
+    const paymentResponse = decodePaymentResponseHeaderSafe(res.headers.get('PAYMENT-RESPONSE')!);
+    expect(paymentResponse.ok).toBe(true);
+    if (!paymentResponse.ok) throw new Error(paymentResponse.reason);
+    expect(paymentResponse.value.payer).toBe('0xRecordedExternalBuyer');
 
     expect(provider.verifyCalls).toHaveLength(1);
     expect(provider.settleCalls).toHaveLength(1);
@@ -298,5 +324,122 @@ describe('PaymentEvidenceProvider HTTP boundary wiring (SUN-0700B checkpoint 1 p
     expect(settleCall.actualAmount).toBe(ACTUAL_AMOUNT);
     // The two must never be silently collapsed to the same value.
     expect(settleCall.actualAmount).not.toBe(settleCall.context.usageResult!.authorized_maximum);
+  });
+
+  it('settlement failure cannot return a successful paid HTTP result or PAYMENT-RESPONSE', async () => {
+    const provider = new SettlementFailureProvider();
+    const app = new Hono();
+    let executionCount = 0;
+    createX402ServiceRoute(app, {
+      serviceId: 'company_evidence_graph.v1',
+      scheme: 'exact',
+      pricingKey: 'company_evidence_graph',
+      network: 'eip155:8453',
+      asset: '0xUSDC',
+      path: '/v1/company/evidence-graph-settlement-failure',
+      inputSchema: { type: 'object' },
+      contractRelease: '1.0.0',
+      inputSchemaHash: 'sha256:' + '7'.repeat(64),
+      outputSchemaHash: 'sha256:' + '8'.repeat(64),
+      pccDependency: '1.0.0',
+      db,
+      clock: () => clockValue,
+      evidenceMode: 'fixture',
+      evidenceProvider: provider,
+      executor: async () => {
+        executionCount += 1;
+        return {
+          result: {
+            result_class: 'success',
+            output: { ok: true },
+            output_hash: 'sha256:' + '9'.repeat(64),
+            receipt_id: 'rcpt_' + '3'.repeat(24),
+            receipt: { fake: true },
+          },
+        };
+      },
+    });
+
+    const input = { probe: 'settlement-failure' };
+    const res402 = await app.request('/v1/company/evidence-graph-settlement-failure', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    const decoded = decodePaymentRequiredHeaderSafe(res402.headers.get('PAYMENT-REQUIRED')!);
+    expect(decoded.ok).toBe(true);
+    if (!decoded.ok) throw new Error(decoded.reason);
+    const payload = buildBuyerPayload(decoded.value);
+
+    const res = await app.request('/v1/company/evidence-graph-settlement-failure', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'PAYMENT-SIGNATURE': encodePaymentSignatureHeaderSafe(payload),
+      },
+      body: JSON.stringify(input),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+
+    expect(res.status).toBe(402);
+    expect(body.error).toBe('settlement_rejected');
+    expect(res.headers.get('PAYMENT-RESPONSE')).toBeNull();
+    expect(executionCount).toBe(1);
+    expect(provider.verifyCalls).toHaveLength(1);
+    expect(provider.settleCalls).toHaveLength(1);
+  });
+
+  it('verification failure transitions directly to REJECTED and never executes or settles', async () => {
+    const provider = new VerificationFailureProvider();
+    const app = new Hono();
+    let executionCount = 0;
+    createX402ServiceRoute(app, {
+      serviceId: 'company_evidence_graph.v1',
+      scheme: 'exact',
+      pricingKey: 'company_evidence_graph',
+      network: 'eip155:8453',
+      asset: '0xUSDC',
+      path: '/v1/company/evidence-graph-verification-failure',
+      inputSchema: { type: 'object' },
+      contractRelease: '1.0.0',
+      inputSchemaHash: 'sha256:' + 'a'.repeat(64),
+      outputSchemaHash: 'sha256:' + 'b'.repeat(64),
+      pccDependency: '1.0.0',
+      db,
+      clock: () => clockValue,
+      evidenceMode: 'fixture',
+      evidenceProvider: provider,
+      executor: async () => {
+        executionCount += 1;
+        return { result: { result_class: 'rejected' } };
+      },
+    });
+
+    const input = { probe: 'verification-failure' };
+    const res402 = await app.request('/v1/company/evidence-graph-verification-failure', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    const decoded = decodePaymentRequiredHeaderSafe(res402.headers.get('PAYMENT-REQUIRED')!);
+    expect(decoded.ok).toBe(true);
+    if (!decoded.ok) throw new Error(decoded.reason);
+
+    const res = await app.request('/v1/company/evidence-graph-verification-failure', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'PAYMENT-SIGNATURE': encodePaymentSignatureHeaderSafe(buildBuyerPayload(decoded.value)),
+      },
+      body: JSON.stringify(input),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+
+    expect(res.status).toBe(402);
+    expect(body.error).toBe('payment_verification_rejected');
+    expect(res.headers.get('PAYMENT-RESPONSE')).toBeNull();
+    expect(executionCount).toBe(0);
+    expect(provider.verifyCalls).toHaveLength(1);
+    expect(provider.settleCalls).toHaveLength(0);
   });
 });
