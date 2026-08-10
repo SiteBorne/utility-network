@@ -17,8 +17,8 @@
 # SUN-0700B (live CDP facilitator settlement) — blocked_external until
 # these are provisioned:
 SELLER_WALLET_ADDRESS=
-CDP_API_KEY_NAME=
-CDP_API_KEY_PRIVATE_KEY=
+CDP_API_KEY_ID=
+CDP_API_KEY_SECRET=
 CDP_WALLET_SECRET=
 
 # Nevermined (SUN-0900, blocked_external):

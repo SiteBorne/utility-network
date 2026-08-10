@@ -105,9 +105,10 @@ binding = "BROWSER"
 ### 10. Secrets (via Cloudflare Dashboard or wrangler)
 
 - [ ] `SELLER_WALLET_ADDRESS` - Base wallet address
-- [ ] `CDP_API_KEY_NAME` - Coinbase CDP API key name
-- [ ] `CDP_API_KEY_PRIVATE_KEY` - CDP private key
-- [ ] `CDP_WALLET_SECRET` - CDP wallet secret
+- [ ] `CDP_API_KEY_ID` - Coinbase CDP API key ID (`@coinbase/cdp-sdk`'s own
+      default env var name)
+- [ ] `CDP_API_KEY_SECRET` - Coinbase CDP API key secret (ditto)
+- [ ] `CDP_WALLET_SECRET` - CDP wallet secret (buyer-side signing only)
 - [ ] `NEVERMINED_API_KEY` - Nevermined API key
 - [ ] `VOYAGE_API_KEY` - Voyage AI API key
 - [ ] `MODAL_TOKEN_ID` - Modal token ID

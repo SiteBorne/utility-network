@@ -24,9 +24,12 @@ PCC_VERSION = "1.0.0"
 # entries for them, so an accidental real value pasted here is never
 # possible by construction. Exact names:
 #   SELLER_WALLET_ADDRESS   - production payment-receiving wallet (Base)
-#   CDP_API_KEY_NAME        - Coinbase CDP API key name
-#   CDP_API_KEY_PRIVATE_KEY - Coinbase CDP API private key
-#   CDP_WALLET_SECRET       - Coinbase CDP wallet secret
+#   CDP_API_KEY_ID          - Coinbase CDP API key ID (@coinbase/cdp-sdk's
+#                             own default env var name)
+#   CDP_API_KEY_SECRET      - Coinbase CDP API key secret (ditto)
+#   CDP_WALLET_SECRET       - Coinbase CDP wallet secret (buyer-side
+#                             signing only, not required by the seller
+#                             facilitator client itself)
 #   NEVERMINED_API_KEY      - Nevermined API key
 #   VOYAGE_API_KEY          - Voyage AI API key
 #   MODAL_TOKEN_ID          - Modal deployment token ID (SUN-0400B)

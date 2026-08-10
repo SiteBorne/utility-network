@@ -10,8 +10,8 @@ export interface Env {
   LOG_LEVEL: string;
   PCC_VERSION: string;
   SELLER_WALLET_ADDRESS: string;
-  CDP_API_KEY_NAME: string;
-  CDP_API_KEY_PRIVATE_KEY: string;
+  CDP_API_KEY_ID: string;
+  CDP_API_KEY_SECRET: string;
   CDP_WALLET_SECRET: string;
   NEVERMINED_API_KEY: string;
   VOYAGE_API_KEY: string;
@@ -77,8 +77,8 @@ function validateProductionBindings(env: Env): void {
 
   const requiredSecrets: (keyof Env)[] = [
     'SELLER_WALLET_ADDRESS',
-    'CDP_API_KEY_NAME',
-    'CDP_API_KEY_PRIVATE_KEY',
+    'CDP_API_KEY_ID',
+    'CDP_API_KEY_SECRET',
     'CDP_WALLET_SECRET',
     'NEVERMINED_API_KEY',
   ];
