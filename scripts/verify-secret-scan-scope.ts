@@ -2,7 +2,6 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync }
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
 
 const repositoryRoot = resolve(import.meta.dirname, '..');
 const configPath = join(repositoryRoot, '.gitleaks.toml');
@@ -107,9 +106,13 @@ const probePaths = [
 
 const probeRoot = mkdtempSync(join(tmpdir(), 'siteborne-secret-scope-'));
 try {
-  // Construct a well-known synthetic detector canary at runtime so the
-  // scanner's own source never contains a token-shaped literal.
-  const detectorCanary = ['g', 'h', 'p', '_'].join('') + randomBytes(27).toString('base64url');
+  // Construct a deterministic, high-entropy synthetic detector canary at
+  // runtime so the scanner's source never contains a token-shaped literal.
+  // Base64URL is deliberately not used: its '-'/'_' alphabet and random
+  // entropy distribution made detector matching probabilistic.
+  const detectorCanary =
+    ['g', 'h', 'p', '_'].join('') +
+    ['A7dK', '9mQ2', 'vX5c', 'B8nP', '4rT6', 'yH3j', 'L0sW', '1fG2', 'uZ8e'].join('');
   for (const relativePath of probePaths) {
     const probePath = join(probeRoot, relativePath);
     mkdirSync(dirname(probePath), { recursive: true });
@@ -120,6 +123,14 @@ try {
       ['dir', probePath, `--config=${configPath}`, '--redact', '--no-banner', '--exit-code=7'],
       { cwd: repositoryRoot, encoding: 'utf8' }
     );
+    if (result.error || result.status === null) {
+      throw new Error(`Gitleaks scanner failed to execute for ${relativePath}`);
+    }
+    if (result.status !== 0 && result.status !== 7) {
+      throw new Error(
+        `Gitleaks scanner failed for ${relativePath} with status ${String(result.status)}`
+      );
+    }
     if (result.status !== 7) {
       throw new Error(
         `Gitleaks did not detect the redacted canary in ${relativePath} (status ${String(result.status)})`
