@@ -75,7 +75,9 @@ amount redeemed, and a bounded reason code.
 ## Current state
 
 The CDP rail has accepted live Base Sepolia exact and upto evidence. The
-Nevermined rail is modeled and compatibility-tested only. No Nevermined route is
-mounted with a real provider in Checkpoint 1; no account, credentials,
-registration, or network call is required. Production remains disabled and not
-ready.
+Nevermined rail now has a deterministic Edge provider, official-SDK adapter, and
+exactly four explicit local fixture-test routes through the shared lifecycle.
+Its fixture provider cannot produce external trust, and the default application
+fails closed without an authenticated sandbox provider. No Nevermined account,
+credential, registration, network verification, or settlement has occurred.
+Production remains disabled and not ready.

@@ -28,6 +28,9 @@ export interface Env {
    * This is independent of, and does not itself enable, real payment
    * execution: `production_enabled` remains `false` regardless. */
   PAID_ROUTES_ENABLED?: string;
+  /** Additive Nevermined route-family gate. Checkpoint 2 still has no
+   * authenticated sandbox provider, so setting this alone fails closed. */
+  NEVERMINED_ROUTES_ENABLED?: string;
   CF_PAGES_COMMIT_SHA?: string;
   CF_WORKER_VERSION?: string;
 }

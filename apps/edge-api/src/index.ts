@@ -88,6 +88,18 @@ app.route('/', openapiRoute);
 let cachedPaidServicesApp: Awaited<ReturnType<typeof buildPaidServicesApp>> | undefined;
 let cachedPaidServicesDb: Env['DB'] | undefined;
 
+app.all('/v1/nevermined/*', (c) => {
+  if (c.env?.NEVERMINED_ROUTES_ENABLED !== 'true') return c.notFound();
+  return c.json(
+    {
+      error: 'nevermined_provider_not_configured',
+      message:
+        'Nevermined routes require an authenticated sandbox provider; no fixture fallback is allowed',
+    },
+    503
+  );
+});
+
 app.all('/v1/*', async (c) => {
   if (c.env?.PAID_ROUTES_ENABLED !== 'true') {
     return c.notFound();

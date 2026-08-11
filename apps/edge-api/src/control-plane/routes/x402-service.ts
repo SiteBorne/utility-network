@@ -22,6 +22,20 @@
  */
 import type { Context, Hono } from 'hono';
 import Ajv2020 from 'ajv/dist/2020';
+import { buildPaymentRequired as buildNeverminedSdkPaymentRequired } from '@nevermined-io/payments';
+import {
+  NEVERMINED_DECLARATIONS,
+  NEVERMINED_PAYMENT_PROVIDER,
+  PAYMENT_IDENTIFIER_HEADER,
+  bindNeverminedPaymentRequired,
+  encodeNeverminedPaymentRequiredHeaderSafe,
+  encodeNeverminedPaymentResponseHeaderSafe,
+  parseNeverminedPaymentIdentifier,
+  validateNeverminedAccessToken,
+  validateNeverminedPaymentRequired,
+  type NeverminedPaymentRequired,
+  type NeverminedPaymentResponse,
+} from '@siteborne/protocol-nevermined';
 import type {
   Network,
   PaymentAttemptBinding,
@@ -139,6 +153,10 @@ export interface X402ServiceRouteConfig {
    * (directive §17, §32). */
   evidenceMode: PaymentEvidenceMode;
   evidenceProvider?: PaymentEvidenceProvider;
+  /** Defaults to CDP for the accepted open routes. Nevermined is selected
+   * explicitly by its dedicated route family and never by fallback. */
+  rail?: 'cdp' | 'nevermined';
+  nevermined?: { agentId: string; planId: string };
 }
 
 export const PAYTO_NOT_CONFIGURED = 'siteborne-fixture:payto-not-configured';
@@ -146,7 +164,14 @@ export const PAYTO_NOT_CONFIGURED = 'siteborne-fixture:payto-not-configured';
 interface CachedResult {
   status: number;
   body: unknown;
-  settleResponse: SettleResponse;
+  settleResponse: SettleResponse | NeverminedPaymentResponse;
+}
+
+export class NeverminedEvidenceProviderNotConfiguredError extends Error {
+  constructor() {
+    super('Nevermined route requires an explicitly selected Nevermined evidence provider');
+    this.name = 'NeverminedEvidenceProviderNotConfiguredError';
+  }
 }
 
 function jsonError(c: Context, status: number, code: string, message: string, details?: unknown) {
@@ -162,6 +187,10 @@ function jsonError(c: Context, status: number, code: string, message: string, de
  * production evidence provider anywhere in SUN-0700A.
  */
 export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig): void {
+  const rail = config.rail ?? 'cdp';
+  if (rail === 'nevermined' && (!config.nevermined || !config.evidenceProvider)) {
+    throw new NeverminedEvidenceProviderNotConfiguredError();
+  }
   // Fails closed at construction time, not per-request — a misconfigured
   // production evidence mode must never even reach the point of
   // accepting a request.
@@ -257,29 +286,56 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
         expires_at: expiresAt,
       });
 
-      const built =
-        config.scheme === 'exact'
-          ? await buildExactPaymentRequirement({
-              quote,
-              resource_id: resourceUrl,
-              maxTimeoutSeconds,
-              extra: config.paymentRequirementExtra,
-            })
-          : await buildUptoPaymentRequirement({
-              quote,
-              resource_id: resourceUrl,
-              maxTimeoutSeconds,
-              extra: config.paymentRequirementExtra,
-            });
-
-      await quotes.create(quote, built.requirement, built.requirement_id, resourceUrl);
-
-      const challenge = buildPaymentRequired({
-        resource: { url: resourceUrl },
-        accepts: [built.requirement],
-        extensions: declareSiteborneePaymentIdentifierSupport(paymentIdentifierRequired),
-      });
-      c.header('PAYMENT-REQUIRED', encodePaymentRequiredHeaderSafe(challenge));
+      let requirementId: string;
+      if (rail === 'nevermined') {
+        const declaration = NEVERMINED_DECLARATIONS[config.serviceId];
+        const official = buildNeverminedSdkPaymentRequired(config.nevermined!.planId, {
+          endpoint: resourceUrl,
+          agentId: config.nevermined!.agentId,
+          httpVerb: 'POST',
+          network: config.network,
+          description: declaration.agent.description,
+          mimeType: 'application/json',
+        }) as NeverminedPaymentRequired;
+        const built = await bindNeverminedPaymentRequired(official, {
+          serviceId: config.serviceId,
+          route: resourceUrl,
+          quoteId: quote.quote_id,
+          amount,
+          semantics: config.scheme,
+          expiresAt,
+          paymentIdentifierRequired,
+        });
+        requirementId = built.requirementId;
+        await quotes.create(quote, built.paymentRequired, built.requirementId, resourceUrl);
+        c.header(
+          'PAYMENT-REQUIRED',
+          encodeNeverminedPaymentRequiredHeaderSafe(built.paymentRequired)
+        );
+      } else {
+        const built =
+          config.scheme === 'exact'
+            ? await buildExactPaymentRequirement({
+                quote,
+                resource_id: resourceUrl,
+                maxTimeoutSeconds,
+                extra: config.paymentRequirementExtra,
+              })
+            : await buildUptoPaymentRequirement({
+                quote,
+                resource_id: resourceUrl,
+                maxTimeoutSeconds,
+                extra: config.paymentRequirementExtra,
+              });
+        requirementId = built.requirement_id;
+        await quotes.create(quote, built.requirement, built.requirement_id, resourceUrl);
+        const challenge = buildPaymentRequired({
+          resource: { url: resourceUrl },
+          accepts: [built.requirement],
+          extensions: declareSiteborneePaymentIdentifierSupport(paymentIdentifierRequired),
+        });
+        c.header('PAYMENT-REQUIRED', encodePaymentRequiredHeaderSafe(challenge));
+      }
       await audit('payment_required_created', { quote_id: quote.quote_id, resource: resourceUrl });
 
       return c.json(
@@ -287,60 +343,116 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
           error: 'payment_required',
           x402_version: SUPPORTED_X402_VERSION,
           quote_id: quote.quote_id,
+          requirement_id: requirementId,
         },
         402
       );
     }
 
     // ---------------------------------------------------------------
-    // PAYMENT-SIGNATURE present: decode, validate, acquire replay slot.
+    // PAYMENT-SIGNATURE present: validate the selected rail's transport,
+    // recover the exact persisted requirement, then acquire D1 before any
+    // provider verification or useful service execution.
     // ---------------------------------------------------------------
-    const decoded = decodePaymentSignatureHeaderSafe(sigHeader);
-    if (!decoded.ok) {
-      await audit('payment_payload_received', { valid: false, reason: decoded.reason });
-      return jsonError(c, 400, 'malformed_payment_signature', decoded.reason, decoded.detail);
-    }
-    const payload: PaymentPayload = decoded.value;
-    await audit('payment_payload_received', { valid: true });
+    let payload: PaymentPayload | undefined;
+    let neverminedRequired: NeverminedPaymentRequired | undefined;
+    let paymentIdentifier: string;
+    let stored: NonNullable<Awaited<ReturnType<X402QuoteRepository['getById']>>>;
 
-    const quoteId = (payload.accepted?.extra as Record<string, unknown> | undefined)?.[
-      'quote_id'
-    ] as string | undefined;
-    if (!quoteId) {
-      return jsonError(c, 400, 'malformed_payment_signature', 'accepted.extra.quote_id is missing');
-    }
-    const stored = await quotes.getById(quoteId);
-    if (!stored) {
-      return jsonError(
-        c,
-        402,
-        'expired_quote',
-        'no such quote (unknown, or never issued by this route)'
+    if (rail === 'nevermined') {
+      const token = validateNeverminedAccessToken(sigHeader);
+      if (token.status !== 'valid') {
+        await audit('payment_payload_received', { valid: false, reason: token.status });
+        return jsonError(c, 400, 'malformed_payment_signature', token.status);
+      }
+      const idResult = parseNeverminedPaymentIdentifier(
+        c.req.header(PAYMENT_IDENTIFIER_HEADER),
+        sigHeader
       );
+      if (idResult.status !== 'present') {
+        return jsonError(c, 400, 'malformed_payment_identifier', idResult.status);
+      }
+      paymentIdentifier = idResult.id;
+      const found = await quotes.getLatestForBinding(config.serviceId, resourceUrl, inputHash);
+      if (!found) {
+        return jsonError(c, 402, 'expired_quote', 'no server-issued quote matches this request');
+      }
+      stored = found;
+      const validation = validateNeverminedPaymentRequired(stored.requirement, {
+        resource: resourceUrl,
+        network: config.network,
+        agentId: config.nevermined!.agentId,
+        planId: config.nevermined!.planId,
+        serviceId: config.serviceId,
+        quoteId: stored.quote.quote_id,
+        requirementId: stored.requirement_id,
+        amount: stored.quote.amount,
+        semantics: config.scheme,
+        expiresAt: stored.quote.expires_at,
+      });
+      if (!validation.valid) {
+        return jsonError(c, 400, 'invalid_payment_structure', validation.reason);
+      }
+      neverminedRequired = validation.paymentRequired;
+      await audit('payment_payload_received', { valid: true, rail });
+    } else {
+      const decoded = decodePaymentSignatureHeaderSafe(sigHeader);
+      if (!decoded.ok) {
+        await audit('payment_payload_received', { valid: false, reason: decoded.reason });
+        return jsonError(c, 400, 'malformed_payment_signature', decoded.reason, decoded.detail);
+      }
+      payload = decoded.value;
+      await audit('payment_payload_received', { valid: true, rail });
+
+      const quoteId = (payload.accepted?.extra as Record<string, unknown> | undefined)?.[
+        'quote_id'
+      ] as string | undefined;
+      if (!quoteId) {
+        return jsonError(
+          c,
+          400,
+          'malformed_payment_signature',
+          'accepted.extra.quote_id is missing'
+        );
+      }
+      const found = await quotes.getById(quoteId);
+      if (!found) {
+        return jsonError(
+          c,
+          402,
+          'expired_quote',
+          'no such quote (unknown, or never issued by this route)'
+        );
+      }
+      stored = found;
+      const structResult = validatePaymentPayloadStructure(payload, {
+        quote: stored.quote,
+        resource_id: resourceUrl,
+        now_iso: nowIso,
+      });
+      if (structResult.status !== 'valid_structure') {
+        return jsonError(c, 400, 'invalid_payment_structure', structResult.status);
+      }
+      const idResult = parsePaymentIdentifier(payload, paymentIdentifierRequired);
+      if (idResult.status !== 'present') {
+        return jsonError(c, 400, 'malformed_payment_signature', idResult.status);
+      }
+      paymentIdentifier = idResult.id;
     }
     if (new Date(nowIso).getTime() >= new Date(stored.quote.expires_at).getTime()) {
       return jsonError(c, 402, 'expired_quote', 'quote has expired');
     }
 
-    const structResult = validatePaymentPayloadStructure(payload, {
-      quote: stored.quote,
-      resource_id: resourceUrl,
-      now_iso: nowIso,
-    });
-    if (structResult.status !== 'valid_structure') {
-      return jsonError(c, 400, 'invalid_payment_structure', structResult.status);
-    }
-
-    const idResult = parsePaymentIdentifier(payload, paymentIdentifierRequired);
-    if (idResult.status !== 'present') {
-      return jsonError(c, 400, 'malformed_payment_signature', idResult.status);
-    }
-    const paymentIdentifier = idResult.id;
-
     const binding: PaymentAttemptBinding = {
       binding_version: 2,
-      payment_rail: 'cdp',
-      payment_provider: CDP_PAYMENT_PROVIDER,
+      payment_rail: rail,
+      payment_provider: rail === 'nevermined' ? NEVERMINED_PAYMENT_PROVIDER : CDP_PAYMENT_PROVIDER,
+      ...(rail === 'nevermined'
+        ? {
+            nevermined_agent_id: config.nevermined!.agentId,
+            nevermined_plan_id: config.nevermined!.planId,
+          }
+        : {}),
       payment_identifier: paymentIdentifier,
       quote_id: stored.quote.quote_id,
       requirement_id: stored.requirement_id,
@@ -369,7 +481,14 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
       if (job.current_state !== 'DELIVERED') return null;
       const cached = await results.getByJobId<CachedResult>(job.id);
       if (!cached) return null;
-      c.header('PAYMENT-RESPONSE', encodePaymentResponseHeaderSafe(cached.settleResponse));
+      c.header(
+        'PAYMENT-RESPONSE',
+        rail === 'nevermined'
+          ? encodeNeverminedPaymentResponseHeaderSafe(
+              cached.settleResponse as NeverminedPaymentResponse
+            )
+          : encodePaymentResponseHeaderSafe(cached.settleResponse as SettleResponse)
+      );
       return c.json(cached.body, cached.status as never);
     }
 
@@ -495,12 +614,24 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
     // closure, directive §7), so a real facilitator's VerifyRequest is
     // built from what was actually validated, not from a reconstruction
     // of it.
-    const verificationContext: PaymentVerificationContext = {
-      ...evidenceContext,
-      authorizationContext: { rail: 'cdp' },
-      paymentPayload: payload,
-      paymentRequirements: payload.accepted,
-    };
+    const verificationContext: PaymentVerificationContext =
+      rail === 'nevermined'
+        ? {
+            ...evidenceContext,
+            authorizationContext: {
+              rail: 'nevermined',
+              accessToken: sigHeader,
+              paymentRequired: neverminedRequired!,
+              agentId: config.nevermined!.agentId,
+              planId: config.nevermined!.planId,
+            },
+          }
+        : {
+            ...evidenceContext,
+            authorizationContext: { rail: 'cdp' },
+            paymentPayload: payload!,
+            paymentRequirements: payload!.accepted,
+          };
     const verificationEvidence = await evidenceProvider.verify(verificationContext);
     await audit('payment_verification_requested', { payment_identifier: paymentIdentifier });
     const verifyGate = canAdvanceToVerified(
@@ -649,13 +780,26 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
     // Same object-identity discipline as the verify() boundary above —
     // the exact `payload`/`payload.accepted` already validated, plus the
     // `upto` usage-result binding when one was computed (directive §5).
-    const settlementContext: PaymentSettlementContext = {
-      ...evidenceContext,
-      authorizationContext: { rail: 'cdp' },
-      paymentPayload: payload,
-      paymentRequirements: payload.accepted,
-      ...(usageResult ? { usageResult } : {}),
-    };
+    const settlementContext: PaymentSettlementContext =
+      rail === 'nevermined'
+        ? {
+            ...evidenceContext,
+            authorizationContext: {
+              rail: 'nevermined',
+              accessToken: sigHeader,
+              paymentRequired: neverminedRequired!,
+              agentId: config.nevermined!.agentId,
+              planId: config.nevermined!.planId,
+            },
+            ...(usageResult ? { usageResult } : {}),
+          }
+        : {
+            ...evidenceContext,
+            authorizationContext: { rail: 'cdp' },
+            paymentPayload: payload!,
+            paymentRequirements: payload!.accepted,
+            ...(usageResult ? { usageResult } : {}),
+          };
     const settlementEvidence = await evidenceProvider.settle(
       settlementContext,
       verificationEvidence,
@@ -687,8 +831,14 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
 
     let link = await buildPaymentServiceLink({
       link_version: 2,
-      payment_rail: 'cdp',
-      payment_provider: CDP_PAYMENT_PROVIDER,
+      payment_rail: rail,
+      payment_provider: rail === 'nevermined' ? NEVERMINED_PAYMENT_PROVIDER : CDP_PAYMENT_PROVIDER,
+      ...(rail === 'nevermined'
+        ? {
+            nevermined_agent_id: config.nevermined!.agentId,
+            nevermined_plan_id: config.nevermined!.planId,
+          }
+        : {}),
       payment_identifier: paymentIdentifier,
       quote_id: stored.quote.quote_id,
       requirement_id: stored.requirement_id,
@@ -717,14 +867,23 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
         : {}),
     };
 
-    const settleResponse: SettleResponse = {
-      success: true,
-      transaction: settlementEvidence.transaction_reference ?? 'synthetic-tx:unknown',
-      network: config.network,
-      ...(settlementEvidence.payer ? { payer: settlementEvidence.payer } : {}),
-      amount: actualAmount,
-      extra: { link_id: link.link_id, payment_identifier: paymentIdentifier },
-    };
+    const settleResponse: SettleResponse | NeverminedPaymentResponse =
+      rail === 'nevermined'
+        ? {
+            success: true,
+            transaction: settlementEvidence.transaction_reference ?? 'fixture:settlement:unknown',
+            network: config.network,
+            ...(settlementEvidence.payer ? { payer: settlementEvidence.payer } : {}),
+            creditsRedeemed: actualAmount,
+          }
+        : {
+            success: true,
+            transaction: settlementEvidence.transaction_reference ?? 'synthetic-tx:unknown',
+            network: config.network,
+            ...(settlementEvidence.payer ? { payer: settlementEvidence.payer } : {}),
+            amount: actualAmount,
+            extra: { link_id: link.link_id, payment_identifier: paymentIdentifier },
+          };
 
     await results.create(
       jobId,
@@ -734,7 +893,12 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
     );
     await audit('payment_consumed', { payment_identifier: paymentIdentifier, job_id: jobId });
 
-    c.header('PAYMENT-RESPONSE', encodePaymentResponseHeaderSafe(settleResponse));
+    c.header(
+      'PAYMENT-RESPONSE',
+      rail === 'nevermined'
+        ? encodeNeverminedPaymentResponseHeaderSafe(settleResponse as NeverminedPaymentResponse)
+        : encodePaymentResponseHeaderSafe(settleResponse as SettleResponse)
+    );
     return c.json(responseBody, 200);
   });
 }

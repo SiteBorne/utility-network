@@ -78,7 +78,7 @@
     "nevermined:test": "pnpm --filter @siteborne/protocol-nevermined run test",
     "nevermined:fixtures:verify": "pnpm --filter @siteborne/protocol-nevermined run fixtures:verify",
     "nevermined:spec:verify": "pnpm --filter @siteborne/protocol-nevermined run spec:verify",
-    "nevermined:compat:verify": "vitest run packages/protocol-x402/src/replay/binding.test.ts packages/protocol-x402/src/linkage/payment-service-link.test.ts apps/edge-api/tests/d1-payment-attempts.test.ts apps/edge-api/tests/x402-service-route.test.ts",
+    "nevermined:compat:verify": "vitest run packages/protocol-x402/src/replay/binding.test.ts packages/protocol-x402/src/linkage/payment-service-link.test.ts apps/edge-api/tests/d1-payment-attempts.test.ts apps/edge-api/tests/x402-service-route.test.ts apps/edge-api/tests/nevermined-provider.test.ts apps/edge-api/tests/nevermined-service-route.test.ts apps/edge-api/tests/paid-routes-mounting.test.ts",
     "nevermined:check": "pnpm --filter @siteborne/protocol-nevermined run format:check && pnpm --filter @siteborne/protocol-nevermined run lint && pnpm --filter @siteborne/protocol-nevermined run typecheck && pnpm nevermined:test && pnpm nevermined:fixtures:verify && pnpm nevermined:spec:verify && pnpm nevermined:compat:verify",
     "secrets:scope:verify": "tsx scripts/verify-secret-scan-scope.ts",
     "secrets:scan": "pnpm secrets:scope:verify && gitleaks git . --config=.gitleaks.toml --redact --verbose && gitleaks dir . --config=.gitleaks.toml --redact --verbose",

@@ -35,4 +35,18 @@ describe('paid-service route mounting gate (directive §6, §32)', () => {
     );
     expect(res.status).toBe(404);
   });
+
+  it('Nevermined routes are absent by default and fail closed without an authenticated provider', async () => {
+    const request = {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    };
+    expect((await app.request('/v1/nevermined/company/evidence-graph', request)).status).toBe(404);
+    const enabled = await app.request('/v1/nevermined/company/evidence-graph', request, {
+      NEVERMINED_ROUTES_ENABLED: 'true',
+    } as never);
+    expect(enabled.status).toBe(503);
+    expect(await enabled.json()).toMatchObject({ error: 'nevermined_provider_not_configured' });
+  });
 });

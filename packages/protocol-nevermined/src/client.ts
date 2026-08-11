@@ -52,6 +52,18 @@ export interface NeverminedSettlementResult {
   remainingBalance?: string;
 }
 
+/** Bounded public response emitted by SITEBORNE after a validated settlement.
+ * Provider-only fields such as orderTx are deliberately not representable. */
+export interface NeverminedPaymentResponse {
+  success: boolean;
+  payer?: string;
+  transaction: string;
+  network: string;
+  creditsRedeemed?: string;
+  remainingBalance?: string;
+  agentRequestId?: string;
+}
+
 /** Narrow request-time interface implemented by the future edge-api SDK
  * adapter. */
 export interface NeverminedFacilitatorClient {

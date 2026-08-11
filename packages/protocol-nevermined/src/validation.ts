@@ -1,10 +1,22 @@
-import type { NeverminedPaymentRequired, NeverminedSettlementResult } from './client';
+import { NEVERMINED_PAYMENT_PROVIDER, type SiteborneServiceId } from '@siteborne/protocol-x402';
+import type {
+  NeverminedPaymentRequired,
+  NeverminedSettlementResult,
+  NeverminedVerificationResult,
+} from './client';
+import { SITEBORNE_NEVERMINED_EXTENSION, type NeverminedRequirementExtension } from './requirement';
 
 export interface NeverminedRequirementExpectation {
   resource: string;
   network: string;
   agentId: string;
   planId: string;
+  serviceId?: SiteborneServiceId;
+  quoteId?: string;
+  requirementId?: string;
+  amount?: string;
+  semantics?: 'exact' | 'upto';
+  expiresAt?: string;
 }
 
 export type NeverminedRequirementValidation =
@@ -20,7 +32,8 @@ export type NeverminedRequirementValidation =
         | 'network_mismatch'
         | 'plan_mismatch'
         | 'agent_mismatch'
-        | 'http_verb_mismatch';
+        | 'http_verb_mismatch'
+        | 'siteborne_binding_mismatch';
     };
 
 function record(value: unknown): Record<string, unknown> | null {
@@ -59,7 +72,59 @@ export function validateNeverminedPaymentRequired(
     return { valid: false, reason: 'agent_mismatch' };
   }
   if (extra.httpVerb !== 'POST') return { valid: false, reason: 'http_verb_mismatch' };
+  if (expected.serviceId !== undefined) {
+    const extension = record(
+      record(required.extensions)?.[SITEBORNE_NEVERMINED_EXTENSION]
+    ) as NeverminedRequirementExtension | null;
+    if (
+      !extension ||
+      extension.version !== 1 ||
+      extension.payment_rail !== 'nevermined' ||
+      extension.payment_provider !== NEVERMINED_PAYMENT_PROVIDER ||
+      extension.service_id !== expected.serviceId ||
+      extension.route !== expected.resource ||
+      extension.quote_id !== expected.quoteId ||
+      extension.requirement_id !== expected.requirementId ||
+      extension.amount !== expected.amount ||
+      extension.semantics !== expected.semantics ||
+      extension.expires_at !== expected.expiresAt ||
+      extension.payment_identifier_required !== true ||
+      extension.production_enabled !== false
+    ) {
+      return { valid: false, reason: 'siteborne_binding_mismatch' };
+    }
+  }
   return { valid: true, paymentRequired: value as NeverminedPaymentRequired };
+}
+
+export interface NeverminedVerificationExpectation {
+  network: string;
+}
+
+export type NeverminedVerificationValidation =
+  | { valid: true }
+  | {
+      valid: false;
+      reason:
+        | 'provider_rejected'
+        | 'payer_missing_or_malformed'
+        | 'network_mismatch'
+        | 'request_identity_missing_or_malformed';
+    };
+
+export function validateNeverminedVerificationResult(
+  result: NeverminedVerificationResult,
+  expected: NeverminedVerificationExpectation
+): NeverminedVerificationValidation {
+  if (!result.isValid) return { valid: false, reason: 'provider_rejected' };
+  if (!result.payer || !/^0x[a-fA-F0-9]{40}$/.test(result.payer)) {
+    return { valid: false, reason: 'payer_missing_or_malformed' };
+  }
+  if (result.network !== expected.network) return { valid: false, reason: 'network_mismatch' };
+  if (!result.agentRequestId || !/^[A-Za-z0-9_.:-]{1,256}$/.test(result.agentRequestId)) {
+    return { valid: false, reason: 'request_identity_missing_or_malformed' };
+  }
+  return { valid: true };
 }
 
 export interface NeverminedSettlementExpectation {

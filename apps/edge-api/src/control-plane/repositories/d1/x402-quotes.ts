@@ -14,11 +14,13 @@
  */
 import type { D1Database } from '@cloudflare/workers-types';
 import type { Quote } from '@siteborne/protocol-x402';
-import type { PaymentRequirements } from '@x402/core/types';
 
 export interface StoredX402Quote {
   quote: Quote;
-  requirement: PaymentRequirements;
+  /** Exact rail-native requirement object issued in the 402. CDP narrows this
+   * to PaymentRequirements; Nevermined narrows it only after its own codec and
+   * binding validator succeeds. */
+  requirement: unknown;
   requirement_id: string;
 }
 
@@ -41,7 +43,7 @@ export class X402QuoteRepository {
    */
   async create(
     quote: Quote,
-    requirement: PaymentRequirements,
+    requirement: unknown,
     requirementId: string,
     resourceId: string
   ): Promise<void> {
@@ -76,12 +78,46 @@ export class X402QuoteRepository {
     try {
       return {
         quote: JSON.parse(row.quote_json as string) as Quote,
-        requirement: JSON.parse(row.requirement_json as string) as PaymentRequirements,
+        requirement: JSON.parse(row.requirement_json as string) as unknown,
         requirement_id: row.requirement_id as string,
       };
     } catch {
       return null;
     }
+  }
+
+  /** Nevermined's payment-signature is intentionally opaque and does not
+   * carry SITEBORNE's quote id. Resolve the persisted server-issued quote by
+   * the already-validated route/service/input binding, newest first. */
+  async getLatestForBinding(
+    serviceId: string,
+    resourceId: string,
+    inputHash: string
+  ): Promise<StoredX402Quote | null> {
+    const result = await this.db
+      .prepare(
+        `SELECT * FROM x402_quotes
+         WHERE service_id = ? AND resource_id = ?
+         ORDER BY created_at DESC, quote_id DESC`
+      )
+      .bind(serviceId, resourceId)
+      .all();
+    if (!result.success) return null;
+    for (const raw of result.results) {
+      const row = raw as Record<string, unknown>;
+      try {
+        const quote = JSON.parse(row.quote_json as string) as Quote;
+        if (quote.input_hash !== inputHash) continue;
+        return {
+          quote,
+          requirement: JSON.parse(row.requirement_json as string) as unknown,
+          requirement_id: row.requirement_id as string,
+        };
+      } catch {
+        // A corrupt candidate never becomes a usable authorization binding.
+      }
+    }
+    return null;
   }
 }
 

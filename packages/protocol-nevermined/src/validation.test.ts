@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { validateNeverminedPaymentRequired, validateNeverminedSettlementResult } from './index';
+import {
+  validateNeverminedPaymentRequired,
+  validateNeverminedSettlementResult,
+  validateNeverminedVerificationResult,
+} from './index';
 
 const expectedRequirement = {
   resource: '/v1/nevermined/company/evidence-graph',
@@ -107,6 +111,42 @@ describe('Nevermined protocol boundary validation', () => {
           network: 'eip155:84532',
           actualAmount: '12000',
         }
+      )
+    ).toMatchObject({ valid: false });
+  });
+
+  it('accepts verification only when payer, network, and stable request identity are bounded', () => {
+    expect(
+      validateNeverminedVerificationResult(
+        {
+          isValid: true,
+          payer: '0x' + '1'.repeat(40),
+          network: 'eip155:84532',
+          agentRequestId: 'agent-request-1',
+        },
+        { network: 'eip155:84532' }
+      )
+    ).toEqual({ valid: true });
+  });
+
+  it.each([
+    ['provider rejection', { isValid: false, invalidReason: 'free form secret detail' }],
+    ['payer missing', { payer: undefined }],
+    ['payer malformed', { payer: 'not-an-address' }],
+    ['network mismatch', { network: 'eip155:1' }],
+    ['request missing', { agentRequestId: undefined }],
+    ['request oversized', { agentRequestId: 'x'.repeat(257) }],
+  ])('rejects unsafe verification result: %s', (_name, patch) => {
+    expect(
+      validateNeverminedVerificationResult(
+        {
+          isValid: true,
+          payer: '0x' + '1'.repeat(40),
+          network: 'eip155:84532',
+          agentRequestId: 'agent-request-1',
+          ...patch,
+        },
+        { network: 'eip155:84532' }
       )
     ).toMatchObject({ valid: false });
   });

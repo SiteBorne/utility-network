@@ -110,6 +110,13 @@ export function isCdpPaymentAuthorizationContext(
   return context.authorizationContext.rail === 'cdp';
 }
 
+export function isNeverminedPaymentAuthorizationContext(
+  context: PaymentVerificationContext | PaymentSettlementContext
+): context is PaymentEvidenceContext &
+  NeverminedPaymentAuthorizationContext & { usageResult?: UsageResult } {
+  return context.authorizationContext.rail === 'nevermined';
+}
+
 /** How a `PaymentEvidenceProvider` was implemented — never inferred via
  * `instanceof` (directive §9). `resolvePaymentEvidenceProvider` uses this
  * field alone to decide whether a supplied provider may ever be selected

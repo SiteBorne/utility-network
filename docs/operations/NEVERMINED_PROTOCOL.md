@@ -12,9 +12,10 @@
 The protocol package is credential-independent. It does not import the SDK at
 runtime, read environment variables, create singleton client state, execute a
 service, persist D1 state, generate PCC, or make a network call. The edge layer
-contains a pure compile-checked mapper to the official SDK's
-`VerifyPermissionsParams` and `SettlePermissionsParams`; it does not initialize
-`Payments` or invoke a facilitator in this checkpoint.
+now contains the Checkpoint-2 provider and concrete adapter compiled against the
+official SDK's `VerifyPermissionsParams` and `SettlePermissionsParams`.
+Importing the provider does not initialize `Payments`; authenticated SDK
+construction is isolated behind the explicit future sandbox live guard.
 
 The local spec fixture verifies the installed package version and current type
 surface for `X402PaymentRequired`, verify/settle parameter and result types,
@@ -88,10 +89,20 @@ advances.
 D1 before the future facilitator call and is not derived from the Nevermined
 token.
 
-## Deferred work
+## Deterministic route runtime
 
-SUN-0900A Checkpoint 2 owns the injected SDK provider and deterministic four
-route adapters through the shared lifecycle. SUN-0900B owns credentials,
-builder/subscriber identities, agent/plan registration, live sandbox
-verification/settlement, and proof of document actual-usage capability.
-Production and `live` remain disabled.
+The four Nevermined-only Hono routes are implemented through the existing shared
+paid-service lifecycle. Their server challenge is built with the official SDK
+helper and the SITEBORNE binding extension. The opaque `payment-signature` and
+separate `Payment-Identifier` are structurally checked, then D1 acquires the
+complete v2 rail binding before `verifyPermissions`.
+
+Explicit fixture injection may exercise the lifecycle under fixture evidence
+policy. That provider always emits `synthetic_fixture`; only the sealed
+authenticated SDK factory can produce evidence eligible for `external_verified`.
+Default paths are absent, or return provider-unavailable when explicitly enabled
+without authenticated configuration. They never fall back to CDP.
+
+SUN-0900B owns credentials, builder/subscriber identities, agent/plan
+registration, live sandbox verification/settlement, and proof of document
+actual-usage capability. Production and `live` remain disabled.

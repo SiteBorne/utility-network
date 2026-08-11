@@ -26,6 +26,7 @@ import {
   PAYTO_NOT_CONFIGURED,
   REGISTRY_SERVICES,
 } from '@siteborne/protocol-x402';
+import { NEVERMINED_DECLARATIONS, NEVERMINED_ROUTES } from '@siteborne/protocol-nevermined';
 import { calculateDocumentUsage, documentUsageToAtomicUnits } from '@siteborne/pricing';
 import { D1ServicesRepository } from '../repositories/d1/services';
 import type { PaymentEvidenceMode, PaymentEvidenceProvider } from '@siteborne/protocol-x402';
@@ -109,6 +110,9 @@ export interface PaidServicesConfig {
   evidenceProvider?: PaymentEvidenceProvider;
   payTo?: string;
   clock?: () => string;
+  /** Internal/additive route-family selector. The public open-route builder
+   * defaults to CDP; the Nevermined wrapper below selects its own paths. */
+  rail?: 'cdp' | 'nevermined';
 }
 
 /**
@@ -123,6 +127,31 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
   const app = new Hono();
   const { signer, registry: keyRegistry } = await createFixtureSigner();
   const clock = config.clock ?? (() => new Date().toISOString());
+  const rail = config.rail ?? 'cdp';
+
+  function paymentRoute(serviceId: (typeof ALL_BAZAAR_SERVICE_IDS)[number], cdpPath: string) {
+    if (rail === 'nevermined') {
+      const declaration = NEVERMINED_DECLARATIONS[serviceId];
+      return {
+        rail,
+        network: 'eip155:84532' as const,
+        asset: 'nevermined:credits',
+        payTo: 'siteborne:nevermined-publisher-not-registered',
+        path: NEVERMINED_ROUTES[serviceId],
+        nevermined: {
+          agentId: declaration.agent.local_agent_id,
+          planId: declaration.plan.local_plan_id,
+        },
+      };
+    }
+    return {
+      rail,
+      network: 'eip155:8453' as const,
+      asset: '0xUSDC',
+      payTo: config.payTo ?? PAYTO_NOT_CONFIGURED,
+      path: cdpPath,
+    };
+  }
 
   function freshContext(serviceId: ServiceId) {
     return buildServiceContext(serviceId, {
@@ -138,9 +167,7 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
     serviceId: 'company_evidence_graph.v1',
     scheme: 'exact',
     pricingKey: 'company_evidence_graph',
-    network: 'eip155:8453',
-    asset: '0xUSDC',
-    path: '/v1/company/evidence-graph',
+    ...paymentRoute('company_evidence_graph.v1', '/v1/company/evidence-graph'),
     inputSchema: BUNDLED_SERVICE_INPUT_SCHEMAS['company_evidence_graph.v1'] as Record<
       string,
       unknown
@@ -151,7 +178,6 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
     pccDependency: '1.0.0',
     db: config.db,
     clock,
-    payTo: config.payTo ?? PAYTO_NOT_CONFIGURED,
     evidenceMode: config.evidenceMode,
     evidenceProvider: config.evidenceProvider,
     executor: async (input): Promise<ExecutorOutcome> => {
@@ -179,9 +205,7 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
     serviceId: 'web_context_verified.v1',
     scheme: 'exact',
     pricingKey: 'web_context_verified_direct',
-    network: 'eip155:8453',
-    asset: '0xUSDC',
-    path: '/v1/web/context',
+    ...paymentRoute('web_context_verified.v1', '/v1/web/context'),
     inputSchema: BUNDLED_SERVICE_INPUT_SCHEMAS['web_context_verified.v1'] as Record<
       string,
       unknown
@@ -192,7 +216,6 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
     pccDependency: '1.0.0',
     db: config.db,
     clock,
-    payTo: config.payTo ?? PAYTO_NOT_CONFIGURED,
     evidenceMode: config.evidenceMode,
     evidenceProvider: config.evidenceProvider,
     executor: async (input): Promise<ExecutorOutcome> => {
@@ -222,9 +245,7 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
     serviceId: 'document_evidence_json.v1',
     scheme: 'upto',
     pricingKey: 'document_evidence_json_max_job',
-    network: 'eip155:8453',
-    asset: '0xUSDC',
-    path: '/v1/document/evidence-json',
+    ...paymentRoute('document_evidence_json.v1', '/v1/document/evidence-json'),
     inputSchema: BUNDLED_SERVICE_INPUT_SCHEMAS['document_evidence_json.v1'] as Record<
       string,
       unknown
@@ -235,7 +256,6 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
     pccDependency: '1.0.0',
     db: config.db,
     clock,
-    payTo: config.payTo ?? PAYTO_NOT_CONFIGURED,
     evidenceMode: config.evidenceMode,
     evidenceProvider: config.evidenceProvider,
     executor: async (input): Promise<ExecutorOutcome> => {
@@ -308,9 +328,7 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
     serviceId: 'verify_agent_output.v1',
     scheme: 'exact',
     pricingKey: 'verify_agent_output_standard',
-    network: 'eip155:8453',
-    asset: '0xUSDC',
-    path: '/v1/verify/agent-output',
+    ...paymentRoute('verify_agent_output.v1', '/v1/verify/agent-output'),
     inputSchema: BUNDLED_SERVICE_INPUT_SCHEMAS['verify_agent_output.v1'] as Record<string, unknown>,
     contractRelease: '1.0.0',
     inputSchemaHash: 'sha256:66d459905cd1a18b57ccb3fc40043a4e4c1a77bc7dba40676fcaf674cacb0f34',
@@ -318,7 +336,6 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
     pccDependency: '1.0.0',
     db: config.db,
     clock,
-    payTo: config.payTo ?? PAYTO_NOT_CONFIGURED,
     evidenceMode: config.evidenceMode,
     evidenceProvider: config.evidenceProvider,
     executor: async (input): Promise<ExecutorOutcome> => {
@@ -336,6 +353,18 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
   });
 
   return app;
+}
+
+export interface NeverminedPaidServicesConfig extends Omit<PaidServicesConfig, 'rail'> {
+  evidenceProvider: PaymentEvidenceProvider;
+}
+
+/** Exactly four additive Nevermined-only routes, all driven by the same route
+ * lifecycle and the same service executors as the accepted CDP family. */
+export function buildNeverminedPaidServicesApp(
+  config: NeverminedPaidServicesConfig
+): Promise<Hono> {
+  return buildPaidServicesApp({ ...config, rail: 'nevermined' });
 }
 
 export { DOCUMENT_FIXTURE_ARTIFACT_ID };
