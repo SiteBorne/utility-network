@@ -1,13 +1,46 @@
 {
   "name": "@siteborne/protocol-mcp",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
-  "description": "Planned for future increment - not implemented in SUN-0001",
-  "x-status": "planned",
-  "scripts": {
-    "lint": "echo 'No lint script - package not implemented' && exit 0",
-    "typecheck": "echo 'No typecheck - package not implemented' && exit 0",
-    "test": "echo 'No tests - package not implemented' && exit 0"
+  "type": "module",
+  "description": "Credential-independent MCP 2026-07-28 protocol and Hono transport foundation for SITEBORNE utilities",
+  "x-status": "active",
+  "main": "dist/index.js",
+  "types": "src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
   },
-  "devDependencies": {}
+  "scripts": {
+    "build": "pnpm run typecheck && esbuild src/index.ts --bundle --platform=node --format=esm --target=node20 --outfile=dist/index.js --banner:js='import { createRequire as __createRequire } from \"node:module\"; const require = __createRequire(import.meta.url);'",
+    "test": "vitest run",
+    "test:property": "vitest run --config vitest.property.config.ts",
+    "lint": "eslint src/ scripts/",
+    "typecheck": "tsc --noEmit",
+    "format:check": "prettier --check src/ scripts/ fixtures/",
+    "spec:verify": "node --import tsx scripts/verify-spec-fixture.ts",
+    "check": "pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run build && pnpm run test && pnpm run test:property && pnpm run spec:verify"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/hono": "2.0.0",
+    "@modelcontextprotocol/server": "2.0.0",
+    "@siteborne/pricing": "workspace:*",
+    "@siteborne/protocol-x402": "workspace:*",
+    "hono": "^4.11.4",
+    "zod": "^4.2.0"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "2.0.0",
+    "@types/node": "^22.0.0",
+    "ajv": "^8.17.1",
+    "esbuild": "0.28.1",
+    "eslint": "^9.0.0",
+    "fast-check": "^3.17.0",
+    "tsx": "^4.16.0",
+    "typescript": "^5.5.0",
+    "vitest": "^2.0.0"
+  }
 }

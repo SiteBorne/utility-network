@@ -1,0 +1,43 @@
+{
+  "name": "@siteborne/mcp-server",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Local stdio shim for the SITEBORNE Utility Network MCP server",
+  "license": "UNLICENSED",
+  "mcpName": "net.siteborne/utility",
+  "bin": {
+    "siteborne-mcp": "dist/stdio.js"
+  },
+  "files": [
+    "dist/stdio.js",
+    "README.md",
+    "server.json"
+  ],
+  "scripts": {
+    "build": "esbuild src/stdio.ts --bundle --platform=node --format=esm --target=node20 --outfile=dist/stdio.js --banner:js='#!/usr/bin/env node\nimport { createRequire as __createRequire } from \"node:module\"; const require = __createRequire(import.meta.url);'",
+    "test": "pnpm run build && vitest run",
+    "lint": "eslint src/ tests/ scripts/",
+    "typecheck": "tsc --noEmit",
+    "format:check": "prettier --check src/ tests/ scripts/ README.md server.json package.json",
+    "metadata:verify": "node --import tsx scripts/verify-metadata.ts",
+    "pack:verify": "pnpm run build && node --import tsx scripts/verify-packed-install.ts",
+    "check": "pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run metadata:verify && pnpm run pack:verify"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "2.0.0",
+    "@modelcontextprotocol/server": "2.0.0",
+    "@siteborne/protocol-mcp": "workspace:*",
+    "@types/node": "^22.0.0",
+    "esbuild": "0.28.1",
+    "eslint": "^9.0.0",
+    "tsx": "^4.16.0",
+    "typescript": "^5.5.0",
+    "vitest": "^2.0.0"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

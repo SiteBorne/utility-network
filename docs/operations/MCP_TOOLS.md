@@ -1,0 +1,61 @@
+# MCP Tool Contracts
+
+The MCP server name is `net.siteborne/utility`, version `0.1.0`. Its tool
+inventory is immutable for SUN-0800A checkpoint 1: exactly four paid utility
+tools plus quote and health.
+
+| Tool                               | Contract boundary                                     | Local behavior                                                                                                    |
+| ---------------------------------- | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `siteborne_company_evidence_graph` | `company_evidence_graph.v1` frozen input/output       | Calls the injected paid-service boundary; closed default returns `payment_required`                               |
+| `siteborne_web_context_verified`   | `web_context_verified.v1` frozen input/output         | Calls the injected paid-service boundary; closed default returns `payment_required`                               |
+| `siteborne_document_evidence_json` | `document_evidence_json.v1` frozen input/output       | Calls the injected paid-service boundary; closed default returns `payment_required`                               |
+| `siteborne_verify_agent_output`    | `verify_agent_output.v1` frozen input/output          | Calls the injected paid-service boundary; closed default returns `payment_required`                               |
+| `siteborne_get_quote`              | Canonical pricing and x402 quote/requirement builders | Returns an exact charge or an `upto` authorization ceiling; never claims an actual `upto` charge before execution |
+| `siteborne_get_service_health`     | Local protocol and production-state boundary          | Reports local readiness, all four service states, external publication blocked, and production false              |
+
+## Frozen service schemas
+
+Service inputs are the exact bundled schemas exported by
+`@siteborne/protocol-x402`, which derives them from the frozen `1.0.0` service
+contracts. Service outputs are the same frozen `1.0.0` output schemas with the
+PCC and money references embedded under `$defs`, so each MCP output schema is
+self-contained. Tests compile all four schemas and validate their accepted
+frozen examples.
+
+Schema metadata uses the accepted SITEBORNE service schema URIs. No second
+MCP-specific service wire shape is maintained.
+
+## Quote semantics
+
+`siteborne_get_quote` accepts:
+
+- a frozen service ID;
+- `exact` or `upto`;
+- the service input to bind.
+
+It resolves the accepted pricing key from `@siteborne/pricing`, hashes the input
+through the accepted x402 canonicalization boundary, constructs a canonical
+quote, and constructs the selected payment requirement. The result binds the
+quote, requirement, service, input, pricing source, network, asset, payee,
+resource, issue time, and expiration.
+
+For `exact`, `amount_kind` is `exact`. For `upto`, `amount_kind` is
+`authorized_maximum` and `actual_amount` is `null`: actual usage can only be
+known after the paid service executes. The quote tool does not verify or settle
+a payment.
+
+## Health semantics
+
+`siteborne_get_service_health` always reports:
+
+- `status: ready_local`;
+- MCP protocol `2026-07-28`;
+- six tools;
+- each local service as fixture-verified, production-disabled, and not
+  externally live;
+- `external_publication: blocked_external`;
+- `production_ready: false`;
+- `production_enabled: false`.
+
+Callers must not interpret local MCP health as deployment, registry publication,
+customer use, revenue, or production readiness.

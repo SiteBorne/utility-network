@@ -889,8 +889,18 @@ tasks:
       - 'Current A2A 1.0 Agent Card model is generated, signed, locally verified, and rejects tampering'
       - 'Local /a2a and /.well-known/agent-card.json routes work with truthful skills, schemas, security, payment, and production-disabled metadata'
       - 'Credential-free validation and full repository check pass with no external publication, deployment, registry, wallet, or Nevermined calls'
-    evidence: []
-    next_action: 'Execute SUN-0800A checkpoint 1 only: current MCP remote server, six-tool transport boundary, protocol drift guard, local registry preparation, and package-ready npm shim. Do not begin A2A implementation in checkpoint 1.'
+    evidence:
+      - 'packages/protocol-mcp/src/server.ts'
+      - 'packages/protocol-mcp/src/transport.test.ts'
+      - 'packages/protocol-mcp/src/transport.property.test.ts'
+      - 'packages/protocol-mcp/src/frozen-contracts.test.ts'
+      - 'packages/protocol-mcp/fixtures/mcp-spec-baseline.json'
+      - 'apps/edge-api/src/routes/mcp.ts'
+      - 'apps/edge-api/tests/mcp-route.test.ts'
+      - 'packages/mcp-server/server.json'
+      - 'packages/mcp-server/scripts/verify-packed-install.ts'
+      - 'docs/reports/SUN-0800A-checkpoint-1-mcp-report.md'
+    next_action: 'Checkpoint 1 MCP foundation complete locally: current 2026-07-28 per-request Streamable HTTP server, exact six-tool boundary, frozen schemas, canonical x402 quote tool, truthful health, cross-client isolation, adversarial/property/no-network coverage, Edge /mcp route, protocol drift guard, registry-ready metadata, and offline tarball install proof. SUN-0800A remains active. Next checkpoint is credential-independent A2A 1.0 Agent Card generation/signing/local verification and local routes; do not publish or deploy.'
     blocker: null
     commit_ref: null
 

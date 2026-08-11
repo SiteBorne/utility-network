@@ -39,6 +39,7 @@ export default defineConfig({
       '@siteborne/policy': path.resolve(__dirname, 'packages/policy/src'),
       '@siteborne/test-fixtures': path.resolve(__dirname, 'packages/test-fixtures/src'),
       '@siteborne/protocol-x402': path.resolve(__dirname, 'packages/protocol-x402/src'),
+      '@siteborne/protocol-mcp': path.resolve(__dirname, 'packages/protocol-mcp/src'),
     },
     typecheck: {
       tsconfig: 'tsconfig.base.json',

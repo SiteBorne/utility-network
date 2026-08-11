@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { healthRoute } from './routes/health';
 import { readinessRoute } from './routes/readiness';
+import { mcpRoute } from './routes/mcp';
 import { catalogRoute } from './control-plane/routes/catalog';
 import { serviceMetadataRoute } from './control-plane/routes/catalog';
 import { schemasRoute } from './control-plane/routes/catalog';
@@ -62,6 +63,7 @@ app.use('*', async (c, next) => {
 
 app.route('/health', healthRoute);
 app.route('/ready', readinessRoute);
+app.all('/mcp', mcpRoute);
 app.route('/catalog', catalogRoute);
 app.route('/services', serviceMetadataRoute);
 app.route('/schemas', schemasRoute);

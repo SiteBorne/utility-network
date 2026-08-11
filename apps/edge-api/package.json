@@ -22,6 +22,7 @@
   },
   "dependencies": {
     "@coinbase/cdp-sdk": "^1.55.0",
+    "@siteborne/protocol-mcp": "workspace:*",
     "@siteborne/protocol-x402": "workspace:*",
     "@siteborne/pricing": "workspace:*",
     "@siteborne/provider-adapters": "workspace:*",
@@ -37,6 +38,7 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20240800.0",
+    "@modelcontextprotocol/client": "2.0.0",
     "eslint": "^9.0.0",
     "fast-check": "^3.17.0",
     "miniflare": "5.20260801.0-alpha",

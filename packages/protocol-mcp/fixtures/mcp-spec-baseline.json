@@ -1,0 +1,24 @@
+{
+  "protocol_version": "2026-07-28",
+  "sdk": {
+    "@modelcontextprotocol/server": "2.0.0",
+    "@modelcontextprotocol/client": "2.0.0",
+    "@modelcontextprotocol/hono": "2.0.0"
+  },
+  "transport": "streamable-http-per-request",
+  "required_headers": ["MCP-Protocol-Version", "Mcp-Method", "Mcp-Name"],
+  "header_mismatch_error_code": -32020,
+  "server_name": "net.siteborne/utility",
+  "tools": [
+    "siteborne_company_evidence_graph",
+    "siteborne_web_context_verified",
+    "siteborne_document_evidence_json",
+    "siteborne_verify_agent_output",
+    "siteborne_get_quote",
+    "siteborne_get_service_health"
+  ],
+  "source_urls": [
+    "https://github.com/modelcontextprotocol/modelcontextprotocol/blob/main/docs/specification/2026-07-28/basic/transports/streamable-http.mdx",
+    "https://github.com/modelcontextprotocol/typescript-sdk/blob/main/docs/migration/support-2026-07-28.md"
+  ]
+}

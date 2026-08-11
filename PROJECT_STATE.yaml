@@ -98,6 +98,9 @@ implemented:
   - 'x402_http_vertical_slice' # SUN-0700A checkpoint 5, real Hono boundary over real D1, opt-in PAID_ROUTES_ENABLED gate, synthetic evidence only
   - 'x402_live_exact_facilitator_verification_and_settlement' # SUN-0700B checkpoint 1, controlled Base Sepolia validation only
   - 'x402_live_upto_facilitator_verification_and_settlement' # SUN-0700B checkpoint 2, controlled Base Sepolia validation only
+  - 'mcp_2026_07_28_remote_transport_foundation' # SUN-0800A checkpoint 1, local /mcp only
+  - 'mcp_six_tool_contract_and_payment_boundary' # four frozen paid services plus canonical quote and truthful health
+  - 'mcp_local_stdio_npm_shim_pack_install_verified' # package-ready only; not published
 
 not_implemented:
   - 'company_evidence_graph_xbrl_facts_and_repository_signals_field_groups'
@@ -106,7 +109,7 @@ not_implemented:
   - 'verify_agent_output_signature_valid_evidence_resolves_no_pii_no_secrets_checks'
   - 'x402_signed_offers_and_receipts' # evaluated and deliberately deferred, see ADR 0050
   - 'x402_bazaar_facilitator_cataloging' # local declaration/validation only, see ADR 0049
-  - 'mcp'
+  - 'mcp_publication_and_public_endpoint' # SUN-0800B blocked_external
   - 'a2a'
   - 'nevermined'
   - 'agentverse'
@@ -200,4 +203,4 @@ pcc_schema:
   extension_namespace: 'reverse-domain-qualified'
   drift_check: 'enabled'
 
-last_updated: '2026-08-10T23:06:00Z'
+last_updated: '2026-08-11T01:43:18Z'

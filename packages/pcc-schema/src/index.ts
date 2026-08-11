@@ -1,6 +1,5 @@
 import { z } from 'zod';
-import * as fs from 'fs';
-import * as path from 'path';
+import canonicalSchema from '../../../schemas/proof-carrying-context.schema.json' with { type: 'json' };
 
 export const PCC_VERSION = '1.0.0' as const;
 
@@ -54,12 +53,11 @@ export const SIGNING_POLICY = {
   verification: 'Deterministic; no model may override verification failure',
 } as const;
 
-// Load the canonical schema from the single source of truth
-const schemaPath = path.resolve(
-  import.meta.dirname,
-  '../../../schemas/proof-carrying-context.schema.json'
-);
-const schemaJson = JSON.parse(fs.readFileSync(schemaPath, 'utf-8'));
+// Import the canonical single source of truth so bundlers can preserve it
+// without depending on the repository's runtime directory layout.
+const schemaJson = canonicalSchema as unknown as Record<string, unknown> & {
+  definitions?: Record<string, unknown>;
+};
 
 export const NORMATIVE_SCHEMA = schemaJson;
 
@@ -337,7 +335,7 @@ export function validateSchema(data: unknown): { valid: boolean; errors: string[
     }
   }
 
-  validateObject(data, NORMATIVE_SCHEMA);
+  validateObject(data, NORMATIVE_SCHEMA as SchemaObject);
 
   return { valid: errors.length === 0, errors };
 }

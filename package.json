@@ -59,9 +59,18 @@
     "x402:fixtures:verify": "pnpm --filter @siteborne/protocol-x402 run fixtures:verify",
     "x402:spec:verify": "pnpm --filter @siteborne/protocol-x402 run fixtures:verify",
     "x402:check": "pnpm --filter @siteborne/protocol-x402 run format:check && pnpm --filter @siteborne/protocol-x402 run lint && pnpm --filter @siteborne/protocol-x402 run typecheck && pnpm x402:test && pnpm x402:test:property && pnpm x402:fixtures:verify",
+    "mcp:test:protocol": "pnpm --filter @siteborne/protocol-mcp run test",
+    "mcp:test:edge": "vitest run apps/edge-api/tests/mcp-route.test.ts",
+    "mcp:test:stdio": "pnpm --filter @siteborne/mcp-server run test",
+    "mcp:test": "pnpm mcp:test:protocol && pnpm mcp:test:edge && pnpm mcp:test:stdio",
+    "mcp:test:property": "pnpm --filter @siteborne/protocol-mcp run test:property",
+    "mcp:spec:verify": "pnpm --filter @siteborne/protocol-mcp run spec:verify",
+    "mcp:metadata:verify": "pnpm --filter @siteborne/mcp-server run metadata:verify",
+    "mcp:pack:verify": "pnpm --filter @siteborne/mcp-server run pack:verify",
+    "mcp:check": "pnpm --filter @siteborne/protocol-mcp run check && pnpm mcp:test:edge && pnpm --filter @siteborne/mcp-server run check",
     "secrets:scope:verify": "tsx scripts/verify-secret-scan-scope.ts",
     "secrets:scan": "pnpm secrets:scope:verify && gitleaks git . --config=.gitleaks.toml --redact --verbose && gitleaks dir . --config=.gitleaks.toml --redact --verbose",
-    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm pcc:generate:check && pnpm services:generate:check && pnpm openapi:generate:check && pnpm python:test:pcc && pnpm python:test:modal && pnpm governance:validate && pnpm state:validate && pnpm tasks:validate && pnpm contracts:baseline:verify && pnpm contracts:compat:check && pnpm contracts:release:verify && pnpm migrations:verify && pnpm d1:test && pnpm control-plane:test && pnpm control-plane:check && pnpm adapters:check && pnpm document-worker:check && pnpm document-worker:fixtures:verify && pnpm verification:check && pnpm services-runtime:check && pnpm secrets:scan"
+    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm pcc:generate:check && pnpm services:generate:check && pnpm openapi:generate:check && pnpm python:test:pcc && pnpm python:test:modal && pnpm governance:validate && pnpm state:validate && pnpm tasks:validate && pnpm contracts:baseline:verify && pnpm contracts:compat:check && pnpm contracts:release:verify && pnpm migrations:verify && pnpm d1:test && pnpm control-plane:test && pnpm control-plane:check && pnpm adapters:check && pnpm document-worker:check && pnpm document-worker:fixtures:verify && pnpm verification:check && pnpm services-runtime:check && pnpm mcp:check && pnpm secrets:scan"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",
