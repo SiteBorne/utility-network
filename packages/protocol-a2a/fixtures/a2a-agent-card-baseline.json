@@ -1,0 +1,32 @@
+{
+  "schema_version": "1.0.0",
+  "name": "SITEBORNE Utility Network",
+  "agent_version": "1.0.0",
+  "protocol_binding": "JSONRPC",
+  "protocol_version": "1.0",
+  "interface_url": "https://utility.siteborne.net/a2a",
+  "discovery_path": "/.well-known/agent-card.json",
+  "jwks_path": "/.well-known/jwks.json",
+  "content_type": "application/a2a+json",
+  "skills": [
+    "company_evidence_graph.v1",
+    "web_context_verified.v1",
+    "document_evidence_json.v1",
+    "verify_agent_output.v1"
+  ],
+  "x402_extension_uri": "https://siteborne.net/extensions/a2a/x402/v1",
+  "payment_modes": {
+    "company_evidence_graph.v1": "exact",
+    "web_context_verified.v1": "exact",
+    "document_evidence_json.v1": "upto",
+    "verify_agent_output.v1": "exact"
+  },
+  "streaming": false,
+  "push_notifications": false,
+  "extended_agent_card": false,
+  "authentication_required": false,
+  "payment_required_for_useful_execution": true,
+  "production_ready": false,
+  "production_enabled": false,
+  "external_publication": "blocked_external"
+}

@@ -57,12 +57,18 @@ importers:
 
   apps/edge-api:
     dependencies:
+      '@a2a-js/sdk':
+        specifier: 1.0.1
+        version: 1.0.1
       '@coinbase/cdp-sdk':
         specifier: ^1.55.0
         version: 1.55.0(@x402/core@2.21.0)(@x402/evm@2.21.0(typescript@5.7.3))(@x402/extensions@2.21.0(typescript@5.7.3))(@x402/svm@2.21.0(@solana/kit@5.5.1(typescript@5.7.3))(@solana/sysvars@5.5.1(typescript@5.7.3)))(typescript@5.7.3)
       '@siteborne/pricing':
         specifier: workspace:*
         version: link:../../packages/pricing
+      '@siteborne/protocol-a2a':
+        specifier: workspace:*
+        version: link:../../packages/protocol-a2a
       '@siteborne/protocol-mcp':
         specifier: workspace:*
         version: link:../../packages/protocol-mcp
@@ -236,7 +242,36 @@ importers:
         specifier: ^2.0.0
         version: 2.1.8(@types/node@22.10.5)(jsdom@26.0.0)
 
-  packages/protocol-a2a: {}
+  packages/protocol-a2a:
+    dependencies:
+      '@a2a-js/sdk':
+        specifier: 1.0.1
+        version: 1.0.1
+      '@siteborne/protocol-x402':
+        specifier: workspace:*
+        version: link:../protocol-x402
+      ajv:
+        specifier: ^8.17.1
+        version: 8.17.1
+      hono:
+        specifier: ^4.5.0
+        version: 4.13.0
+    devDependencies:
+      eslint:
+        specifier: ^9.0.0
+        version: 9.18.0
+      fast-check:
+        specifier: ^3.17.0
+        version: 3.23.2
+      tsx:
+        specifier: ^4.16.0
+        version: 4.23.7
+      typescript:
+        specifier: ^5.5.0
+        version: 5.7.3
+      vitest:
+        specifier: ^2.0.0
+        version: 2.1.8(@types/node@22.10.5)(jsdom@26.0.0)
 
   packages/protocol-mcp:
     dependencies:
@@ -471,6 +506,21 @@ importers:
         version: 2.1.8(@types/node@22.10.5)(jsdom@26.0.0)
 
 packages:
+
+  '@a2a-js/sdk@1.0.1':
+    resolution: {integrity: sha512-CJQdh3Wzwo8qIx5UUkSJ7+7BEI16PB+MXMHHNSmx8JQsQed2HlQgvx1ENOiKUfYA3PlcEvxIwv14dBblhDuPmw==}
+    engines: {node: '>=20'}
+    peerDependencies:
+      '@bufbuild/protobuf': ^2.10.2
+      '@grpc/grpc-js': ^1.11.0
+      express: ^4.21.2 || ^5.1.0
+    peerDependenciesMeta:
+      '@bufbuild/protobuf':
+        optional: true
+      '@grpc/grpc-js':
+        optional: true
+      express:
+        optional: true
 
   '@adraffy/ens-normalize@1.11.0':
     resolution: {integrity: sha512-/3DDPKHqqIqxUULp8yP4zODUY1i+2xvVWsv8A79xGWdCAG+8sb0hRh0Rk2QyOJUnnbyPUAZYcpBuRe3nS2OIUg==}
@@ -2696,6 +2746,10 @@ packages:
     resolution: {integrity: sha512-508e6IcKLrhxKdBbcA2b4KQZlLVp2+J5UwQ6F7Drckkc5N9ZJwFa4TgWtsww9UG8fGHbm6gbV19TdM5pQ4GaIA==}
     hasBin: true
 
+  uuid@11.1.1:
+    resolution: {integrity: sha512-vIYxrBCC/N/K+Js3qSN88go7kIfNPssr/hHCesKCQNAjmgvYS2oqr69kIufEG+O4+PfezOH4EbIeHCfFov8ZgQ==}
+    hasBin: true
+
   valid-url@1.0.9:
     resolution: {integrity: sha512-QQDsV8OnSf5Uc30CKSwG9lnhMPe6exHtTXLRYX8uMwKENy640pU+2BgBL0LRbDh/eYRahNCS7aewCx0wf3NYVA==}
 
@@ -2869,6 +2923,11 @@ packages:
     resolution: {integrity: sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==}
 
 snapshots:
+
+  '@a2a-js/sdk@1.0.1':
+    dependencies:
+      jose: 6.2.8
+      uuid: 11.1.1
 
   '@adraffy/ens-normalize@1.11.0': {}
 
@@ -5005,6 +5064,8 @@ snapshots:
       punycode: 2.3.1
 
   uuid@11.0.5: {}
+
+  uuid@11.1.1: {}
 
   valid-url@1.0.9: {}
 

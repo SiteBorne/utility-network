@@ -1,0 +1,35 @@
+{
+  "schema_version": "1.0.0",
+  "a2a_spec_version": "1.0",
+  "sdk_package": "@a2a-js/sdk",
+  "sdk_version": "1.0.1",
+  "agent_card_path_export": ".well-known/agent-card.json",
+  "selected_protocol_binding": "JSONRPC",
+  "supported_interface_version": "1.0",
+  "version_header": "A2A-Version",
+  "version_header_absent_behavior": "defaults_to_0.3_and_is_rejected",
+  "content_type": "application/a2a+json",
+  "send_message_operation": "SendMessage",
+  "part_discrimination": "member_presence",
+  "legacy_kind_emitted": false,
+  "legacy_v0_3_compatibility": false,
+  "signature_algorithm": "ES256",
+  "signature_canonicalization": "RFC8785_JCS_after_v1_round_trip_without_signatures",
+  "signature_fields": ["protected", "signature", "header"],
+  "sdk_runtime_exports": [
+    "AgentCard",
+    "Extensions",
+    "canonicalizeAgentCard",
+    "generateAgentCardSignature",
+    "verifyAgentCardSignature"
+  ],
+  "sdk_server_exports": [
+    "AgentExecutor",
+    "DefaultRequestHandler",
+    "InMemoryTaskStore",
+    "JsonRpcTransportHandler",
+    "defaultServerCallContextBuilder",
+    "validateVersion"
+  ],
+  "sdk_client_exports": ["ClientFactory", "DefaultAgentCardResolver", "JsonRpcTransportFactory"]
+}

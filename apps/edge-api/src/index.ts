@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { healthRoute } from './routes/health';
 import { readinessRoute } from './routes/readiness';
 import { mcpRoute } from './routes/mcp';
+import { a2aRoute } from './routes/a2a';
 import { catalogRoute } from './control-plane/routes/catalog';
 import { serviceMetadataRoute } from './control-plane/routes/catalog';
 import { schemasRoute } from './control-plane/routes/catalog';
@@ -64,6 +65,9 @@ app.use('*', async (c, next) => {
 app.route('/health', healthRoute);
 app.route('/ready', readinessRoute);
 app.all('/mcp', mcpRoute);
+app.post('/a2a', a2aRoute);
+app.get('/.well-known/agent-card.json', a2aRoute);
+app.get('/.well-known/jwks.json', a2aRoute);
 app.route('/catalog', catalogRoute);
 app.route('/services', serviceMetadataRoute);
 app.route('/schemas', schemasRoute);

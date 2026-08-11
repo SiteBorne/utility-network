@@ -68,9 +68,16 @@
     "mcp:metadata:verify": "pnpm --filter @siteborne/mcp-server run metadata:verify",
     "mcp:pack:verify": "pnpm --filter @siteborne/mcp-server run pack:verify",
     "mcp:check": "pnpm --filter @siteborne/protocol-mcp run check && pnpm mcp:test:edge && pnpm --filter @siteborne/mcp-server run check",
+    "a2a:test:protocol": "pnpm --filter @siteborne/protocol-a2a run test",
+    "a2a:test:edge": "vitest run apps/edge-api/tests/a2a-route.test.ts",
+    "a2a:test": "pnpm a2a:test:protocol && pnpm a2a:test:edge",
+    "a2a:test:property": "pnpm --filter @siteborne/protocol-a2a run test:property",
+    "a2a:fixtures:verify": "pnpm --filter @siteborne/protocol-a2a run fixtures:verify",
+    "a2a:spec:verify": "pnpm --filter @siteborne/protocol-a2a run spec:verify",
+    "a2a:check": "pnpm --filter @siteborne/protocol-a2a run check && pnpm a2a:test:edge",
     "secrets:scope:verify": "tsx scripts/verify-secret-scan-scope.ts",
     "secrets:scan": "pnpm secrets:scope:verify && gitleaks git . --config=.gitleaks.toml --redact --verbose && gitleaks dir . --config=.gitleaks.toml --redact --verbose",
-    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm pcc:generate:check && pnpm services:generate:check && pnpm openapi:generate:check && pnpm python:test:pcc && pnpm python:test:modal && pnpm governance:validate && pnpm state:validate && pnpm tasks:validate && pnpm contracts:baseline:verify && pnpm contracts:compat:check && pnpm contracts:release:verify && pnpm migrations:verify && pnpm d1:test && pnpm control-plane:test && pnpm control-plane:check && pnpm adapters:check && pnpm document-worker:check && pnpm document-worker:fixtures:verify && pnpm verification:check && pnpm services-runtime:check && pnpm mcp:check && pnpm secrets:scan"
+    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm pcc:generate:check && pnpm services:generate:check && pnpm openapi:generate:check && pnpm python:test:pcc && pnpm python:test:modal && pnpm governance:validate && pnpm state:validate && pnpm tasks:validate && pnpm contracts:baseline:verify && pnpm contracts:compat:check && pnpm contracts:release:verify && pnpm migrations:verify && pnpm d1:test && pnpm control-plane:test && pnpm control-plane:check && pnpm adapters:check && pnpm document-worker:check && pnpm document-worker:fixtures:verify && pnpm verification:check && pnpm services-runtime:check && pnpm mcp:check && pnpm a2a:check && pnpm secrets:scan"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",

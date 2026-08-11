@@ -21,7 +21,9 @@
     "typecheck": "tsc --project tsconfig.json --noEmit --pretty false && tsc --project tsconfig.live-tests.json --noEmit --pretty false"
   },
   "dependencies": {
+    "@a2a-js/sdk": "1.0.1",
     "@coinbase/cdp-sdk": "^1.55.0",
+    "@siteborne/protocol-a2a": "workspace:*",
     "@siteborne/protocol-mcp": "workspace:*",
     "@siteborne/protocol-x402": "workspace:*",
     "@siteborne/pricing": "workspace:*",
