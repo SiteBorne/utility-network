@@ -1,5 +1,5 @@
 version: '1.0.0'
-last_updated: '2026-08-10T23:06:00Z'
+last_updated: '2026-08-11T01:02:00Z'
 tasks:
   # Phase 0: Establish Source of Truth
   - id: 'SUN-0001'
@@ -854,9 +854,9 @@ tasks:
     commit_ref: 'cd39320'
 
   - id: 'SUN-0800'
-    title: 'Implement MCP (remote server + npm shim) and A2A (signed Agent Card)'
+    title: 'Implement MCP (remote server + npm shim) and A2A (signed Agent Card) [DECOMPOSED]'
     phase: 'phase_10_mcp_a2a'
-    state: 'blocked_external'
+    state: 'superseded'
     owner_agent: 'architect'
     dependencies:
       - 'SUN-0700B'
@@ -868,8 +868,49 @@ tasks:
       - 'A2A Agent Card validates and is signed'
       - 'Agent Card served at /.well-known/agent-card.json'
     evidence: []
-    next_action: 'Blocked until the recorded Nevermined credentials are provisioned. Do not activate or start automatically.'
-    blocker: 'Requires Nevermined credentials (blocked_external)'
+    next_action: 'Superseded by decomposition into SUN-0800A (credential-independent MCP/A2A protocol foundation) and SUN-0800B (external npm/public MCP/Agent Card publication and verification). The coarse task incorrectly attached Nevermined credentials to MCP/A2A and conflated locally provable implementation with public publication/deployment. Do not implement against this task; see SUN-0800A/SUN-0800B. Nevermined remains exclusively SUN-0900.'
+    blocker: null
+    commit_ref: null
+
+  - id: 'SUN-0800A'
+    title: 'Credential-Independent MCP and A2A Protocol Foundation'
+    phase: 'phase_10_mcp_a2a'
+    state: 'active'
+    owner_agent: 'architect'
+    dependencies:
+      - 'SUN-0700B'
+    rubric_target: 85
+    acceptance_tests:
+      - 'Current remote Streamable HTTP MCP server responds to tools/list with exactly the six immutable SITEBORNE tools'
+      - 'All six MCP tools invoke through accepted SITEBORNE contract, pricing, x402, service-runtime, verification, and health boundaries without a free production-service bypass'
+      - 'MCP tool schemas derive from the frozen service contracts and current protocol metadata mismatches fail closed'
+      - 'Independent MCP clients are request/session isolated and cannot observe one another state, results, request identity, or metadata'
+      - 'Local Hono /mcp route and package-ready npm shim build, typecheck, pack, and install without publication or credentials'
+      - 'Current A2A 1.0 Agent Card model is generated, signed, locally verified, and rejects tampering'
+      - 'Local /a2a and /.well-known/agent-card.json routes work with truthful skills, schemas, security, payment, and production-disabled metadata'
+      - 'Credential-free validation and full repository check pass with no external publication, deployment, registry, wallet, or Nevermined calls'
+    evidence: []
+    next_action: 'Execute SUN-0800A checkpoint 1 only: current MCP remote server, six-tool transport boundary, protocol drift guard, local registry preparation, and package-ready npm shim. Do not begin A2A implementation in checkpoint 1.'
+    blocker: null
+    commit_ref: null
+
+  - id: 'SUN-0800B'
+    title: 'External MCP/A2A Publication and Public Verification'
+    phase: 'phase_10_mcp_a2a'
+    state: 'blocked_external'
+    owner_agent: 'operator'
+    dependencies:
+      - 'SUN-0800A'
+    rubric_target: 85
+    acceptance_tests:
+      - 'npm shim is published publicly and installs successfully from the public npm registry'
+      - 'Public remote MCP endpoint is reachable and passes protocol verification'
+      - 'Signed Agent Card is publicly reachable at https://utility.siteborne.net/.well-known/agent-card.json'
+      - 'Production/public Agent Card signing identity and verification surface are available where required'
+      - 'Required external namespace, domain, deployment, DNS, and TLS verification completes without overstating production capability'
+    evidence: []
+    next_action: 'Blocked until npm publication/account/package access, public Cloudflare deployment with DNS/TLS, and production Agent Card signing identity/publication prerequisites are available. MCP Registry listing remains SUN-1100 and Nevermined remains SUN-0900.'
+    blocker: 'Requires npm publication access, public Cloudflare deployment/DNS/TLS, and production Agent Card signing identity/publication prerequisites (blocked_external)'
     commit_ref: null
 
   - id: 'SUN-0900'
@@ -878,7 +919,7 @@ tasks:
     state: 'pending'
     owner_agent: 'architect'
     dependencies:
-      - 'SUN-0800'
+      - 'SUN-0800A'
     rubric_target: 85
     acceptance_tests:
       - 'Pay-as-you-go plans created for all 4 services'
@@ -923,6 +964,7 @@ tasks:
     owner_agent: 'architect'
     dependencies:
       - 'SUN-1000'
+      - 'SUN-0800B'
     rubric_target: 85
     acceptance_tests:
       - 'MCP Registry entry visible'

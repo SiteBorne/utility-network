@@ -9,14 +9,13 @@ source_directive:
 
 execution:
   mode: 'serial'
-  active_mutation_tasks: 0
-  current_increment: null
+  active_mutation_tasks: 1
+  current_increment: 'SUN-0800A'
   current_phase: 'phase_10_mcp_a2a'
   last_completed_increment: 'SUN-0700B'
-  frontier_status: 'blocked_external'
-  blocked_on:
-    - 'SUN-0800'
-  reason: 'SUN-0700B is accepted after retained real Base Sepolia exact evidence and new real Base Sepolia upto evidence both proved live CDP facilitator verify/settle, authoritative D1 replay, one service execution/job/settlement, and fail-closed negatives. SUN-0800 is the only dependency-ready unfinished task and remains blocked_external on the Nevermined credentials recorded in TASKS.yaml; it was not activated or started. Production remains disabled and not ready.'
+  frontier_status: 'executable'
+  blocked_on: []
+  reason: 'SUN-0800 was truthfully decomposed after preflight proved its Nevermined blocker was unrelated to its MCP/A2A scope. SUN-0800A is the sole active credential-independent MCP/A2A protocol-foundation task; checkpoint 1 is limited to MCP. SUN-0800B retains external npm/public endpoint/Agent Card publication and is blocked_external. SUN-0900 separately owns Nevermined and now depends on SUN-0800A. Production remains disabled and not ready.'
 
 implemented:
   - 'governance_validation'
