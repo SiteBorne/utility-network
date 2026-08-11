@@ -9,13 +9,14 @@ source_directive:
 
 execution:
   mode: 'serial'
-  active_mutation_tasks: 1
-  current_increment: 'SUN-0900A'
+  active_mutation_tasks: 0
+  current_increment: null
   current_phase: 'phase_11_nevermined'
-  last_completed_increment: 'SUN-0800A'
-  frontier_status: 'executable'
-  blocked_on: []
-  reason: 'SUN-0900 was truthfully decomposed: credential-independent alternative-rail, versioned D1/linkage, configuration, and Nevermined protocol work is active as SUN-0900A; sandbox registration and live verification remain SUN-0900B blocked_external on genuine Nevermined account, credential, funding/delegation, and dynamic PAYG capability prerequisites. SUN-0800B remains independently blocked_external. Production remains disabled and not ready.'
+  last_completed_increment: 'SUN-0900A'
+  frontier_status: 'blocked_external'
+  blocked_on:
+    - 'SUN-0900B'
+  reason: 'SUN-0900A is accepted: the credential-independent alternative-rail foundation, official Nevermined SDK adapter boundary, fixture/external trust separation, four deterministic Nevermined-only routes, shared D1/service/PCC/UsageResult/linkage lifecycle, replay, and fail-closed behavior are implemented and validated without credentials or network activity. SUN-0900B is the next dependency frontier and remains blocked_external on genuine Nevermined sandbox builder/subscriber credentials, funding/delegation, registration, and dynamic PAYG capability proof. SUN-0800B remains independently blocked_external. Production remains disabled and not ready.'
 
 implemented:
   - 'governance_validation'
@@ -106,6 +107,9 @@ implemented:
   - 'a2a_four_skill_contract_and_x402_extension' # frozen services and truthful production-disabled payment metadata
   - 'payment_rail_v2_d1_and_linkage_foundation' # SUN-0900A checkpoint 1; v1 hashes retained, new rows bind rail/provider
   - 'nevermined_credential_independent_protocol_model' # SUN-0900A checkpoint 1; no provider invocation or registration
+  - 'nevermined_payment_evidence_provider_boundary' # SUN-0900A checkpoint 2; authenticated SDK and synthetic fixture trust paths remain distinct
+  - 'nevermined_four_route_deterministic_runtime' # SUN-0900A checkpoint 2; shared D1/service/PCC/UsageResult/linkage lifecycle
+  - 'nevermined_fixed_and_actual_usage_fixture_settlement' # deterministic only; no sandbox capability or external settlement claim
 
 not_implemented:
   - 'company_evidence_graph_xbrl_facts_and_repository_signals_field_groups'
@@ -117,7 +121,6 @@ not_implemented:
   - 'mcp_publication_and_public_endpoint' # SUN-0800B blocked_external
   - 'a2a_publication_and_public_endpoint' # SUN-0800B blocked_external
   - 'a2a_production_signing_identity' # SUN-0800B blocked_external
-  - 'nevermined_injected_provider_and_routes' # SUN-0900A checkpoint 2
   - 'nevermined_sandbox_registration_and_live_settlement' # SUN-0900B blocked_external
   - 'agentverse'
   - 'modal_document_processing'

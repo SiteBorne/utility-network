@@ -954,7 +954,7 @@ tasks:
   - id: 'SUN-0900A'
     title: 'Credential-Independent Nevermined Alternative-Rail Foundation'
     phase: 'phase_11_nevermined'
-    state: 'active'
+    state: 'accepted'
     owner_agent: 'architect'
     dependencies:
       - 'SUN-0800A'
@@ -976,9 +976,14 @@ tasks:
       - 'Checkpoint 1: packages/protocol-nevermined provides four canonical PAYG declarations, config/validation/evidence domains, deterministic fixtures, SDK drift checks, and no-network tests'
       - 'Checkpoint 1: apps/edge-api pins @nevermined-io/payments@1.10.0 and compile-checks pure parameter mappings without initializing a client or invoking provider methods'
       - 'Checkpoint 1 report: docs/reports/SUN-0900A-checkpoint-1-report.md'
-    next_action: 'Checkpoint 1 complete: rail-safe versioned persistence/linkage and the credential-independent Nevermined protocol model are implemented and validated. Checkpoint 2 must add the injected Nevermined provider and four deterministic Nevermined-only route adapters through the existing D1/service/PCC/UsageResult/linkage lifecycle, with simulated fixed PAYG and actual-usage settlement, replay, and fail-closed negatives. Keep it credential-free and network-free; do not contact Nevermined or begin SUN-0900B.'
+      - 'Checkpoint 2: apps/edge-api/src/control-plane/evidence/nevermined-provider.ts implements the private-constructor fixture/authenticated provider split and narrow official-SDK verifyPermissions/settlePermissions adapter'
+      - 'Checkpoint 2: exactly four dedicated Nevermined Hono routes traverse authoritative D1 before verification and the shared service/PCC/UsageResult/PaymentServiceLink lifecycle with deterministic fixed and actual-usage settlement'
+      - 'Checkpoint 2: deterministic replay, rail/binding conflicts, authorization-exceeded, verify/settle rejection and exception, no-fallback, no-network, and fixture-trust production rejection coverage passes'
+      - 'Checkpoint 2 report: docs/reports/SUN-0900A-checkpoint-2-report.md'
+      - 'Checkpoint 2 implementation commit: 00dfd33940c0ff5a29081839454624abe70e6aa9'
+    next_action: 'Accepted after both checkpoints and the full credential-free repository gate. SUN-0900B is the exact next dependency frontier but remains blocked_external until Nevermined sandbox builder and controlled subscriber credentials, sandbox funding/delegation setup, real registration capability, and dynamic PAYG actual-usage proof are available. Do not begin or activate SUN-0900B without those prerequisites.'
     blocker: null
-    commit_ref: null
+    commit_ref: '00dfd33940c0ff5a29081839454624abe70e6aa9'
 
   - id: 'SUN-0900B'
     title: 'Nevermined Sandbox Registration and Live Settlement Verification'
