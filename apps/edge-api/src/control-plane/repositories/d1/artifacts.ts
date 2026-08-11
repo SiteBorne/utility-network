@@ -9,6 +9,8 @@ import { ok, err } from '../interfaces';
 import {
   mapArtifactRecord,
   mapQueueDispatch,
+  getD1Failure,
+  toRequiredRepositoryResponse,
   toSingleRepositoryResponse,
   toRepositoryResponse,
 } from './shared';
@@ -39,11 +41,12 @@ export class D1ArtifactsRepository implements ArtifactsRepository {
         )
         .run();
 
-      if (!result.success) {
-        if (result.error?.includes('UNIQUE constraint')) {
+      const failure = getD1Failure(result);
+      if (failure) {
+        if (failure.includes('UNIQUE constraint')) {
           return err('DUPLICATE_ARTIFACT', 'Artifact already exists');
         }
-        return err('DATABASE_ERROR', result.error ?? 'Failed to create artifact');
+        return err('DATABASE_ERROR', failure);
       }
       return ok(artifact);
     } catch (e) {
@@ -74,8 +77,9 @@ export class D1ArtifactsRepository implements ArtifactsRepository {
       const stmt = this.db.prepare(`DELETE FROM job_artifacts WHERE id = ?`);
       const result = await stmt.bind(id).run();
 
-      if (!result.success) {
-        return err('DATABASE_ERROR', result.error ?? 'Failed to delete artifact');
+      const failure = getD1Failure(result);
+      if (failure) {
+        return err('DATABASE_ERROR', failure);
       }
       return ok(result.meta.changes > 0);
     } catch (e) {
@@ -90,8 +94,9 @@ export class D1ArtifactsRepository implements ArtifactsRepository {
       `);
       const result = await stmt.run();
 
-      if (!result.success) {
-        return err('DATABASE_ERROR', result.error ?? 'Failed to delete expired artifacts');
+      const failure = getD1Failure(result);
+      if (failure) {
+        return err('DATABASE_ERROR', failure);
       }
       return ok(result.meta.changes);
     } catch (e) {
@@ -127,11 +132,12 @@ export class D1QueueDispatchRepository implements QueueDispatchRepository {
         )
         .run();
 
-      if (!result.success) {
-        if (result.error?.includes('UNIQUE constraint')) {
+      const failure = getD1Failure(result);
+      if (failure) {
+        if (failure.includes('UNIQUE constraint')) {
           return err('DUPLICATE_DISPATCH', 'Dispatch already exists');
         }
-        return err('DATABASE_ERROR', result.error ?? 'Failed to create dispatch');
+        return err('DATABASE_ERROR', failure);
       }
       return ok(dispatch);
     } catch (e) {
@@ -166,8 +172,9 @@ export class D1QueueDispatchRepository implements QueueDispatchRepository {
       `);
       const result = await stmt.bind(retryCount, id).run();
 
-      if (!result.success) {
-        return err('DATABASE_ERROR', result.error ?? 'Failed to update retry count');
+      const failure = getD1Failure(result);
+      if (failure) {
+        return err('DATABASE_ERROR', failure);
       }
       if (result.meta.changes === 0) {
         return err('DISPATCH_NOT_FOUND', 'Dispatch not found');
@@ -175,7 +182,12 @@ export class D1QueueDispatchRepository implements QueueDispatchRepository {
 
       const getStmt = this.db.prepare(`SELECT * FROM queue_dispatches WHERE id = ?`);
       const getResult = await getStmt.bind(id).all();
-      return toSingleRepositoryResponse(getResult, mapQueueDispatch);
+      return toRequiredRepositoryResponse(
+        getResult,
+        mapQueueDispatch,
+        'DISPATCH_NOT_FOUND',
+        'Dispatch not found'
+      );
     } catch (e) {
       return err('DATABASE_ERROR', e instanceof Error ? e.message : 'Unknown error');
     }

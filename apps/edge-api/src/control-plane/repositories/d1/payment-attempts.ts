@@ -35,6 +35,7 @@ import type {
   PaymentLifecycleStage,
 } from '@siteborne/protocol-x402';
 import { isLegalLifecycleTransition } from '@siteborne/protocol-x402';
+import { getD1Failure } from './shared';
 
 function mapRow(row: Record<string, unknown>): PaymentAttemptRecord {
   const binding: PaymentAttemptBinding = {
@@ -152,12 +153,13 @@ export class D1PaymentAttemptRepository implements PaymentAttemptRepository {
         )
         .run();
 
-      if (result.success) {
+      const failure = getD1Failure(result);
+      if (!failure) {
         insertSucceeded = true;
-      } else if (result.error?.includes('UNIQUE constraint')) {
+      } else if (failure.includes('UNIQUE constraint')) {
         insertUniqueViolation = true;
       } else {
-        insertOtherError = result.error ?? 'insert failed for an unknown reason';
+        insertOtherError = failure;
       }
     } catch (e) {
       // D1/Miniflare throws on a UNIQUE constraint violation rather than
@@ -257,9 +259,8 @@ export class D1PaymentAttemptRepository implements PaymentAttemptRepository {
         )
         .bind(to, paymentIdentifier, from)
         .run();
-      if (!result.success) {
-        return { status: 'error', reason: result.error ?? 'update failed for an unknown reason' };
-      }
+      const failure = getD1Failure(result);
+      if (failure) return { status: 'error', reason: failure };
       if ((result.meta?.changes ?? 0) === 0) {
         // Either the identifier doesn't exist, or it is no longer in the
         // expected `from` stage (a concurrent transition already moved

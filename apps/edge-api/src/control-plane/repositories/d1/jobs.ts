@@ -11,6 +11,8 @@ import {
   mapJob,
   mapJobAttempt,
   mapStateEvent,
+  getD1Failure,
+  toRequiredRepositoryResponse,
   toSingleRepositoryResponse,
   toRepositoryResponse,
 } from './shared';
@@ -50,17 +52,18 @@ export class D1JobsRepository implements JobsRepository {
         )
         .run();
 
-      if (!result.success) {
-        if (result.error?.includes('UNIQUE constraint')) {
-          if (result.error.includes('idx_jobs_idempotency_key')) {
+      const failure = getD1Failure(result);
+      if (failure) {
+        if (failure.includes('UNIQUE constraint')) {
+          if (failure.includes('idx_jobs_idempotency_key')) {
             return err('DUPLICATE_IDEMPOTENCY_KEY', 'Idempotency key already exists');
           }
-          if (result.error.includes('idx_jobs_marketplace_external')) {
+          if (failure.includes('idx_jobs_marketplace_external')) {
             return err('DUPLICATE_MARKETPLACE_JOB', 'Marketplace job already exists');
           }
           return err('DUPLICATE_JOB', 'Job already exists');
         }
-        return err('DATABASE_ERROR', result.error ?? 'Failed to create job');
+        return err('DATABASE_ERROR', failure);
       }
       return ok(job);
     } catch (e) {
@@ -113,8 +116,9 @@ export class D1JobsRepository implements JobsRepository {
       const stmt = this.db.prepare(sql);
       const result = await stmt.bind(...params).run();
 
-      if (!result.success) {
-        return err('DATABASE_ERROR', result.error ?? 'Failed to update job state');
+      const failure = getD1Failure(result);
+      if (failure) {
+        return err('DATABASE_ERROR', failure);
       }
       if (result.meta.changes === 0) {
         return err('JOB_NOT_FOUND', 'Job not found');
@@ -122,7 +126,7 @@ export class D1JobsRepository implements JobsRepository {
 
       const getStmt = this.db.prepare(`SELECT * FROM jobs WHERE id = ?`);
       const getResult = await getStmt.bind(id).all();
-      return toSingleRepositoryResponse(getResult, mapJob);
+      return toRequiredRepositoryResponse(getResult, mapJob, 'JOB_NOT_FOUND', 'Job not found');
     } catch (e) {
       return err('DATABASE_ERROR', e instanceof Error ? e.message : 'Unknown error');
     }
@@ -135,8 +139,9 @@ export class D1JobsRepository implements JobsRepository {
       `);
       const result = await stmt.bind(id).run();
 
-      if (!result.success) {
-        return err('DATABASE_ERROR', result.error ?? 'Failed to update timestamps');
+      const failure = getD1Failure(result);
+      if (failure) {
+        return err('DATABASE_ERROR', failure);
       }
       if (result.meta.changes === 0) {
         return err('JOB_NOT_FOUND', 'Job not found');
@@ -144,7 +149,7 @@ export class D1JobsRepository implements JobsRepository {
 
       const getStmt = this.db.prepare(`SELECT * FROM jobs WHERE id = ?`);
       const getResult = await getStmt.bind(id).all();
-      return toSingleRepositoryResponse(getResult, mapJob);
+      return toRequiredRepositoryResponse(getResult, mapJob, 'JOB_NOT_FOUND', 'Job not found');
     } catch (e) {
       return err('DATABASE_ERROR', e instanceof Error ? e.message : 'Unknown error');
     }
@@ -189,11 +194,12 @@ export class D1JobAttemptsRepository implements JobAttemptsRepository {
         )
         .run();
 
-      if (!result.success) {
-        if (result.error?.includes('UNIQUE constraint')) {
+      const failure = getD1Failure(result);
+      if (failure) {
+        if (failure.includes('UNIQUE constraint')) {
           return err('DUPLICATE_ATTEMPT', 'Attempt already exists');
         }
-        return err('DATABASE_ERROR', result.error ?? 'Failed to create attempt');
+        return err('DATABASE_ERROR', failure);
       }
       return ok(attempt);
     } catch (e) {
@@ -238,8 +244,9 @@ export class D1JobAttemptsRepository implements JobAttemptsRepository {
         )
         .run();
 
-      if (!result.success) {
-        return err('DATABASE_ERROR', result.error ?? 'Failed to update attempt');
+      const failure = getD1Failure(result);
+      if (failure) {
+        return err('DATABASE_ERROR', failure);
       }
       if (result.meta.changes === 0) {
         return err('ATTEMPT_NOT_FOUND', 'Attempt not found');
@@ -286,8 +293,9 @@ export class D1StateEventsRepository implements StateEventsRepository {
         )
         .run();
 
-      if (!result.success) {
-        return err('DATABASE_ERROR', result.error ?? 'Failed to create state event');
+      const failure = getD1Failure(result);
+      if (failure) {
+        return err('DATABASE_ERROR', failure);
       }
       return ok(event);
     } catch (e) {

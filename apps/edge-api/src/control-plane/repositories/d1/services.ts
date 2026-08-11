@@ -9,6 +9,8 @@ import { ok, err } from '../interfaces';
 import {
   mapServiceMetadata,
   mapServiceVersion,
+  getD1Failure,
+  toRequiredRepositoryResponse,
   toSingleRepositoryResponse,
   toRepositoryResponse,
 } from './shared';
@@ -37,11 +39,12 @@ export class D1ServicesRepository implements ServicesRepository {
         )
         .run();
 
-      if (!result.success) {
-        if (result.error?.includes('UNIQUE constraint')) {
+      const failure = getD1Failure(result);
+      if (failure) {
+        if (failure.includes('UNIQUE constraint')) {
           return err('DUPLICATE_SERVICE', 'Service already exists');
         }
-        return err('DATABASE_ERROR', result.error ?? 'Failed to create service');
+        return err('DATABASE_ERROR', failure);
       }
       return ok(service);
     } catch (e) {
@@ -81,8 +84,9 @@ export class D1ServicesRepository implements ServicesRepository {
       `);
       const result = await stmt.bind(enabled ? 1 : 0, serviceId).run();
 
-      if (!result.success) {
-        return err('DATABASE_ERROR', result.error ?? 'Failed to update service');
+      const failure = getD1Failure(result);
+      if (failure) {
+        return err('DATABASE_ERROR', failure);
       }
       if (result.meta.changes === 0) {
         return err('SERVICE_NOT_FOUND', 'Service not found');
@@ -90,7 +94,12 @@ export class D1ServicesRepository implements ServicesRepository {
 
       const getStmt = this.db.prepare(`SELECT * FROM services WHERE id = ?`);
       const getResult = await getStmt.bind(serviceId).all();
-      return toSingleRepositoryResponse(getResult, mapServiceMetadata);
+      return toRequiredRepositoryResponse(
+        getResult,
+        mapServiceMetadata,
+        'SERVICE_NOT_FOUND',
+        'Service not found'
+      );
     } catch (e) {
       return err('DATABASE_ERROR', e instanceof Error ? e.message : 'Unknown error');
     }
@@ -118,11 +127,12 @@ export class D1ServiceVersionsRepository implements ServiceVersionsRepository {
         )
         .run();
 
-      if (!result.success) {
-        if (result.error?.includes('UNIQUE constraint')) {
+      const failure = getD1Failure(result);
+      if (failure) {
+        if (failure.includes('UNIQUE constraint')) {
           return err('DUPLICATE_VERSION', 'Service version already exists');
         }
-        return err('DATABASE_ERROR', result.error ?? 'Failed to create service version');
+        return err('DATABASE_ERROR', failure);
       }
       return ok(version);
     } catch (e) {

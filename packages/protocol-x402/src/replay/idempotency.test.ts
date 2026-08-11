@@ -193,6 +193,21 @@ describe('acquirePaymentAttempt — upto replay matrix', () => {
     expect(outcome.status).toBe('duplicate_conflict');
   });
 
+  it.each([
+    ['input', { request_input_hash: 'sha256:' + '9'.repeat(64) }],
+    ['quote', { quote_id: 'qte_' + '9'.repeat(24) }],
+    ['resource', { resource_id: 'https://api.siteborne.dev/v1/document/changed' }],
+  ] as const)('same upto payment ID + changed %s -> duplicate_conflict', async (_field, change) => {
+    const repo = new InMemoryPaymentAttemptRepository();
+    await acquirePaymentAttempt(repo, { binding: uptoBinding(), nowIso: NOW, ttlMs: TTL_MS });
+    const outcome = await acquirePaymentAttempt(repo, {
+      binding: uptoBinding(change),
+      nowIso: '2026-08-09T00:00:05.000Z',
+      ttlMs: TTL_MS,
+    });
+    expect(outcome.status).toBe('duplicate_conflict');
+  });
+
   // directive §25: actual usage is known only after execution, so it is
   // deliberately NOT part of the pre-execution authorization binding
   // (PaymentAttemptBinding.amount is always the authorized maximum for

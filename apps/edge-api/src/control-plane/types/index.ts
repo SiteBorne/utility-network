@@ -65,9 +65,8 @@ export const AllowedTransitions: Record<JobState, JobState[]> = {
   RECEIVED: ['VALIDATED', 'REJECTED'],
   VALIDATED: ['QUOTED', 'REJECTED', 'REQUOTE_REQUIRED'],
   QUOTED: ['PAYMENT_CHALLENGED', 'LOCKED', 'REJECTED', 'REQUOTE_REQUIRED'],
-  PAYMENT_CHALLENGED: ['PAYMENT_VERIFIED', 'PAYMENT_FAILED', 'REJECTED'],
+  PAYMENT_CHALLENGED: ['PAYMENT_VERIFIED', 'REJECTED', 'RETRYABLE'],
   PAYMENT_VERIFIED: ['LOCKED', 'REJECTED'],
-  PAYMENT_FAILED: ['REJECTED', 'RETRYABLE'],
   LOCKED: ['ROUTED', 'REJECTED', 'RETRYABLE'],
   ROUTED: ['EXECUTING', 'REJECTED', 'RETRYABLE'],
   EXECUTING: ['VERIFYING', 'RETRYABLE', 'QUARANTINED'],
@@ -85,7 +84,6 @@ export const AllowedTransitions: Record<JobState, JobState[]> = {
 export const TerminalStates: JobState[] = ['DELIVERED', 'TOMBSTONED'];
 
 export const RetryableStates: JobState[] = [
-  'PAYMENT_FAILED',
   'LOCKED',
   'ROUTED',
   'EXECUTING',
@@ -113,6 +111,7 @@ export function canTransitionFrom(state: JobState): boolean {
 }
 
 export const StateEventSchema = z.object({
+  id: z.string().uuid(),
   job_id: z.string().uuid(),
   attempt_number: z.number().int().positive(),
   from_state: JobStateSchema,
@@ -161,6 +160,8 @@ export const JobAttemptSchema = z.object({
   completed_at: z.string().datetime({ offset: true }).optional(),
   worker_id: z.string().optional(),
   trace_context: z.string().optional(),
+  created_at: z.string().datetime({ offset: true }).optional(),
+  updated_at: z.string().datetime({ offset: true }).optional(),
 });
 export type JobAttempt = z.infer<typeof JobAttemptSchema>;
 
@@ -286,6 +287,7 @@ export const ServiceMetadataSchema = z.object({
 export type ServiceMetadata = z.infer<typeof ServiceMetadataSchema>;
 
 export const ServiceVersionSchema = z.object({
+  id: z.string().uuid(),
   service_id: z.string(),
   version: z.string(),
   input_schema_hash: z.string(),

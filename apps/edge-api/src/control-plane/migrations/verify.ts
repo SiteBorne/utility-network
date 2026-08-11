@@ -73,7 +73,8 @@ export async function verifyMigrations(db: D1Database): Promise<MigrationVerific
     // Check foreign key enforcement
     const fkStmt = db.prepare(`PRAGMA foreign_keys`);
     const fkResult = await fkStmt.all();
-    const foreignKeysActive = fkResult.success && fkResult.results[0] === 1;
+    const foreignKeyRow = fkResult.results[0] as Record<string, unknown> | undefined;
+    const foreignKeysActive = fkResult.success && foreignKeyRow?.foreign_keys === 1;
 
     // Verify constraints through actual inserts
     const constraintsVerified = await verifyConstraints(db);

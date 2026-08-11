@@ -1,34 +1,29 @@
 import {
-  JobState,
   JobStateSchema,
   AllowedTransitions,
   TerminalStates,
   RetryableStates,
   QuarantineStates,
-  TransitionReason,
-  ActorClass,
-  StateEvent,
   StateEventSchema,
   isValidTransition,
   isTerminalState,
   canTransitionFrom,
 } from '../types';
+import type { ActorClass, JobState, StateEvent, TransitionReason } from '../types';
 
 export {
-  JobState,
   JobStateSchema,
   AllowedTransitions,
   TerminalStates,
   RetryableStates,
   QuarantineStates,
-  TransitionReason,
-  ActorClass,
-  StateEvent,
   StateEventSchema,
   isValidTransition,
   isTerminalState,
   canTransitionFrom,
 };
+
+export type { JobState, TransitionReason, ActorClass, StateEvent };
 
 export class InvalidTransitionError extends Error {
   constructor(
@@ -68,6 +63,7 @@ export function createStateEvent(
 
   const timestamp = new Date().toISOString();
   const event: StateEvent = {
+    id: crypto.randomUUID(),
     job_id: jobId,
     attempt_number: attemptNumber,
     from_state: fromState,

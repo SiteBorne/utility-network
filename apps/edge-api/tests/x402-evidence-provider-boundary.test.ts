@@ -290,6 +290,7 @@ describe('PaymentEvidenceProvider HTTP boundary wiring (SUN-0700B checkpoint 1 p
           receipt: { fake: true },
         },
         actualAmountAtomic: ACTUAL_AMOUNT,
+        resourceMetrics: { pages: 1, mode: 'native' },
       }),
     });
 

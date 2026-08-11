@@ -60,6 +60,9 @@ importers:
       '@coinbase/cdp-sdk':
         specifier: ^1.55.0
         version: 1.55.0(@x402/core@2.21.0)(@x402/evm@2.21.0(typescript@5.7.3))(@x402/extensions@2.21.0(typescript@5.7.3))(@x402/svm@2.21.0(@solana/kit@5.5.1(typescript@5.7.3))(@solana/sysvars@5.5.1(typescript@5.7.3)))(typescript@5.7.3)
+      '@siteborne/pricing':
+        specifier: workspace:*
+        version: link:../../packages/pricing
       '@siteborne/protocol-x402':
         specifier: workspace:*
         version: link:../../packages/protocol-x402
@@ -90,6 +93,9 @@ importers:
       hono:
         specifier: ^4.5.0
         version: 4.13.0
+      viem:
+        specifier: ^2.55.11
+        version: 2.55.11(typescript@5.7.3)(zod@3.25.76)
     devDependencies:
       '@cloudflare/workers-types':
         specifier: ^4.20240800.0

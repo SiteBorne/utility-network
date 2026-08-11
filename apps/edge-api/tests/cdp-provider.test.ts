@@ -21,6 +21,15 @@ const REQUIREMENTS = {
   extra: { quote_id: 'qte_' + '1'.repeat(24) },
 };
 
+const FACILITATOR_ADDRESS = '0x1234567890123456789012345678901234567890';
+
+const UPTO_REQUIREMENTS = {
+  ...REQUIREMENTS,
+  scheme: 'upto' as const,
+  amount: '250000',
+  extra: { ...REQUIREMENTS.extra, facilitatorAddress: FACILITATOR_ADDRESS },
+};
+
 const PAYMENT_PAYLOAD = {
   x402Version: 2,
   accepted: REQUIREMENTS,
@@ -54,6 +63,33 @@ const SETTLE_CONTEXT: PaymentSettlementContext = {
   paymentRequirements: REQUIREMENTS,
 };
 
+const UPTO_SETTLE_CONTEXT: PaymentSettlementContext = {
+  ...BASE_CONTEXT,
+  scheme: 'upto',
+  amount: UPTO_REQUIREMENTS.amount,
+  paymentPayload: {
+    ...PAYMENT_PAYLOAD,
+    accepted: UPTO_REQUIREMENTS,
+  },
+  paymentRequirements: UPTO_REQUIREMENTS,
+  usageResult: {
+    usage_result_id: 'use_' + '5'.repeat(24),
+    quote_id: BASE_CONTEXT.quote_id,
+    requirement_id: BASE_CONTEXT.requirement_id,
+    payment_identifier: BASE_CONTEXT.payment_identifier,
+    service_id: 'document_evidence_json.v1',
+    service_version: 'v1',
+    request_input_hash: 'sha256:' + '6'.repeat(64),
+    service_output_hash: 'sha256:' + '7'.repeat(64),
+    verification_receipt_id: 'rcpt_' + '8'.repeat(24),
+    verification_receipt_hash: 'sha256:' + 'b'.repeat(64),
+    resource_metrics_hash: 'sha256:' + '9'.repeat(64),
+    actual_amount: '12000',
+    authorized_maximum: UPTO_REQUIREMENTS.amount,
+    usage_result_hash: 'sha256:' + 'a'.repeat(64),
+  },
+};
+
 function facilitator(
   overrides: Partial<Pick<HTTPFacilitatorClient, 'verify' | 'settle' | 'getSupported'>> = {}
 ): HTTPFacilitatorClient {
@@ -74,7 +110,12 @@ function facilitator(
       return {
         kinds: [
           { x402Version: 2, scheme: 'exact', network: BASE_CONTEXT.network },
-          { x402Version: 2, scheme: 'upto', network: BASE_CONTEXT.network },
+          {
+            x402Version: 2,
+            scheme: 'upto',
+            network: BASE_CONTEXT.network,
+            extra: { facilitatorAddress: FACILITATOR_ADDRESS },
+          },
         ],
         extensions: [],
         signers: {},
@@ -218,6 +259,43 @@ describe('CdpPaymentEvidenceProvider', () => {
     });
   });
 
+  it('settles upto for measured actual amount while preserving the signed authorized maximum', async () => {
+    const actualAmount = UPTO_SETTLE_CONTEXT.usageResult!.actual_amount;
+    let settlementRequirements: typeof UPTO_REQUIREMENTS | undefined;
+    const provider = new CdpPaymentEvidenceProvider(
+      facilitator({
+        async settle(payload, requirements) {
+          expect(payload).toBe(UPTO_SETTLE_CONTEXT.paymentPayload);
+          settlementRequirements = requirements as typeof UPTO_REQUIREMENTS;
+          return {
+            success: true,
+            transaction: '0x' + 'd'.repeat(64),
+            network: BASE_CONTEXT.network,
+            payer: '0x516F57e1fB800ccEB2E70C42607Fb93E2abEcB99',
+            amount: actualAmount,
+          };
+        },
+      })
+    );
+
+    const evidence = await provider.settle(
+      UPTO_SETTLE_CONTEXT,
+      { ...acceptedVerification(), scheme: 'upto' },
+      actualAmount
+    );
+
+    expect(UPTO_SETTLE_CONTEXT.paymentRequirements.amount).toBe('250000');
+    expect(UPTO_SETTLE_CONTEXT.paymentPayload.accepted.amount).toBe('250000');
+    expect(settlementRequirements).toEqual({ ...UPTO_REQUIREMENTS, amount: actualAmount });
+    expect(settlementRequirements).not.toBe(UPTO_SETTLE_CONTEXT.paymentRequirements);
+    expect(evidence).toMatchObject({
+      success: true,
+      actual_amount: actualAmount,
+      authorized_maximum: '250000',
+      usage_result_hash: UPTO_SETTLE_CONTEXT.usageResult!.usage_result_hash,
+    });
+  });
+
   it('fails closed when the facilitator settlement network differs from the validated requirement', async () => {
     const provider = new CdpPaymentEvidenceProvider(
       facilitator({
@@ -310,6 +388,7 @@ describe('checkCdpSupportsNetwork', () => {
       { scheme: 'exact', network: BASE_CONTEXT.network },
       { scheme: 'upto', network: BASE_CONTEXT.network },
     ]);
+    expect(result.uptoFacilitatorAddress).toBe(FACILITATOR_ADDRESS);
   });
 
   it('fails closed when upto is absent', async () => {
@@ -330,6 +409,30 @@ describe('checkCdpSupportsNetwork', () => {
     expect(result.ok).toBe(false);
     expect(result.reason).toBe(
       'facilitator does not advertise scheme(s) [upto] for network "eip155:84532"'
+    );
+  });
+
+  it('fails closed when upto omits its required facilitator address', async () => {
+    const result = await checkCdpSupportsNetwork(
+      facilitator({
+        async getSupported() {
+          return {
+            kinds: [
+              { x402Version: 2, scheme: 'exact', network: BASE_CONTEXT.network },
+              { x402Version: 2, scheme: 'upto', network: BASE_CONTEXT.network },
+            ],
+            extensions: [],
+            signers: {},
+          };
+        },
+      }),
+      BASE_CONTEXT.network,
+      ['exact', 'upto']
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe(
+      'facilitator upto capability is missing a valid facilitatorAddress for network "eip155:84532"'
     );
   });
 });

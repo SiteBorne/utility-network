@@ -134,6 +134,7 @@ describe('no-network proof', () => {
       request_input_hash: 'sha256:' + '1'.repeat(64),
       service_output_hash: 'sha256:' + '2'.repeat(64),
       verification_receipt_id: 'rcpt_' + '1'.repeat(24),
+      verification_receipt_hash: 'sha256:' + '4'.repeat(64),
       resource_metrics_hash: 'sha256:' + '3'.repeat(64),
       actual_amount: '1',
       authorized_maximum: '1',

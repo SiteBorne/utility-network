@@ -1,7 +1,7 @@
 import type { D1Database } from '@cloudflare/workers-types';
 import type { Job, JobAttempt, StateEvent, IdempotencyRecord, AuditEvent } from '../../types';
 import type { Clock } from './shared';
-import { systemClock } from './shared';
+import { getD1Failure, systemClock } from './shared';
 import { randomUUID } from 'crypto';
 
 export type AcquisitionOutcome = 'acquired' | 'duplicate' | 'conflict';
@@ -192,7 +192,7 @@ export async function acquireJob(
       )
       .bind(
         jobId,
-        uuidv4(), // request_id
+        randomUUID(), // request_id
         input.serviceId,
         input.serviceVersion,
         input.inputHash,
@@ -292,10 +292,11 @@ export async function acquireJob(
 
     // Check if any statement failed
     for (const result of batchResult) {
-      if (!result.success) {
+      const failure = getD1Failure(result);
+      if (failure) {
         // Check for unique constraint violations that could indicate race conditions
-        if (result.error?.includes('UNIQUE constraint')) {
-          if (result.error.includes('idx_idempotency_key')) {
+        if (failure.includes('UNIQUE constraint')) {
+          if (failure.includes('idx_idempotency_key')) {
             // Race condition - another request acquired the same key
             // Retry the whole operation
             return acquireJob(db, input, clock);
@@ -305,8 +306,8 @@ export async function acquireJob(
           ok: false,
           error: {
             code: 'ACQUISITION_FAILED',
-            message: result.error ?? 'Transaction failed',
-            retryable: !result.error?.includes('constraint'),
+            message: failure,
+            retryable: !failure.includes('constraint'),
           },
         };
       }

@@ -1,5 +1,7 @@
+import type { D1Database as CloudflareD1Database } from '@cloudflare/workers-types';
+
 export interface Env {
-  DB: D1Database;
+  DB: CloudflareD1Database;
   ARTIFACTS: R2Bucket;
   JOBS: Queue;
   EVENTS: Queue;
@@ -26,6 +28,8 @@ export interface Env {
    * This is independent of, and does not itself enable, real payment
    * execution: `production_enabled` remains `false` regardless. */
   PAID_ROUTES_ENABLED?: string;
+  CF_PAGES_COMMIT_SHA?: string;
+  CF_WORKER_VERSION?: string;
 }
 
 export interface ControlPlaneConfig {
@@ -133,7 +137,7 @@ export const BINDING_NAMES = {
 export type BindingName = (typeof BINDING_NAMES)[keyof typeof BINDING_NAMES];
 
 export interface TypedBindings {
-  DB: D1Database;
+  DB: CloudflareD1Database;
   ARTIFACTS: R2Bucket;
   JOBS: Queue<QueueDispatchMessage>;
   EVENTS: Queue<AuditEventMessage>;

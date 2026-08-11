@@ -1,5 +1,22 @@
 import { z } from 'zod';
 import type { Context, Next } from 'hono';
+import type { Env } from '../config/env';
+import type {
+  ArtifactsRepository,
+  AuditRepository,
+  IdempotencyRepository,
+  JobAttemptsRepository,
+  JobsRepository,
+  QueueDispatchRepository,
+  QuotaRepository,
+  SecurityRepository,
+  ServicesRepository,
+  ServiceVersionsRepository,
+  StateEventsRepository,
+} from '../repositories/interfaces';
+import type { ArtifactStore } from '../artifacts/store';
+import type { AuditLogger } from '../audit/events';
+import type { QueueDispatchHandler, QueueProducer } from '../queue/dispatch';
 
 export interface RequestContext {
   requestId: string;
@@ -20,6 +37,32 @@ export interface AuditContext {
   clientIp?: string;
   userAgent?: string;
   timestamp: string;
+}
+
+declare module 'hono' {
+  interface ContextVariableMap {
+    requestId: string;
+    correlationId: string;
+    requestContext: RequestContext;
+    auditContext: AuditContext;
+    idempotencyKey: string;
+    isTestMode: boolean;
+    servicesRepo: ServicesRepository;
+    serviceVersionsRepo: ServiceVersionsRepository;
+    jobsRepo: JobsRepository;
+    jobAttemptsRepo: JobAttemptsRepository;
+    stateEventsRepo: StateEventsRepository;
+    idempotencyRepo: IdempotencyRepository;
+    artifactsRepo: ArtifactsRepository;
+    queueDispatchRepo: QueueDispatchRepository;
+    quotaRepo: QuotaRepository;
+    auditRepo: AuditRepository;
+    securityRepo: SecurityRepository;
+    artifactStore: ArtifactStore;
+    queueProducer: QueueProducer;
+    dispatchHandler: QueueDispatchHandler;
+    auditLogger: AuditLogger;
+  }
 }
 
 export const RequestContextSchema = z.object({
@@ -81,7 +124,7 @@ export const MAX_BODY_SIZE = 10 * 1024 * 1024; // 10 MB
 
 export const AllowedContentTypes = ['application/json', 'application/json; charset=utf-8'] as const;
 
-export function validateContentType(contentType: string | null): boolean {
+export function validateContentType(contentType: string | null | undefined): boolean {
   if (!contentType) return false;
   return AllowedContentTypes.some((ct) => contentType.startsWith(ct));
 }
@@ -164,7 +207,10 @@ export function createStructuredErrorMiddleware() {
         );
       }
 
-      if (error.name === 'InvalidTransitionError' || error.name === 'TerminalStateError') {
+      if (
+        error instanceof Error &&
+        (error.name === 'InvalidTransitionError' || error.name === 'TerminalStateError')
+      ) {
         return c.json(
           {
             code: 'INVALID_STATE_TRANSITION',

@@ -59,7 +59,8 @@
     "x402:fixtures:verify": "pnpm --filter @siteborne/protocol-x402 run fixtures:verify",
     "x402:spec:verify": "pnpm --filter @siteborne/protocol-x402 run fixtures:verify",
     "x402:check": "pnpm --filter @siteborne/protocol-x402 run format:check && pnpm --filter @siteborne/protocol-x402 run lint && pnpm --filter @siteborne/protocol-x402 run typecheck && pnpm x402:test && pnpm x402:test:property && pnpm x402:fixtures:verify",
-    "secrets:scan": "gitleaks detect --source=. --config=.gitleaks.toml --no-git --redact --verbose",
+    "secrets:scope:verify": "tsx scripts/verify-secret-scan-scope.ts",
+    "secrets:scan": "pnpm secrets:scope:verify && gitleaks git . --config=.gitleaks.toml --redact --verbose && gitleaks dir . --config=.gitleaks.toml --redact --verbose",
     "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm pcc:generate:check && pnpm services:generate:check && pnpm openapi:generate:check && pnpm python:test:pcc && pnpm python:test:modal && pnpm governance:validate && pnpm state:validate && pnpm tasks:validate && pnpm contracts:baseline:verify && pnpm contracts:compat:check && pnpm contracts:release:verify && pnpm migrations:verify && pnpm d1:test && pnpm control-plane:test && pnpm control-plane:check && pnpm adapters:check && pnpm document-worker:check && pnpm document-worker:fixtures:verify && pnpm verification:check && pnpm services-runtime:check && pnpm secrets:scan"
   },
   "devDependencies": {

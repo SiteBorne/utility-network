@@ -2,7 +2,12 @@ import type { D1Database } from '@cloudflare/workers-types';
 import type { IdempotencyRecord } from '../../types';
 import type { IdempotencyRepository, RepositoryResponse } from '../interfaces';
 import { ok, err } from '../interfaces';
-import { mapIdempotencyRecord, toSingleRepositoryResponse } from './shared';
+import {
+  getD1Failure,
+  mapIdempotencyRecord,
+  toRequiredRepositoryResponse,
+  toSingleRepositoryResponse,
+} from './shared';
 
 export class D1IdempotencyRepository implements IdempotencyRepository {
   constructor(private db: D1Database) {}
@@ -32,11 +37,12 @@ export class D1IdempotencyRepository implements IdempotencyRepository {
         )
         .run();
 
-      if (!result.success) {
-        if (result.error?.includes('UNIQUE constraint')) {
+      const failure = getD1Failure(result);
+      if (failure) {
+        if (failure.includes('UNIQUE constraint')) {
           return err('IDEMPOTENCY_CONFLICT', 'Idempotency key already exists');
         }
-        return err('DATABASE_ERROR', result.error ?? 'Failed to acquire idempotency record');
+        return err('DATABASE_ERROR', failure);
       }
       return ok(record);
     } catch (e) {
@@ -73,8 +79,9 @@ export class D1IdempotencyRepository implements IdempotencyRepository {
       `);
       const result = await stmt.bind(resultRef, key).run();
 
-      if (!result.success) {
-        return err('DATABASE_ERROR', result.error ?? 'Failed to update idempotency result');
+      const failure = getD1Failure(result);
+      if (failure) {
+        return err('DATABASE_ERROR', failure);
       }
       if (result.meta.changes === 0) {
         return err('IDEMPOTENCY_NOT_FOUND', 'Idempotency record not found');
@@ -84,7 +91,12 @@ export class D1IdempotencyRepository implements IdempotencyRepository {
         `SELECT * FROM idempotency_records WHERE idempotency_key = ?`
       );
       const getResult = await getStmt.bind(key).all();
-      return toSingleRepositoryResponse(getResult, mapIdempotencyRecord);
+      return toRequiredRepositoryResponse(
+        getResult,
+        mapIdempotencyRecord,
+        'IDEMPOTENCY_NOT_FOUND',
+        'Idempotency record not found'
+      );
     } catch (e) {
       return err('DATABASE_ERROR', e instanceof Error ? e.message : 'Unknown error');
     }
@@ -97,8 +109,9 @@ export class D1IdempotencyRepository implements IdempotencyRepository {
       `);
       const result = await stmt.run();
 
-      if (!result.success) {
-        return err('DATABASE_ERROR', result.error ?? 'Failed to delete expired records');
+      const failure = getD1Failure(result);
+      if (failure) {
+        return err('DATABASE_ERROR', failure);
       }
       return ok(result.meta.changes);
     } catch (e) {

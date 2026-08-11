@@ -1,4 +1,4 @@
-import type { ArtifactRecord, ArtifactStore } from './interfaces';
+import type { ArtifactRecord } from '../types';
 
 export async function computeHash(content: Uint8Array): Promise<string> {
   const hashBuffer = await crypto.subtle.digest('SHA-256', content);

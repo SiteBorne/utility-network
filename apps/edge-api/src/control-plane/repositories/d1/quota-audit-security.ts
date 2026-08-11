@@ -11,6 +11,7 @@ import {
   mapQuotaReservation,
   mapAuditEvent,
   mapSecurityEvent,
+  getD1Failure,
   toSingleRepositoryResponse,
   toRepositoryResponse,
 } from './shared';
@@ -45,11 +46,12 @@ export class D1QuotaRepository implements QuotaRepository {
         )
         .run();
 
-      if (!result.success) {
-        if (result.error?.includes('UNIQUE constraint')) {
+      const failure = getD1Failure(result);
+      if (failure) {
+        if (failure.includes('UNIQUE constraint')) {
           return err('DUPLICATE_RESERVATION', 'Reservation already exists');
         }
-        return err('DATABASE_ERROR', result.error ?? 'Failed to create reservation');
+        return err('DATABASE_ERROR', failure);
       }
       return ok(reservation);
     } catch (e) {
@@ -79,8 +81,9 @@ export class D1QuotaRepository implements QuotaRepository {
       `);
       const result = await stmt.bind(jobId).run();
 
-      if (!result.success) {
-        return err('DATABASE_ERROR', result.error ?? 'Failed to release reservation');
+      const failure = getD1Failure(result);
+      if (failure) {
+        return err('DATABASE_ERROR', failure);
       }
       return ok(result.meta.changes > 0);
     } catch (e) {
@@ -95,8 +98,9 @@ export class D1QuotaRepository implements QuotaRepository {
       `);
       const result = await stmt.run();
 
-      if (!result.success) {
-        return err('DATABASE_ERROR', result.error ?? 'Failed to delete expired reservations');
+      const failure = getD1Failure(result);
+      if (failure) {
+        return err('DATABASE_ERROR', failure);
       }
       return ok(result.meta.changes);
     } catch (e) {
@@ -129,8 +133,9 @@ export class D1AuditRepository implements AuditRepository {
         )
         .run();
 
-      if (!result.success) {
-        return err('DATABASE_ERROR', result.error ?? 'Failed to create audit event');
+      const failure = getD1Failure(result);
+      if (failure) {
+        return err('DATABASE_ERROR', failure);
       }
       return ok(event);
     } catch (e) {
@@ -187,8 +192,9 @@ export class D1SecurityRepository implements SecurityRepository {
         )
         .run();
 
-      if (!result.success) {
-        return err('DATABASE_ERROR', result.error ?? 'Failed to create security event');
+      const failure = getD1Failure(result);
+      if (failure) {
+        return err('DATABASE_ERROR', failure);
       }
       return ok(event);
     } catch (e) {

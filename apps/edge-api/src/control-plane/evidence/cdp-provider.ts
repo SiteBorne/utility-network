@@ -132,13 +132,12 @@ export class CdpPaymentEvidenceProvider implements PaymentEvidenceProvider {
   }
 
   /**
-   * Calls the real facilitator's `/settle` with the same
-   * `paymentPayload`/`paymentRequirements` object identity `verify()`
-   * was given. `actual_amount` is the caller-supplied, already-validated
-   * amount (the `exact` quote amount, or the `upto` usage-bound actual
-   * amount) — never the facilitator's own optional `amount` field, which
-   * `@x402/core` documents as present only for some schemes and is not
-   * SITEBORNE's source of truth for what was authorized.
+   * Calls the real facilitator's `/settle` with the same signed
+   * `paymentPayload` that `/verify` received. For `exact`, the selected
+   * requirements object is forwarded unchanged. For `upto`, the signed
+   * payload continues to authorize its original maximum while a shallow
+   * settlement-only requirements copy carries the measured actual amount,
+   * as required by the official x402 upto facilitator contract.
    */
   async settle(
     context: PaymentSettlementContext,
@@ -146,9 +145,13 @@ export class CdpPaymentEvidenceProvider implements PaymentEvidenceProvider {
     actualAmount: string
   ): Promise<ExternalSettlementEvidence> {
     const verification_evidence_hash = await hashPaymentObject(verificationEvidence);
+    const facilitatorRequirements =
+      context.scheme === 'upto'
+        ? { ...context.paymentRequirements, amount: actualAmount }
+        : context.paymentRequirements;
     let response: SettleResponse;
     try {
-      response = await this.facilitator.settle(context.paymentPayload, context.paymentRequirements);
+      response = await this.facilitator.settle(context.paymentPayload, facilitatorRequirements);
     } catch (error) {
       const record = errorRecord(error);
       const errorReason = safeReasonCode(record?.errorReason);
@@ -249,6 +252,9 @@ export interface CdpSupportedCheckResult {
   /** Sanitized (network/scheme pairs only, no credentials, no raw
    * facilitator response) — safe to log or include in a report. */
   kinds: { scheme: string; network: string }[];
+  /** Public EVM address required in an upto Permit2 witness. Present only
+   * after strict address validation. */
+  uptoFacilitatorAddress?: string;
 }
 
 /**
@@ -269,12 +275,23 @@ export async function checkCdpSupportsNetwork(
   const missing = requiredSchemes.filter(
     (scheme) => !kinds.some((k) => k.network === network && k.scheme === scheme)
   );
+  const uptoKind = supported.kinds.find(
+    (kind) => kind.x402Version === 2 && kind.network === network && kind.scheme === 'upto'
+  );
+  const uptoFacilitatorAddress = safePayer(uptoKind?.extra?.facilitatorAddress);
+  const missingUptoAddress =
+    requiredSchemes.includes('upto') &&
+    missing.length === 0 &&
+    uptoFacilitatorAddress === undefined;
   return {
-    ok: missing.length === 0,
+    ok: missing.length === 0 && !missingUptoAddress,
     reason:
       missing.length > 0
         ? `facilitator does not advertise scheme(s) [${missing.join(', ')}] for network "${network}"`
-        : undefined,
+        : missingUptoAddress
+          ? `facilitator upto capability is missing a valid facilitatorAddress for network "${network}"`
+          : undefined,
     kinds,
+    ...(uptoFacilitatorAddress ? { uptoFacilitatorAddress } : {}),
   };
 }

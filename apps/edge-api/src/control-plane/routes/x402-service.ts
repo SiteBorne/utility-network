@@ -92,6 +92,9 @@ export interface ExecutorOutcome {
    * `src/pricing/document-usage.ts`) — this module never guesses or
    * derives it itself. */
   actualAmountAtomic?: string;
+  /** Required for `upto`: the deterministic measured metrics used by
+   * @siteborne/pricing to derive `actualAmountAtomic`. */
+  resourceMetrics?: Record<string, unknown>;
 }
 
 export type ServiceExecutor = (
@@ -561,6 +564,8 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
       result_class: outcome.result.result_class,
     });
 
+    const receiptHash = await hashPaymentObject(outcome.result.receipt as Record<string, unknown>);
+
     let actualAmount = stored.quote.amount;
     let usageResultHash: string | undefined;
     // Full object (not just its hash) hoisted out of the `upto` branch so
@@ -579,6 +584,28 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
         );
       }
       actualAmount = outcome.actualAmountAtomic;
+      if (BigInt(actualAmount) > BigInt(stored.quote.amount)) {
+        await transition(jobId, 'VERIFYING', 'REJECTED', 'VERIFICATION_FAILED');
+        await audit('payment_verification_failed', {
+          payment_identifier: paymentIdentifier,
+          reason: 'authorization_exceeded',
+        });
+        return jsonError(
+          c,
+          402,
+          'authorization_exceeded',
+          `actual amount ${actualAmount} exceeds authorized maximum ${stored.quote.amount}`
+        );
+      }
+      if (!outcome.resourceMetrics) {
+        await transition(jobId, 'VERIFYING', 'REJECTED', 'VERIFICATION_FAILED');
+        return jsonError(
+          c,
+          500,
+          'service_execution_failed',
+          'upto executor did not report deterministic resourceMetrics'
+        );
+      }
       try {
         const builtUsageResult = await buildUsageResult({
           quote_id: stored.quote.quote_id,
@@ -589,7 +616,9 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
           request_input_hash: inputHash,
           service_output_hash: outcome.result.output_hash,
           verification_receipt_id: outcome.result.receipt_id,
-          resource_metrics_hash: await hashPaymentObject({ actual_amount: actualAmount }),
+          verification_receipt_hash: receiptHash,
+          resource_metrics_hash: await hashPaymentObject(outcome.resourceMetrics),
+          pricing_source_version: resolvePricingSourceVersion(),
           actual_amount: actualAmount,
           authorized_maximum: stored.quote.amount,
         });
@@ -650,7 +679,6 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
     await paymentAttempts.markConsumed(paymentIdentifier);
     await audit('payment_settled', { payment_identifier: paymentIdentifier });
 
-    const receiptHash = await hashPaymentObject(outcome.result.receipt as Record<string, unknown>);
     let link = await buildPaymentServiceLink({
       payment_identifier: paymentIdentifier,
       quote_id: stored.quote.quote_id,

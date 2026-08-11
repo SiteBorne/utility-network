@@ -295,6 +295,7 @@ describe('object-identity: the exact payload/requirements objects supplied reach
       request_input_hash: 'sha256:' + '9'.repeat(64),
       service_output_hash: 'sha256:' + 'a'.repeat(64),
       verification_receipt_id: 'rcpt_' + '1'.repeat(24),
+      verification_receipt_hash: 'sha256:' + 'c'.repeat(64),
       resource_metrics_hash: 'sha256:' + 'b'.repeat(64),
       actual_amount: '10000',
       authorized_maximum: '20000',

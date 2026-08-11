@@ -221,43 +221,63 @@ export class D1RepositoryError extends Error {
   }
 }
 
+/**
+ * Current D1 throws on execution failure and returns `success: true` on a
+ * result. Older test doubles and Workers runtimes returned a structured
+ * `{ success: false, error }` result instead. Keep that compatibility at one
+ * validated boundary rather than reaching into the current SDK's `never`
+ * error field throughout every repository.
+ */
+export function getD1Failure(result: unknown): string | undefined {
+  if (typeof result !== 'object' || result === null || !('success' in result)) {
+    return 'Malformed D1 execution result';
+  }
+  const candidate = result as { success: unknown; error?: unknown };
+  if (candidate.success === true) return undefined;
+  return typeof candidate.error === 'string' ? candidate.error : 'D1 execution failed';
+}
+
 export function toRepositoryResponse<T>(
-  result: { success: boolean; results: T[]; error?: string },
-  mapFn?: (row: Record<string, unknown>) => T
-): RepositoryResponse<T | T[] | null> {
-  if (!result.success) {
-    const isRetryable =
-      result.error?.includes('UNIQUE constraint') === false &&
-      result.error?.includes('constraint') === false;
-    return err('DATABASE_ERROR', result.error ?? 'Database operation failed', {
+  result: { success: boolean; results: Record<string, unknown>[]; error?: string },
+  mapFn: (row: Record<string, unknown>) => T
+): RepositoryResponse<T[]> {
+  const failure = getD1Failure(result);
+  if (failure) {
+    const isRetryable = !failure.includes('constraint');
+    return err('DATABASE_ERROR', failure, {
       retryable: isRetryable,
     });
   }
-  if (mapFn) {
-    return ok(result.results.map(mapFn));
-  }
-  return ok(result.results as T[]);
+  return ok(result.results.map(mapFn));
 }
 
 export function toSingleRepositoryResponse<T>(
-  result: { success: boolean; results: T[]; error?: string },
-  mapFn?: (row: Record<string, unknown>) => T
+  result: { success: boolean; results: Record<string, unknown>[]; error?: string },
+  mapFn: (row: Record<string, unknown>) => T
 ): RepositoryResponse<T | null> {
-  if (!result.success) {
-    const isRetryable =
-      result.error?.includes('UNIQUE constraint') === false &&
-      result.error?.includes('constraint') === false;
-    return err('DATABASE_ERROR', result.error ?? 'Database operation failed', {
+  const failure = getD1Failure(result);
+  if (failure) {
+    const isRetryable = !failure.includes('constraint');
+    return err('DATABASE_ERROR', failure, {
       retryable: isRetryable,
     });
   }
   if (result.results.length === 0) {
     return ok(null);
   }
-  if (mapFn) {
-    return ok(mapFn(result.results[0]));
-  }
-  return ok(result.results[0] as T);
+  return ok(mapFn(result.results[0]));
+}
+
+export function toRequiredRepositoryResponse<T>(
+  result: { success: boolean; results: Record<string, unknown>[]; error?: string },
+  mapFn: (row: Record<string, unknown>) => T,
+  notFoundCode: string,
+  notFoundMessage: string
+): RepositoryResponse<T> {
+  const response = toSingleRepositoryResponse(result, mapFn);
+  if (!response.ok) return response;
+  if (response.value === null) return err(notFoundCode, notFoundMessage);
+  return ok(response.value);
 }
 
 export async function executeBatch(
@@ -270,11 +290,10 @@ export async function executeBatch(
     const results = await batch;
     const allRows: Record<string, unknown>[] = [];
     for (const r of results) {
-      if (!r.success) {
-        return { success: false, results: [], error: r.error ?? 'Batch failed' };
-      }
+      const failure = getD1Failure(r);
+      if (failure) return { success: false, results: [], error: failure };
       if (r.results) {
-        allRows.push(...r.results);
+        allRows.push(...(r.results as Record<string, unknown>[]));
       }
     }
     return { success: true, results: allRows };

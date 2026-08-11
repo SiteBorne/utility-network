@@ -25,9 +25,8 @@ import {
   BUNDLED_SERVICE_INPUT_SCHEMAS,
   PAYTO_NOT_CONFIGURED,
   REGISTRY_SERVICES,
-  calculateDocumentUsage,
-  documentUsageToAtomicUnits,
 } from '@siteborne/protocol-x402';
+import { calculateDocumentUsage, documentUsageToAtomicUnits } from '@siteborne/pricing';
 import { D1ServicesRepository } from '../repositories/d1/services';
 import type { PaymentEvidenceMode, PaymentEvidenceProvider } from '@siteborne/protocol-x402';
 import {
@@ -284,7 +283,23 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
         }))
       );
       const actualAmountAtomic = documentUsageToAtomicUnits(usage, 6);
-      return { result, actualAmountAtomic };
+      return {
+        result,
+        actualAmountAtomic,
+        resourceMetrics: {
+          page_count: DOCUMENT_FIXTURE_WORKER_RESULT.pages.length,
+          pages: DOCUMENT_FIXTURE_WORKER_RESULT.pages.map((page) => ({
+            page_number: page.page_number,
+            ocr_used: page.ocr_used,
+            table_count: page.tables.length,
+          })),
+          page_costs: usage.page_costs,
+          subtotal_usd_micro: usage.subtotal_usd_micro,
+          max_job_usd_micro: usage.max_job_usd_micro,
+          total_usd_micro: usage.total_usd_micro,
+          capped: usage.capped,
+        },
+      };
     },
   });
 

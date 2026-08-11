@@ -13,6 +13,11 @@ import type {
 } from '../interfaces';
 import type { D1Bindings, Clock } from './shared';
 import { createInMemoryRepositories } from '../in-memory';
+import { D1JobsRepository, D1JobAttemptsRepository, D1StateEventsRepository } from './jobs';
+import { D1IdempotencyRepository } from './idempotency';
+import { D1ArtifactsRepository, D1QueueDispatchRepository } from './artifacts';
+import { D1QuotaRepository, D1AuditRepository, D1SecurityRepository } from './quota-audit-security';
+import { D1ServicesRepository, D1ServiceVersionsRepository } from './services';
 
 export { D1ServicesRepository, D1ServiceVersionsRepository } from './services';
 
@@ -78,17 +83,17 @@ export function createRepositories(options: RepositoryFactoryOptions): Repositor
     const db = bindings.DB;
 
     return {
-      jobs: new (await import('./jobs')).D1JobsRepository(db),
-      jobAttempts: new (await import('./jobs')).D1JobAttemptsRepository(db),
-      stateEvents: new (await import('./jobs')).D1StateEventsRepository(db),
-      idempotency: new (await import('./idempotency')).D1IdempotencyRepository(db),
-      artifacts: new (await import('./artifacts')).D1ArtifactsRepository(db),
-      queueDispatch: new (await import('./artifacts')).D1QueueDispatchRepository(db),
-      quota: new (await import('./quota-audit-security')).D1QuotaRepository(db),
-      audit: new (await import('./quota-audit-security')).D1AuditRepository(db),
-      security: new (await import('./quota-audit-security')).D1SecurityRepository(db),
-      services: new (await import('./services')).D1ServicesRepository(db),
-      serviceVersions: new (await import('./services')).D1ServiceVersionsRepository(db),
+      jobs: new D1JobsRepository(db),
+      jobAttempts: new D1JobAttemptsRepository(db),
+      stateEvents: new D1StateEventsRepository(db),
+      idempotency: new D1IdempotencyRepository(db),
+      artifacts: new D1ArtifactsRepository(db),
+      queueDispatch: new D1QueueDispatchRepository(db),
+      quota: new D1QuotaRepository(db),
+      audit: new D1AuditRepository(db),
+      security: new D1SecurityRepository(db),
+      services: new D1ServicesRepository(db),
+      serviceVersions: new D1ServiceVersionsRepository(db),
     };
   }
 
@@ -114,26 +119,18 @@ export function createRepositoriesSync(options: RepositoryFactoryOptions): Repos
 
     const db = bindings.DB;
 
-    // Dynamic imports for D1 repositories
-    // These are loaded synchronously since the modules are already imported above
-    const jobs = await import('./jobs');
-    const idempotency = await import('./idempotency');
-    const artifacts = await import('./artifacts');
-    const quotaAuditSecurity = await import('./quota-audit-security');
-    const services = await import('./services');
-
     return {
-      jobs: new jobs.D1JobsRepository(db),
-      jobAttempts: new jobs.D1JobAttemptsRepository(db),
-      stateEvents: new jobs.D1StateEventsRepository(db),
-      idempotency: new idempotency.D1IdempotencyRepository(db),
-      artifacts: new artifacts.D1ArtifactsRepository(db),
-      queueDispatch: new artifacts.D1QueueDispatchRepository(db),
-      quota: new quotaAuditSecurity.D1QuotaRepository(db),
-      audit: new quotaAuditSecurity.D1AuditRepository(db),
-      security: new quotaAuditSecurity.D1SecurityRepository(db),
-      services: new services.D1ServicesRepository(db),
-      serviceVersions: new services.D1ServiceVersionsRepository(db),
+      jobs: new D1JobsRepository(db),
+      jobAttempts: new D1JobAttemptsRepository(db),
+      stateEvents: new D1StateEventsRepository(db),
+      idempotency: new D1IdempotencyRepository(db),
+      artifacts: new D1ArtifactsRepository(db),
+      queueDispatch: new D1QueueDispatchRepository(db),
+      quota: new D1QuotaRepository(db),
+      audit: new D1AuditRepository(db),
+      security: new D1SecurityRepository(db),
+      services: new D1ServicesRepository(db),
+      serviceVersions: new D1ServiceVersionsRepository(db),
     };
   }
 

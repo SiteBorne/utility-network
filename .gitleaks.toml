@@ -12,17 +12,7 @@ title = "Gitleaks configuration for SITEBORNE Utility Network"
 useDefault = true
 
 [allowlist]
-description = "Allowlisted paths and patterns for test fixtures and examples"
-paths = [
-  "schemas/common/request-envelope.schema.json",
-  "packages/contracts/src/semantic/validators.test.ts",
-  "packages/contracts/src/semantic/test_validators.py",
-  # Frozen-release checksum report — every "finding" here is a public
-  # SHA-256 content hash of a committed schema file, not a secret; high
-  # entropy hex strings are exactly what a checksum report is supposed to
-  # contain. See docs/decisions/... contract-freeze ADRs.
-  "docs/reports/SUN-0102-contract-freeze-report.md",
-]
+description = "Narrow public fixture and frozen-checksum patterns; no path-wide exclusions"
 regexes = [
   '''idem_[a-z0-9]{24}''',
   '''idem_abc123xyz[a-z0-9]*''',
@@ -31,4 +21,8 @@ regexes = [
   # and packages/verification/src/tests/fixtures.ts — a fixture literal,
   # never a real idempotency key issued by any live system.
   '''idk_verificationfixture01aaa''',
+  # One public SHA-256 contract artifact checksum in the frozen SUN-0102
+  # report is classified by the generic-api-key rule. Allow only this exact
+  # immutable checksum rather than excluding the report (or all hashes).
+  '''61f3ace1dd8b786cda5821a48f812345a55253e31c20538834c185752a889d86''',
 ]

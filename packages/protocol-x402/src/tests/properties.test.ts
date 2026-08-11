@@ -354,6 +354,9 @@ describe('protocol-x402 properties', () => {
             .hexaString({ minLength: 64, maxLength: 64 })
             .map((h) => `sha256:${h}`),
           verification_receipt_id: fc.constant('rcpt_' + '1'.repeat(24)),
+          verification_receipt_hash: fc
+            .hexaString({ minLength: 64, maxLength: 64 })
+            .map((h) => `sha256:${h}`),
           resource_metrics_hash: fc
             .hexaString({ minLength: 64, maxLength: 64 })
             .map((h) => `sha256:${h}`),

@@ -1,4 +1,5 @@
-import type { QueueDispatch, QueueDispatchRepository } from '../repositories/interfaces';
+import type { QueueDispatch } from '../types';
+import type { QueueDispatchRepository } from '../repositories/interfaces';
 
 export interface QueueDispatchMessage {
   job_id: string;
@@ -60,7 +61,7 @@ export class InMemoryQueueConsumer implements QueueConsumer {
   }
 
   async release(message: QueueDispatchMessage): Promise<void> {
-    await this.queue.retry(message);
+    this.queue.push({ ...message, retry_count: message.retry_count + 1 });
   }
 }
 
@@ -167,8 +168,9 @@ export class R2QueueConsumerAdapter implements QueueConsumer {
   }
 
   async receive(batchSize = 10, waitTimeSeconds = 5): Promise<QueueDispatchMessage[]> {
-    const batch = await this.queue.receive(batchSize, waitTimeSeconds);
-    return batch.messages.map((m) => m.body as QueueDispatchMessage);
+    void batchSize;
+    void waitTimeSeconds;
+    throw new Error('Cloudflare Queue consumers receive messages through a MessageBatch handler');
   }
 
   async acknowledge(_message: QueueDispatchMessage): Promise<void> {
@@ -176,6 +178,6 @@ export class R2QueueConsumerAdapter implements QueueConsumer {
   }
 
   async release(message: QueueDispatchMessage): Promise<void> {
-    await this.queue.retry(message);
+    await this.queue.send({ ...message, retry_count: message.retry_count + 1 });
   }
 }

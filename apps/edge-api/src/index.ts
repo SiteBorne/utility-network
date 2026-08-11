@@ -13,7 +13,7 @@ import { createSecurityHeadersMiddleware } from './control-plane/middleware/requ
 import { createRequestTimingMiddleware } from './control-plane/middleware/request-context';
 import { createAuditContextMiddleware } from './control-plane/middleware/request-context';
 import { createDevelopmentModeMiddleware } from './control-plane/middleware/request-context';
-import { ControlPlaneConfig } from './control-plane/config/env';
+import type { ControlPlaneConfig } from './control-plane/config/env';
 import { createInMemoryRepositories } from './control-plane/repositories/in-memory';
 import { InMemoryArtifactStore } from './control-plane/artifacts/store';
 import { InMemoryQueueProducer } from './control-plane/queue/dispatch';
@@ -22,7 +22,7 @@ import { AuditLogger } from './control-plane/audit/events';
 import { buildPaidServicesApp } from './control-plane/routes/paid-services';
 import type { Env } from './control-plane/config/env';
 
-export { ControlPlaneConfig };
+export type { ControlPlaneConfig };
 
 const app = new Hono<{ Bindings: Env }>();
 

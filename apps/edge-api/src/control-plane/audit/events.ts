@@ -1,10 +1,5 @@
-import type {
-  AuditEvent,
-  SecurityEvent,
-  AuditRepository,
-  SecurityRepository,
-} from '../repositories/interfaces';
-import type { ActorClass } from '../types';
+import type { AuditRepository, SecurityRepository } from '../repositories/interfaces';
+import type { ActorClass, AuditEvent, SecurityEvent } from '../types';
 
 export const AuditEventTypes = {
   REQUEST_RECEIVED: 'request_received',
@@ -66,6 +61,7 @@ export function createSecurityEvent(
     jobId?: string;
     attemptNumber?: number;
     serviceId?: string;
+    actor?: ActorClass;
     details: Record<string, unknown>;
     correlationId?: string;
     severity: 'low' | 'medium' | 'high' | 'critical';
@@ -77,7 +73,7 @@ export function createSecurityEvent(
     job_id: options.jobId,
     attempt_number: options.attemptNumber,
     service_id: options.serviceId,
-    details: sanitizeDetails(options.details),
+    details: sanitizeDetails({ ...options.details, actor: options.actor }),
     timestamp: new Date().toISOString(),
     correlation_id: options.correlationId,
     severity: options.severity,

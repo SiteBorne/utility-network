@@ -18,11 +18,12 @@
     "build": "tsc && tsc -m ESNext --outDir dist/esm && mv dist/esm/*.mjs dist/ 2>/dev/null || true",
     "test": "vitest run",
     "lint": "eslint src/",
-    "typecheck": "echo 'Typecheck uses vitest with path aliases; static analysis skipped for SUN-0001'"
+    "typecheck": "tsc --project tsconfig.json --noEmit --pretty false && tsc --project tsconfig.live-tests.json --noEmit --pretty false"
   },
   "dependencies": {
     "@coinbase/cdp-sdk": "^1.55.0",
     "@siteborne/protocol-x402": "workspace:*",
+    "@siteborne/pricing": "workspace:*",
     "@siteborne/provider-adapters": "workspace:*",
     "@siteborne/service-runtime": "workspace:*",
     "@siteborne/verification": "workspace:*",
@@ -31,7 +32,8 @@
     "@x402/extensions": "2.21.0",
     "@x402/svm": "2.21.0",
     "ajv": "^8.17.1",
-    "hono": "^4.5.0"
+    "hono": "^4.5.0",
+    "viem": "^2.55.11"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20240800.0",

@@ -1,7 +1,6 @@
 import type { D1Database } from '@cloudflare/workers-types';
-import { randomUUID } from 'crypto';
 import type { QueueDispatch, Job, JobAttempt } from '../types';
-import { mapQueueDispatch, mapJob, mapJobAttempt } from './shared';
+import { mapQueueDispatch, mapJob, mapJobAttempt } from '../repositories/d1/shared';
 
 export type DispatchValidationResult =
   | {
@@ -242,7 +241,7 @@ export async function processDispatchMessage(
 
     if (deadLetterOutcomes.includes(validation.outcome)) {
       await deadLetterSink.add({
-        id: randomUUID(),
+        id: crypto.randomUUID(),
         original_dispatch_id: message.id,
         job_id: message.job_id,
         attempt_number: message.attempt_number,

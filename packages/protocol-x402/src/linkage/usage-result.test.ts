@@ -12,6 +12,7 @@ function baseInput(overrides: Partial<UsageResultInput> = {}): UsageResultInput 
     request_input_hash: 'sha256:' + '1'.repeat(64),
     service_output_hash: 'sha256:' + '2'.repeat(64),
     verification_receipt_id: 'rcpt_' + '1'.repeat(24),
+    verification_receipt_hash: 'sha256:' + '4'.repeat(64),
     resource_metrics_hash: 'sha256:' + '3'.repeat(64),
     pricing_source_version: '1.0.0',
     actual_amount: '100000',
@@ -47,6 +48,7 @@ describe('buildUsageResult', () => {
     ['request_input_hash', 'sha256:' + '9'.repeat(64)],
     ['service_output_hash', 'sha256:' + '9'.repeat(64)],
     ['verification_receipt_id', 'rcpt_' + '9'.repeat(24)],
+    ['verification_receipt_hash', 'sha256:' + '9'.repeat(64)],
     ['resource_metrics_hash', 'sha256:' + '9'.repeat(64)],
     ['actual_amount', '50000'],
   ] as const)('mutating %s changes the usage_result_hash', async (field, value) => {

@@ -72,7 +72,7 @@ export class InMemoryJobsRepository implements JobsRepository {
   private store = new InMemoryStore<Job>();
   private byIdempotencyKey = new Map<string, string>();
 
-  async create(job: Job): Promise<ReturnType<JobsRepository['create']>> {
+  async create(job: Job): ReturnType<JobsRepository['create']> {
     try {
       await this.store.create(job);
       if (job.idempotency_key) {
@@ -84,14 +84,12 @@ export class InMemoryJobsRepository implements JobsRepository {
     }
   }
 
-  async getById(id: string): Promise<ReturnType<JobsRepository['getById']>> {
+  async getById(id: string): ReturnType<JobsRepository['getById']> {
     const job = await this.store.get(id);
     return ok(job);
   }
 
-  async getByIdempotencyKey(
-    key: string
-  ): Promise<ReturnType<JobsRepository['getByIdempotencyKey']>> {
+  async getByIdempotencyKey(key: string): ReturnType<JobsRepository['getByIdempotencyKey']> {
     const jobId = this.byIdempotencyKey.get(key);
     if (!jobId) return ok(null);
     const job = await this.store.get(jobId);
@@ -102,7 +100,7 @@ export class InMemoryJobsRepository implements JobsRepository {
     id: string,
     state: Job['current_state'],
     attemptCount?: number
-  ): Promise<ReturnType<JobsRepository['updateState']>> {
+  ): ReturnType<JobsRepository['updateState']> {
     try {
       const updated = await this.store.update(id, (job) => ({
         ...job,
@@ -116,7 +114,7 @@ export class InMemoryJobsRepository implements JobsRepository {
     }
   }
 
-  async updateTimestamps(id: string): Promise<ReturnType<JobsRepository['updateTimestamps']>> {
+  async updateTimestamps(id: string): ReturnType<JobsRepository['updateTimestamps']> {
     try {
       const updated = await this.store.update(id, (job: Job) => ({
         ...job,
@@ -131,7 +129,7 @@ export class InMemoryJobsRepository implements JobsRepository {
   async listByState(
     state: Job['current_state'],
     limit = 100
-  ): Promise<ReturnType<JobsRepository['listByState']>> {
+  ): ReturnType<JobsRepository['listByState']> {
     const jobs = await this.store.list();
     return ok(jobs.filter((j: Job) => j.current_state === state).slice(0, limit));
   }
@@ -146,7 +144,7 @@ export class InMemoryJobAttemptsRepository implements JobAttemptsRepository {
   private store = new InMemoryStore<JobAttempt>();
   private byJobId = new Map<string, JobAttempt[]>();
 
-  async create(attempt: JobAttempt): Promise<ReturnType<JobAttemptsRepository['create']>> {
+  async create(attempt: JobAttempt): ReturnType<JobAttemptsRepository['create']> {
     try {
       await this.store.create(attempt);
       const list = this.byJobId.get(attempt.job_id) ?? [];
@@ -161,12 +159,12 @@ export class InMemoryJobAttemptsRepository implements JobAttemptsRepository {
   async getByJobIdAndAttempt(
     jobId: string,
     attemptNumber: number
-  ): Promise<ReturnType<JobAttemptsRepository['getByJobIdAndAttempt']>> {
+  ): ReturnType<JobAttemptsRepository['getByJobIdAndAttempt']> {
     const list = this.byJobId.get(jobId) ?? [];
     return ok(list.find((attempt: JobAttempt) => attempt.attempt_number === attemptNumber) ?? null);
   }
 
-  async update(attempt: JobAttempt): Promise<ReturnType<JobAttemptsRepository['update']>> {
+  async update(attempt: JobAttempt): ReturnType<JobAttemptsRepository['update']> {
     try {
       const updated = await this.store.update(attempt.id, () => attempt);
       const list = this.byJobId.get(attempt.job_id) ?? [];
@@ -178,7 +176,7 @@ export class InMemoryJobAttemptsRepository implements JobAttemptsRepository {
     }
   }
 
-  async listByJobId(jobId: string): Promise<ReturnType<JobAttemptsRepository['listByJobId']>> {
+  async listByJobId(jobId: string): ReturnType<JobAttemptsRepository['listByJobId']> {
     const list = this.byJobId.get(jobId) ?? [];
     return ok(
       [...list].sort((a: JobAttempt, b: JobAttempt) => a.attempt_number - b.attempt_number)
@@ -195,7 +193,7 @@ export class InMemoryStateEventsRepository implements StateEventsRepository {
   private store = new InMemoryStore<StateEvent>();
   private byJobId = new Map<string, StateEvent[]>();
 
-  async create(event: StateEvent): Promise<ReturnType<StateEventsRepository['create']>> {
+  async create(event: StateEvent): ReturnType<StateEventsRepository['create']> {
     try {
       await this.store.create(event);
       const list = this.byJobId.get(event.job_id) ?? [];
@@ -207,7 +205,7 @@ export class InMemoryStateEventsRepository implements StateEventsRepository {
     }
   }
 
-  async getByJobId(jobId: string): Promise<ReturnType<StateEventsRepository['getByJobId']>> {
+  async getByJobId(jobId: string): ReturnType<StateEventsRepository['getByJobId']> {
     const list = this.byJobId.get(jobId) ?? [];
     return ok(
       [...list].sort(
@@ -220,7 +218,7 @@ export class InMemoryStateEventsRepository implements StateEventsRepository {
   async getByJobIdAndAttempt(
     jobId: string,
     attemptNumber: number
-  ): Promise<ReturnType<StateEventsRepository['getByJobIdAndAttempt']>> {
+  ): ReturnType<StateEventsRepository['getByJobIdAndAttempt']> {
     const list = this.byJobId.get(jobId) ?? [];
     return ok(list.filter((event: StateEvent) => event.attempt_number === attemptNumber));
   }
@@ -235,7 +233,7 @@ export class InMemoryIdempotencyRepository implements IdempotencyRepository {
   private store = new InMemoryStore<IdempotencyRecord>();
   private byKey = new Map<string, string>();
 
-  async acquire(record: IdempotencyRecord): Promise<ReturnType<IdempotencyRepository['acquire']>> {
+  async acquire(record: IdempotencyRecord): ReturnType<IdempotencyRepository['acquire']> {
     try {
       await this.store.create(record);
       this.byKey.set(record.idempotency_key, record.id);
@@ -245,7 +243,7 @@ export class InMemoryIdempotencyRepository implements IdempotencyRepository {
     }
   }
 
-  async getByKey(key: string): Promise<ReturnType<IdempotencyRepository['getByKey']>> {
+  async getByKey(key: string): ReturnType<IdempotencyRepository['getByKey']> {
     const id = this.byKey.get(key);
     if (!id) return ok(null);
     const record = await this.store.get(id);
@@ -256,7 +254,7 @@ export class InMemoryIdempotencyRepository implements IdempotencyRepository {
     key: string,
     inputHash: string,
     inputSchemaHash: string
-  ): Promise<ReturnType<IdempotencyRepository['getByKeyAndInput']>> {
+  ): ReturnType<IdempotencyRepository['getByKeyAndInput']> {
     const record = await this.getByKey(key);
     if (!record.ok || !record.value) return ok(null);
     if (
@@ -271,7 +269,7 @@ export class InMemoryIdempotencyRepository implements IdempotencyRepository {
   async updateResult(
     key: string,
     resultRef: string
-  ): Promise<ReturnType<IdempotencyRepository['updateResult']>> {
+  ): ReturnType<IdempotencyRepository['updateResult']> {
     const record = await this.getByKey(key);
     if (!record.ok || !record.value) {
       return err('IDEMPOTENCY_NOT_FOUND', 'Idempotency record not found');
@@ -287,7 +285,7 @@ export class InMemoryIdempotencyRepository implements IdempotencyRepository {
     }
   }
 
-  async deleteExpired(): Promise<ReturnType<IdempotencyRepository['deleteExpired']>> {
+  async deleteExpired(): ReturnType<IdempotencyRepository['deleteExpired']> {
     const now = new Date().toISOString();
     let count = 0;
     for (const [id, record] of this.store['store'].entries()) {
@@ -311,7 +309,7 @@ export class InMemoryArtifactsRepository implements ArtifactsRepository {
   private byContentHash = new Map<string, string>();
   private byJobId = new Map<string, ArtifactRecord[]>();
 
-  async create(artifact: ArtifactRecord): Promise<ReturnType<ArtifactsRepository['create']>> {
+  async create(artifact: ArtifactRecord): ReturnType<ArtifactsRepository['create']> {
     try {
       await this.store.create(artifact);
       this.byContentHash.set(artifact.content_hash, artifact.id);
@@ -324,26 +322,24 @@ export class InMemoryArtifactsRepository implements ArtifactsRepository {
     }
   }
 
-  async getById(id: string): Promise<ReturnType<ArtifactsRepository['getById']>> {
+  async getById(id: string): ReturnType<ArtifactsRepository['getById']> {
     const artifact = await this.store.get(id);
     return ok(artifact);
   }
 
-  async getByContentHash(
-    hash: string
-  ): Promise<ReturnType<ArtifactsRepository['getByContentHash']>> {
+  async getByContentHash(hash: string): ReturnType<ArtifactsRepository['getByContentHash']> {
     const id = this.byContentHash.get(hash);
     if (!id) return ok(null);
     const artifact = await this.store.get(id);
     return ok(artifact);
   }
 
-  async getByJobId(jobId: string): Promise<ReturnType<ArtifactsRepository['getByJobId']>> {
+  async getByJobId(jobId: string): ReturnType<ArtifactsRepository['getByJobId']> {
     const list = this.byJobId.get(jobId) ?? [];
     return ok([...list]);
   }
 
-  async delete(id: string): Promise<ReturnType<ArtifactsRepository['delete']>> {
+  async delete(id: string): ReturnType<ArtifactsRepository['delete']> {
     const artifact = await this.store.get(id);
     if (!artifact) return ok(false);
     this.byContentHash.delete(artifact.content_hash);
@@ -356,7 +352,7 @@ export class InMemoryArtifactsRepository implements ArtifactsRepository {
     return ok(true);
   }
 
-  async deleteExpired(): Promise<ReturnType<ArtifactsRepository['deleteExpired']>> {
+  async deleteExpired(): ReturnType<ArtifactsRepository['deleteExpired']> {
     const now = new Date().toISOString();
     let count = 0;
     for (const [id, artifact] of this.store.entries()) {
@@ -385,7 +381,7 @@ export class InMemoryQueueDispatchRepository implements QueueDispatchRepository 
   private store = new InMemoryStore<QueueDispatch>();
   private byJobAttempt = new Map<string, string>();
 
-  async create(dispatch: QueueDispatch): Promise<ReturnType<QueueDispatchRepository['create']>> {
+  async create(dispatch: QueueDispatch): ReturnType<QueueDispatchRepository['create']> {
     try {
       await this.store.create(dispatch);
       const key = `${dispatch.job_id}:${dispatch.attempt_number}`;
@@ -396,7 +392,7 @@ export class InMemoryQueueDispatchRepository implements QueueDispatchRepository 
     }
   }
 
-  async getById(id: string): Promise<ReturnType<QueueDispatchRepository['getById']>> {
+  async getById(id: string): ReturnType<QueueDispatchRepository['getById']> {
     const dispatch = await this.store.get(id);
     return ok(dispatch);
   }
@@ -404,7 +400,7 @@ export class InMemoryQueueDispatchRepository implements QueueDispatchRepository 
   async getByJobIdAndAttempt(
     jobId: string,
     attemptNumber: number
-  ): Promise<ReturnType<QueueDispatchRepository['getByJobIdAndAttempt']>> {
+  ): ReturnType<QueueDispatchRepository['getByJobIdAndAttempt']> {
     const key = `${jobId}:${attemptNumber}`;
     const id = this.byJobAttempt.get(key);
     if (!id) return ok(null);
@@ -415,7 +411,7 @@ export class InMemoryQueueDispatchRepository implements QueueDispatchRepository 
   async updateRetryCount(
     id: string,
     retryCount: number
-  ): Promise<ReturnType<QueueDispatchRepository['updateRetryCount']>> {
+  ): ReturnType<QueueDispatchRepository['updateRetryCount']> {
     try {
       const updated = await this.store.update(id, (d) => ({ ...d, retry_count: retryCount }));
       return ok(updated);
@@ -424,7 +420,7 @@ export class InMemoryQueueDispatchRepository implements QueueDispatchRepository 
     }
   }
 
-  async listPending(limit = 100): Promise<ReturnType<QueueDispatchRepository['listPending']>> {
+  async listPending(limit = 100): ReturnType<QueueDispatchRepository['listPending']> {
     const all = await this.store.list();
     return ok(all.slice(0, limit));
   }
@@ -440,7 +436,7 @@ export class InMemoryQuotaRepository implements QuotaRepository {
   private byJobId = new Map<string, string>();
   private byResourceClass = new Map<string, QuotaReservation[]>();
 
-  async create(reservation: QuotaReservation): Promise<ReturnType<QuotaRepository['create']>> {
+  async create(reservation: QuotaReservation): ReturnType<QuotaRepository['create']> {
     try {
       await this.store.create(reservation);
       this.byJobId.set(reservation.job_id, reservation.id);
@@ -453,7 +449,7 @@ export class InMemoryQuotaRepository implements QuotaRepository {
     }
   }
 
-  async getByJobId(jobId: string): Promise<ReturnType<QuotaRepository['getByJobId']>> {
+  async getByJobId(jobId: string): ReturnType<QuotaRepository['getByJobId']> {
     const id = this.byJobId.get(jobId);
     if (!id) return ok(null);
     const reservation = await this.store.get(id);
@@ -462,12 +458,12 @@ export class InMemoryQuotaRepository implements QuotaRepository {
 
   async getByResourceClass(
     resourceClass: string
-  ): Promise<ReturnType<QuotaRepository['getByResourceClass']>> {
+  ): ReturnType<QuotaRepository['getByResourceClass']> {
     const list = this.byResourceClass.get(resourceClass) ?? [];
     return ok([...list]);
   }
 
-  async release(jobId: string): Promise<ReturnType<QuotaRepository['release']>> {
+  async release(jobId: string): ReturnType<QuotaRepository['release']> {
     const id = this.byJobId.get(jobId);
     if (!id) return ok(false);
     try {
@@ -482,7 +478,7 @@ export class InMemoryQuotaRepository implements QuotaRepository {
     }
   }
 
-  async deleteExpired(): Promise<ReturnType<QuotaRepository['deleteExpired']>> {
+  async deleteExpired(): ReturnType<QuotaRepository['deleteExpired']> {
     const now = new Date().toISOString();
     let count = 0;
     for (const [id, reservation] of this.store.entries()) {
@@ -510,7 +506,7 @@ export class InMemoryAuditRepository implements AuditRepository {
   private byJobId = new Map<string, AuditEvent[]>();
   private byCorrelationId = new Map<string, AuditEvent[]>();
 
-  async create(event: AuditEvent): Promise<ReturnType<AuditRepository['create']>> {
+  async create(event: AuditEvent): ReturnType<AuditRepository['create']> {
     try {
       await this.store.create(event);
       if (event.job_id) {
@@ -529,7 +525,7 @@ export class InMemoryAuditRepository implements AuditRepository {
     }
   }
 
-  async getByJobId(jobId: string): Promise<ReturnType<AuditRepository['getByJobId']>> {
+  async getByJobId(jobId: string): ReturnType<AuditRepository['getByJobId']> {
     const list = this.byJobId.get(jobId) ?? [];
     return ok(
       [...list].sort(
@@ -541,7 +537,7 @@ export class InMemoryAuditRepository implements AuditRepository {
 
   async getByCorrelationId(
     correlationId: string
-  ): Promise<ReturnType<AuditRepository['getByCorrelationId']>> {
+  ): ReturnType<AuditRepository['getByCorrelationId']> {
     const list = this.byCorrelationId.get(correlationId) ?? [];
     return ok(
       [...list].sort(
@@ -551,7 +547,7 @@ export class InMemoryAuditRepository implements AuditRepository {
     );
   }
 
-  async list(limit = 100): Promise<ReturnType<AuditRepository['list']>> {
+  async list(limit = 100): ReturnType<AuditRepository['list']> {
     const all = await this.store.list();
     return ok(all.slice(-limit).reverse());
   }
@@ -567,7 +563,7 @@ export class InMemorySecurityRepository implements SecurityRepository {
   private store = new InMemoryStore<SecurityEvent>();
   private byJobId = new Map<string, SecurityEvent[]>();
 
-  async create(event: SecurityEvent): Promise<ReturnType<SecurityRepository['create']>> {
+  async create(event: SecurityEvent): ReturnType<SecurityRepository['create']> {
     try {
       await this.store.create(event);
       if (event.job_id) {
@@ -581,7 +577,7 @@ export class InMemorySecurityRepository implements SecurityRepository {
     }
   }
 
-  async getByJobId(jobId: string): Promise<ReturnType<SecurityRepository['getByJobId']>> {
+  async getByJobId(jobId: string): ReturnType<SecurityRepository['getByJobId']> {
     const list = this.byJobId.get(jobId) ?? [];
     return ok(
       [...list].sort(
@@ -591,7 +587,7 @@ export class InMemorySecurityRepository implements SecurityRepository {
     );
   }
 
-  async list(limit = 100): Promise<ReturnType<SecurityRepository['list']>> {
+  async list(limit = 100): ReturnType<SecurityRepository['list']> {
     const all = await this.store.list();
     return ok(all.slice(-limit).reverse());
   }
@@ -605,7 +601,7 @@ export class InMemorySecurityRepository implements SecurityRepository {
 export class InMemoryServicesRepository implements ServicesRepository {
   private store = new Map<string, ServiceMetadata>();
 
-  async create(service: ServiceMetadata): Promise<ReturnType<ServicesRepository['create']>> {
+  async create(service: ServiceMetadata): ReturnType<ServicesRepository['create']> {
     try {
       if (this.store.has(service.service_id)) {
         return err('DUPLICATE_SERVICE', 'Service already exists');
@@ -617,12 +613,12 @@ export class InMemoryServicesRepository implements ServicesRepository {
     }
   }
 
-  async getById(serviceId: string): Promise<ReturnType<ServicesRepository['getById']>> {
+  async getById(serviceId: string): ReturnType<ServicesRepository['getById']> {
     const service = this.store.get(serviceId) ?? null;
     return ok(service);
   }
 
-  async getAll(): Promise<ReturnType<ServicesRepository['getAll']>> {
+  async getAll(): ReturnType<ServicesRepository['getAll']> {
     const all = Array.from(this.store.values());
     return ok(all);
   }
@@ -630,7 +626,7 @@ export class InMemoryServicesRepository implements ServicesRepository {
   async updateProductionEnabled(
     serviceId: string,
     enabled: boolean
-  ): Promise<ReturnType<ServicesRepository['updateProductionEnabled']>> {
+  ): ReturnType<ServicesRepository['updateProductionEnabled']> {
     const service = this.store.get(serviceId);
     if (!service) {
       return err('SERVICE_NOT_FOUND', 'Service not found');
@@ -649,7 +645,7 @@ export class InMemoryServiceVersionsRepository implements ServiceVersionsReposit
   private store = new InMemoryStore<ServiceVersion>();
   private byServiceId = new Map<string, ServiceVersion[]>();
 
-  async create(version: ServiceVersion): Promise<ReturnType<ServiceVersionsRepository['create']>> {
+  async create(version: ServiceVersion): ReturnType<ServiceVersionsRepository['create']> {
     try {
       await this.store.create(version);
       const list = this.byServiceId.get(version.service_id) ?? [];
@@ -664,7 +660,7 @@ export class InMemoryServiceVersionsRepository implements ServiceVersionsReposit
   async getByServiceIdAndVersion(
     serviceId: string,
     version: string
-  ): Promise<ReturnType<ServiceVersionsRepository['getByServiceIdAndVersion']>> {
+  ): ReturnType<ServiceVersionsRepository['getByServiceIdAndVersion']> {
     const list = this.byServiceId.get(serviceId) ?? [];
     const v = list.find((v) => v.version === version) ?? null;
     return ok(v);
@@ -672,7 +668,7 @@ export class InMemoryServiceVersionsRepository implements ServiceVersionsReposit
 
   async listByServiceId(
     serviceId: string
-  ): Promise<ReturnType<ServiceVersionsRepository['listByServiceId']>> {
+  ): ReturnType<ServiceVersionsRepository['listByServiceId']> {
     const list = this.byServiceId.get(serviceId) ?? [];
     return ok([...list]);
   }
