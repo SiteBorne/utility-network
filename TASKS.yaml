@@ -875,7 +875,7 @@ tasks:
   - id: 'SUN-0800A'
     title: 'Credential-Independent MCP and A2A Protocol Foundation'
     phase: 'phase_10_mcp_a2a'
-    state: 'active'
+    state: 'accepted'
     owner_agent: 'architect'
     dependencies:
       - 'SUN-0700B'
@@ -900,9 +900,19 @@ tasks:
       - 'packages/mcp-server/server.json'
       - 'packages/mcp-server/scripts/verify-packed-install.ts'
       - 'docs/reports/SUN-0800A-checkpoint-1-mcp-report.md'
-    next_action: 'Checkpoint 1 MCP foundation complete locally: current 2026-07-28 per-request Streamable HTTP server, exact six-tool boundary, frozen schemas, canonical x402 quote tool, truthful health, cross-client isolation, adversarial/property/no-network coverage, Edge /mcp route, protocol drift guard, registry-ready metadata, and offline tarball install proof. SUN-0800A remains active. Next checkpoint is credential-independent A2A 1.0 Agent Card generation/signing/local verification and local routes; do not publish or deploy.'
+      - 'packages/protocol-a2a/src/transport.ts'
+      - 'packages/protocol-a2a/src/signing.ts'
+      - 'packages/protocol-a2a/src/executor.ts'
+      - 'packages/protocol-a2a/src/protocol.property.test.ts'
+      - 'packages/protocol-a2a/fixtures/a2a-spec-baseline.json'
+      - 'packages/protocol-a2a/fixtures/a2a-agent-card-baseline.json'
+      - 'apps/edge-api/src/routes/a2a.ts'
+      - 'apps/edge-api/tests/a2a-route.test.ts'
+      - 'docs/decisions/0053-a2a-v1-hono-signing-and-x402-extension.md'
+      - 'docs/reports/SUN-0800A-protocol-foundation-report.md'
+    next_action: 'ACCEPTED. Checkpoint 1 retained the credential-independent MCP foundation in commit 12cd3e2. Checkpoint 2 added the official A2A 1.0 JSON-RPC boundary, four immutable SITEBORNE skills, signed and locally verified Agent Card, public-only JWKS, truthful x402 extension metadata, fail-closed frozen-schema execution, isolation, adversarial/property/no-network coverage, local Hono /a2a and discovery routes, and protocol drift guards in commit 5b8d5d1. No package was published, no endpoint was deployed, Nevermined was not contacted, and production remains disabled and not ready.'
     blocker: null
-    commit_ref: null
+    commit_ref: '5b8d5d1'
 
   - id: 'SUN-0800B'
     title: 'External MCP/A2A Publication and Public Verification'
@@ -926,7 +936,7 @@ tasks:
   - id: 'SUN-0900'
     title: 'Implement Nevermined (pay-as-you-go plans, no free trials until first paid)'
     phase: 'phase_11_nevermined'
-    state: 'pending'
+    state: 'blocked_external'
     owner_agent: 'architect'
     dependencies:
       - 'SUN-0800A'

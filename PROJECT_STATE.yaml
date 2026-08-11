@@ -9,13 +9,14 @@ source_directive:
 
 execution:
   mode: 'serial'
-  active_mutation_tasks: 1
-  current_increment: 'SUN-0800A'
-  current_phase: 'phase_10_mcp_a2a'
-  last_completed_increment: 'SUN-0700B'
-  frontier_status: 'executable'
-  blocked_on: []
-  reason: 'SUN-0800 was truthfully decomposed after preflight proved its Nevermined blocker was unrelated to its MCP/A2A scope. SUN-0800A is the sole active credential-independent MCP/A2A protocol-foundation task; checkpoint 1 is limited to MCP. SUN-0800B retains external npm/public endpoint/Agent Card publication and is blocked_external. SUN-0900 separately owns Nevermined and now depends on SUN-0800A. Production remains disabled and not ready.'
+  active_mutation_tasks: 0
+  current_increment: null
+  current_phase: 'phase_11_nevermined'
+  last_completed_increment: 'SUN-0800A'
+  frontier_status: 'blocked_external'
+  blocked_on:
+    - 'SUN-0900'
+  reason: 'SUN-0800A is accepted with credential-independent MCP and A2A 1.0 protocol foundations complete locally. SUN-0800B remains blocked_external on npm publication, public deployment/DNS/TLS, and production Agent Card signing prerequisites. The dependency-ready serial frontier is SUN-0900, which remains externally blocked on Nevermined credentials; it has not been activated. Production remains disabled and not ready.'
 
 implemented:
   - 'governance_validation'
@@ -101,6 +102,9 @@ implemented:
   - 'mcp_2026_07_28_remote_transport_foundation' # SUN-0800A checkpoint 1, local /mcp only
   - 'mcp_six_tool_contract_and_payment_boundary' # four frozen paid services plus canonical quote and truthful health
   - 'mcp_local_stdio_npm_shim_pack_install_verified' # package-ready only; not published
+  - 'a2a_v1_jsonrpc_protocol_foundation' # SUN-0800A checkpoint 2, local /a2a only
+  - 'a2a_signed_agent_card_and_public_jwks' # ephemeral local ES256 identity only; not production key custody
+  - 'a2a_four_skill_contract_and_x402_extension' # frozen services and truthful production-disabled payment metadata
 
 not_implemented:
   - 'company_evidence_graph_xbrl_facts_and_repository_signals_field_groups'
@@ -110,7 +114,8 @@ not_implemented:
   - 'x402_signed_offers_and_receipts' # evaluated and deliberately deferred, see ADR 0050
   - 'x402_bazaar_facilitator_cataloging' # local declaration/validation only, see ADR 0049
   - 'mcp_publication_and_public_endpoint' # SUN-0800B blocked_external
-  - 'a2a'
+  - 'a2a_publication_and_public_endpoint' # SUN-0800B blocked_external
+  - 'a2a_production_signing_identity' # SUN-0800B blocked_external
   - 'nevermined'
   - 'agentverse'
   - 'modal_document_processing'
@@ -203,4 +208,4 @@ pcc_schema:
   extension_namespace: 'reverse-domain-qualified'
   drift_check: 'enabled'
 
-last_updated: '2026-08-11T01:43:18Z'
+last_updated: '2026-08-11T04:05:27Z'
