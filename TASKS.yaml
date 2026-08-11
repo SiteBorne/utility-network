@@ -934,9 +934,9 @@ tasks:
     commit_ref: null
 
   - id: 'SUN-0900'
-    title: 'Implement Nevermined (pay-as-you-go plans, no free trials until first paid)'
+    title: 'Implement Nevermined (pay-as-you-go plans, no free trials until first paid) [DECOMPOSED]'
     phase: 'phase_11_nevermined'
-    state: 'blocked_external'
+    state: 'superseded'
     owner_agent: 'architect'
     dependencies:
       - 'SUN-0800A'
@@ -947,8 +947,54 @@ tasks:
       - 'Callback verification works'
       - 'Free live trials disabled'
     evidence: []
-    next_action: 'Security release gate'
-    blocker: 'Requires Nevermined credentials (blocked_external)'
+    next_action: 'Superseded by decomposition into SUN-0900A (credential-independent, rail-safe Nevermined foundation) and SUN-0900B (sandbox registration and live settlement verification). The coarse task incorrectly treated credentials as a blocker for protocol modeling, versioned D1/link bindings, configuration validation, and deterministic lifecycle tests. The original callback-verification security intent is preserved in SUN-0900B as authenticated synchronous facilitator-response validation; an inbound webhook is required only if a future adopted Nevermined flow actually delivers one to SITEBORNE. Do not implement against this task; see SUN-0900A/SUN-0900B.'
+    blocker: null
+    commit_ref: null
+
+  - id: 'SUN-0900A'
+    title: 'Credential-Independent Nevermined Alternative-Rail Foundation'
+    phase: 'phase_11_nevermined'
+    state: 'active'
+    owner_agent: 'architect'
+    dependencies:
+      - 'SUN-0800A'
+    rubric_target: 85
+    acceptance_tests:
+      - 'Buyer-surface-specific rail selection is deterministic: open SITEBORNE x402 routes use CDP only and dedicated Nevermined routes use Nevermined only, with no stacking or fallback'
+      - 'D1 remains the single authoritative payment/replay lifecycle and new payment-attempt bindings persist a versioned rail/provider identity without invalidating historical CDP bindings'
+      - 'PaymentServiceLink is extended additively for rail/provider and optional Nevermined agent/plan identities while historical accepted link hashes remain valid'
+      - 'The canonical Nevermined configuration boundary accepts NVM_API_KEY, supports the deprecated NEVERMINED_API_KEY alias fail-closed, and rejects live NVM_ENVIRONMENT at this project stage without exposing secrets'
+      - 'protocol-nevermined defines exactly four credential-independent PAYG, positive-price, non-trial agent/plan declarations derived from accepted SITEBORNE contracts and pricing'
+      - 'document_evidence_json.v1 remains registration-disabled until sandbox proves post-execution settlement at actual usage not exceeding the authorized maximum'
+      - 'Narrow injected Nevermined verification/settlement interfaces and sanitized evidence domains preserve external_verified trust requirements without credentials or network calls'
+      - 'Dedicated Nevermined route adapters exercise the shared D1/service/PCC/UsageResult/linkage lifecycle deterministically with fixed PAYG and actual-usage settlement, without a real account or live payment'
+      - 'Existing CDP exact/upto routes, replay behavior, evidence, UsageResult, PaymentServiceLink, consumed state, and retained live-checkpoint hashes remain valid'
+      - 'Credential-free validation and full repository check pass with production disabled and no Nevermined registration, authentication, or network activity'
+    evidence: []
+    next_action: 'Checkpoint 1: implement and verify the rail-safe, versioned persistence/linkage substrate and credential-independent Nevermined protocol model. Checkpoint 2 then adds the injected provider and four deterministic Nevermined route adapters before SUN-0900A acceptance. Do not contact Nevermined or begin SUN-0900B.'
+    blocker: null
+    commit_ref: null
+
+  - id: 'SUN-0900B'
+    title: 'Nevermined Sandbox Registration and Live Settlement Verification'
+    phase: 'phase_11_nevermined'
+    state: 'blocked_external'
+    owner_agent: 'operator'
+    dependencies:
+      - 'SUN-0900A'
+    rubric_target: 85
+    acceptance_tests:
+      - 'Nevermined sandbox builder and controlled subscriber identities are configured without committing credentials'
+      - 'Four positive-price, non-trial PAYG plans are created and bound to the four canonical SITEBORNE services'
+      - 'Live entitlement verification succeeds and rejects invalid entitlement before service execution'
+      - 'Nevermined facilitator verification and settlement responses are authenticated/validated, bound to the selected request, plan, rail, and payment identity, and fail closed; an inbound webhook is required only if an adopted Nevermined flow delivers one to SITEBORNE'
+      - 'Sandbox proves fixed PAYG settlement and document post-execution actual-usage settlement where actual amount does not exceed the authorized maximum and the maximum is not charged by default'
+      - 'D1 replay remains authoritative with one logical job, one service execution, one verification, and one settlement per payment identity'
+      - 'Free live trials, credits trials, time trials, and zero-price live plans remain disabled until after the first unknown external paid purchase'
+      - 'Sanitized live evidence records the real sandbox registration, verification, settlement, and public identifiers without claiming production readiness or revenue'
+    evidence: []
+    next_action: 'Blocked until Nevermined sandbox builder credentials, controlled subscriber credentials, sandbox payment/funding/delegation setup, dynamic PAYG actual-usage capability proof, and real registration/live verification capability are available. Do not activate during SUN-0900A.'
+    blocker: 'Requires Nevermined sandbox builder and controlled subscriber credentials, sandbox funding/delegation setup, dynamic PAYG actual-usage capability proof, and real registration/live verification capability (blocked_external)'
     commit_ref: null
 
   - id: 'SUN-1000'
@@ -957,7 +1003,7 @@ tasks:
     state: 'pending'
     owner_agent: 'architect'
     dependencies:
-      - 'SUN-0900'
+      - 'SUN-0900B'
     rubric_target: 85
     acceptance_tests:
       - 'Semgrep passes with no critical findings'

@@ -9,14 +9,13 @@ source_directive:
 
 execution:
   mode: 'serial'
-  active_mutation_tasks: 0
-  current_increment: null
+  active_mutation_tasks: 1
+  current_increment: 'SUN-0900A'
   current_phase: 'phase_11_nevermined'
   last_completed_increment: 'SUN-0800A'
-  frontier_status: 'blocked_external'
-  blocked_on:
-    - 'SUN-0900'
-  reason: 'SUN-0800A is accepted with credential-independent MCP and A2A 1.0 protocol foundations complete locally. SUN-0800B remains blocked_external on npm publication, public deployment/DNS/TLS, and production Agent Card signing prerequisites. The dependency-ready serial frontier is SUN-0900, which remains externally blocked on Nevermined credentials; it has not been activated. Production remains disabled and not ready.'
+  frontier_status: 'executable'
+  blocked_on: []
+  reason: 'SUN-0900 was truthfully decomposed: credential-independent alternative-rail, versioned D1/linkage, configuration, and Nevermined protocol work is active as SUN-0900A; sandbox registration and live verification remain SUN-0900B blocked_external on genuine Nevermined account, credential, funding/delegation, and dynamic PAYG capability prerequisites. SUN-0800B remains independently blocked_external. Production remains disabled and not ready.'
 
 implemented:
   - 'governance_validation'
