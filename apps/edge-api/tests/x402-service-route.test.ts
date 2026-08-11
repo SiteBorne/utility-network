@@ -19,6 +19,7 @@ import type {
 } from '@siteborne/protocol-x402';
 import {
   FixturePaymentEvidenceProvider,
+  CDP_PAYMENT_PROVIDER,
   buildBuyerPaymentIdentifierExtensions,
   decodePaymentRequiredHeaderSafe,
   encodePaymentSignatureHeaderSafe,
@@ -228,6 +229,32 @@ describe('x402 HTTP vertical slice (SUN-0700A checkpoint 5)', () => {
       expect(body.receipt_id).toBeTruthy();
       expect(body.link_id).toBeTruthy();
       expect(res.headers.get('PAYMENT-RESPONSE')).toBeTruthy();
+    });
+
+    it('writes every new open-route attempt as a v2 CDP rail binding', async () => {
+      const challenge = await get402(app, '/v1/company/evidence-graph', COMPANY_INPUT);
+      const id = generateSiteborneePaymentId();
+      const res = await payAndRetry(
+        app,
+        '/v1/company/evidence-graph',
+        COMPANY_INPUT,
+        challenge,
+        id
+      );
+      expect(res.status).toBe(200);
+      const row = await db
+        .prepare(
+          'SELECT binding_version, payment_rail, payment_provider, nevermined_agent_id, nevermined_plan_id FROM payment_attempts WHERE payment_identifier = ?'
+        )
+        .bind(id)
+        .first<Record<string, unknown>>();
+      expect(row).toEqual({
+        binding_version: 2,
+        payment_rail: 'cdp',
+        payment_provider: CDP_PAYMENT_PROVIDER,
+        nevermined_agent_id: null,
+        nevermined_plan_id: null,
+      });
     });
   });
 

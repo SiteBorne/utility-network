@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { bindingsAreIdentical, computeBindingDigest } from './binding';
+import {
+  CDP_PAYMENT_PROVIDER,
+  NEVERMINED_PAYMENT_PROVIDER,
+  bindingsAreIdentical,
+  computeBindingDigest,
+  validatePaymentAttemptBinding,
+} from './binding';
 import type { PaymentAttemptBinding } from './binding';
 
 function baseBinding(overrides: Partial<PaymentAttemptBinding> = {}): PaymentAttemptBinding {
@@ -22,6 +28,15 @@ function baseBinding(overrides: Partial<PaymentAttemptBinding> = {}): PaymentAtt
 }
 
 describe('computeBindingDigest', () => {
+  it('preserves the accepted legacy v1 digest byte-for-byte', async () => {
+    expect(await computeBindingDigest(baseBinding())).toBe(
+      'sha256:fae6c47100b04a2485b192607a05bea1824b788978034ab4b7f903da5ecdbba5'
+    );
+    expect(await computeBindingDigest(baseBinding({ binding_version: 1 }))).toBe(
+      'sha256:fae6c47100b04a2485b192607a05bea1824b788978034ab4b7f903da5ecdbba5'
+    );
+  });
+
   it('is deterministic for identical bindings', async () => {
     const a = await computeBindingDigest(baseBinding());
     const b = await computeBindingDigest(baseBinding());
@@ -71,6 +86,60 @@ describe('computeBindingDigest', () => {
       baseBinding({ [field]: value } as Partial<PaymentAttemptBinding>)
     );
     expect(mutated).not.toBe(original);
+  });
+});
+
+describe('rail-aware v2 binding', () => {
+  const railAware = (overrides: Record<string, unknown> = {}): PaymentAttemptBinding => ({
+    ...baseBinding(),
+    binding_version: 2,
+    payment_rail: 'cdp',
+    payment_provider: CDP_PAYMENT_PROVIDER,
+    ...overrides,
+  });
+
+  it('requires rail and provider for every new binding', () => {
+    expect(validatePaymentAttemptBinding(railAware())).toEqual({ valid: true, version: 2 });
+    expect(
+      validatePaymentAttemptBinding({
+        ...baseBinding(),
+        binding_version: 2,
+      } as PaymentAttemptBinding)
+    ).toMatchObject({ valid: false });
+  });
+
+  it('binds rail and provider into the v2 digest and replay comparison', async () => {
+    const cdp = railAware();
+    const nevermined = railAware({
+      payment_rail: 'nevermined',
+      payment_provider: NEVERMINED_PAYMENT_PROVIDER,
+      nevermined_agent_id: 'agent_company_v1',
+      nevermined_plan_id: 'plan_company_payg_v1',
+    });
+    expect(await computeBindingDigest(cdp)).not.toBe(await computeBindingDigest(nevermined));
+    expect(bindingsAreIdentical(cdp, nevermined)).toBe(false);
+  });
+
+  it.each([
+    ['payment_provider', CDP_PAYMENT_PROVIDER],
+    ['nevermined_agent_id', 'agent_changed'],
+    ['nevermined_plan_id', 'plan_changed'],
+  ] as const)('treats changed %s as a replay conflict', (field, value) => {
+    const original = railAware({
+      payment_rail: 'nevermined',
+      payment_provider: NEVERMINED_PAYMENT_PROVIDER,
+      nevermined_agent_id: 'agent_company_v1',
+      nevermined_plan_id: 'plan_company_payg_v1',
+    });
+    expect(bindingsAreIdentical(original, railAware({ ...original, [field]: value }))).toBe(false);
+  });
+
+  it('rejects Nevermined identifiers on a CDP binding', () => {
+    expect(
+      validatePaymentAttemptBinding(
+        railAware({ nevermined_agent_id: 'agent_company_v1', nevermined_plan_id: 'plan' })
+      )
+    ).toMatchObject({ valid: false });
   });
 });
 

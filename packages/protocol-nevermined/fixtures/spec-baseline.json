@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "package": {
+    "name": "@nevermined-io/payments",
+    "version": "1.10.0"
+  },
+  "runtime_dependency_owner": "apps/edge-api",
+  "protocol_runtime_sdk_dependency": false,
+  "public_environment_model": ["sandbox", "live"],
+  "checkpoint_environment": "sandbox",
+  "canonical_secret_key": "NVM_API_KEY",
+  "deprecated_secret_alias": "NEVERMINED_API_KEY",
+  "facilitator_types": [
+    "X402PaymentRequired",
+    "VerifyPermissionsParams",
+    "VerifyPermissionsResult",
+    "SettlePermissionsParams",
+    "SettlePermissionsResult"
+  ],
+  "facilitator_methods": ["verifyPermissions", "settlePermissions"],
+  "payg_helpers": ["getPayAsYouGoPriceConfig", "getPayAsYouGoCreditsConfig"],
+  "credit_helpers": ["getFixedCreditsConfig", "getDynamicCreditsConfig"],
+  "registration_methods": ["registerPlan", "registerCreditsPlan"],
+  "trial_registration_methods": ["registerCreditsTrialPlan", "registerTimeTrialPlan"],
+  "sdk_declared_a2a_range": "^0.3.13",
+  "siteborne_direct_a2a_version": "1.0.1"
+}

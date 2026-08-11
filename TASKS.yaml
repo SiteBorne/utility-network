@@ -970,8 +970,13 @@ tasks:
       - 'Dedicated Nevermined route adapters exercise the shared D1/service/PCC/UsageResult/linkage lifecycle deterministically with fixed PAYG and actual-usage settlement, without a real account or live payment'
       - 'Existing CDP exact/upto routes, replay behavior, evidence, UsageResult, PaymentServiceLink, consumed state, and retained live-checkpoint hashes remain valid'
       - 'Credential-free validation and full repository check pass with production disabled and no Nevermined registration, authentication, or network activity'
-    evidence: []
-    next_action: 'Checkpoint 1: implement and verify the rail-safe, versioned persistence/linkage substrate and credential-independent Nevermined protocol model. Checkpoint 2 then adds the injected provider and four deterministic Nevermined route adapters before SUN-0900A acceptance. Do not contact Nevermined or begin SUN-0900B.'
+    evidence:
+      - 'Checkpoint 1: ADR 0054 and docs/operations/PAYMENT_RAILS.md freeze Model D buyer-surface-specific rail selection with no stacking/fallback'
+      - 'Checkpoint 1: migrations/0005_payment_rail_binding.sql plus protocol-x402 v1/v2 replay and PaymentServiceLink tests preserve accepted historical hashes and bind new rail/provider/agent/plan identities'
+      - 'Checkpoint 1: packages/protocol-nevermined provides four canonical PAYG declarations, config/validation/evidence domains, deterministic fixtures, SDK drift checks, and no-network tests'
+      - 'Checkpoint 1: apps/edge-api pins @nevermined-io/payments@1.10.0 and compile-checks pure parameter mappings without initializing a client or invoking provider methods'
+      - 'Checkpoint 1 report: docs/reports/SUN-0900A-checkpoint-1-report.md'
+    next_action: 'Checkpoint 1 complete: rail-safe versioned persistence/linkage and the credential-independent Nevermined protocol model are implemented and validated. Checkpoint 2 must add the injected Nevermined provider and four deterministic Nevermined-only route adapters through the existing D1/service/PCC/UsageResult/linkage lifecycle, with simulated fixed PAYG and actual-usage settlement, replay, and fail-closed negatives. Keep it credential-free and network-free; do not contact Nevermined or begin SUN-0900B.'
     blocker: null
     commit_ref: null
 

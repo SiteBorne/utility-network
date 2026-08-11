@@ -19,6 +19,7 @@ import type { HTTPFacilitatorClient } from '@x402/core/server';
 import type { SettleResponse, SupportedResponse, VerifyResponse } from '@x402/core/types';
 import {
   hashPaymentObject,
+  isCdpPaymentAuthorizationContext,
   type ExternalSettlementEvidence,
   type ExternalVerificationEvidence,
   type Network,
@@ -71,6 +72,9 @@ export class CdpPaymentEvidenceProvider implements PaymentEvidenceProvider {
    * evaluated by the unchanged `canAdvanceToVerified` gate.
    */
   async verify(context: PaymentVerificationContext): Promise<ExternalVerificationEvidence> {
+    if (!isCdpPaymentAuthorizationContext(context)) {
+      throw new Error('cdp provider received a non-CDP authorization context');
+    }
     let response: VerifyResponse;
     try {
       response = await this.facilitator.verify(context.paymentPayload, context.paymentRequirements);
@@ -144,6 +148,9 @@ export class CdpPaymentEvidenceProvider implements PaymentEvidenceProvider {
     verificationEvidence: ExternalVerificationEvidence,
     actualAmount: string
   ): Promise<ExternalSettlementEvidence> {
+    if (!isCdpPaymentAuthorizationContext(context)) {
+      throw new Error('cdp provider received a non-CDP authorization context');
+    }
     const verification_evidence_hash = await hashPaymentObject(verificationEvidence);
     const facilitatorRequirements =
       context.scheme === 'upto'

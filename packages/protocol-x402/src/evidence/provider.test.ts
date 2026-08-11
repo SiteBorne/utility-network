@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   FixturePaymentEvidenceProvider,
   ProductionEvidenceProviderNotConfiguredError,
+  isCdpPaymentAuthorizationContext,
   resolvePaymentEvidenceProvider,
 } from './provider';
 import type {
@@ -51,12 +52,14 @@ const CTX: PaymentEvidenceContext = {
 
 const VERIFY_CTX: PaymentVerificationContext = {
   ...CTX,
+  authorizationContext: { rail: 'cdp' },
   paymentPayload: PAYMENT_PAYLOAD,
   paymentRequirements: PAYMENT_REQUIREMENTS,
 };
 
 const SETTLE_CTX: PaymentSettlementContext = {
   ...CTX,
+  authorizationContext: { rail: 'cdp' },
   paymentPayload: PAYMENT_PAYLOAD,
   paymentRequirements: PAYMENT_REQUIREMENTS,
 };
@@ -80,6 +83,22 @@ describe('FixturePaymentEvidenceProvider', () => {
     expect(settlement.trust_class).toBe('synthetic_fixture');
     expect(settlement.success).toBe(true);
     expect(settlement.actual_amount).toBe(CTX.amount);
+  });
+
+  it('never serializes an opaque Nevermined authorization token into fixture evidence', async () => {
+    const accessToken = 'fixture-opaque-token-that-must-not-survive';
+    const neverminedContext: PaymentVerificationContext = {
+      ...CTX,
+      authorizationContext: {
+        rail: 'nevermined',
+        accessToken,
+        paymentRequired: { planId: 'plan_company_payg_v1' },
+        agentId: 'agent_company_v1',
+        planId: 'plan_company_payg_v1',
+      },
+    };
+    const evidence = await new FixturePaymentEvidenceProvider().verify(neverminedContext);
+    expect(JSON.stringify(evidence)).not.toContain(accessToken);
   });
 });
 
@@ -263,8 +282,11 @@ describe('object-identity: the exact payload/requirements objects supplied reach
     provider.nextVerification = externalVerification();
     await provider.verify(VERIFY_CTX);
     expect(provider.verifyCalls).toHaveLength(1);
-    expect(provider.verifyCalls[0]!.paymentPayload).toBe(PAYMENT_PAYLOAD);
-    expect(provider.verifyCalls[0]!.paymentRequirements).toBe(PAYMENT_REQUIREMENTS);
+    const received = provider.verifyCalls[0]!;
+    expect(isCdpPaymentAuthorizationContext(received)).toBe(true);
+    if (!isCdpPaymentAuthorizationContext(received)) throw new Error('expected CDP context');
+    expect(received.paymentPayload).toBe(PAYMENT_PAYLOAD);
+    expect(received.paymentRequirements).toBe(PAYMENT_REQUIREMENTS);
   });
 
   it('settle() receives the identical paymentPayload/paymentRequirements and the actual amount', async () => {
@@ -274,8 +296,11 @@ describe('object-identity: the exact payload/requirements objects supplied reach
     provider.nextSettlement = externalSettlement('sha256:' + '6'.repeat(64));
     await provider.settle(SETTLE_CTX, verification, '12345');
     expect(provider.settleCalls).toHaveLength(1);
-    expect(provider.settleCalls[0]!.context.paymentPayload).toBe(PAYMENT_PAYLOAD);
-    expect(provider.settleCalls[0]!.context.paymentRequirements).toBe(PAYMENT_REQUIREMENTS);
+    const received = provider.settleCalls[0]!.context;
+    expect(isCdpPaymentAuthorizationContext(received)).toBe(true);
+    if (!isCdpPaymentAuthorizationContext(received)) throw new Error('expected CDP context');
+    expect(received.paymentPayload).toBe(PAYMENT_PAYLOAD);
+    expect(received.paymentRequirements).toBe(PAYMENT_REQUIREMENTS);
     expect(provider.settleCalls[0]!.actualAmount).toBe('12345');
   });
 

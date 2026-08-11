@@ -24,8 +24,10 @@
 import { hashPaymentObject } from '../canonical';
 import { deterministicId } from '../ids';
 import type { SiteborneServiceId } from '../types';
+import type { PaymentProviderIdentity, PaymentRail } from '../payment/rail';
+import { providerMatchesRail } from '../payment/rail';
 
-export interface PaymentServiceLinkInput {
+interface PaymentServiceLinkInputBase {
   payment_identifier: string;
   quote_id: string;
   requirement_id: string;
@@ -48,13 +50,48 @@ export interface PaymentServiceLinkInput {
   settlement_evidence_hash?: string;
 }
 
+export interface PaymentServiceLinkInput extends PaymentServiceLinkInputBase {
+  link_version?: 1 | 2;
+  payment_rail?: PaymentRail;
+  payment_provider?: PaymentProviderIdentity;
+  nevermined_agent_id?: string;
+  nevermined_plan_id?: string;
+}
+
 export interface PaymentServiceLink extends PaymentServiceLinkInput {
   link_id: string;
   link_hash: string;
 }
 
+function validateLinkInput(input: PaymentServiceLinkInput): void {
+  if (input.link_version === undefined || input.link_version === 1) {
+    if (
+      input.payment_rail !== undefined ||
+      input.payment_provider !== undefined ||
+      input.nevermined_agent_id !== undefined ||
+      input.nevermined_plan_id !== undefined
+    ) {
+      throw new Error('legacy v1 PaymentServiceLink cannot carry rail fields');
+    }
+    return;
+  }
+  if (!input.payment_rail || !input.payment_provider) {
+    throw new Error('v2 PaymentServiceLink requires payment rail and provider');
+  }
+  if (!providerMatchesRail(input.payment_rail, input.payment_provider)) {
+    throw new Error('PaymentServiceLink provider does not match selected rail');
+  }
+  if (input.payment_rail === 'nevermined') {
+    if (!input.nevermined_agent_id || !input.nevermined_plan_id) {
+      throw new Error('Nevermined PaymentServiceLink requires agent and plan identifiers');
+    }
+  } else if (input.nevermined_agent_id || input.nevermined_plan_id) {
+    throw new Error('CDP PaymentServiceLink cannot carry Nevermined identifiers');
+  }
+}
+
 function bindingPayload(input: PaymentServiceLinkInput): Record<string, unknown> {
-  return {
+  const common = {
     payment_identifier: input.payment_identifier,
     quote_id: input.quote_id,
     requirement_id: input.requirement_id,
@@ -69,11 +106,23 @@ function bindingPayload(input: PaymentServiceLinkInput): Record<string, unknown>
     verification_evidence_hash: input.verification_evidence_hash ?? null,
     settlement_evidence_hash: input.settlement_evidence_hash ?? null,
   };
+  if (input.link_version === 2) {
+    return {
+      link_version: 2,
+      payment_rail: input.payment_rail,
+      payment_provider: input.payment_provider,
+      nevermined_agent_id: input.nevermined_agent_id ?? null,
+      nevermined_plan_id: input.nevermined_plan_id ?? null,
+      ...common,
+    };
+  }
+  return common;
 }
 
 export async function buildPaymentServiceLink(
   input: PaymentServiceLinkInput
 ): Promise<PaymentServiceLink> {
+  validateLinkInput(input);
   const link_hash = await hashPaymentObject(bindingPayload(input));
   const link_id = deterministicId('lnk', link_hash);
   return { ...input, link_id, link_hash };
@@ -90,7 +139,7 @@ export async function extendWithSettlement(
   link: PaymentServiceLink,
   settlementEvidenceHash: string
 ): Promise<PaymentServiceLink> {
-  const input: PaymentServiceLinkInput = {
+  const common = {
     payment_identifier: link.payment_identifier,
     quote_id: link.quote_id,
     requirement_id: link.requirement_id,
@@ -105,5 +154,16 @@ export async function extendWithSettlement(
     verification_evidence_hash: link.verification_evidence_hash,
     settlement_evidence_hash: settlementEvidenceHash,
   };
+  const input: PaymentServiceLinkInput =
+    link.link_version === 2
+      ? {
+          ...common,
+          link_version: 2,
+          payment_rail: link.payment_rail,
+          payment_provider: link.payment_provider,
+          ...(link.nevermined_agent_id ? { nevermined_agent_id: link.nevermined_agent_id } : {}),
+          ...(link.nevermined_plan_id ? { nevermined_plan_id: link.nevermined_plan_id } : {}),
+        }
+      : common;
   return buildPaymentServiceLink(input);
 }

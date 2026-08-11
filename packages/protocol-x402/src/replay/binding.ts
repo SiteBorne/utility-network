@@ -8,8 +8,15 @@
 import { hashPaymentObject } from '../canonical';
 import type { SiteborneServiceId } from '../types';
 import type { Network } from '@x402/core/types';
+import {
+  CDP_PAYMENT_PROVIDER,
+  NEVERMINED_PAYMENT_PROVIDER,
+  providerMatchesRail,
+  type PaymentProviderIdentity,
+  type PaymentRail,
+} from '../payment/rail';
 
-export interface PaymentAttemptBinding {
+interface PaymentAttemptBindingBase {
   payment_identifier: string;
   quote_id: string;
   requirement_id: string;
@@ -37,6 +44,62 @@ export interface PaymentAttemptBinding {
   idempotency_key?: string;
 }
 
+/** Version 1 is the accepted historical shape; version 2 is rail-aware.
+ * The fields remain optional at this storage boundary so legacy rows can be
+ * represented exactly, while `validatePaymentAttemptBinding` enforces the
+ * discriminated v2 invariants before any new row is written. */
+export interface PaymentAttemptBinding extends PaymentAttemptBindingBase {
+  binding_version?: 1 | 2;
+  payment_rail?: PaymentRail;
+  payment_provider?: PaymentProviderIdentity;
+  nevermined_agent_id?: string;
+  nevermined_plan_id?: string;
+}
+
+export type PaymentAttemptBindingValidation =
+  | { valid: true; version: 1 | 2 }
+  | { valid: false; reason: string };
+
+export function validatePaymentAttemptBinding(
+  binding: PaymentAttemptBinding
+): PaymentAttemptBindingValidation {
+  if (binding.binding_version === undefined || binding.binding_version === 1) {
+    if (
+      binding.payment_rail !== undefined ||
+      binding.payment_provider !== undefined ||
+      binding.nevermined_agent_id !== undefined ||
+      binding.nevermined_plan_id !== undefined
+    ) {
+      return { valid: false, reason: 'legacy_v1_binding_cannot_carry_rail_fields' };
+    }
+    return { valid: true, version: 1 };
+  }
+  if (binding.binding_version !== 2) {
+    return { valid: false, reason: 'unsupported_binding_version' };
+  }
+  if (!binding.payment_rail || !binding.payment_provider) {
+    return { valid: false, reason: 'v2_binding_requires_rail_and_provider' };
+  }
+  if (!providerMatchesRail(binding.payment_rail, binding.payment_provider)) {
+    return { valid: false, reason: 'payment_provider_does_not_match_rail' };
+  }
+  if (binding.payment_rail === 'nevermined') {
+    if (!binding.nevermined_agent_id || !binding.nevermined_plan_id) {
+      return { valid: false, reason: 'nevermined_binding_requires_agent_and_plan' };
+    }
+  } else if (binding.nevermined_agent_id || binding.nevermined_plan_id) {
+    return { valid: false, reason: 'cdp_binding_cannot_carry_nevermined_identifiers' };
+  }
+  return { valid: true, version: 2 };
+}
+
+export class InvalidPaymentAttemptBindingError extends Error {
+  constructor(public readonly reason: string) {
+    super(`invalid payment-attempt binding: ${reason}`);
+    this.name = 'InvalidPaymentAttemptBindingError';
+  }
+}
+
 /** Every field that participates in the immutable binding digest.
  * `job_id`/`idempotency_key` are deliberately included when present
  * (mutable operational metadata like a transport request ID or a
@@ -44,7 +107,7 @@ export interface PaymentAttemptBinding {
  * to `null` when absent, so an omitted vs. explicitly-null field never
  * silently changes the digest in a way callers can't reason about. */
 function digestPayload(binding: PaymentAttemptBinding): Record<string, unknown> {
-  return {
+  const common = {
     payment_identifier: binding.payment_identifier,
     quote_id: binding.quote_id,
     requirement_id: binding.requirement_id,
@@ -61,6 +124,17 @@ function digestPayload(binding: PaymentAttemptBinding): Record<string, unknown> 
     job_id: binding.job_id ?? null,
     idempotency_key: binding.idempotency_key ?? null,
   };
+  if (binding.binding_version === 2) {
+    return {
+      binding_version: 2,
+      payment_rail: binding.payment_rail,
+      payment_provider: binding.payment_provider,
+      nevermined_agent_id: binding.nevermined_agent_id ?? null,
+      nevermined_plan_id: binding.nevermined_plan_id ?? null,
+      ...common,
+    };
+  }
+  return common;
 }
 
 /** Canonical, key-order-independent digest of a payment attempt's
@@ -68,14 +142,26 @@ function digestPayload(binding: PaymentAttemptBinding): Record<string, unknown> 
  * (regardless of construction order) always produce the same digest;
  * mutating any bound field changes it (proven by property test). */
 export async function computeBindingDigest(binding: PaymentAttemptBinding): Promise<string> {
+  const validation = validatePaymentAttemptBinding(binding);
+  if (!validation.valid) throw new InvalidPaymentAttemptBindingError(validation.reason);
   return hashPaymentObject(digestPayload(binding));
 }
 
 /** True only when every immutable field matches exactly — the retry vs.
  * conflict distinction (directive §21) is built entirely on this. */
 export function bindingsAreIdentical(a: PaymentAttemptBinding, b: PaymentAttemptBinding): boolean {
+  if (!validatePaymentAttemptBinding(a).valid || !validatePaymentAttemptBinding(b).valid) {
+    return false;
+  }
   const da = digestPayload(a);
   const db = digestPayload(b);
-  const keys = Object.keys(da);
-  return keys.every((key) => da[key] === db[key]);
+  const keys = new Set([...Object.keys(da), ...Object.keys(db)]);
+  return [...keys].every((key) => da[key] === db[key]);
 }
+
+export {
+  CDP_PAYMENT_PROVIDER,
+  NEVERMINED_PAYMENT_PROVIDER,
+  type PaymentProviderIdentity,
+  type PaymentRail,
+};

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildPaymentServiceLink, extendWithSettlement } from './payment-service-link';
 import type { PaymentServiceLinkInput } from './payment-service-link';
+import { CDP_PAYMENT_PROVIDER, NEVERMINED_PAYMENT_PROVIDER } from '../replay/binding';
 
 function baseInput(overrides: Partial<PaymentServiceLinkInput> = {}): PaymentServiceLinkInput {
   return {
@@ -19,6 +20,16 @@ function baseInput(overrides: Partial<PaymentServiceLinkInput> = {}): PaymentSer
 }
 
 describe('buildPaymentServiceLink', () => {
+  it('preserves the accepted legacy v1 link hash byte-for-byte', async () => {
+    const legacy = await buildPaymentServiceLink(baseInput());
+    const explicitV1 = await buildPaymentServiceLink(baseInput({ link_version: 1 }));
+    expect(legacy.link_hash).toBe(
+      'sha256:f5a66c7bcaeb536613a540b79633de7d6affc3a1119c50307932d2188c5b72f1'
+    );
+    expect(explicitV1.link_hash).toBe(legacy.link_hash);
+    expect(explicitV1.link_id).toBe(legacy.link_id);
+  });
+
   it('produces a `lnk_` prefixed deterministic ID', async () => {
     const link = await buildPaymentServiceLink(baseInput());
     expect(link.link_id).toMatch(/^lnk_[a-f0-9]{24}$/);
@@ -53,6 +64,52 @@ describe('buildPaymentServiceLink', () => {
     );
     expect(mutated.link_hash).not.toBe(original.link_hash);
   });
+
+  it.each([
+    ['nevermined_agent_id', 'agent_changed'],
+    ['nevermined_plan_id', 'plan_changed'],
+  ] as const)('binds v2 %s into the link hash', async (field, value) => {
+    const input: PaymentServiceLinkInput = {
+      ...baseInput(),
+      link_version: 2,
+      payment_rail: 'nevermined',
+      payment_provider: NEVERMINED_PAYMENT_PROVIDER,
+      nevermined_agent_id: 'agent_company_v1',
+      nevermined_plan_id: 'plan_company_payg_v1',
+    };
+    const original = await buildPaymentServiceLink(input);
+    const mutated = await buildPaymentServiceLink({ ...input, [field]: value });
+    expect(mutated.link_hash).not.toBe(original.link_hash);
+  });
+
+  it('binds the selected rail/provider pair into the v2 link hash', async () => {
+    const nevermined = await buildPaymentServiceLink({
+      ...baseInput(),
+      link_version: 2,
+      payment_rail: 'nevermined',
+      payment_provider: NEVERMINED_PAYMENT_PROVIDER,
+      nevermined_agent_id: 'agent_company_v1',
+      nevermined_plan_id: 'plan_company_payg_v1',
+    });
+    const cdp = await buildPaymentServiceLink({
+      ...baseInput(),
+      link_version: 2,
+      payment_rail: 'cdp',
+      payment_provider: CDP_PAYMENT_PROVIDER,
+    });
+    expect(nevermined.link_hash).not.toBe(cdp.link_hash);
+  });
+
+  it('supports a rail-aware CDP v2 link without Nevermined identifiers', async () => {
+    const link = await buildPaymentServiceLink({
+      ...baseInput(),
+      link_version: 2,
+      payment_rail: 'cdp',
+      payment_provider: CDP_PAYMENT_PROVIDER,
+    });
+    expect(link.link_version).toBe(2);
+    expect(link.payment_rail).toBe('cdp');
+  });
 });
 
 describe('extendWithSettlement', () => {
@@ -78,5 +135,24 @@ describe('extendWithSettlement', () => {
     await extendWithSettlement(original, 'sha256:' + '8'.repeat(64));
     expect(original.link_hash).toBe(originalHash);
     expect(original.settlement_evidence_hash).toBeUndefined();
+  });
+
+  it('preserves every v2 rail field when settlement evidence is appended', async () => {
+    const original = await buildPaymentServiceLink({
+      ...baseInput(),
+      link_version: 2,
+      payment_rail: 'nevermined',
+      payment_provider: NEVERMINED_PAYMENT_PROVIDER,
+      nevermined_agent_id: 'agent_company_v1',
+      nevermined_plan_id: 'plan_company_payg_v1',
+    });
+    const extended = await extendWithSettlement(original, 'sha256:' + '8'.repeat(64));
+    expect(extended).toMatchObject({
+      link_version: 2,
+      payment_rail: 'nevermined',
+      payment_provider: NEVERMINED_PAYMENT_PROVIDER,
+      nevermined_agent_id: 'agent_company_v1',
+      nevermined_plan_id: 'plan_company_payg_v1',
+    });
   });
 });

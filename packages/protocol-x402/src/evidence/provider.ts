@@ -34,9 +34,9 @@
  * clear it is not a live verifier — never `LiveFacilitatorProvider` or
  * similar. A production evidence provider (one that could produce
  * `external_verified` evidence from a real facilitator) is **not
- * implemented** anywhere in this package — that remains SUN-0700B's
- * exclusive scope (this checkpoint only widens the seam it will plug
- * into). `resolvePaymentEvidenceProvider` still fails closed in
+ * implemented** anywhere in this package. The accepted CDP implementation
+ * lives in the edge integration layer; the Nevermined implementation remains
+ * SUN-0900A Checkpoint 2. `resolvePaymentEvidenceProvider` still fails closed in
  * `production` mode whenever no provider, or only a fixture provider, is
  * supplied — see `providerKind` below for how that's now decided without
  * an `instanceof` check.
@@ -64,10 +64,31 @@ import {
  * `validatePaymentPayloadStructure`) — never re-decoded or re-derived
  * copies (directive §7).
  */
-export interface PaymentVerificationContext extends PaymentEvidenceContext {
+export interface CdpPaymentAuthorizationContext {
+  authorizationContext: { rail: 'cdp' };
   paymentPayload: PaymentPayload;
   paymentRequirements: PaymentRequirements;
 }
+
+/** Nevermined authorization remains opaque at this shared boundary. The
+ * protocol-nevermined adapter supplies the installed SDK's exact requirement
+ * type when it implements its narrower client interface; x402 never coerces
+ * `nvm:erc4337` into Coinbase `exact | upto` wire types. */
+export interface NeverminedPaymentAuthorizationContext {
+  authorizationContext: {
+    rail: 'nevermined';
+    accessToken: string;
+    paymentRequired: unknown;
+    agentId: string;
+    planId: string;
+  };
+}
+
+export type PaymentAuthorizationContext =
+  | CdpPaymentAuthorizationContext
+  | NeverminedPaymentAuthorizationContext;
+
+export type PaymentVerificationContext = PaymentEvidenceContext & PaymentAuthorizationContext;
 
 /**
  * Everything `settle()` needs to construct a real facilitator
@@ -77,10 +98,16 @@ export interface PaymentVerificationContext extends PaymentEvidenceContext {
  * settlement is requested, distinct from the pre-execution authorized
  * maximum carried in `paymentRequirements`/`amount`.
  */
-export interface PaymentSettlementContext extends PaymentEvidenceContext {
-  paymentPayload: PaymentPayload;
-  paymentRequirements: PaymentRequirements;
-  usageResult?: UsageResult;
+export type PaymentSettlementContext = PaymentEvidenceContext &
+  PaymentAuthorizationContext & {
+    usageResult?: UsageResult;
+  };
+
+export function isCdpPaymentAuthorizationContext(
+  context: PaymentVerificationContext | PaymentSettlementContext
+): context is PaymentEvidenceContext &
+  CdpPaymentAuthorizationContext & { usageResult?: UsageResult } {
+  return context.authorizationContext.rail === 'cdp';
 }
 
 /** How a `PaymentEvidenceProvider` was implemented — never inferred via

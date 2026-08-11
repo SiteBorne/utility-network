@@ -75,9 +75,14 @@
     "a2a:fixtures:verify": "pnpm --filter @siteborne/protocol-a2a run fixtures:verify",
     "a2a:spec:verify": "pnpm --filter @siteborne/protocol-a2a run spec:verify",
     "a2a:check": "pnpm --filter @siteborne/protocol-a2a run check && pnpm a2a:test:edge",
+    "nevermined:test": "pnpm --filter @siteborne/protocol-nevermined run test",
+    "nevermined:fixtures:verify": "pnpm --filter @siteborne/protocol-nevermined run fixtures:verify",
+    "nevermined:spec:verify": "pnpm --filter @siteborne/protocol-nevermined run spec:verify",
+    "nevermined:compat:verify": "vitest run packages/protocol-x402/src/replay/binding.test.ts packages/protocol-x402/src/linkage/payment-service-link.test.ts apps/edge-api/tests/d1-payment-attempts.test.ts apps/edge-api/tests/x402-service-route.test.ts",
+    "nevermined:check": "pnpm --filter @siteborne/protocol-nevermined run format:check && pnpm --filter @siteborne/protocol-nevermined run lint && pnpm --filter @siteborne/protocol-nevermined run typecheck && pnpm nevermined:test && pnpm nevermined:fixtures:verify && pnpm nevermined:spec:verify && pnpm nevermined:compat:verify",
     "secrets:scope:verify": "tsx scripts/verify-secret-scan-scope.ts",
     "secrets:scan": "pnpm secrets:scope:verify && gitleaks git . --config=.gitleaks.toml --redact --verbose && gitleaks dir . --config=.gitleaks.toml --redact --verbose",
-    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm pcc:generate:check && pnpm services:generate:check && pnpm openapi:generate:check && pnpm python:test:pcc && pnpm python:test:modal && pnpm governance:validate && pnpm state:validate && pnpm tasks:validate && pnpm contracts:baseline:verify && pnpm contracts:compat:check && pnpm contracts:release:verify && pnpm migrations:verify && pnpm d1:test && pnpm control-plane:test && pnpm control-plane:check && pnpm adapters:check && pnpm document-worker:check && pnpm document-worker:fixtures:verify && pnpm verification:check && pnpm services-runtime:check && pnpm mcp:check && pnpm a2a:check && pnpm secrets:scan"
+    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm pcc:generate:check && pnpm services:generate:check && pnpm openapi:generate:check && pnpm python:test:pcc && pnpm python:test:modal && pnpm governance:validate && pnpm state:validate && pnpm tasks:validate && pnpm contracts:baseline:verify && pnpm contracts:compat:check && pnpm contracts:release:verify && pnpm migrations:verify && pnpm d1:test && pnpm control-plane:test && pnpm control-plane:check && pnpm adapters:check && pnpm document-worker:check && pnpm document-worker:fixtures:verify && pnpm verification:check && pnpm services-runtime:check && pnpm x402:check && pnpm mcp:check && pnpm a2a:check && pnpm nevermined:check && pnpm secrets:scan"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",

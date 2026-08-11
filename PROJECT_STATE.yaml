@@ -104,6 +104,8 @@ implemented:
   - 'a2a_v1_jsonrpc_protocol_foundation' # SUN-0800A checkpoint 2, local /a2a only
   - 'a2a_signed_agent_card_and_public_jwks' # ephemeral local ES256 identity only; not production key custody
   - 'a2a_four_skill_contract_and_x402_extension' # frozen services and truthful production-disabled payment metadata
+  - 'payment_rail_v2_d1_and_linkage_foundation' # SUN-0900A checkpoint 1; v1 hashes retained, new rows bind rail/provider
+  - 'nevermined_credential_independent_protocol_model' # SUN-0900A checkpoint 1; no provider invocation or registration
 
 not_implemented:
   - 'company_evidence_graph_xbrl_facts_and_repository_signals_field_groups'
@@ -115,7 +117,8 @@ not_implemented:
   - 'mcp_publication_and_public_endpoint' # SUN-0800B blocked_external
   - 'a2a_publication_and_public_endpoint' # SUN-0800B blocked_external
   - 'a2a_production_signing_identity' # SUN-0800B blocked_external
-  - 'nevermined'
+  - 'nevermined_injected_provider_and_routes' # SUN-0900A checkpoint 2
+  - 'nevermined_sandbox_registration_and_live_settlement' # SUN-0900B blocked_external
   - 'agentverse'
   - 'modal_document_processing'
   - 'production_deployment'

@@ -53,12 +53,14 @@ const BASE_CONTEXT = {
 
 const VERIFY_CONTEXT: PaymentVerificationContext = {
   ...BASE_CONTEXT,
+  authorizationContext: { rail: 'cdp' },
   paymentPayload: PAYMENT_PAYLOAD,
   paymentRequirements: REQUIREMENTS,
 };
 
 const SETTLE_CONTEXT: PaymentSettlementContext = {
   ...BASE_CONTEXT,
+  authorizationContext: { rail: 'cdp' },
   paymentPayload: PAYMENT_PAYLOAD,
   paymentRequirements: REQUIREMENTS,
 };
@@ -67,6 +69,7 @@ const UPTO_SETTLE_CONTEXT: PaymentSettlementContext = {
   ...BASE_CONTEXT,
   scheme: 'upto',
   amount: UPTO_REQUIREMENTS.amount,
+  authorizationContext: { rail: 'cdp' },
   paymentPayload: {
     ...PAYMENT_PAYLOAD,
     accepted: UPTO_REQUIREMENTS,

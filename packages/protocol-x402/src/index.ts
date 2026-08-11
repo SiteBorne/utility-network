@@ -21,6 +21,7 @@ export * from './challenge/payment-required';
 export * from './codec/headers';
 export * from './payload/parser';
 export * from './identifier/payment-identifier';
+export * from './payment/rail';
 export * from './replay/binding';
 export * from './replay/repository';
 export * from './replay/idempotency';

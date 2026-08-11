@@ -23,10 +23,12 @@
   "dependencies": {
     "@a2a-js/sdk": "1.0.1",
     "@coinbase/cdp-sdk": "^1.55.0",
+    "@nevermined-io/payments": "1.10.0",
+    "@siteborne/pricing": "workspace:*",
     "@siteborne/protocol-a2a": "workspace:*",
     "@siteborne/protocol-mcp": "workspace:*",
+    "@siteborne/protocol-nevermined": "workspace:*",
     "@siteborne/protocol-x402": "workspace:*",
-    "@siteborne/pricing": "workspace:*",
     "@siteborne/provider-adapters": "workspace:*",
     "@siteborne/service-runtime": "workspace:*",
     "@siteborne/verification": "workspace:*",
@@ -36,7 +38,8 @@
     "@x402/svm": "2.21.0",
     "ajv": "^8.17.1",
     "hono": "^4.5.0",
-    "viem": "^2.55.11"
+    "viem": "^2.55.11",
+    "zod": "3.25.76"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20240800.0",

@@ -14,6 +14,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Miniflare } from 'miniflare';
 import type { D1Database } from '@cloudflare/workers-types';
 import {
+  CDP_PAYMENT_PROVIDER,
+  NEVERMINED_PAYMENT_PROVIDER,
   computeBindingDigest,
   InMemoryPaymentAttemptRepository,
   acquirePaymentAttempt,
@@ -45,6 +47,15 @@ function runMigrations(db: D1Database): Promise<void> {
       await db.exec(stmt);
     }
   }, Promise.resolve());
+}
+
+function railAwareBinding(overrides: Partial<PaymentAttemptBinding> = {}): PaymentAttemptBinding {
+  return baseBinding({
+    binding_version: 2,
+    payment_rail: 'cdp',
+    payment_provider: CDP_PAYMENT_PROVIDER,
+    ...overrides,
+  });
 }
 
 function baseBinding(overrides: Partial<PaymentAttemptBinding> = {}): PaymentAttemptBinding {
@@ -150,6 +161,115 @@ describe('D1PaymentAttemptRepository — authoritative persistence (SUN-0700A ch
         ttlMs: TTL_MS,
       });
       expect(outcome.status).toBe('expired');
+    });
+  });
+
+  describe('versioned rail persistence and authoritative cross-rail replay', () => {
+    it('persists and reconstructs every required v2 CDP rail field', async () => {
+      const binding = railAwareBinding();
+      expect(
+        await acquirePaymentAttempt(repo, { binding, nowIso: NOW, ttlMs: TTL_MS })
+      ).toMatchObject({ status: 'first_seen' });
+      const stored = await repo.getByIdentifier(binding.payment_identifier);
+      expect(stored?.binding).toMatchObject({
+        binding_version: 2,
+        payment_rail: 'cdp',
+        payment_provider: CDP_PAYMENT_PROVIDER,
+      });
+    });
+
+    it.each([
+      [
+        'rail',
+        {
+          payment_rail: 'nevermined',
+          payment_provider: NEVERMINED_PAYMENT_PROVIDER,
+          nevermined_agent_id: 'agent_company_v1',
+          nevermined_plan_id: 'plan_company_payg_v1',
+        },
+      ],
+      ['provider', { payment_provider: 'cdp-facilitator@1.56.0' }],
+      [
+        'agent',
+        {
+          payment_rail: 'nevermined',
+          payment_provider: NEVERMINED_PAYMENT_PROVIDER,
+          nevermined_agent_id: 'agent_changed',
+          nevermined_plan_id: 'plan_company_payg_v1',
+        },
+      ],
+      [
+        'plan',
+        {
+          payment_rail: 'nevermined',
+          payment_provider: NEVERMINED_PAYMENT_PROVIDER,
+          nevermined_agent_id: 'agent_company_v1',
+          nevermined_plan_id: 'plan_changed',
+        },
+      ],
+    ] as const)(
+      'same Payment-Identifier + changed %s is duplicate_conflict',
+      async (_label, changed) => {
+        const identifier = 'pay_' + crypto.randomUUID().replaceAll('-', '').slice(0, 28);
+        const cdp = railAwareBinding({ payment_identifier: identifier });
+        await acquirePaymentAttempt(repo, { binding: cdp, nowIso: NOW, ttlMs: TTL_MS });
+        const outcome = await acquirePaymentAttempt(repo, {
+          binding: railAwareBinding({ ...cdp, ...changed }),
+          nowIso: '2026-08-09T00:00:05.000Z',
+          ttlMs: TTL_MS,
+        });
+        expect(outcome.status).toBe('duplicate_conflict');
+      }
+    );
+
+    it('interprets a historical nullable row as v1 and preserves its accepted digest', async () => {
+      const binding = baseBinding();
+      const digest = await computeBindingDigest(binding);
+      await db
+        .prepare(
+          `INSERT INTO payment_attempts (
+            id, payment_identifier, binding_digest, quote_id, requirement_id,
+            service_id, service_version, contract_release, request_input_hash,
+            resource_id, scheme, network, asset, amount, payee, created_at, expires_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        )
+        .bind(
+          crypto.randomUUID(),
+          binding.payment_identifier,
+          digest,
+          binding.quote_id,
+          binding.requirement_id,
+          binding.service_id,
+          binding.service_version,
+          binding.contract_release,
+          binding.request_input_hash,
+          binding.resource_id,
+          binding.scheme,
+          binding.network,
+          binding.asset,
+          binding.amount,
+          binding.payee,
+          NOW,
+          '2026-08-09T00:05:00.000Z'
+        )
+        .run();
+      const stored = await repo.getByIdentifier(binding.payment_identifier);
+      expect(stored?.binding.binding_version).toBe(1);
+      expect(await computeBindingDigest(stored!.binding)).toBe(digest);
+    });
+
+    it('fails closed before insertion when a new v2 binding lacks required rail fields', async () => {
+      const invalid = { ...baseBinding(), binding_version: 2 } as PaymentAttemptBinding;
+      const outcome = await repo.acquire({
+        payment_identifier: invalid.payment_identifier,
+        binding_digest: 'sha256:' + '0'.repeat(64),
+        binding: invalid,
+        created_at: NOW,
+        expires_at: '2026-08-09T00:05:00.000Z',
+        consumed: false,
+      });
+      expect(outcome).toMatchObject({ status: 'error' });
+      expect(await repo.getByIdentifier(invalid.payment_identifier)).toBeNull();
     });
   });
 

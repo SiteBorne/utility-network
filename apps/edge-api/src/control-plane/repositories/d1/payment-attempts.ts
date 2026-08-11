@@ -34,11 +34,19 @@ import type {
   PaymentAttemptRepository,
   PaymentLifecycleStage,
 } from '@siteborne/protocol-x402';
-import { isLegalLifecycleTransition } from '@siteborne/protocol-x402';
+import {
+  isLegalLifecycleTransition,
+  validatePaymentAttemptBinding,
+} from '@siteborne/protocol-x402';
 import { getD1Failure } from './shared';
 
 function mapRow(row: Record<string, unknown>): PaymentAttemptRecord {
+  const bindingVersion =
+    row.binding_version === null || row.binding_version === undefined
+      ? 1
+      : Number(row.binding_version);
   const binding: PaymentAttemptBinding = {
+    binding_version: bindingVersion as 1 | 2,
     payment_identifier: row.payment_identifier as string,
     quote_id: row.quote_id as string,
     requirement_id: row.requirement_id as string,
@@ -55,6 +63,18 @@ function mapRow(row: Record<string, unknown>): PaymentAttemptRecord {
     ...(row.job_id !== null && row.job_id !== undefined ? { job_id: row.job_id as string } : {}),
     ...(row.idempotency_key !== null && row.idempotency_key !== undefined
       ? { idempotency_key: row.idempotency_key as string }
+      : {}),
+    ...(bindingVersion === 2
+      ? {
+          payment_rail: row.payment_rail as PaymentAttemptBinding['payment_rail'],
+          payment_provider: row.payment_provider as PaymentAttemptBinding['payment_provider'],
+          ...(row.nevermined_agent_id !== null && row.nevermined_agent_id !== undefined
+            ? { nevermined_agent_id: row.nevermined_agent_id as string }
+            : {}),
+          ...(row.nevermined_plan_id !== null && row.nevermined_plan_id !== undefined
+            ? { nevermined_plan_id: row.nevermined_plan_id as string }
+            : {}),
+        }
       : {}),
   };
   return {
@@ -96,7 +116,11 @@ function tryMapRow(row: Record<string, unknown>): PaymentAttemptRecord | { error
     }
   }
   try {
-    return mapRow(row);
+    const mapped = mapRow(row);
+    const validation = validatePaymentAttemptBinding(mapped.binding);
+    return validation.valid
+      ? mapped
+      : { error: `stored payment_attempts binding is invalid: ${validation.reason}` };
   } catch (e) {
     return { error: e instanceof Error ? e.message : 'unknown row-mapping error' };
   }
@@ -115,13 +139,18 @@ export class D1PaymentAttemptRepository implements PaymentAttemptRepository {
 
   async acquire(record: PaymentAttemptRecord): Promise<AcquireOutcome> {
     const b = record.binding;
+    const validation = validatePaymentAttemptBinding(b);
+    if (!validation.valid) {
+      return { status: 'error', reason: `invalid payment-attempt binding: ${validation.reason}` };
+    }
     const stmt = this.db.prepare(`
       INSERT INTO payment_attempts (
         id, payment_identifier, binding_digest, quote_id, requirement_id,
         service_id, service_version, contract_release, request_input_hash,
         resource_id, scheme, network, asset, amount, payee, job_id,
-        idempotency_key, created_at, expires_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        idempotency_key, created_at, expires_at, binding_version, payment_rail,
+        payment_provider, nevermined_agent_id, nevermined_plan_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     let insertSucceeded = false;
@@ -149,7 +178,12 @@ export class D1PaymentAttemptRepository implements PaymentAttemptRepository {
           b.job_id ?? null,
           b.idempotency_key ?? null,
           record.created_at,
-          record.expires_at
+          record.expires_at,
+          validation.version,
+          b.payment_rail ?? null,
+          b.payment_provider ?? null,
+          b.nevermined_agent_id ?? null,
+          b.nevermined_plan_id ?? null
         )
         .run();
 

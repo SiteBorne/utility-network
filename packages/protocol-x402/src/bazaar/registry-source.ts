@@ -19,7 +19,9 @@ export interface RegistryServiceEntry {
   description: string;
   capabilities: string[];
   input_schema_uri: string;
+  input_schema_hash: string;
   output_schema_uri: string;
+  output_schema_hash: string;
   pcc_version: string;
   pricing_schemes: string[];
   base_price: { amount: string; currency: string };

@@ -38,6 +38,7 @@ import type {
   UsageResult,
 } from '@siteborne/protocol-x402';
 import {
+  CDP_PAYMENT_PROVIDER,
   FixturePaymentEvidenceProvider,
   ProductionEvidenceProviderNotConfiguredError,
   SUPPORTED_X402_VERSION,
@@ -337,6 +338,9 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
     const paymentIdentifier = idResult.id;
 
     const binding: PaymentAttemptBinding = {
+      binding_version: 2,
+      payment_rail: 'cdp',
+      payment_provider: CDP_PAYMENT_PROVIDER,
       payment_identifier: paymentIdentifier,
       quote_id: stored.quote.quote_id,
       requirement_id: stored.requirement_id,
@@ -493,6 +497,7 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
     // of it.
     const verificationContext: PaymentVerificationContext = {
       ...evidenceContext,
+      authorizationContext: { rail: 'cdp' },
       paymentPayload: payload,
       paymentRequirements: payload.accepted,
     };
@@ -646,6 +651,7 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
     // `upto` usage-result binding when one was computed (directive §5).
     const settlementContext: PaymentSettlementContext = {
       ...evidenceContext,
+      authorizationContext: { rail: 'cdp' },
       paymentPayload: payload,
       paymentRequirements: payload.accepted,
       ...(usageResult ? { usageResult } : {}),
@@ -680,6 +686,9 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
     await audit('payment_settled', { payment_identifier: paymentIdentifier });
 
     let link = await buildPaymentServiceLink({
+      link_version: 2,
+      payment_rail: 'cdp',
+      payment_provider: CDP_PAYMENT_PROVIDER,
       payment_identifier: paymentIdentifier,
       quote_id: stored.quote.quote_id,
       requirement_id: stored.requirement_id,

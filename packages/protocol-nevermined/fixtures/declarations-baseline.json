@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "declarations": [
+    {
+      "service_id": "company_evidence_graph.v1",
+      "endpoint": "/v1/nevermined/company/evidence-graph",
+      "payment_semantics": "exact",
+      "gross_buyer_amount_atomic": "39000",
+      "dynamic_actual_settlement_required": false,
+      "registration_allowed": true
+    },
+    {
+      "service_id": "web_context_verified.v1",
+      "endpoint": "/v1/nevermined/web/context",
+      "payment_semantics": "exact",
+      "gross_buyer_amount_atomic": "9000",
+      "dynamic_actual_settlement_required": false,
+      "registration_allowed": true
+    },
+    {
+      "service_id": "document_evidence_json.v1",
+      "endpoint": "/v1/nevermined/document/evidence-json",
+      "payment_semantics": "upto",
+      "gross_buyer_amount_atomic": "190000",
+      "dynamic_actual_settlement_required": true,
+      "registration_allowed": false,
+      "actual_tiers_atomic": {
+        "native": "12000",
+        "ocr": "19000",
+        "table": "29000"
+      }
+    },
+    {
+      "service_id": "verify_agent_output.v1",
+      "endpoint": "/v1/nevermined/verify/agent-output",
+      "payment_semantics": "exact",
+      "gross_buyer_amount_atomic": "19000",
+      "dynamic_actual_settlement_required": false,
+      "registration_allowed": true
+    }
+  ],
+  "shared_plan_policy": {
+    "plan_classification": "payg",
+    "trial_kind": "none",
+    "nevermined_scheme": "nvm:erc4337",
+    "asset": "USDC",
+    "asset_decimals": 6,
+    "pricing_source_version": "1.0.0",
+    "sandbox_capability_verified": false,
+    "production_enabled": false
+  }
+}
