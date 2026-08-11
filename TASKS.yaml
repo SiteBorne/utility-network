@@ -830,7 +830,7 @@ tasks:
   - id: 'SUN-0700B'
     title: 'Live CDP facilitator payment settlement (x402 verify/settle against a real facilitator)'
     phase: 'phase_9_x402'
-    state: 'active'
+    state: 'accepted'
     owner_agent: 'operator'
     dependencies:
       - 'SUN-0700A'
@@ -841,18 +841,22 @@ tasks:
       - 'Upto payment flow settles end-to-end against a live facilitator for at least one real transaction'
     evidence:
       - 'docs/reports/SUN-0700B-checkpoint-1-live-exact-report.md'
+      - 'docs/reports/SUN-0700B-checkpoint-2-live-upto-report.md'
       - 'apps/edge-api/src/control-plane/evidence/cdp-provider.ts'
       - 'apps/edge-api/tests/cdp-provider.test.ts'
       - 'apps/edge-api/tests/live/x402-live-exact.test.ts'
+      - 'apps/edge-api/tests/live/x402-live-upto.test.ts'
       - 'apps/edge-api/tests/x402-evidence-provider-boundary.test.ts'
-    next_action: 'Checkpoint 1 complete: one controlled Base Sepolia exact payment settled, replay reconstructed from D1 with zero second execution/settlement/job, real facilitator rejection and local negatives passed, and sanitized evidence is recorded. SUN-0700B remains active for separately authorized checkpoint 2. Do not start real upto in this checkpoint.'
+      - 'apps/edge-api/tsconfig.live-tests.json'
+      - 'scripts/verify-secret-scan-scope.ts'
+    next_action: 'ACCEPTED. Checkpoint 1 retained one controlled Base Sepolia exact settlement (654a5453cdcffc01570aae8b2bd554141d6999f7). Checkpoint 2 added one controlled Base Sepolia upto settlement whose 190000 atomic maximum produced 12000 atomic measured usage and exactly 12000 atomic settlement (cd39320). Both real CDP /verify and /settle paths passed; D1 replay held service execution, logical job, verify, and settle counts at one; fail-closed conflicts, authorization_exceeded, facilitator rejection, and settlement failure remain green. edge-api now has a real strict no-emit typecheck covering source and live tests. The secret scan now proves tracked source/config/governance/docs/migrations/scripts/generated/live coverage with redacted detector canaries. Production remains disabled and not ready.'
     blocker: null
-    commit_ref: null
+    commit_ref: 'cd39320'
 
   - id: 'SUN-0800'
     title: 'Implement MCP (remote server + npm shim) and A2A (signed Agent Card)'
     phase: 'phase_10_mcp_a2a'
-    state: 'pending'
+    state: 'blocked_external'
     owner_agent: 'architect'
     dependencies:
       - 'SUN-0700B'
@@ -864,7 +868,7 @@ tasks:
       - 'A2A Agent Card validates and is signed'
       - 'Agent Card served at /.well-known/agent-card.json'
     evidence: []
-    next_action: 'Implement Nevermined'
+    next_action: 'Blocked until the recorded Nevermined credentials are provisioned. Do not activate or start automatically.'
     blocker: 'Requires Nevermined credentials (blocked_external)'
     commit_ref: null
 

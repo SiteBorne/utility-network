@@ -9,13 +9,14 @@ source_directive:
 
 execution:
   mode: 'serial'
-  active_mutation_tasks: 1
-  current_increment: 'SUN-0700B'
-  current_phase: 'phase_9_x402'
-  last_completed_increment: 'SUN-0700A'
-  frontier_status: 'executable'
-  blocked_on: []
-  reason: 'SUN-0700B checkpoint 1 completed: one controlled Base Sepolia exact payment verified and settled through the live CDP facilitator, D1 replay caused zero second execution/settlement/job, and live/deterministic negatives fail closed. SUN-0700B remains active for separately authorized checkpoint 2; real upto has not started. Production remains disabled and not ready.'
+  active_mutation_tasks: 0
+  current_increment: null
+  current_phase: 'phase_10_mcp_a2a'
+  last_completed_increment: 'SUN-0700B'
+  frontier_status: 'blocked_external'
+  blocked_on:
+    - 'SUN-0800'
+  reason: 'SUN-0700B is accepted after retained real Base Sepolia exact evidence and new real Base Sepolia upto evidence both proved live CDP facilitator verify/settle, authoritative D1 replay, one service execution/job/settlement, and fail-closed negatives. SUN-0800 is the only dependency-ready unfinished task and remains blocked_external on the Nevermined credentials recorded in TASKS.yaml; it was not activated or started. Production remains disabled and not ready.'
 
 implemented:
   - 'governance_validation'
@@ -97,13 +98,13 @@ implemented:
   - 'x402_bazaar_discovery_metadata' # SUN-0700A checkpoint 4, local declaration/validation only
   - 'x402_http_vertical_slice' # SUN-0700A checkpoint 5, real Hono boundary over real D1, opt-in PAID_ROUTES_ENABLED gate, synthetic evidence only
   - 'x402_live_exact_facilitator_verification_and_settlement' # SUN-0700B checkpoint 1, controlled Base Sepolia validation only
+  - 'x402_live_upto_facilitator_verification_and_settlement' # SUN-0700B checkpoint 2, controlled Base Sepolia validation only
 
 not_implemented:
   - 'company_evidence_graph_xbrl_facts_and_repository_signals_field_groups'
   - 'web_context_verified_rendered_mode' # Browser Rendering blocked_external
   - 'document_evidence_json_upload_reference_and_url_input_modes'
   - 'verify_agent_output_signature_valid_evidence_resolves_no_pii_no_secrets_checks'
-  - 'x402_live_upto_facilitator_verification_and_settlement' # SUN-0700B checkpoint 2, not started
   - 'x402_signed_offers_and_receipts' # evaluated and deliberately deferred, see ADR 0050
   - 'x402_bazaar_facilitator_cataloging' # local declaration/validation only, see ADR 0049
   - 'mcp'
