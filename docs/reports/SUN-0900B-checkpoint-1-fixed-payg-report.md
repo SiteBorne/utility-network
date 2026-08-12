@@ -599,3 +599,124 @@ unchanged; live persistence path stable; `production_enabled`/`production_ready`
 both `false`. SUN-0900B remains **not accepted**. **Exactly one final fixed-PAYG
 live run is assessed as safe to execute** in a separate, subsequent,
 explicitly-authorized turn — this turn made zero live Nevermined calls.
+
+## Final fixed-PAYG live acceptance attempt — a THIRD real settlement, again falsely rejected locally
+
+**Outcome: not accepted.** The authorized live run executed for real against the
+sandbox and produced a **third real, confirmed external settlement**
+(`transactionCount: 1`, `status: "succeeded"`, real
+`providerTransactionId: 0x8fec56c49ee6e85a30105d308fd7b1788c9866f8d3780395c8e0f5e549cfd0f2`),
+but was **again** locally rejected before reaching `200`/`consumed` —
+`{"error":"settlement_rejected","message":"settlement_not_successful"}`, HTTP
+`402`. Per the directive's own crash rule, **the live test was not rerun**; all
+work below is read-only reconciliation of durable D1 + external Nevermined
+state.
+
+**What happened, in order (all real, all confirmed):**
+
+1. Registration reconciled as `existing` (0 mutation) — agent/plan/linkage/
+   economics all matched.
+2. Balance recheck (read-only Base Sepolia RPC): payer
+   `0xCa7DD940B5071Bbcb238901794B900CF9db376E7` held `19,982,000` atomic USDC
+   (≈19.98 USDC, comfortably above the required `9000`) and `0` wei native ETH
+   (unremarkable for an ERC-4337 smart account using a paymaster — the same
+   account completed two prior real settlements under the same condition).
+3. Delegation reconciliation (subscriber key, `listDelegations`) found **zero**
+   currently accessible delegations — only the two known historical exhausted
+   ones — classified `no_match`, matching the live test's own internal
+   reconciliation log line
+   `delegation reconciliation (sanitized): { state: 'no_match' }`.
+4. The live test created exactly one new delegation
+   (`eaa3929b-7619-45d4-a858-0d91e47fa55e`), obtained an ephemeral x402 token
+   (never logged, never persisted), and drove the real route:
+   `verifyPermissions` → `external_verified` → one real service execution
+   (`web_context_verified.v1`, fixture-mode adapters) → `SETTLEMENT_PENDING`
+   durably persisted (confirmed in D1,
+   `settlement_pending_at: 2026-08-12T13:48:59.420Z`) → real `settlePermissions`
+   call.
+5. The local settlement gate rejected the result with reason
+   `settlement_not_successful` — **not** `ambiguous_settlement` — so the row
+   correctly, deterministically transitioned
+   `settlement_pending → settlement_failed` (the terminal,
+   non-recoverable-via-`202` path this turn's design intends for a genuine
+   rejection) rather than staying recoverable. Job state: `REFUND_REQUIRED`.
+   `consumed_at`: never set.
+
+**Independent, read-only external reconciliation (seller `NVM_API_KEY`,
+`GET /api/v1/delegation/{id}` and `.../transactions`) proves the rejection was
+false:**
+
+```
+delegation eaa3929b-7619-45d4-a858-0d91e47fa55e
+  status: Exhausted
+  spendingLimitCents: "1"      (matches the expected $0.01 rounded cap for a $0.009 price)
+  amountSpentCents: "1"
+  transactionCount: 1
+  providerPaymentMethodId: 0xCa7DD940B5071Bbcb238901794B900CF9db376E7  (matches expected payer)
+
+transaction 0fac89e8-d202-4132-9417-6b5cc5c29405
+  status: succeeded
+  providerTransactionId: 0x8fec56c49ee6e85a30105d308fd7b1788c9866f8d3780395c8e0f5e549cfd0f2
+  amountCents: "1"
+  createdAt: 2026-08-12T13:49:03.097Z
+```
+
+Exactly one transaction, `succeeded`, matching delegation/payer/amount — by this
+checkpoint's own reconciliation classifier
+(`reconcileNeverminedSettlementForRecovery`), this is unambiguously
+**`SETTLED`**, not `AMBIGUOUS`. `duplicate_transaction_count` is 1, not >1; the
+historical `AMBIGUOUS_PENDING_RECONCILIATION` framing from the first two
+incidents does **not** apply here — this one is cleanly, positively confirmed
+settled externally, and just as cleanly rejected locally.
+
+**Root-cause hypothesis (not yet confirmed by raw-evidence inspection — the
+sanitization design deliberately never persists the raw
+`SettlePermissionsResult` anywhere, so this can't be confirmed without a future
+live capture under explicit authorization):**
+`NeverminedPaymentEvidenceProvider.settle()`'s `transactionValid` check
+(`/^0x[0-9a-fA-F]{64}$/.test(result.transaction)`) validates the **synchronous**
+`settlePermissions()` HTTP response's `transaction` field — but the SDK's own
+type comment documents `transaction` as "empty string if settlement failed",
+implying the field may also be empty/unpopulated for a settlement that is still
+pending **asynchronous** on-chain confirmation at the moment the HTTP call
+returns. The timing is consistent with this: `settlement_pending_at`
+(`13:48:59.420Z`) precedes the transaction's own `createdAt` (`13:49:03.097Z`)
+by **~3.7 seconds** — a plausible on-chain confirmation delay. If
+`result.transaction` was empty/malformed at synchronous-response time,
+`transactionValid` is `false`, `success: validation.valid && transactionValid`
+becomes `false`, and the reason is `transaction_reference_invalid` — which the
+route's ambiguous-vs-explicit- failure branch (added this turn) currently treats
+as a **non-ambiguous**, terminal explicit failure, since only the literal string
+`'ambiguous_settlement'` is special-cased. This is a plausible, narrow, distinct
+defect from the two already-fixed incidents (which were about `.success` being
+absent) — a **different** field, in a **different** part of the response,
+causing the **same class** of false-rejection. Not fixed in this turn — no code
+change was made after the live run, per the "reconcile first, do not blindly
+repair and retry" discipline this checkpoint has followed throughout.
+
+**Classification:** `PAID_EXTERNAL_NOT_CONSUMED_LOCAL` /
+`LOCAL_ARTIFACTS_UNRECOVERABLE` (durable D1 artifacts for this attempt — output,
+receipt, verification evidence — remain intact and reconstructible, but the
+route's own terminal `settlement_failed` state does not offer an automatic
+recovery path the way `settlement_pending` does; recovering this specific
+payment into a served `200` would require either a new, explicitly- authorized
+code change to how `transaction_reference_invalid` is classified, or a
+manual/administrative decision, neither of which this turn performed). This is
+now a **third** occurrence of the same failure family as the first two
+historical incidents (`aafdab51-...`, `6a4979a9-...`) — real money (sandbox test
+USDC, $0.01 rounded, negligible/no real value) moved for real, three times, and
+SITEBORNE's own local validator has now been wrong on the first attempt three
+times running, twice already fixed, once newly discovered.
+
+**Not done, deliberately, per the directive's own crash rule:** no second live
+run; no attempt to force this payment to `consumed`; no code change proposed or
+applied to `transaction_reference_invalid` handling. `RUN_LIVE_NEVERMINED`
+confirmed cleared (`MISSING`) immediately after the run, in this shell and in
+every persistent location checked (`~/.zshenv`,
+`~/.config/siteborne/ nevermined-sandbox.env` — present but contains only
+`NVM_ENVIRONMENT=sandbox`, no live flag; not modified by this turn).
+**Checkpoint 1B fixed-PAYG live acceptance is not granted.** SUN-0900B remains
+active, not accepted. No code change was made this turn — the only change is
+this report update, recording the durable D1 state and the external Nevermined
+sandbox state captured above; both remain the authoritative record of this
+attempt.
