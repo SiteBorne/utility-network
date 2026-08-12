@@ -36,8 +36,24 @@
  * Phases: A registration reconciliation, B subscriber delegation,
  * C ephemeral x402 authorization, D-F real verify/execute/settle (driven
  * by the `it()` block's HTTP requests), G replay/duplicate_conflict.
+ *
+ * SUN-0900B checkpoint 1B recovery hardening: D1 now persists at a
+ * stable, deterministic path (not a fresh random tempdir every run —
+ * see the `tempDir` assignment in `beforeAll`), never auto-deleted, so a
+ * failed final live run is resumable by re-running this exact file
+ * rather than starting over. The durable settlement-recovery primitives
+ * themselves (`packages/protocol-x402/src/lifecycle/stage.ts`'s
+ * `executed`/`settlement_pending`/`settled_external`/`link_verified`
+ * stages, `D1PaymentAttemptRepository.recordSettlementPending`/
+ * `recordSettledExternal`, and
+ * `packages/protocol-nevermined/src/settlement-recovery.ts`'s
+ * `reconcileNeverminedSettlement`) are built and proven deterministically
+ * in `apps/edge-api/tests/nevermined-settlement-recovery.test.ts` — this
+ * live test does not yet call them itself; wiring the actual HTTP route
+ * (`createX402ServiceRoute`) through that durable path is the next
+ * integration step before authorizing the final live run.
  */
-import { readFileSync, readdirSync, mkdtempSync } from 'node:fs';
+import { readFileSync, readdirSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -139,7 +155,23 @@ describe.skipIf(!RUN_LIVE)(
         throw new Error('SUN-0900B live test: NVM_ENVIRONMENT must be "sandbox"');
       }
 
-      tempDir = mkdtempSync(join(tmpdir(), 'siteborne-d1-nevermined-live-'));
+      // Stable, deterministic path — deliberately NOT `mkdtempSync`
+      // (which mints a fresh random directory every run, making it
+      // impossible for an operator or a resumed process to reopen the
+      // same D1 state after a crash). One fixed path per checkpoint,
+      // under the OS temp root, containing no secret material — safe to
+      // name literally. Never auto-deleted by this file (no `rmSync` in
+      // `afterAll` below); an operator recovers from a failed final live
+      // run by re-running this exact test file with the exact same
+      // RUN_LIVE_NEVERMINED=1 command — the durable settlement-recovery
+      // lifecycle (packages/protocol-x402/src/lifecycle/stage.ts,
+      // packages/protocol-nevermined/src/settlement-recovery.ts) reads
+      // back whatever state survives here instead of assuming a clean
+      // slate. To force a genuinely fresh checkpoint DB, delete this
+      // directory manually first: `rm -rf
+      // $TMPDIR/siteborne-sun-0900b-checkpoint1-live-d1`.
+      tempDir = join(tmpdir(), 'siteborne-sun-0900b-checkpoint1-live-d1');
+      mkdirSync(tempDir, { recursive: true });
       mf = new Miniflare({
         modules: true,
         script: `export default { async fetch() { return new Response('OK'); } }`,

@@ -16,11 +16,14 @@ all confirmed. **Two real sandbox settlements have externally occurred**
 `GET /delegation/{id}/transactions` returning `status: "succeeded"` for both),
 but neither reached a local HTTP 200 / `PaymentServiceLink` / D1 `consumed`
 state, because SITEBORNE's own settlement validator falsely rejected both real
-successes. That validator defect, and a separate D1 cross-process persistence
-defect it exposed, are both fixed and regression-tested below. Full crash-
-recovery state-machine hardening (durable `SETTLEMENT_PENDING` state, external-
-settlement reconciliation before allowing a retry) is **not yet implemented** —
-see "What remains before another live run" below.
+successes. That validator defect and a separate D1 cross-process persistence
+defect it exposed are both fixed and regression-tested (prior repair, commit
+`9d9e102`). **This pass adds the durable settlement-recovery state machine and
+crash-recovery proof** those two fixes made possible — see "Durable
+settlement-recovery lifecycle" below. It is built and thoroughly tested as a
+standalone library; wiring it into the actual live HTTP route
+(`createX402ServiceRoute`) is the next, and final, integration step before
+authorizing the checkpoint-closing live run.
 
 ```
 funding                     PASS (20 USDC on the subscriber smart account)
@@ -224,23 +227,96 @@ the same path (the same guarantee a real process crash-and-restart needs — not
 merely reusing the same in-memory instance, which a different, already- accepted
 test proves a different thing about).
 
-## What remains before another live run
+## Durable settlement-recovery lifecycle (recovery hardening pass)
 
-This checkpoint fixes the two defects that caused the false rejections and the
-unrecoverable local state. It does **not** yet implement the durable
-`SETTLEMENT_PENDING` → `SETTLED_EXTERNAL` → `CONSUMED` payment state machine
-requested for full crash-recovery hardening (write settlement-correlation data
-before calling `settlePermissions`, reconcile against external transaction
-records on resume, never re-settle when external evidence already proves
-`SETTLED`). Building that correctly is a real, separate undertaking touching
-`x402-service.ts`'s route lifecycle itself, not just the Nevermined validator/
-persistence layer, and doing it hastily in the same pass as the two fixes above
-risked under-testing something whose entire purpose is financial correctness.
-Recommended as the next concrete step before authorizing another live charge.
+Smallest additive extension to the already-accepted `payment_attempts` table
+(checkpoint 2) and its `lifecycle_stage` summary state (checkpoint 3, ADR 0046)
+— not a parallel lifecycle. `packages/protocol-x402/src/lifecycle/ stage.ts`'s
+`PaymentLifecycleStage` gains four new stages, inserted between the pre-existing
+`verified` and `settled`/`settlement_failed` terminals:
 
-## What was not done in this checkpoint (1B repair turn)
+```
+verified -> executed -> settlement_pending -> settled_external -> link_verified -> settled
+                \-> settlement_failed          \-> settlement_failed
+```
+
+`verified -> settled` and `verified -> settlement_failed` remain legal directly,
+unchanged — the durable-recovery path is additive, never mandatory; the existing
+accepted CDP/fixture-mode flow is untouched. There is no separate `consumed`
+stage: `link_verified -> settled` reuses the pre-existing terminal value and the
+pre-existing `markConsumed`/`consumed_at` mechanism exactly as before.
+
+**`SETTLEMENT_PENDING` precedes the external call, always.** Migration
+`0006_settlement_recovery.sql` adds six nullable, additive columns to
+`payment_attempts`: `nevermined_delegation_id`, `settlement_permission_hash`,
+`service_output_hash`, `service_receipt_id`, `settlement_transaction_reference`,
+`settlement_pending_at`.
+`D1PaymentAttemptRepository.recordSettlementPending(paymentIdentifier, correlation)`
+writes exactly these non-secret fields and atomically transitions
+`executed -> settlement_pending` in the same statement — no access token, API
+key, authorization header, or other secret can be expressed by this method's own
+type signature, let alone persisted by it. `recordSettledExternal` records the
+settlement transaction reference and transitions
+`settlement_pending -> settled_external` once external evidence (or a normal
+synchronous response) confirms success.
+
+**Read-only external reconciliation.**
+`packages/protocol-nevermined/src/settlement-recovery.ts`'s
+`reconcileNeverminedSettlement` classifies
+`GET /delegation/{delegationId}/transactions` evidence into exactly `SETTLED` /
+`NOT_SETTLED` / `AMBIGUOUS` — zero transactions is `NOT_SETTLED`; a single
+transaction with a recognized failure status is `NOT_SETTLED`; a single
+transaction with `status: "succeeded"` is `SETTLED`; **more than one transaction
+for what should be a single-use delegation is always `AMBIGUOUS`**
+(duplicate/external-inconsistency), never silently accepted as settled even if
+every one of them individually looks successful; a read failure or an
+unrecognized status string is also `AMBIGUOUS`, never guessed either way.
+`AMBIGUOUS` must never trigger an automatic retry.
+
+**13 new tests** prove the invariants deterministically:
+`settlement-recovery.test.ts` (7, the classifier alone, no D1) and
+`nevermined-settlement-recovery.test.ts` (7, credential-free, real D1/ Miniflare
+with `resourcePersistencePath`, `dispose()` + fresh-instance cycles for genuine
+cross-process proof — never merely reusing the same in-memory instance):
+
+- B: `SETTLEMENT_PENDING` persisted, external reconciliation finds nothing
+  (`NOT_SETTLED`) — safe to retry per existing idempotency policy, no duplicate
+  execution.
+- C/D: provider settles for real but the local process never processes the
+  response — read-only reconciliation still proves `SETTLED`.
+- E/F: recovered `SETTLED` state completes
+  `link_verified -> settled -> consumed` exactly once after a real process
+  restart (fresh Miniflare instance, same persistence path), reusing the durable
+  receipt/output — `markConsumed` remains idempotent (a second call is a no-op).
+- G: explicit settlement failure — never consumed, stays distinguishable from
+  ambiguity.
+- H: reconciliation read itself fails (timeout/transport loss) — `AMBIGUOUS`,
+  local state stays at `settlement_pending`, never auto-transitions either way.
+- J: more than one recorded transaction for the same delegation — fails closed
+  as `AMBIGUOUS`, matching the classifier's own duplicate guard.
+- **Principal acceptance test:** "process A" writes `SETTLEMENT_PENDING` then
+  fully disposes; "process B" (fresh Miniflare instance, same
+  `resourcePersistencePath`) recovers the durable correlation data, runs
+  read-only reconciliation (`SETTLED`), completes
+  `settled_external -> link_verified -> settled -> consumed`, and a subsequent
+  replay with the identical binding reconstructs the already-`settled` result
+  via the existing `already_consumed` idempotency path — zero re-execution, zero
+  re-settlement.
+
+**Live harness prepared, not yet wired.**
+`apps/edge-api/tests/live/nevermined-live-exact.test.ts` now opens D1 at a
+stable, deterministic path (`$TMPDIR/siteborne-sun-0900b-checkpoint1-live-d1`,
+never a fresh random `mkdtempSync` directory) and never auto-deletes it, so an
+operator can resume a failed final live run by re-running the exact same command
+instead of starting over. **The durable settlement-recovery primitives
+themselves are not yet called from this live test or from the real
+`createX402ServiceRoute` HTTP route** — they are built and proven standalone.
+Wiring them into the actual route (so a real live run benefits from them) is the
+next, final integration step before the checkpoint-closing live charge.
+
+## What was not done in this checkpoint (1B repair + recovery-hardening turns)
 
 No delegation was created. No x402 access token was obtained. No
 `verifyPermissions` or `settlePermissions` call was made. No paid service
-execution occurred. `RUN_LIVE_NEVERMINED` was not set during this repair turn.
+execution occurred. `RUN_LIVE_NEVERMINED` was not set during either turn.
 SUN-0900B is not accepted.

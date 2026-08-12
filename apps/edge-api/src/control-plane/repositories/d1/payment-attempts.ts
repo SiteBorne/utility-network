@@ -326,6 +326,127 @@ export class D1PaymentAttemptRepository implements PaymentAttemptRepository {
       .run();
   }
 
+  /**
+   * SUN-0900B checkpoint 1B recovery hardening (migration
+   * 0006_settlement_recovery.sql). Durably records the non-secret
+   * correlation data a crash-recovery reconciliation pass needs, and
+   * atomically transitions `lifecycle_stage` from `executed` to
+   * `settlement_pending` in the SAME statement — a caller must call this
+   * BEFORE ever invoking a facilitator's settle operation, never after.
+   * Never accepts (and this type signature cannot express) an access
+   * token, API key, authorization header, or any other secret.
+   */
+  async recordSettlementPending(
+    paymentIdentifier: string,
+    correlation: {
+      neverminedDelegationId?: string;
+      settlementPermissionHash?: string;
+      serviceOutputHash?: string;
+      serviceReceiptId?: string;
+    }
+  ): Promise<
+    | { status: 'transitioned' }
+    | { status: 'illegal_transition' }
+    | { status: 'error'; reason: string }
+  > {
+    try {
+      const result = await this.db
+        .prepare(
+          `UPDATE payment_attempts SET
+             lifecycle_stage = 'settlement_pending',
+             nevermined_delegation_id = ?,
+             settlement_permission_hash = ?,
+             service_output_hash = ?,
+             service_receipt_id = ?,
+             settlement_pending_at = ?
+           WHERE payment_identifier = ? AND lifecycle_stage = 'executed'`
+        )
+        .bind(
+          correlation.neverminedDelegationId ?? null,
+          correlation.settlementPermissionHash ?? null,
+          correlation.serviceOutputHash ?? null,
+          correlation.serviceReceiptId ?? null,
+          new Date().toISOString(),
+          paymentIdentifier
+        )
+        .run();
+      const failure = getD1Failure(result);
+      if (failure) return { status: 'error', reason: failure };
+      if ((result.meta?.changes ?? 0) === 0) {
+        return { status: 'illegal_transition' };
+      }
+      return { status: 'transitioned' };
+    } catch (e) {
+      return {
+        status: 'error',
+        reason: e instanceof Error ? e.message : 'unknown settlement_pending write error',
+      };
+    }
+  }
+
+  /** Read-only recovery lookup — the correlation data a crash-recovery
+   * reconciliation pass reads back after a restart. Never returns a
+   * secret (none is ever written by `recordSettlementPending`). */
+  async getSettlementRecoveryRecord(paymentIdentifier: string): Promise<{
+    lifecycleStage: PaymentLifecycleStage;
+    neverminedDelegationId: string | null;
+    settlementPermissionHash: string | null;
+    serviceOutputHash: string | null;
+    serviceReceiptId: string | null;
+    settlementTransactionReference: string | null;
+    settlementPendingAt: string | null;
+  } | null> {
+    const row = await this.getRawByIdentifier(paymentIdentifier);
+    if (!row || typeof row.lifecycle_stage !== 'string') return null;
+    return {
+      lifecycleStage: row.lifecycle_stage as PaymentLifecycleStage,
+      neverminedDelegationId: (row.nevermined_delegation_id as string | null) ?? null,
+      settlementPermissionHash: (row.settlement_permission_hash as string | null) ?? null,
+      serviceOutputHash: (row.service_output_hash as string | null) ?? null,
+      serviceReceiptId: (row.service_receipt_id as string | null) ?? null,
+      settlementTransactionReference:
+        (row.settlement_transaction_reference as string | null) ?? null,
+      settlementPendingAt: (row.settlement_pending_at as string | null) ?? null,
+    };
+  }
+
+  /** Records the settlement transaction reference once external
+   * reconciliation (or a normal synchronous settle response) confirms
+   * `SETTLED`/`settled_external`. Additive to `recordSettlementPending` —
+   * separate so a crash between the two writes is itself recoverable
+   * (the correlation data from the first write is enough to reconcile). */
+  async recordSettledExternal(
+    paymentIdentifier: string,
+    settlementTransactionReference: string | undefined
+  ): Promise<
+    | { status: 'transitioned' }
+    | { status: 'illegal_transition' }
+    | { status: 'error'; reason: string }
+  > {
+    try {
+      const result = await this.db
+        .prepare(
+          `UPDATE payment_attempts SET
+             lifecycle_stage = 'settled_external',
+             settlement_transaction_reference = ?
+           WHERE payment_identifier = ? AND lifecycle_stage = 'settlement_pending'`
+        )
+        .bind(settlementTransactionReference ?? null, paymentIdentifier)
+        .run();
+      const failure = getD1Failure(result);
+      if (failure) return { status: 'error', reason: failure };
+      if ((result.meta?.changes ?? 0) === 0) {
+        return { status: 'illegal_transition' };
+      }
+      return { status: 'transitioned' };
+    } catch (e) {
+      return {
+        status: 'error',
+        reason: e instanceof Error ? e.message : 'unknown settled_external write error',
+      };
+    }
+  }
+
   private async getRawByIdentifier(
     paymentIdentifier: string
   ): Promise<Record<string, unknown> | null> {

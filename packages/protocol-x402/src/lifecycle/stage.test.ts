@@ -48,3 +48,40 @@ describe('PAYMENT_LIFECYCLE_TRANSITIONS legal graph (directive §7)', () => {
     expect(isTerminalLifecycleStage('verified')).toBe(false);
   });
 });
+
+describe('durable settlement-recovery stages (SUN-0900B checkpoint 1B)', () => {
+  it.each([
+    ['verified', 'executed'],
+    ['executed', 'settlement_pending'],
+    ['settlement_pending', 'settled_external'],
+    ['settlement_pending', 'settlement_failed'],
+    ['settled_external', 'link_verified'],
+    ['link_verified', 'settled'],
+  ] as const)('%s -> %s is legal', (from, to) => {
+    expect(isLegalLifecycleTransition(from, to)).toBe(true);
+  });
+
+  it.each([
+    ['executed', 'settled'],
+    ['executed', 'link_verified'],
+    ['settlement_pending', 'link_verified'],
+    ['settlement_pending', 'settled'],
+    ['settled_external', 'settled'],
+    ['settled_external', 'settlement_failed'],
+    ['link_verified', 'settlement_pending'],
+    ['acquired', 'executed'],
+    ['acquired', 'settlement_pending'],
+  ] as const)('%s -> %s is illegal — no skipping the durable checkpoints', (from, to) => {
+    expect(isLegalLifecycleTransition(from, to)).toBe(false);
+  });
+
+  it('the pre-existing direct verified -> settled/settlement_failed edges remain legal — the durable-recovery path is additive, never mandatory', () => {
+    expect(isLegalLifecycleTransition('verified', 'settled')).toBe(true);
+    expect(isLegalLifecycleTransition('verified', 'settlement_failed')).toBe(true);
+  });
+
+  it('link_verified is the only path to the pre-existing settled terminal — there is no separate "consumed" stage (consumed_at remains its own column)', () => {
+    expect(PAYMENT_LIFECYCLE_TRANSITIONS.settled).toEqual([]);
+    expect(isTerminalLifecycleStage('settled')).toBe(true);
+  });
+});
