@@ -1002,8 +1002,12 @@ tasks:
       - 'D1 replay remains authoritative with one logical job, one service execution, one verification, and one settlement per payment identity'
       - 'Free live trials, credits trials, time trials, and zero-price live plans remain disabled until after the first unknown external paid purchase'
       - 'Sanitized live evidence records the real sandbox registration, verification, settlement, and public identifiers without claiming production readiness or revenue'
-    evidence: []
-    next_action: 'Active for controlled sandbox Checkpoint 1 only: register exactly one positive-price, non-trial PAYG agent/plan for web_context_verified.v1; create one least-privilege subscriber delegation; prove one real Nevermined verify/settle/D1 replay lifecycle; then stop with SUN-0900B active. Do not register the remaining services or begin the document 190000 maximum to 12000 actual proof in this checkpoint.'
+    evidence:
+      - 'Checkpoint 1A: exactly one positive-price, non-trial PAYG agent/plan committed and reconciled for web_context_verified.v1 (agentId 37714377069519076502259354421538507339628407587207707299869594618861814144272, planId 94523930722525068656272128894334430057768353189467518442660086462546695282012) — see docs/reports/SUN-0900B-checkpoint-1-fixed-payg-report.md'
+      - 'Checkpoint 1A: persisted plan economics independently read back and verified (gross buyer 9000 atomic USDC, seller receiver 0x7f44a2dd237938F18632d4CcA40f4c690295E6E1, platform fee kept distinct, Base Sepolia USDC token, non-trial PAYG)'
+      - 'Checkpoint 1A: packages/protocol-nevermined/src/registry-reconciliation.ts makes the live harness idempotent against an already-existing checkpoint registration; 9 credential-free regression tests prove the reuse/fail-closed/timeout/absence invariants'
+      - 'Delegation, x402 authorization, verify, service execution, settlement, and replay proof remain outstanding — not yet attempted'
+    next_action: 'Registration for web_context_verified.v1 is committed and reconciled (Checkpoint 1A). Next: create one least-privilege subscriber delegation, obtain one ephemeral x402 authorization, prove one real Nevermined verify/execute/settle/D1 replay lifecycle using the existing frozen agent/plan (never re-register) via apps/edge-api/tests/live/nevermined-live-exact.test.ts, then stop with SUN-0900B still active. Do not register the remaining services or begin the document 190000-to-12000 actual-usage proof in this checkpoint.'
     blocker: null
     commit_ref: null
 

@@ -25,4 +25,11 @@ regexes = [
   # report is classified by the generic-api-key rule. Allow only this exact
   # immutable checksum rather than excluding the report (or all hashes).
   '''61f3ace1dd8b786cda5821a48f812345a55253e31c20538834c185752a889d86''',
+  # Circle's official Base Sepolia USDC ERC-20 contract address (public,
+  # verifiable on BaseScan) — a public token address, not a secret. The
+  # generic-api-key rule matches it when it appears as an object-literal
+  # field value (packages/protocol-nevermined/src/checkpoint-fixture.ts);
+  # the same literal elsewhere in the repo as a bare const isn't flagged,
+  # confirming this is a match-context false positive, not a real secret.
+  '''0x036CbD53842c5426634e7929541eC2318f3dCF7e''',
 ]

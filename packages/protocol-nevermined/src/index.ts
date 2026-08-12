@@ -6,6 +6,8 @@ export * from './dynamic-settlement';
 export * from './evidence';
 export * from './live-guard';
 export * from './payment-identifier';
+export * from './registry-reconciliation';
+export * from './checkpoint-fixture';
 export * from './routes';
 export * from './requirement';
 export * from './validation';
