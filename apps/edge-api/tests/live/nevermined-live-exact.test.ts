@@ -93,6 +93,7 @@ import { createX402ServiceRoute } from '../../src/control-plane/routes/x402-serv
 import type { ExecutorOutcome } from '../../src/control-plane/routes/x402-service';
 import { buildPaidServicesApp } from '../../src/control-plane/routes/paid-services';
 import { NeverminedPaymentEvidenceProvider } from '../../src/control-plane/evidence/nevermined-provider';
+import { NeverminedSandboxReconciliationClient } from '../../src/control-plane/evidence/nevermined-reconciliation-client';
 
 const RUN_LIVE = process.env.RUN_LIVE_NEVERMINED === '1';
 
@@ -401,6 +402,17 @@ describe.skipIf(!RUN_LIVE)(
           apiKeyEnvironment: 'sandbox',
         },
       });
+      // Seller-credentialed (NVM_API_KEY — never NVM_SUBSCRIBER_API_KEY),
+      // read-only reconciliation client so a restart of this live run
+      // actually exercises the real recovery path (SUN-0900B checkpoint
+      // 1B route-recovery wiring), not just a mocked route test.
+      const neverminedReconciliationClient = NeverminedSandboxReconciliationClient.authenticated({
+        apiKey: process.env.NVM_API_KEY!,
+        liveGuard: {
+          runLiveNevermined: process.env.RUN_LIVE_NEVERMINED,
+          apiKeyEnvironment: 'sandbox',
+        },
+      });
 
       app = new Hono();
       const { signer, registry: keyRegistry } = await createFixtureSigner();
@@ -423,6 +435,7 @@ describe.skipIf(!RUN_LIVE)(
         evidenceProvider,
         rail: 'nevermined',
         nevermined: { agentId, planId },
+        neverminedReconciliationClient,
         executor: async (input): Promise<ExecutorOutcome> => {
           executionCount += 1;
           const context = buildServiceContext(SERVICE_ID, {

@@ -328,25 +328,26 @@ needs a `delegationId` to reconcile against
 (`GET /delegation/{delegationId}/transactions`). Tracing every place one could
 reach the real seller-side route — `PaymentVerificationContext`/
 `PaymentSettlementContext`'s Nevermined `authorizationContext`
-(`packages/protocol-x402/src/evidence/provider.ts`), `NeverminedPaymentEvidenceProvider.verify()`/`settle()`
+(`packages/protocol-x402/src/evidence/provider.ts`),
+`NeverminedPaymentEvidenceProvider.verify()`/`settle()`
 (`apps/edge-api/src/control-plane/evidence/nevermined-provider.ts`), and the
 installed SDK's own `.d.ts` files
 (`VerifyPermissionsResult`/`SettlePermissionsResult` in `facilitator-api.d.ts`,
 `X402TokenAPI.getX402AccessToken` in `token.d.ts`) — confirmed none of them
-carry a delegation reference the seller can read back. `DelegationAPI.listDelegations`/
-`getPurchasingPower` were also checked and ruled out: they are scoped to "the
-requesting API key" (the **buyer's** subscriber key), not the seller's
-facilitator key, and the seller's HTTP route never sees the buyer's key.
+carry a delegation reference the seller can read back.
+`DelegationAPI.listDelegations`/ `getPurchasingPower` were also checked and
+ruled out: they are scoped to "the requesting API key" (the **buyer's**
+subscriber key), not the seller's facilitator key, and the seller's HTTP route
+never sees the buyer's key.
 
 **Prerequisite check (real, live, read-only).** Before committing to a wire
 change, verified directly against the sandbox — using the **seller's**
 `NVM_API_KEY` against both real delegations from the earlier checkpoint
 (`aafdab51-...`, `6a4979a9-...`, created by the buyer's subscriber key) — that
 the seller's own credential CAN read `GET /api/v1/delegation/{id}` and
-`GET /api/v1/delegation/{id}/transactions` for a delegation it doesn't own:
-both returned HTTP 200 with the expected shape. This closed the "seller
-credential can't read anything at all" failure mode before it was designed
-around.
+`GET /api/v1/delegation/{id}/transactions` for a delegation it doesn't own: both
+returned HTTP 200 with the expected shape. This closed the "seller credential
+can't read anything at all" failure mode before it was designed around.
 
 **Decision (explicit, user-directed):** add a `PAYMENT-DELEGATION-ID` header —
 additive, Nevermined-only, never authorization evidence by itself — the buyer
@@ -354,21 +355,22 @@ discloses the same delegationId their access token is bound to.
 
 ### What was wired into the real route
 
-- **`PAYMENT-DELEGATION-ID` header** (`packages/protocol-nevermined/src/delegation-header.ts`,
-  new): parsed and structurally validated (bounded token shape) *before* any
-  provider call, on the Nevermined branch only. Missing/malformed → `400
-  malformed_payment_delegation_id`, zero verify/execute/settle calls (route
+- **`PAYMENT-DELEGATION-ID` header**
+  (`packages/protocol-nevermined/src/delegation-header.ts`, new): parsed and
+  structurally validated (bounded token shape) _before_ any provider call, on
+  the Nevermined branch only. Missing/malformed →
+  `400 malformed_payment_delegation_id`, zero verify/execute/settle calls (route
   test: "requires PAYMENT-DELEGATION-ID before any provider call").
 - **Bound into the immutable v2 payment-attempt binding**
   (`packages/protocol-x402/src/replay/binding.ts`): `nevermined_delegation_id`
-  is now a *required* field of every new Nevermined v2 binding (validated by
-  `validatePaymentAttemptBinding`, participates in the binding digest). A
-  reused Payment-Identifier presented with a different delegationId is
+  is now a _required_ field of every new Nevermined v2 binding (validated by
+  `validatePaymentAttemptBinding`, participates in the binding digest). A reused
+  Payment-Identifier presented with a different delegationId is
   `duplicate_conflict`, before any provider call — proven at the route level.
   Persisted via the same `nevermined_delegation_id` D1 column migration 0006
-  already added (dual role: written at acquire time as part of the binding,
-  and again — redundantly, same value — by `recordSettlementPending`'s
-  correlation write; no new migration needed).
+  already added (dual role: written at acquire time as part of the binding, and
+  again — redundantly, same value — by `recordSettlementPending`'s correlation
+  write; no new migration needed).
 - **`delegationId` threaded through the authorization context**
   (`packages/protocol-x402/src/evidence/provider.ts`'s
   `NeverminedPaymentAuthorizationContext`): available to `verify()`/`settle()`
@@ -376,106 +378,105 @@ discloses the same delegationId their access token is bound to.
   authorization evidence by itself.
 - **Durable pre-settle persistence, in the real route**
   (`apps/edge-api/src/control-plane/routes/x402-service.ts`): after execution
-  succeeds, for the Nevermined rail, `lifecycle_stage` moves `verified ->
-  executed`, the full executor output/receipt/verification-evidence is
-  durably written to `x402_service_results` via a new `createPending`
-  (before the real `settle()` call), and `recordSettlementPending` commits
-  `executed -> settlement_pending` with the delegationId + correlation
-  hashes — **all before `evidenceProvider.settle(...)` is ever called**. If
-  that persistence write fails, the route returns `500 repository_failure`
-  and `settle()` is never reached (route test: "normal success writes
+  succeeds, for the Nevermined rail, `lifecycle_stage` moves
+  `verified -> executed`, the full executor output/receipt/verification-evidence
+  is durably written to `x402_service_results` via a new `createPending` (before
+  the real `settle()` call), and `recordSettlementPending` commits
+  `executed -> settlement_pending` with the delegationId + correlation hashes —
+  **all before `evidenceProvider.settle(...)` is ever called**. If that
+  persistence write fails, the route returns `500 repository_failure` and
+  `settle()` is never reached (route test: "normal success writes
   SETTLEMENT_PENDING durably before the real settle call" + the crash-A test
   below prove the sequencing both ways).
-- **Ambiguous vs. explicit-failure, distinguished at the route**: on a
-  rejected settle gate, the route now checks
+- **Ambiguous vs. explicit-failure, distinguished at the route**: on a rejected
+  settle gate, the route now checks
   `settlementEvidence.reason === 'ambiguous_settlement'` (the exact marker the
   prior turn's `normalizeSettlementSuccess` produces). Ambiguous leaves
   `lifecycle_stage` at `settlement_pending` (recoverable later, never
   auto-retried) instead of collapsing into the terminal `settlement_failed` a
   genuine provider rejection uses. Both are proven by dedicated route tests.
-- **On confirmed success**: `recordSettledExternal` (`settlement_pending ->
-  settled_external`), then `settled_external -> link_verified -> settled`,
-  then the pre-existing `markConsumed` — reusing exactly the terminal
-  semantics that already existed; `lifecycle_stage: 'settled'` remains the
-  single definition of "payment complete," `consumed_at` remains the separate,
-  pre-existing idempotency mechanism (`markConsumed`, `WHERE consumed_at IS
-  NULL`) — no second competing definition introduced. CDP's `verified ->
-  settled` two-hop path is completely unchanged (proven by the full,
-  unmodified CDP regression suite passing — `x402-service-route.test.ts`,
-  30/30).
+- **On confirmed success**: `recordSettledExternal`
+  (`settlement_pending -> settled_external`), then
+  `settled_external -> link_verified -> settled`, then the pre-existing
+  `markConsumed` — reusing exactly the terminal semantics that already existed;
+  `lifecycle_stage: 'settled'` remains the single definition of "payment
+  complete," `consumed_at` remains the separate, pre-existing idempotency
+  mechanism (`markConsumed`, `WHERE consumed_at IS NULL`) — no second competing
+  definition introduced. CDP's `verified -> settled` two-hop path is completely
+  unchanged (proven by the full, unmodified CDP regression suite passing —
+  `x402-service-route.test.ts`, 30/30).
 - **Restart recovery, at the real replay entry point**
   (`attemptNeverminedRecovery` in `x402-service.ts`, invoked from the
-  pre-existing `duplicate_same` branch, before `reconstructFromJob`/`202`):
-  for the Nevermined rail with an optional, injected
-  `neverminedReconciliationClient` (`X402ServiceRouteConfig.neverminedReconciliationClient`,
-  threaded through `paid-services.ts`'s `PaidServicesConfig` too — omitted
-  entirely, behavior is byte-identical to before this turn). On a
-  `duplicate_same` retry against a payment stuck at `lifecycle_stage:
-  'settlement_pending'`, reconciles externally **first** — before any
-  re-verify/re-execute/re-settle — via
+  pre-existing `duplicate_same` branch, before `reconstructFromJob`/`202`): for
+  the Nevermined rail with an optional, injected
+  `neverminedReconciliationClient`
+  (`X402ServiceRouteConfig.neverminedReconciliationClient`, threaded through
+  `paid-services.ts`'s `PaidServicesConfig` too — omitted entirely, behavior is
+  byte-identical to before this turn). On a `duplicate_same` retry against a
+  payment stuck at `lifecycle_stage: 'settlement_pending'`, reconciles
+  externally **first** — before any re-verify/re-execute/re-settle — via
   `reconcileNeverminedSettlementForRecovery`
   (`packages/protocol-nevermined/src/settlement-recovery.ts`, new):
   independently validates the buyer-supplied delegation
   (`validateNeverminedDelegationConsistency` — provider/currency/plan/payer,
-  only for fields the backend actually populates, matching the real sandbox
-  data where `planId` was observed `null`) *before* ever trusting its
-  transactions, so a real succeeded transaction on some unrelated delegation
-  is never enough by itself. `SETTLED` → recovers the durable pre-settle draft
-  from `x402_service_results`, rebuilds and verifies the real
-  `PaymentServiceLink`, marks consumed, returns the identical `200` a normal
-  synchronous success would have produced — **zero** additional
-  verify/execute/settle calls. `NOT_SETTLED`/`AMBIGUOUS` → falls through to
-  the pre-existing `202 processing` response, the row is left exactly where
-  reconciliation found it; this turn does **not** implement the separate,
-  explicitly-invoked retry path a `NOT_SETTLED` finding is supposed to
-  eventually unlock (see gaps below).
+  only for fields the backend actually populates, matching the real sandbox data
+  where `planId` was observed `null`) _before_ ever trusting its transactions,
+  so a real succeeded transaction on some unrelated delegation is never enough
+  by itself. `SETTLED` → recovers the durable pre-settle draft from
+  `x402_service_results`, rebuilds and verifies the real `PaymentServiceLink`,
+  marks consumed, returns the identical `200` a normal synchronous success would
+  have produced — **zero** additional verify/execute/settle calls.
+  `NOT_SETTLED`/`AMBIGUOUS` → falls through to the pre-existing `202 processing`
+  response, the row is left exactly where reconciliation found it; this turn
+  does **not** implement the separate, explicitly-invoked retry path a
+  `NOT_SETTLED` finding is supposed to eventually unlock (see gaps below).
 
 ### New route-level tests (`apps/edge-api/tests/nevermined-route-settlement-recovery.test.ts`, 8 tests)
 
 All exercise the real `createX402ServiceRoute` production code path (never a
-parallel implementation) with real D1/Miniflare (`resourcePersistencePath`)
-and a fully controllable in-memory `PaymentEvidenceProvider`
+parallel implementation) with real D1/Miniflare (`resourcePersistencePath`) and
+a fully controllable in-memory `PaymentEvidenceProvider`
 (`providerKind: 'external'`, `trust_class: 'external_verified'`, so
-`evidenceMode: 'production'`'s real gate evaluates it exactly as it would a
-real facilitator) — no network, no credential, no `RUN_LIVE_NEVERMINED`
-anywhere in the file.
+`evidenceMode: 'production'`'s real gate evaluates it exactly as it would a real
+facilitator) — no network, no credential, no `RUN_LIVE_NEVERMINED` anywhere in
+the file.
 
 1. `PAYMENT-DELEGATION-ID` required before any provider call.
 2. Same Payment-Identifier + different delegationId → `duplicate_conflict`.
-3. Normal success → `SETTLEMENT_PENDING` durably written before the real
-   settle call, then `settled`/consumed.
+3. Normal success → `SETTLEMENT_PENDING` durably written before the real settle
+   call, then `settled`/consumed.
 4. Explicit provider failure → terminal `settlement_failed`, never consumed.
 5. Ambiguous settlement → stays at `settlement_pending`, never
    `settlement_failed`, never auto-retried.
 6. **Crash scenario A** (against the real D1-backed repository directly):
    `recordSettlementPending` on a row that never reached `executed` returns
-   `illegal_transition` — the exact condition the route's `pending.status !==
-   'transitioned'` guard relies on to keep `settle()` at zero calls.
+   `illegal_transition` — the exact condition the route's
+   `pending.status !== 'transitioned'` guard relies on to keep `settle()` at
+   zero calls.
 7. **Crash scenario I**: `SETTLEMENT_PENDING` already committed by one route
    instance; "restart" (fresh route + fresh reconciliation client reporting
    `NOT_SETTLED`, same D1); the retry reconciles first and returns `202` with
-   **zero** re-verify/re-execute/re-settle — the core anti-double-charge
-   proof.
+   **zero** re-verify/re-execute/re-settle — the core anti-double-charge proof.
 8. **Crash-after-provider-commit recovery**: full cross-process proof —
    `dispose()` one Miniflare instance, open a genuinely fresh one at the same
    `resourcePersistencePath`, a fresh route instance with a reconciliation
    client reporting `SETTLED` recovers to `200` with zero additional
-   verify/execute/settle, a verified `PaymentServiceLink`, and `consumed_at`
-   set — chained with an identical-replay proof (zero additional calls, same
+   verify/execute/settle, a verified `PaymentServiceLink`, and `consumed_at` set
+   — chained with an identical-replay proof (zero additional calls, same
    `link_id`) and a `duplicate_conflict`-after-recovered-consumption proof
    (mutated input, same Payment-Identifier, `409` before any provider call).
 
 ### Regression proof
 
 Full, unmodified suites still pass: `x402-service-route.test.ts` (30/30, CDP
-untouched), `nevermined-service-route.test.ts` (17/17, updated only to send
-the new required header — behavior otherwise unchanged),
-`nevermined-settlement-recovery.test.ts` (7/7, the standalone library proof
-from the prior turn, unchanged design), `d1-payment-attempts.test.ts` (35/35,
+untouched), `nevermined-service-route.test.ts` (17/17, updated only to send the
+new required header — behavior otherwise unchanged),
+`nevermined-settlement-recovery.test.ts` (7/7, the standalone library proof from
+the prior turn, unchanged design), `d1-payment-attempts.test.ts` (35/35,
 extended with delegation-mismatch conflict + requires-delegation-id cases),
 protocol-x402/protocol-nevermined package suites (581 + 151 tests). Targeted
-gates: `nevermined:check`, `x402:check`, `control-plane:check` all exit 0.
-Full `pnpm run check` (format, lint, typecheck, every test suite, migrations,
+gates: `nevermined:check`, `x402:check`, `control-plane:check` all exit 0. Full
+`pnpm run check` (format, lint, typecheck, every test suite, migrations,
 governance/state/tasks validation, contracts, secrets:scan) exits 0 with both
 `RUN_LIVE_NEVERMINED` and `RUN_LIVE_X402` absent throughout.
 
@@ -487,17 +488,114 @@ governance/state/tasks validation, contracts, secrets:scan) exits 0 with both
   `settlement_pending` rather than auto-transitioning it to a distinct
   "retry-eligible" state or actually re-driving verify/execute/settle. That
   separate retry path is not built this turn.
-- **The live test (`nevermined-live-exact.test.ts`) sends the new header but
-  is not wired to a real `neverminedReconciliationClient`.** The prerequisite
-  check in this turn proved a real raw-fetch client against the seller's
-  `NVM_API_KEY` works; wiring an actual `NeverminedDelegationLookupClient`
-  implementation into the live test (so the final live run can exercise real
-  restart recovery, not just the mocked route tests above) is a small
-  remaining step before that run.
+- **The live test (`nevermined-live-exact.test.ts`) sends the new header but is
+  not wired to a real `neverminedReconciliationClient`.** The prerequisite check
+  in this turn proved a real raw-fetch client against the seller's `NVM_API_KEY`
+  works; wiring an actual `NeverminedDelegationLookupClient` implementation into
+  the live test (so the final live run can exercise real restart recovery, not
+  just the mocked route tests above) is a small remaining step before that run.
 - **No live Nevermined call of any kind was made in this turn** —
   `RUN_LIVE_NEVERMINED` stayed absent throughout, per the directive's own "no
-  live payment in this turn" instruction. The prerequisite delegation-read
-  check used real, already-existing sandbox delegations from the prior
-  checkpoint's real settlements — read-only, no new mutation.
+  live payment in this turn" instruction. The prerequisite delegation-read check
+  used real, already-existing sandbox delegations from the prior checkpoint's
+  real settlements — read-only, no new mutation.
 - SUN-0900B remains **not accepted**. The final fixed-PAYG live charge is a
   separate, subsequent, explicitly-authorized turn.
+
+## Final live-harness recovery wiring turn (this turn)
+
+Froze commit `3bbf68f` unchanged — no redesign of the wire contract, D1
+settlement states, recovery ordering, or the seller-readability question. Only
+wired the live harness onto those accepted mechanisms.
+
+**Real seller-credentialed reconciliation client, implemented**
+(`apps/edge-api/src/control-plane/evidence/nevermined-reconciliation-client.ts`,
+new): `NeverminedSandboxReconciliationClient`, authenticated with `NVM_API_KEY`
+only (never `NVM_SUBSCRIBER_API_KEY`), sandbox-only, gated by the same
+`evaluateNeverminedLiveGuard` construction-time pattern
+`NeverminedPaymentEvidenceProvider.authenticated` already uses — so with
+`RUN_LIVE_NEVERMINED` absent, construction throws immediately and no HTTP call
+is structurally reachable. Implements exactly `NeverminedDelegationLookupClient`
+(two GET operations — `listDelegationTransactions`, `getDelegation`) with no
+mutating method anywhere on the class. A 404 and a 403 on `getDelegation` are
+both normalized to `null`, identically, never distinguished — so no caller can
+infer anything about a delegation it can't see. Wired into
+`apps/edge-api/tests/live/nevermined-live-exact.test.ts`'s `beforeAll` (which
+only ever executes when `RUN_LIVE_NEVERMINED==='1'`, via the file's existing
+`describe.skipIf(!RUN_LIVE)`) and passed as `neverminedReconciliationClient`
+into the real route mount.
+
+**9 new adapter tests**
+(`apps/edge-api/tests/nevermined-reconciliation-client.test.ts`): live-guard
+construction denial (flag absent; wrong key environment), then `fetch` mocked at
+the transport boundary only (never the reconciliation classifier, already proven
+standalone) — proves exact request shape (`GET`, sandbox URL, seller bearer
+token, `Nevermined-Version: 1.1`), 404/403 normalization, non-2xx surfaced as a
+thrown error rather than a silently-empty result, malformed response bodies
+rejected rather than guessed at, and that every real call this class can ever
+make is `GET` — never a mutating method.
+
+**3 new route-level tests** added to
+`nevermined-route-settlement-recovery.test.ts` (now 11): a malformed (but
+transport-legal) `PAYMENT-DELEGATION-ID` is rejected before any provider call; a
+structurally valid but otherwise arbitrary delegationId does not itself grant
+success (a forced explicit settle failure still rejects the payment — the header
+is never itself authorization evidence); a CDP-rail request neither requires nor
+references the header at all (the field only exists on the Nevermined branch).
+
+**`PaymentServiceLink` delegation-binding decision (explicit, not
+retrofitted):** the delegationId is **not** added as a new bound field on the
+link itself. Reasoning: `payment_identifier` is already a link-bound field
+(`packages/protocol-x402/src/linkage/payment-service-link.ts`), and the
+immutable v2 binding already enforces a strict 1:1 relationship between a
+Payment-Identifier and its delegationId — a different delegationId under the
+same Payment-Identifier is `duplicate_conflict` _before_ any link is ever built,
+so two different delegations can never produce a link under the same payment
+identity in the first place. The existing, already-passing
+`payment-service-link.test.ts` mutation-sensitivity coverage (every bound field,
+including `payment_identifier`, changes `link_hash` when mutated) therefore
+already covers the cross-delegation-reinterpretation case transitively — no new
+PSL test was added since it would duplicate that existing, generic proof rather
+than exercise anything new.
+
+**Live persistence directory:** confirmed unchanged —
+`$TMPDIR/siteborne-sun-0900b-checkpoint1-live-d1`, stable, never auto-deleted
+(from the prior recovery-hardening commit).
+
+**Startup recovery priority:** unchanged from the accepted design — the real
+route's `duplicate_same` branch already calls `attemptNeverminedRecovery`
+(external reconciliation) _before_ `reconstructFromJob`/the `202` fallback, and
+_before_ any possibility of a new delegation/token/verify/execute/settle,
+because a `duplicate_same` outcome is only ever reached for an _existing_
+Payment-Identifier — a genuinely new payment never enters that branch at all. No
+new code was needed for this: the ordering the directive asks for is exactly
+what `3bbf68f` already built.
+
+**Live test collection, confirmed:**
+`pnpm exec vitest run apps/edge-api/tests/live/nevermined-live-exact.test.ts`
+with `RUN_LIVE_NEVERMINED` unset → `1 test | 1 skipped`, zero network activity
+(the guarded `beforeAll` body, including the new reconciliation client's
+construction, never executes).
+
+**Regression:** `nevermined:check`, `x402:check`, `mcp:check`, `a2a:check`,
+`governance:validate`, `state:validate`, `tasks:validate` all exit 0. Full
+`pnpm run check` (format, lint, typecheck, every test suite, migrations,
+contracts, secrets:scan) exits 0 with both live flags absent throughout.
+
+**Remaining, explicit gap, unchanged from the prior turn:** no automatic
+`NOT_SETTLED` retry path exists — a `NOT_SETTLED` recovery finding still leaves
+the row at `settlement_pending` rather than transitioning to a distinct
+retry-eligible state, per the directive's own "only a separate, later,
+explicitly-invoked settlement path may ever retry" requirement.
+
+**Final-live-run readiness (self-assessed against this turn's own precondition
+list):** registration existing/reuse-only, zero mutation on resume; seller
+reconciliation client wired; delegation header wired and bound into the
+immutable binding; durable D1 write-before-settle proven; cross-process crash
+recovery proven (route-level, mocked evidence provider); PaymentServiceLink
+recovery proven (route-level); identical-replay and `duplicate_conflict` proven
+(both pre- and post-recovery); CDP regression unaffected; historical v1 digests
+unchanged; live persistence path stable; `production_enabled`/`production_ready`
+both `false`. SUN-0900B remains **not accepted**. **Exactly one final fixed-PAYG
+live run is assessed as safe to execute** in a separate, subsequent,
+explicitly-authorized turn — this turn made zero live Nevermined calls.

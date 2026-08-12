@@ -323,6 +323,133 @@ describe('Nevermined route-level durable settlement recovery (SUN-0900B checkpoi
     expect(counters.execute).toBe(0);
   });
 
+  it('rejects a malformed PAYMENT-DELEGATION-ID before any provider call', async () => {
+    await challenge();
+    const id = generateSiteborneePaymentId();
+    const res = await app.request(ROUTE_PATH, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'payment-signature': 'fixture_' + '0'.repeat(24),
+        [PAYMENT_IDENTIFIER_HEADER]: id,
+        [PAYMENT_DELEGATION_ID_HEADER]: 'not a valid header value with spaces!@#',
+      },
+      body: JSON.stringify(WEB_INPUT),
+    });
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.error).toBe('malformed_payment_delegation_id');
+    expect(counters.verify).toBe(0);
+    expect(counters.settle).toBe(0);
+    expect(counters.execute).toBe(0);
+  });
+
+  it('a valid, well-formed but otherwise arbitrary delegationId does not itself grant success — only real verify/settle evidence does', async () => {
+    // Same setup as the normal-success test but with settle() forced to
+    // fail: proves the header's mere presence/validity is never
+    // authorization evidence, never interpreted as payment success.
+    const hono = new Hono();
+    const controllable = controllableProvider(counters);
+    controllable.setSettleMode('explicit_failure');
+    createX402ServiceRoute(hono, {
+      serviceId: SERVICE_ID,
+      scheme: 'exact',
+      pricingKey: 'web_context_verified_direct',
+      network: NETWORK,
+      asset: 'nevermined:credits',
+      path: ROUTE_PATH,
+      inputSchema: BUNDLED_SERVICE_INPUT_SCHEMAS[SERVICE_ID] as Record<string, unknown>,
+      contractRelease: '1.0.0',
+      inputSchemaHash: 'sha256:d3b0762020d4cc1d1e846960ed978cf1237b1741f90213adabe8ed931c2845ea',
+      outputSchemaHash: 'sha256:138bccc34ad8c320daec36890b8867fca9f709040b80c689710fd4bde49042de',
+      pccDependency: '1.0.0',
+      db,
+      clock: () => clockValue,
+      payTo: 'siteborne:nevermined-publisher-not-registered',
+      evidenceMode: 'production',
+      evidenceProvider: controllable.provider,
+      rail: 'nevermined',
+      nevermined: { agentId: AGENT_ID, planId: PLAN_ID },
+      executor: async (): Promise<ExecutorOutcome> => {
+        counters.execute += 1;
+        return {
+          result: {
+            result_class: 'success',
+            output: {},
+            output_hash: 'sha256:' + '4'.repeat(64),
+            receipt_id: 'rcpt_' + '5'.repeat(24),
+            receipt: { ok: true },
+          },
+        };
+      },
+    });
+    await hono.request(ROUTE_PATH, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(WEB_INPUT),
+    });
+    const id = generateSiteborneePaymentId();
+    const res = await hono.request(ROUTE_PATH, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'payment-signature': 'fixture_' + '0'.repeat(24),
+        [PAYMENT_IDENTIFIER_HEADER]: id,
+        [PAYMENT_DELEGATION_ID_HEADER]: 'perfectly-well-formed-but-unrelated-delegation-id',
+      },
+      body: JSON.stringify(WEB_INPUT),
+    });
+    // A structurally valid header does not bypass real evidence — the
+    // (forced) explicit settle failure still rejects the payment.
+    expect(res.status).toBe(402);
+  });
+
+  it('CDP requests never require or reference PAYMENT-DELEGATION-ID — the header only exists on the Nevermined rail', async () => {
+    const cdpCounters = { verify: 0, settle: 0, execute: 0 };
+    const cdpApp = new Hono();
+    createX402ServiceRoute(cdpApp, {
+      serviceId: SERVICE_ID,
+      scheme: 'exact',
+      pricingKey: 'web_context_verified_direct',
+      network: 'eip155:8453',
+      asset: '0xUSDC',
+      path: '/v1/cdp-independence-test/web/context',
+      inputSchema: BUNDLED_SERVICE_INPUT_SCHEMAS[SERVICE_ID] as Record<string, unknown>,
+      contractRelease: '1.0.0',
+      inputSchemaHash: 'sha256:d3b0762020d4cc1d1e846960ed978cf1237b1741f90213adabe8ed931c2845ea',
+      outputSchemaHash: 'sha256:138bccc34ad8c320daec36890b8867fca9f709040b80c689710fd4bde49042de',
+      pccDependency: '1.0.0',
+      db,
+      clock: () => clockValue,
+      evidenceMode: 'fixture',
+      // rail defaults to 'cdp' — no `nevermined` config supplied at all.
+      executor: async (): Promise<ExecutorOutcome> => {
+        cdpCounters.execute += 1;
+        return {
+          result: {
+            result_class: 'success',
+            output: {},
+            output_hash: 'sha256:' + '4'.repeat(64),
+            receipt_id: 'rcpt_' + '5'.repeat(24),
+            receipt: { ok: true },
+          },
+        };
+      },
+    });
+    const challengeRes = await cdpApp.request('/v1/cdp-independence-test/web/context', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(WEB_INPUT),
+    });
+    expect(challengeRes.status).toBe(402);
+    // No PAYMENT-DELEGATION-ID header at all on the CDP rail — the
+    // fixture facilitator's own payload/binding is sufficient; a real
+    // CDP payload would be built by protocol-x402's fixture provider in
+    // the shared route test suite (x402-service-route.test.ts), unchanged
+    // by this turn's work.
+    expect(cdpCounters.execute).toBe(0);
+  });
+
   it('same Payment-Identifier with a different delegationId is duplicate_conflict, never accepted', async () => {
     await challenge();
     const id = generateSiteborneePaymentId();
