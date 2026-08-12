@@ -9,14 +9,13 @@ source_directive:
 
 execution:
   mode: 'serial'
-  active_mutation_tasks: 0
-  current_increment: null
+  active_mutation_tasks: 1
+  current_increment: 'SUN-0900B'
   current_phase: 'phase_11_nevermined'
   last_completed_increment: 'SUN-0900A'
-  frontier_status: 'blocked_external'
-  blocked_on:
-    - 'SUN-0900B'
-  reason: 'SUN-0900A is accepted: the credential-independent alternative-rail foundation, official Nevermined SDK adapter boundary, fixture/external trust separation, four deterministic Nevermined-only routes, shared D1/service/PCC/UsageResult/linkage lifecycle, replay, and fail-closed behavior are implemented and validated without credentials or network activity. SUN-0900B is the next dependency frontier and remains blocked_external on genuine Nevermined sandbox builder/subscriber credentials, funding/delegation, registration, and dynamic PAYG capability proof. SUN-0800B remains independently blocked_external. Production remains disabled and not ready.'
+  frontier_status: 'executable'
+  blocked_on: []
+  reason: 'SUN-0900B is active for a controlled Nevermined sandbox self-test after sandbox builder/subscriber authentication, payer/payee separation, Base Sepolia nvm:erc4337 capability discovery, rotated credential confirmation, and a 20 USDC subscriber smart-account funding proof. Checkpoint 1 is limited to one fixed web_context_verified.v1 PAYG registration and one verify/settle/replay proof. Dynamic document proof and the remaining registrations are not authorized in this checkpoint. Production remains disabled and not ready.'
 
 implemented:
   - 'governance_validation'

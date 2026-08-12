@@ -988,7 +988,7 @@ tasks:
   - id: 'SUN-0900B'
     title: 'Nevermined Sandbox Registration and Live Settlement Verification'
     phase: 'phase_11_nevermined'
-    state: 'blocked_external'
+    state: 'active'
     owner_agent: 'operator'
     dependencies:
       - 'SUN-0900A'
@@ -1003,8 +1003,8 @@ tasks:
       - 'Free live trials, credits trials, time trials, and zero-price live plans remain disabled until after the first unknown external paid purchase'
       - 'Sanitized live evidence records the real sandbox registration, verification, settlement, and public identifiers without claiming production readiness or revenue'
     evidence: []
-    next_action: 'Blocked until Nevermined sandbox builder credentials, controlled subscriber credentials, sandbox payment/funding/delegation setup, dynamic PAYG actual-usage capability proof, and real registration/live verification capability are available. Do not activate during SUN-0900A.'
-    blocker: 'Requires Nevermined sandbox builder and controlled subscriber credentials, sandbox funding/delegation setup, dynamic PAYG actual-usage capability proof, and real registration/live verification capability (blocked_external)'
+    next_action: 'Active for controlled sandbox Checkpoint 1 only: register exactly one positive-price, non-trial PAYG agent/plan for web_context_verified.v1; create one least-privilege subscriber delegation; prove one real Nevermined verify/settle/D1 replay lifecycle; then stop with SUN-0900B active. Do not register the remaining services or begin the document 190000 maximum to 12000 actual proof in this checkpoint.'
+    blocker: null
     commit_ref: null
 
   - id: 'SUN-1000'
