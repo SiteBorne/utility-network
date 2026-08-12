@@ -53,6 +53,7 @@ import {
   SUN_0900B_CHECKPOINT_1_REGISTRATION,
   decodeNeverminedPaymentRequiredHeaderSafe,
   decodeNeverminedPaymentResponseHeaderSafe,
+  reconcileNeverminedDelegation,
   reconcileNeverminedRegistration,
   type NeverminedPaymentRequired,
   type NeverminedRegistryClient,
@@ -139,12 +140,20 @@ describe.skipIf(!RUN_LIVE)(
       }
 
       tempDir = mkdtempSync(join(tmpdir(), 'siteborne-d1-nevermined-live-'));
-      const dbPath = join(tempDir, 'test.db');
       mf = new Miniflare({
         modules: true,
         script: `export default { async fetch() { return new Response('OK'); } }`,
         d1Databases: ['DB'],
-        d1Persist: dbPath,
+        // `d1Persist` is not a recognized option on this installed
+        // Miniflare version (5.20260801.0-alpha) — it was silently
+        // ignored, so D1 state never actually reached disk regardless of
+        // this option's presence (SUN-0900B checkpoint 1B: confirmed via
+        // every `siteborne-d1-*-live-*` tempdir being empty after real
+        // live runs). The real, current option is the shared, top-level
+        // `resourcePersistencePath` — a directory Miniflare manages
+        // itself (D1/R2/KV/DO all persist under it), not a single sqlite
+        // file path.
+        resourcePersistencePath: tempDir,
       });
       db = await mf.getD1Database('DB');
       await db.exec('PRAGMA foreign_keys = ON');
@@ -264,16 +273,80 @@ describe.skipIf(!RUN_LIVE)(
 
       // =========================================================
       // PHASE B: subscriber delegation. Least-privilege, plan-bound,
-      // short-lived.
+      // short-lived — and, per checkpoint 1A's own lesson, reconciled
+      // read-only FIRST so a crash between "created" and "confirmed"
+      // can never turn a retry into a second (or fifth) delegation.
       // =========================================================
-      const { delegationId } = await subscriber.delegation.createDelegation({
-        provider: 'erc4337',
-        spendingLimitCents: 1, // >= $0.009, least-privilege ceiling for one call
-        durationSecs: 3600,
+      const delegationPolicy = {
+        provider: 'erc4337' as const,
         currency: 'usdc',
-        planId,
+        activeStatuses: ['active'],
+        minRemainingBudgetCents: 1,
+        notExpiredAsOfIso: clockValue(),
+      };
+      const delegationListClient = {
+        listDelegations: async () => {
+          const result = await subscriber.delegation.listDelegations({ accessible: true });
+          return {
+            delegations: result.delegations.map((d) => ({
+              delegationId: d.delegationId,
+              provider: d.provider,
+              status: d.status,
+              currency: d.currency,
+              spendingLimitCents: d.spendingLimitCents,
+              remainingBudgetCents: d.remainingBudgetCents,
+              amountSpentCents: d.amountSpentCents,
+              expiresAt: d.expiresAt,
+            })),
+          };
+        },
+      };
+      const delegationReconciliation = await reconcileNeverminedDelegation(
+        delegationListClient,
+        delegationPolicy
+      );
+      // eslint-disable-next-line no-console
+      console.log('SUN-0900B delegation reconciliation (sanitized):', {
+        state: delegationReconciliation.state,
       });
+
+      let delegationId: string;
+      if (delegationReconciliation.state === 'exact_existing') {
+        delegationId = delegationReconciliation.delegationId;
+      } else if (delegationReconciliation.state === 'no_match') {
+        // Guarded: only reachable when reconciliation positively found
+        // zero erc4337 delegations at all — never merely because one
+        // read failed. Subscriber credential only, never builder.
+        const created = await subscriber.delegation.createDelegation({
+          provider: 'erc4337',
+          spendingLimitCents: 1, // >= $0.009, least-privilege ceiling for one call
+          durationSecs: 3600,
+          currency: 'usdc',
+          planId, // scopes the delegation to the authoritative web plan
+        });
+        delegationId = created.delegationId;
+      } else {
+        throw new Error(
+          `SUN-0900B live test: delegation reconciliation did not resolve to 'exact_existing' or 'no_match' (got "${delegationReconciliation.state}") — refusing to create another delegation. Never create when reconciliation reports conflicting/multiple/timeout state.`
+        );
+      }
       expect(delegationId).toBeTruthy();
+
+      // --- read-back proof (bounded, read-only — same discipline as
+      // registration's eventual-consistency lesson) ---
+      const delegationReadBack = await reconcileNeverminedDelegation(
+        delegationListClient,
+        { ...delegationPolicy, notExpiredAsOfIso: clockValue() },
+        { backoffScheduleMs: [0, 2_000, 5_000, 10_000] }
+      );
+      if (
+        delegationReadBack.state !== 'exact_existing' ||
+        delegationReadBack.delegationId !== delegationId
+      ) {
+        throw new Error(
+          `SUN-0900B live test: delegation ${delegationId} did not read back as exact_existing (got "${delegationReadBack.state}") — preserving created state, not creating another.`
+        );
+      }
 
       // =========================================================
       // PHASE C: ephemeral x402 authorization bound to that delegation.

@@ -8,25 +8,31 @@
 against the Nevermined **sandbox**, never mainnet, never an unknown external
 buyer.
 
-## Outcome so far
+## Outcome so far (Checkpoint 1B)
 
-Registration for exactly one service (`web_context_verified.v1`, `exact` scheme)
-is committed and independently reconciled read-only against the live Nevermined
-sandbox. Delegation, x402 authorization, verification, service execution, and
-settlement have **not** been started.
+Registration (1A), delegation, real verification, and real service execution are
+all confirmed. **Two real sandbox settlements have externally occurred**
+(confirmed via the strongest available evidence —
+`GET /delegation/{id}/transactions` returning `status: "succeeded"` for both),
+but neither reached a local HTTP 200 / `PaymentServiceLink` / D1 `consumed`
+state, because SITEBORNE's own settlement validator falsely rejected both real
+successes. That validator defect, and a separate D1 cross-process persistence
+defect it exposed, are both fixed and regression-tested below. Full crash-
+recovery state-machine hardening (durable `SETTLEMENT_PENDING` state, external-
+settlement reconciliation before allowing a retry) is **not yet implemented** —
+see "What remains before another live run" below.
 
 ```
-funding                    PASS  (20 USDC on the subscriber smart account,
-                                   independently verified via a public
-                                   Base Sepolia RPC eth_call)
-registration                COMMITTED
-registration sync           eventual_consistency_confirmed
-delegation                  NOT STARTED
-authorization (x402 token)  NOT STARTED
-verification                NOT STARTED
-service execution           NOT STARTED
-settlement                  NOT STARTED
-replay proof                NOT STARTED
+funding                     PASS (20 USDC on the subscriber smart account)
+registration                COMMITTED, reconciled
+delegation                  2 delegations created and exhausted (see below)
+authorization (x402 token)  obtained twice, in-memory only, never persisted
+verification                CONFIRMED real (external_verified) on both attempts
+service execution           executed on both attempts (fixture-mode adapters)
+settlement (external)       SETTLED x2 — confirmed via GET /delegation/{id}/transactions
+settlement (local HTTP)     REJECTED x2 — SITEBORNE validator defect, now fixed
+PaymentServiceLink / D1     never reached consumed on either attempt
+replay proof                NOT YET RE-ATTEMPTED
 ```
 
 ## Authoritative registration (frozen — never to be re-registered)
@@ -130,7 +136,109 @@ outstanding. `document_evidence_json.v1` remains `registration_allowed: false`;
 `sandbox_capability_verified: false` is unchanged. Production remains disabled
 and not ready.
 
-## What was not done in this checkpoint
+## Two confirmed real settlements — historical incidents, not proof of end-to-end success
+
+| #   | delegationId                           | providerTransactionId                                                | amountCents | status      |
+| --- | -------------------------------------- | -------------------------------------------------------------------- | ----------- | ----------- |
+| 1   | `aafdab51-57a2-44d2-8765-579b8a5f9c19` | `0xdbd5109b7d7dc10763573f59923d98056068cc3a78f5cba06408ed87779d96fe` | 1           | `succeeded` |
+| 2   | `6a4979a9-a69e-4c21-ba7f-e679c276f1ca` | `0x3b2b1ddfd1ef917e607951400c5bccb23a0e89c66795f2eb0e88171901f3a541` | 1           | `succeeded` |
+
+Confirmed read-only, subscriber key, via
+`GET /api/v1/delegation/{delegationId}/transactions` (the strongest available
+evidence tier — an explicit per-transaction `status`, not inferred from
+delegation-level `Exhausted`/`amountSpentCents`, though both delegations also
+independently corroborate this: `status: Exhausted`, `amountSpentCents: "1"`,
+`transactionCount: 1` each). `transactionCount` from `listDelegations()` matched
+`totalResults` from the transactions endpoint exactly for both — no
+duplicate-settlement risk, no reconciliation inconsistency.
+
+**Classification: `PAID_EXTERNAL_NOT_CONSUMED_LOCAL` for both.** Local artifacts
+(Payment-Identifier, job, attempt, PCC, receipt, verification evidence) from
+both attempts are **`LOCAL_ARTIFACTS_UNRECOVERABLE`** — not merely because the
+test process exited, but because of the D1 durability defect below: they were
+never durably persisted to begin with. These two incidents prove Nevermined
+sandbox external settlement capability. They do **not** prove end-to-end paid
+HTTP success, `PaymentServiceLink`, D1 `consumed`, or replay protection — those
+remain to be demonstrated by a future, successful live run.
+
+## Settlement validator defect (root cause of both false rejections)
+
+`NeverminedSettlementResult` declares `success: boolean` (non-optional) after
+the official `@nevermined-io/payments@1.10.0` SDK's own type — but
+`facilitator-api.js`'s `settlePermissions()` does **zero response
+normalization** (`return await response.json();`, a raw passthrough), so that
+type is a compile-time-only annotation, not a runtime guarantee. Both real
+settlements above arrived with `success` absent, alongside `payer`/`network`/
+`creditsRedeemed` (already found optional-and-absent in the first fixed-PAYG
+diagnostic pass). `packages/protocol-nevermined/src/validation.ts`'s
+`validateNeverminedSettlementResult` required `result.success` truthy as its
+first, unconditional gate — so both real successes were rejected before any
+other field was even checked.
+
+**Fix — `normalizeSettlementSuccess`, a scheme-scoped positive-success
+normalizer** (provider `nevermined-payments@1.10.0`, scheme `nvm:erc4337`),
+never a generic "missing means success" rule:
+
+- `success === false` → `explicit_failure`, always rejected — authoritative over
+  every other field, including a present, valid transaction reference.
+- `success === true` → `positive_success` (unchanged prior behavior).
+- `success === undefined` → `positive_success` **only** when a real, bounded,
+  non-empty `transaction` reference is present; otherwise `ambiguous`.
+- `success` present but neither `true` nor `false` → `ambiguous` — never
+  guessed.
+
+This matches Nevermined's own official TypeScript integration guide, which never
+inspects `settlement.success` at all — it treats a resolved
+`settlePermissions()` call plus a real `settlement.txHash` as sufficient to
+build its own receipt. `ambiguous_settlement` is a new, distinct rejection
+reason (previously collapsed into `provider_rejected`) so a genuinely
+unrecognized response shape is never silently treated as either success or an
+ordinary provider rejection. The same normalizer is reused in `evidence.ts`'s
+`sanitizeNeverminedSettlement` so the sanitized audit record can never disagree
+with the actual pass/fail gate.
+
+14 new regression tests (`packages/protocol-nevermined/src/validation.test.ts`)
+cover the full matrix: canonical REST shape, installed-SDK-observed shape
+(success absent + real transaction), explicit failure (with and without a valid
+transaction present — failure is always authoritative), no positive evidence at
+all, malformed transaction, and an unrecognized `success` shape — all fail
+closed except genuine positive evidence.
+
+## D1 cross-process persistence defect (found while investigating the above)
+
+`d1Persist: <file path>` — used in all seven of this repository's D1-backed
+Hono/Miniflare test files — is **not a recognized option** on the installed
+Miniflare version (`5.20260801.0-alpha`); it was silently ignored. Every
+`siteborne-d1-*-live-*` tempdir left behind by real live runs was confirmed
+empty. This means the two paid-external-not-consumed incidents above have no
+recoverable local trace, and any future crash-recovery design would have nothing
+to reconcile against.
+
+**Fix:** the current option is the shared, top-level `resourcePersistencePath` —
+a directory Miniflare itself manages (D1/R2/KV/DO all persist under it), not a
+single sqlite file path. Fixed in all seven files. A new regression test,
+`apps/edge-api/tests/d1-cross-instance-durability.test.ts`, proves both halves:
+the old option name genuinely writes nothing to disk, and the fixed option
+genuinely survives a full Miniflare instance dispose + fresh-instance cycle at
+the same path (the same guarantee a real process crash-and-restart needs — not
+merely reusing the same in-memory instance, which a different, already- accepted
+test proves a different thing about).
+
+## What remains before another live run
+
+This checkpoint fixes the two defects that caused the false rejections and the
+unrecoverable local state. It does **not** yet implement the durable
+`SETTLEMENT_PENDING` → `SETTLED_EXTERNAL` → `CONSUMED` payment state machine
+requested for full crash-recovery hardening (write settlement-correlation data
+before calling `settlePermissions`, reconcile against external transaction
+records on resume, never re-settle when external evidence already proves
+`SETTLED`). Building that correctly is a real, separate undertaking touching
+`x402-service.ts`'s route lifecycle itself, not just the Nevermined validator/
+persistence layer, and doing it hastily in the same pass as the two fixes above
+risked under-testing something whose entire purpose is financial correctness.
+Recommended as the next concrete step before authorizing another live charge.
+
+## What was not done in this checkpoint (1B repair turn)
 
 No delegation was created. No x402 access token was obtained. No
 `verifyPermissions` or `settlePermissions` call was made. No paid service

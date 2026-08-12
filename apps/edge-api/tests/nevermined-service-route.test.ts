@@ -141,7 +141,12 @@ describe('Nevermined alternative rail HTTP lifecycle', () => {
       modules: true,
       script: `export default { async fetch() { return new Response('OK'); } }`,
       d1Databases: ['DB'],
-      d1Persist: join(tempDir, 'test.db'),
+      // `d1Persist` is not a recognized option on this installed
+      // Miniflare version (5.20260801.0-alpha) — silently ignored. The
+      // real, current option is the shared, top-level
+      // `resourcePersistencePath` (a directory Miniflare manages
+      // itself), not a single sqlite file path.
+      resourcePersistencePath: tempDir,
     });
     db = await miniflare.getD1Database('DB');
     await db.exec('PRAGMA foreign_keys = ON');

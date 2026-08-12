@@ -115,6 +115,128 @@ describe('Nevermined protocol boundary validation', () => {
     ).toMatchObject({ valid: false });
   });
 
+  it('accepts a successful settlement when payer/network/creditsRedeemed are all absent — observed on the real sandbox facilitator, SUN-0900B checkpoint 1B (independently confirmed settled via delegation transactionCount/amountSpentCents/status read-back before this fix)', () => {
+    expect(
+      validateNeverminedSettlementResult(
+        {
+          success: true,
+          payer: undefined,
+          transaction: '0x' + 'a'.repeat(64),
+          network: undefined,
+          creditsRedeemed: undefined,
+        },
+        {
+          payer: '0x' + '1'.repeat(40),
+          network: 'eip155:84532',
+          actualAmount: '9000',
+        }
+      )
+    ).toMatchObject({ valid: true });
+  });
+
+  it.each([
+    ['present-but-wrong payer', { payer: '0x' + '2'.repeat(40) }],
+    ['present-but-wrong network', { network: 'eip155:1' }],
+    ['present-but-wrong creditsRedeemed', { creditsRedeemed: '190000' }],
+  ])(
+    'still rejects %s even when the other optional fields are absent — absence is not the same as disagreement',
+    (_name, patch) => {
+      expect(
+        validateNeverminedSettlementResult(
+          {
+            success: true,
+            payer: undefined,
+            transaction: '0x' + 'a'.repeat(64),
+            network: undefined,
+            creditsRedeemed: undefined,
+            ...patch,
+          },
+          {
+            payer: '0x' + '1'.repeat(40),
+            network: 'eip155:84532',
+            actualAmount: '9000',
+          }
+        )
+      ).toMatchObject({ valid: false });
+    }
+  );
+
+  describe('settlement success normalizer (SUN-0900B checkpoint 1B)', () => {
+    const EXPECTED = {
+      payer: '0x' + '1'.repeat(40),
+      network: 'eip155:84532',
+      actualAmount: '9000',
+    };
+
+    it('A: canonical documented REST success shape (explicit success:true, all fields present) accepts', () => {
+      expect(
+        validateNeverminedSettlementResult(
+          {
+            success: true,
+            payer: EXPECTED.payer,
+            network: EXPECTED.network,
+            transaction: '0x' + 'a'.repeat(64),
+            creditsRedeemed: EXPECTED.actualAmount,
+          },
+          EXPECTED
+        )
+      ).toMatchObject({ valid: true });
+    });
+
+    it('B: installed-SDK-observed successful shape (success absent, real transaction present) accepts', () => {
+      expect(
+        validateNeverminedSettlementResult(
+          { success: undefined, transaction: '0x' + 'b'.repeat(64) },
+          EXPECTED
+        )
+      ).toMatchObject({ valid: true });
+    });
+
+    it('C: explicit success:false rejects as provider_rejected, even with a real transaction present', () => {
+      expect(
+        validateNeverminedSettlementResult(
+          { success: false, transaction: '0x' + 'c'.repeat(64), errorReason: 'insufficient_funds' },
+          EXPECTED
+        )
+      ).toEqual({ valid: false, reason: 'provider_rejected' });
+    });
+
+    it('D: no positive success evidence at all (success absent, transaction absent) is ambiguous, not accepted', () => {
+      expect(
+        validateNeverminedSettlementResult({ success: undefined, transaction: '' }, EXPECTED)
+      ).toEqual({ valid: false, reason: 'ambiguous_settlement' });
+    });
+
+    it('E: success absent, transaction present but malformed (oversized) is ambiguous, not accepted', () => {
+      expect(
+        validateNeverminedSettlementResult(
+          { success: undefined, transaction: 'x'.repeat(300) },
+          EXPECTED
+        )
+      ).toEqual({ valid: false, reason: 'ambiguous_settlement' });
+    });
+
+    it('M: a real transaction present alongside explicit success:false is still rejected — explicit failure is authoritative', () => {
+      expect(
+        validateNeverminedSettlementResult(
+          { success: false, transaction: '0x' + 'd'.repeat(64) },
+          EXPECTED
+        )
+      ).toEqual({ valid: false, reason: 'provider_rejected' });
+    });
+
+    it('N: success present but neither true nor false (unknown/drifted shape) is ambiguous — never guessed', () => {
+      expect(
+        validateNeverminedSettlementResult(
+          // @ts-expect-error — deliberately an off-contract value to prove
+          // the normalizer never coerces an unrecognized shape into success.
+          { success: 'ok', transaction: '0x' + 'e'.repeat(64) },
+          EXPECTED
+        )
+      ).toEqual({ valid: false, reason: 'ambiguous_settlement' });
+    });
+  });
+
   it('accepts verification only when payer, network, and stable request identity are bounded', () => {
     expect(
       validateNeverminedVerificationResult(
@@ -127,6 +249,34 @@ describe('Nevermined protocol boundary validation', () => {
         { network: 'eip155:84532' }
       )
     ).toEqual({ valid: true });
+  });
+
+  it('accepts verification when the (optional, per the official SDK type) network field is absent entirely — observed on the real sandbox facilitator, SUN-0900B checkpoint 1B', () => {
+    expect(
+      validateNeverminedVerificationResult(
+        {
+          isValid: true,
+          payer: '0x' + '1'.repeat(40),
+          network: undefined,
+          agentRequestId: 'agent-request-1',
+        },
+        { network: 'eip155:84532' }
+      )
+    ).toEqual({ valid: true });
+  });
+
+  it('still rejects a network value that is present but wrong — absence is not the same as disagreement', () => {
+    expect(
+      validateNeverminedVerificationResult(
+        {
+          isValid: true,
+          payer: '0x' + '1'.repeat(40),
+          network: 'eip155:1',
+          agentRequestId: 'agent-request-1',
+        },
+        { network: 'eip155:84532' }
+      )
+    ).toEqual({ valid: false, reason: 'network_mismatch' });
   });
 
   it.each([

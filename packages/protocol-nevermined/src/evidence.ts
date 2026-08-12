@@ -1,5 +1,6 @@
 import { NEVERMINED_PAYMENT_PROVIDER, hashPaymentObject } from '@siteborne/protocol-x402';
 import type { NeverminedSettlementResult, NeverminedVerificationResult } from './client';
+import { normalizeSettlementSuccess } from './validation';
 
 export interface NeverminedEvidenceBinding {
   paymentIdentifier: string;
@@ -47,8 +48,18 @@ export async function sanitizeNeverminedSettlement(
     transaction_reference: result.transaction || undefined,
     amount_redeemed: result.creditsRedeemed,
     remaining_balance: result.remainingBalance,
-    result: result.success ? ('settled' as const) : ('rejected' as const),
-    reason_code: result.success ? undefined : reasonCode(result.errorReason, 'provider_rejected'),
+    // Uses the same evidence-backed normalizer validateNeverminedSettlementResult
+    // enforces (see validation.ts) so this sanitized audit record never
+    // disagrees with the actual pass/fail gate about whether a real
+    // settlement occurred.
+    result:
+      normalizeSettlementSuccess(result) === 'positive_success'
+        ? ('settled' as const)
+        : ('rejected' as const),
+    reason_code:
+      normalizeSettlementSuccess(result) === 'positive_success'
+        ? undefined
+        : reasonCode(result.errorReason, 'provider_rejected'),
     observed_at: binding.observedAt,
   };
   return { ...evidence, evidence_hash: await hashPaymentObject(evidence) };
