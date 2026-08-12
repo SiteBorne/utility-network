@@ -157,4 +157,31 @@ export class X402ServiceResultRepository {
       return null;
     }
   }
+
+  /** Durably persists the executor's raw output/receipt *before* a
+   * facilitator settle call is ever made (SUN-0900B checkpoint 1B
+   * route-recovery wiring, directive requirement: "durable persistence
+   * of all execution artifacts... BEFORE any external settlement call").
+   * Same `job_id` primary key as `create()` — `finalize()` below
+   * overwrites this same row once settlement is confirmed, so a crash
+   * between the two writes never leaves two competing rows. */
+  async createPending(
+    jobId: string,
+    paymentIdentifier: string,
+    draft: unknown,
+    nowIso: string
+  ): Promise<void> {
+    await this.create(jobId, paymentIdentifier, draft, nowIso);
+  }
+
+  /** Overwrites the pending draft written by `createPending` with the
+   * final, settled result — the same row `getByJobId`/retry
+   * reconstruction already reads, so a successful finalize is
+   * indistinguishable from the pre-existing synchronous-success path. */
+  async finalize(jobId: string, finalResult: unknown, nowIso: string): Promise<void> {
+    await this.db
+      .prepare(`UPDATE x402_service_results SET result_json = ?, created_at = ? WHERE job_id = ?`)
+      .bind(JSON.stringify(finalResult), nowIso, jobId)
+      .run();
+  }
 }

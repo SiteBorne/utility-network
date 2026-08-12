@@ -74,6 +74,9 @@ function mapRow(row: Record<string, unknown>): PaymentAttemptRecord {
           ...(row.nevermined_plan_id !== null && row.nevermined_plan_id !== undefined
             ? { nevermined_plan_id: row.nevermined_plan_id as string }
             : {}),
+          ...(row.nevermined_delegation_id !== null && row.nevermined_delegation_id !== undefined
+            ? { nevermined_delegation_id: row.nevermined_delegation_id as string }
+            : {}),
         }
       : {}),
   };
@@ -143,14 +146,23 @@ export class D1PaymentAttemptRepository implements PaymentAttemptRepository {
     if (!validation.valid) {
       return { status: 'error', reason: `invalid payment-attempt binding: ${validation.reason}` };
     }
+    // `nevermined_delegation_id` is written here (at acquire time, as part
+    // of the immutable binding) AND later, redundantly, by
+    // `recordSettlementPending` — the same real-world value both times.
+    // Migration 0006 added the column for the settlement-recovery
+    // correlation write; SUN-0900B checkpoint 1B route-recovery wiring
+    // additionally makes it part of the binding itself (so a reused
+    // Payment-Identifier with a *different* delegationId is
+    // `duplicate_conflict`, never silently accepted) — no new migration
+    // needed, the column already anticipated exactly this field.
     const stmt = this.db.prepare(`
       INSERT INTO payment_attempts (
         id, payment_identifier, binding_digest, quote_id, requirement_id,
         service_id, service_version, contract_release, request_input_hash,
         resource_id, scheme, network, asset, amount, payee, job_id,
         idempotency_key, created_at, expires_at, binding_version, payment_rail,
-        payment_provider, nevermined_agent_id, nevermined_plan_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        payment_provider, nevermined_agent_id, nevermined_plan_id, nevermined_delegation_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     let insertSucceeded = false;
@@ -183,7 +195,8 @@ export class D1PaymentAttemptRepository implements PaymentAttemptRepository {
           b.payment_rail ?? null,
           b.payment_provider ?? null,
           b.nevermined_agent_id ?? null,
-          b.nevermined_plan_id ?? null
+          b.nevermined_plan_id ?? null,
+          b.nevermined_delegation_id ?? null
         )
         .run();
 

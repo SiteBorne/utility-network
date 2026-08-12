@@ -26,7 +26,11 @@ import {
   PAYTO_NOT_CONFIGURED,
   REGISTRY_SERVICES,
 } from '@siteborne/protocol-x402';
-import { NEVERMINED_DECLARATIONS, NEVERMINED_ROUTES } from '@siteborne/protocol-nevermined';
+import {
+  NEVERMINED_DECLARATIONS,
+  NEVERMINED_ROUTES,
+  type NeverminedDelegationLookupClient,
+} from '@siteborne/protocol-nevermined';
 import { calculateDocumentUsage, documentUsageToAtomicUnits } from '@siteborne/pricing';
 import { D1ServicesRepository } from '../repositories/d1/services';
 import type { PaymentEvidenceMode, PaymentEvidenceProvider } from '@siteborne/protocol-x402';
@@ -113,6 +117,13 @@ export interface PaidServicesConfig {
   /** Internal/additive route-family selector. The public open-route builder
    * defaults to CDP; the Nevermined wrapper below selects its own paths. */
   rail?: 'cdp' | 'nevermined';
+  /** Optional, Nevermined-only: enables restart recovery for a payment
+   * stuck in `SETTLEMENT_PENDING` (SUN-0900B checkpoint 1B route-recovery
+   * wiring). Ignored on the CDP rail. Omitted entirely, recovery on
+   * restart is skipped and the pre-existing `202 processing` behavior is
+   * unchanged — so every deployment that hasn't supplied one keeps its
+   * exact prior behavior. */
+  neverminedReconciliationClient?: NeverminedDelegationLookupClient;
 }
 
 /**
@@ -142,6 +153,7 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
           agentId: declaration.agent.local_agent_id,
           planId: declaration.plan.local_plan_id,
         },
+        neverminedReconciliationClient: config.neverminedReconciliationClient,
       };
     }
     return {

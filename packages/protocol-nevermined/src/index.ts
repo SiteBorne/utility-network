@@ -1,6 +1,7 @@
 export * from './client';
 export * from './codec';
 export * from './config';
+export * from './delegation-header';
 export * from './declarations';
 export * from './dynamic-settlement';
 export * from './evidence';

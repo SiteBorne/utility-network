@@ -95,6 +95,7 @@ describe('FixturePaymentEvidenceProvider', () => {
         paymentRequired: { planId: 'plan_company_payg_v1' },
         agentId: 'agent_company_v1',
         planId: 'plan_company_payg_v1',
+        delegationId: 'del_' + '1'.repeat(24),
       },
     };
     const evidence = await new FixturePaymentEvidenceProvider().verify(neverminedContext);

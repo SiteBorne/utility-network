@@ -92,3 +92,115 @@ export async function reconcileNeverminedSettlement(
   // either way.
   return { state: 'AMBIGUOUS', reason: `unrecognized_status:${tx!.status}` };
 }
+
+/**
+ * Read-only `GET /delegation/{delegationId}` shape (confirmed live
+ * against the sandbox with the seller's own facilitator credential —
+ * see SUN-0900B checkpoint 1B route-recovery wiring's prerequisite
+ * check). Not exposed by the installed SDK's `DelegationAPI` (which only
+ * lists delegations "accessible to the requesting API key" — the buyer's
+ * subscriber key, not the seller's), so a caller reaches it via a raw
+ * authenticated GET, same as `listDelegationTransactions`.
+ */
+export interface NeverminedDelegationRecoveryRecord {
+  delegationId: string;
+  provider: string;
+  status: string;
+  currency: string;
+  /** Observed `null` on real sandbox erc4337 delegations — not every
+   * field this type carries is actually populated by the backend.
+   * `validateNeverminedDelegationConsistency` only checks fields that are
+   * non-null ("where fields are exposed, require consistency" —
+   * directive requirement), never rejects on an absent field. */
+  planId: string | null;
+  providerPaymentMethodId: string | null;
+}
+
+export interface NeverminedDelegationLookupClient extends NeverminedSettlementReconciliationClient {
+  /** Returns `null` for a delegation id the seller's credential cannot
+   * see (not merely "doesn't exist" vs. "not authorized" — both are
+   * indistinguishable from a 404, and both must be treated identically:
+   * never enough evidence to call anything SETTLED). */
+  getDelegation(delegationId: string): Promise<NeverminedDelegationRecoveryRecord | null>;
+}
+
+export interface NeverminedDelegationExpectation {
+  planId: string;
+  /** Expected delegation provider, e.g. `'erc4337'`. */
+  provider: string;
+  /** Expected settlement currency, e.g. `'usdc'` (case-insensitive). */
+  currency: string;
+  /** The payer wallet/account observed at verification time, when
+   * available — cross-checked against the delegation's
+   * `providerPaymentMethodId` (case-insensitive) when both are present. */
+  payer?: string;
+}
+
+export type NeverminedDelegationConsistency = { valid: true } | { valid: false; reason: string };
+
+/**
+ * A real, successful settlement transaction belonging to *some*
+ * buyer-supplied delegation is never enough by itself (directive
+ * requirement): the delegation must also match the payment context the
+ * seller persisted before ever entering `SETTLED_EXTERNAL`. Only checks
+ * fields the backend actually populated — `planId`/`providerPaymentMethodId`
+ * are frequently `null` on real sandbox data and a `null` value is never
+ * treated as a mismatch, only a genuinely conflicting non-null value.
+ */
+export function validateNeverminedDelegationConsistency(
+  delegation: NeverminedDelegationRecoveryRecord,
+  expected: NeverminedDelegationExpectation
+): NeverminedDelegationConsistency {
+  if (delegation.provider !== expected.provider) {
+    return { valid: false, reason: 'delegation_provider_mismatch' };
+  }
+  if (delegation.currency.toLowerCase() !== expected.currency.toLowerCase()) {
+    return { valid: false, reason: 'delegation_currency_mismatch' };
+  }
+  if (delegation.planId !== null && delegation.planId !== expected.planId) {
+    return { valid: false, reason: 'delegation_plan_mismatch' };
+  }
+  if (
+    expected.payer &&
+    delegation.providerPaymentMethodId &&
+    delegation.providerPaymentMethodId.toLowerCase() !== expected.payer.toLowerCase()
+  ) {
+    return { valid: false, reason: 'delegation_payer_mismatch' };
+  }
+  return { valid: true };
+}
+
+/**
+ * The full recovery-path reconciliation: independently validates the
+ * buyer-supplied delegation against the persisted payment context
+ * *before* ever consulting its transactions, then reuses
+ * `reconcileNeverminedSettlement`'s classifier unchanged. A delegation
+ * the seller's credential cannot read, or one that is read but doesn't
+ * match, is always `AMBIGUOUS` — never `NOT_SETTLED` (which would permit
+ * a later retry) and never `SETTLED` (which would mark the payment
+ * complete) on the strength of a mismatched or unreadable delegation
+ * alone.
+ */
+export async function reconcileNeverminedSettlementForRecovery(
+  client: NeverminedDelegationLookupClient,
+  delegationId: string,
+  expected: NeverminedDelegationExpectation
+): Promise<NeverminedSettlementReconciliation> {
+  let delegation: NeverminedDelegationRecoveryRecord | null;
+  try {
+    delegation = await client.getDelegation(delegationId);
+  } catch (e) {
+    return {
+      state: 'AMBIGUOUS',
+      reason: `delegation_read_failed:${e instanceof Error ? e.name : 'unknown'}`,
+    };
+  }
+  if (!delegation) {
+    return { state: 'AMBIGUOUS', reason: 'delegation_not_found_or_unreadable' };
+  }
+  const consistency = validateNeverminedDelegationConsistency(delegation, expected);
+  if (!consistency.valid) {
+    return { state: 'AMBIGUOUS', reason: `delegation_inconsistent:${consistency.reason}` };
+  }
+  return reconcileNeverminedSettlement(client, delegationId);
+}

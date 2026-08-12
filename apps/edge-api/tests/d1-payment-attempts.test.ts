@@ -191,6 +191,7 @@ describe('D1PaymentAttemptRepository — authoritative persistence (SUN-0700A ch
           payment_provider: NEVERMINED_PAYMENT_PROVIDER,
           nevermined_agent_id: 'agent_company_v1',
           nevermined_plan_id: 'plan_company_payg_v1',
+          nevermined_delegation_id: 'del_' + '1'.repeat(24),
         },
       ],
       ['provider', { payment_provider: 'cdp-facilitator@1.56.0' }],
@@ -201,6 +202,7 @@ describe('D1PaymentAttemptRepository — authoritative persistence (SUN-0700A ch
           payment_provider: NEVERMINED_PAYMENT_PROVIDER,
           nevermined_agent_id: 'agent_changed',
           nevermined_plan_id: 'plan_company_payg_v1',
+          nevermined_delegation_id: 'del_' + '1'.repeat(24),
         },
       ],
       [
@@ -210,6 +212,17 @@ describe('D1PaymentAttemptRepository — authoritative persistence (SUN-0700A ch
           payment_provider: NEVERMINED_PAYMENT_PROVIDER,
           nevermined_agent_id: 'agent_company_v1',
           nevermined_plan_id: 'plan_changed',
+          nevermined_delegation_id: 'del_' + '1'.repeat(24),
+        },
+      ],
+      [
+        'delegation',
+        {
+          payment_rail: 'nevermined',
+          payment_provider: NEVERMINED_PAYMENT_PROVIDER,
+          nevermined_agent_id: 'agent_company_v1',
+          nevermined_plan_id: 'plan_company_payg_v1',
+          nevermined_delegation_id: 'del_' + '2'.repeat(24),
         },
       ],
     ] as const)(

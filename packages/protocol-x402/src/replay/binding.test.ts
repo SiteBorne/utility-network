@@ -115,6 +115,7 @@ describe('rail-aware v2 binding', () => {
       payment_provider: NEVERMINED_PAYMENT_PROVIDER,
       nevermined_agent_id: 'agent_company_v1',
       nevermined_plan_id: 'plan_company_payg_v1',
+      nevermined_delegation_id: 'del_' + '1'.repeat(24),
     });
     expect(await computeBindingDigest(cdp)).not.toBe(await computeBindingDigest(nevermined));
     expect(bindingsAreIdentical(cdp, nevermined)).toBe(false);
@@ -124,12 +125,14 @@ describe('rail-aware v2 binding', () => {
     ['payment_provider', CDP_PAYMENT_PROVIDER],
     ['nevermined_agent_id', 'agent_changed'],
     ['nevermined_plan_id', 'plan_changed'],
+    ['nevermined_delegation_id', 'del_changed'],
   ] as const)('treats changed %s as a replay conflict', (field, value) => {
     const original = railAware({
       payment_rail: 'nevermined',
       payment_provider: NEVERMINED_PAYMENT_PROVIDER,
       nevermined_agent_id: 'agent_company_v1',
       nevermined_plan_id: 'plan_company_payg_v1',
+      nevermined_delegation_id: 'del_' + '1'.repeat(24),
     });
     expect(bindingsAreIdentical(original, railAware({ ...original, [field]: value }))).toBe(false);
   });
@@ -137,9 +140,26 @@ describe('rail-aware v2 binding', () => {
   it('rejects Nevermined identifiers on a CDP binding', () => {
     expect(
       validatePaymentAttemptBinding(
-        railAware({ nevermined_agent_id: 'agent_company_v1', nevermined_plan_id: 'plan' })
+        railAware({
+          nevermined_agent_id: 'agent_company_v1',
+          nevermined_plan_id: 'plan',
+          nevermined_delegation_id: 'del_' + '1'.repeat(24),
+        })
       )
     ).toMatchObject({ valid: false });
+  });
+
+  it('requires a delegation id for every new Nevermined binding (SUN-0900B checkpoint 1B route-recovery wiring)', () => {
+    expect(
+      validatePaymentAttemptBinding(
+        railAware({
+          payment_rail: 'nevermined',
+          payment_provider: NEVERMINED_PAYMENT_PROVIDER,
+          nevermined_agent_id: 'agent_company_v1',
+          nevermined_plan_id: 'plan_company_payg_v1',
+        })
+      )
+    ).toEqual({ valid: false, reason: 'nevermined_binding_requires_delegation_id' });
   });
 });
 

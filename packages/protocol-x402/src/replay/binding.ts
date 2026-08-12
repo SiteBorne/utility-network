@@ -54,6 +54,15 @@ export interface PaymentAttemptBinding extends PaymentAttemptBindingBase {
   payment_provider?: PaymentProviderIdentity;
   nevermined_agent_id?: string;
   nevermined_plan_id?: string;
+  /** The Nevermined delegation the buyer disclosed via the
+   * `PAYMENT-DELEGATION-ID` header (SUN-0900B checkpoint 1B route-recovery
+   * wiring) — the same delegation the buyer's x402 access token is bound
+   * to. Immutable, part of the binding digest: a reused Payment-Identifier
+   * presented with a *different* delegationId is `duplicate_conflict`,
+   * never silently accepted. Not authorization evidence by itself — it
+   * only ever identifies which delegation to reconcile against after a
+   * crash; it never substitutes for a real verify/settle result. */
+  nevermined_delegation_id?: string;
 }
 
 export type PaymentAttemptBindingValidation =
@@ -87,7 +96,14 @@ export function validatePaymentAttemptBinding(
     if (!binding.nevermined_agent_id || !binding.nevermined_plan_id) {
       return { valid: false, reason: 'nevermined_binding_requires_agent_and_plan' };
     }
-  } else if (binding.nevermined_agent_id || binding.nevermined_plan_id) {
+    if (!binding.nevermined_delegation_id) {
+      return { valid: false, reason: 'nevermined_binding_requires_delegation_id' };
+    }
+  } else if (
+    binding.nevermined_agent_id ||
+    binding.nevermined_plan_id ||
+    binding.nevermined_delegation_id
+  ) {
     return { valid: false, reason: 'cdp_binding_cannot_carry_nevermined_identifiers' };
   }
   return { valid: true, version: 2 };
@@ -131,6 +147,7 @@ function digestPayload(binding: PaymentAttemptBinding): Record<string, unknown> 
       payment_provider: binding.payment_provider,
       nevermined_agent_id: binding.nevermined_agent_id ?? null,
       nevermined_plan_id: binding.nevermined_plan_id ?? null,
+      nevermined_delegation_id: binding.nevermined_delegation_id ?? null,
       ...common,
     };
   }

@@ -7,6 +7,7 @@ import { Miniflare } from 'miniflare';
 import type { D1Database } from '@cloudflare/workers-types';
 import {
   NEVERMINED_ROUTES,
+  PAYMENT_DELEGATION_ID_HEADER,
   PAYMENT_IDENTIFIER_HEADER,
   decodeNeverminedPaymentRequiredHeaderSafe,
   decodeNeverminedPaymentResponseHeaderSafe,
@@ -110,11 +111,14 @@ async function challenge(
   return (decoded as { ok: true; value: NeverminedPaymentRequired }).value;
 }
 
+const DELEGATION_ID = 'fixture-delegation-0000000000000000';
+
 function pay(
   app: Awaited<ReturnType<typeof buildNeverminedPaidServicesApp>>,
   path: string,
   body: unknown,
-  paymentIdentifier: string
+  paymentIdentifier: string,
+  delegationId: string = DELEGATION_ID
 ) {
   return app.request(path, {
     method: 'POST',
@@ -122,6 +126,7 @@ function pay(
       'content-type': 'application/json',
       'payment-signature': PAYMENT_CARRIER,
       [PAYMENT_IDENTIFIER_HEADER]: paymentIdentifier,
+      [PAYMENT_DELEGATION_ID_HEADER]: delegationId,
     },
     body: JSON.stringify(body),
   });

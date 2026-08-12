@@ -81,6 +81,17 @@ export interface NeverminedPaymentAuthorizationContext {
     paymentRequired: unknown;
     agentId: string;
     planId: string;
+    /** The Nevermined delegation the buyer disclosed via the
+     * `PAYMENT-DELEGATION-ID` header (SUN-0900B checkpoint 1B) — the same
+     * delegation the access token above is bound to. Carried through so
+     * durable settlement-recovery correlation state can be written before
+     * a real facilitator settle call, and so a crash-recovered payment can
+     * be reconciled via read-only `GET /delegation/{id}` /
+     * `GET /delegation/{id}/transactions` calls. Not authorization
+     * evidence: neither `verify()` nor `settle()` sends it to the
+     * facilitator, and it never substitutes for a real verify/settle
+     * result. */
+    delegationId: string;
   };
 }
 

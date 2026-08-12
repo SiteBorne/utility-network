@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   reconcileNeverminedSettlement,
+  reconcileNeverminedSettlementForRecovery,
+  validateNeverminedDelegationConsistency,
+  type NeverminedDelegationLookupClient,
+  type NeverminedDelegationRecoveryRecord,
   type NeverminedSettlementReconciliationClient,
   type NeverminedSettlementTransaction,
 } from './settlement-recovery';
@@ -89,5 +93,123 @@ describe('reconcileNeverminedSettlement', () => {
       DELEGATION_ID
     );
     expect(result.state).toBe('SETTLED');
+  });
+});
+
+const EXPECTED = { planId: 'plan-1', provider: 'erc4337', currency: 'usdc', payer: '0xPayer' };
+
+function delegation(
+  overrides: Partial<NeverminedDelegationRecoveryRecord> = {}
+): NeverminedDelegationRecoveryRecord {
+  return {
+    delegationId: DELEGATION_ID,
+    provider: 'erc4337',
+    status: 'Exhausted',
+    currency: 'usdc',
+    planId: 'plan-1',
+    providerPaymentMethodId: '0xPayer',
+    ...overrides,
+  };
+}
+
+describe('validateNeverminedDelegationConsistency', () => {
+  it('valid when every populated field matches', () => {
+    expect(validateNeverminedDelegationConsistency(delegation(), EXPECTED)).toEqual({
+      valid: true,
+    });
+  });
+
+  it('valid when planId/providerPaymentMethodId are null — real sandbox erc4337 delegations observed with null planId', () => {
+    expect(
+      validateNeverminedDelegationConsistency(
+        delegation({ planId: null, providerPaymentMethodId: null }),
+        EXPECTED
+      )
+    ).toEqual({ valid: true });
+  });
+
+  it('rejects a provider mismatch', () => {
+    expect(
+      validateNeverminedDelegationConsistency(delegation({ provider: 'stripe' }), EXPECTED)
+    ).toEqual({ valid: false, reason: 'delegation_provider_mismatch' });
+  });
+
+  it('rejects a currency mismatch (case-insensitive comparison, still a real mismatch)', () => {
+    expect(
+      validateNeverminedDelegationConsistency(delegation({ currency: 'eur' }), EXPECTED)
+    ).toEqual({ valid: false, reason: 'delegation_currency_mismatch' });
+    expect(
+      validateNeverminedDelegationConsistency(delegation({ currency: 'USDC' }), EXPECTED)
+    ).toEqual({ valid: true });
+  });
+
+  it('rejects a non-null plan mismatch', () => {
+    expect(
+      validateNeverminedDelegationConsistency(delegation({ planId: 'plan-other' }), EXPECTED)
+    ).toEqual({ valid: false, reason: 'delegation_plan_mismatch' });
+  });
+
+  it('rejects a non-null payer mismatch (case-insensitive)', () => {
+    expect(
+      validateNeverminedDelegationConsistency(
+        delegation({ providerPaymentMethodId: '0xSomeoneElse' }),
+        EXPECTED
+      )
+    ).toEqual({ valid: false, reason: 'delegation_payer_mismatch' });
+  });
+});
+
+function lookupClient(
+  transactions: NeverminedSettlementTransaction[],
+  delegationValue: NeverminedDelegationRecoveryRecord | null,
+  failDelegationRead = false
+): NeverminedDelegationLookupClient {
+  return {
+    listDelegationTransactions: async () => ({ transactions }),
+    getDelegation: async () => {
+      if (failDelegationRead) throw new Error('transient');
+      return delegationValue;
+    },
+  };
+}
+
+describe('reconcileNeverminedSettlementForRecovery', () => {
+  it('SETTLED only when the delegation is both consistent and has exactly one succeeded transaction', async () => {
+    const result = await reconcileNeverminedSettlementForRecovery(
+      lookupClient([tx()], delegation()),
+      DELEGATION_ID,
+      EXPECTED
+    );
+    expect(result.state).toBe('SETTLED');
+  });
+
+  it('AMBIGUOUS — a real succeeded transaction on an inconsistent delegation is never enough by itself', async () => {
+    const result = await reconcileNeverminedSettlementForRecovery(
+      lookupClient([tx()], delegation({ provider: 'stripe' })),
+      DELEGATION_ID,
+      EXPECTED
+    );
+    expect(result.state).toBe('AMBIGUOUS');
+    if (result.state === 'AMBIGUOUS') {
+      expect(result.reason).toContain('delegation_inconsistent');
+    }
+  });
+
+  it('AMBIGUOUS when the seller credential cannot read the delegation at all (not found / not authorized)', async () => {
+    const result = await reconcileNeverminedSettlementForRecovery(
+      lookupClient([tx()], null),
+      DELEGATION_ID,
+      EXPECTED
+    );
+    expect(result).toEqual({ state: 'AMBIGUOUS', reason: 'delegation_not_found_or_unreadable' });
+  });
+
+  it('AMBIGUOUS when the delegation read itself fails', async () => {
+    const result = await reconcileNeverminedSettlementForRecovery(
+      lookupClient([tx()], delegation(), true),
+      DELEGATION_ID,
+      EXPECTED
+    );
+    expect(result.state).toBe('AMBIGUOUS');
   });
 });

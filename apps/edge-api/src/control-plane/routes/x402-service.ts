@@ -26,13 +26,17 @@ import { buildPaymentRequired as buildNeverminedSdkPaymentRequired } from '@neve
 import {
   NEVERMINED_DECLARATIONS,
   NEVERMINED_PAYMENT_PROVIDER,
+  PAYMENT_DELEGATION_ID_HEADER,
   PAYMENT_IDENTIFIER_HEADER,
   bindNeverminedPaymentRequired,
   encodeNeverminedPaymentRequiredHeaderSafe,
   encodeNeverminedPaymentResponseHeaderSafe,
+  parseNeverminedDelegationId,
   parseNeverminedPaymentIdentifier,
+  reconcileNeverminedSettlementForRecovery,
   validateNeverminedAccessToken,
   validateNeverminedPaymentRequired,
+  type NeverminedDelegationLookupClient,
   type NeverminedPaymentRequired,
   type NeverminedPaymentResponse,
 } from '@siteborne/protocol-nevermined';
@@ -157,6 +161,13 @@ export interface X402ServiceRouteConfig {
    * explicitly by its dedicated route family and never by fallback. */
   rail?: 'cdp' | 'nevermined';
   nevermined?: { agentId: string; planId: string };
+  /** Optional, Nevermined-only (SUN-0900B checkpoint 1B route-recovery
+   * wiring): enables restart recovery for a payment stuck in
+   * `SETTLEMENT_PENDING`. When omitted, a `duplicate_same` retry against a
+   * payment that never reached `DELIVERED` still falls through to the
+   * pre-existing `202 processing` response — never a regression, just no
+   * automatic recovery. */
+  neverminedReconciliationClient?: NeverminedDelegationLookupClient;
 }
 
 export const PAYTO_NOT_CONFIGURED = 'siteborne-fixture:payto-not-configured';
@@ -165,6 +176,30 @@ interface CachedResult {
   status: number;
   body: unknown;
   settleResponse: SettleResponse | NeverminedPaymentResponse;
+}
+
+/** Durably persisted (`X402ServiceResultRepository.createPending`)
+ * BEFORE a real Nevermined settle call is ever made — everything a crash
+ * recovery needs to reconstruct the exact same response a normal
+ * synchronous success would have produced, without re-executing the
+ * service or re-deriving hashes non-deterministically. `kind` is a
+ * discriminant so `attemptNeverminedRecovery` never misinterprets a
+ * pre-recovery-era or CDP-shaped cached row as a recoverable draft. */
+interface PendingNeverminedSettlementDraft {
+  kind: 'nevermined_settlement_pending_draft';
+  quote_id: string;
+  requirement_id: string;
+  request_input_hash: string;
+  output: unknown;
+  output_hash: string;
+  receipt_id: string;
+  receipt_hash: string;
+  verification_evidence: { payer?: string };
+  verification_evidence_hash: string;
+  actual_amount: string;
+  usage_result_hash?: string;
+  scheme: 'exact' | 'upto';
+  authorized_maximum: string;
 }
 
 export class NeverminedEvidenceProviderNotConfiguredError extends Error {
@@ -357,6 +392,7 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
     let payload: PaymentPayload | undefined;
     let neverminedRequired: NeverminedPaymentRequired | undefined;
     let paymentIdentifier: string;
+    let neverminedDelegationId: string | undefined;
     let stored: NonNullable<Awaited<ReturnType<X402QuoteRepository['getById']>>>;
 
     if (rail === 'nevermined') {
@@ -365,6 +401,22 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
         await audit('payment_payload_received', { valid: false, reason: token.status });
         return jsonError(c, 400, 'malformed_payment_signature', token.status);
       }
+      // The buyer must disclose the same delegation their access token is
+      // bound to (SUN-0900B checkpoint 1B route-recovery wiring) — the
+      // opaque token itself carries no correlation the seller can read
+      // back, confirmed against the installed SDK's own types. Validated
+      // before any provider call and bound into the immutable v2 binding
+      // below, so a reused Payment-Identifier with a different delegation
+      // is `duplicate_conflict`, never silently accepted. Not
+      // authorization evidence: never sent to the facilitator, only used
+      // to reconcile a crash-recovered payment via read-only calls.
+      const delegationResult = parseNeverminedDelegationId(
+        c.req.header(PAYMENT_DELEGATION_ID_HEADER)
+      );
+      if (delegationResult.status !== 'present') {
+        return jsonError(c, 400, 'malformed_payment_delegation_id', delegationResult.status);
+      }
+      neverminedDelegationId = delegationResult.id;
       const idResult = parseNeverminedPaymentIdentifier(
         c.req.header(PAYMENT_IDENTIFIER_HEADER),
         sigHeader
@@ -451,6 +503,7 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
         ? {
             nevermined_agent_id: config.nevermined!.agentId,
             nevermined_plan_id: config.nevermined!.planId,
+            nevermined_delegation_id: neverminedDelegationId!,
           }
         : {}),
       payment_identifier: paymentIdentifier,
@@ -490,6 +543,129 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
           : encodePaymentResponseHeaderSafe(cached.settleResponse as SettleResponse)
       );
       return c.json(cached.body, cached.status as never);
+    }
+
+    /**
+     * SUN-0900B checkpoint 1B route-recovery wiring: reached only for a
+     * `duplicate_same` retry on the Nevermined rail with a configured
+     * reconciliation client. Reconciles the durable `SETTLEMENT_PENDING`
+     * correlation state externally, BEFORE ever falling through to a
+     * new verify/execute/settle attempt — this route never re-verifies,
+     * re-executes, or re-settles a payment it finds here (directive
+     * requirement: "never auto-settle within the same reconciliation
+     * function"). Returns `null` (never an HTTP response) for every
+     * outcome except a positively-confirmed, context-matching `SETTLED`
+     * recovery, so the caller's pre-existing `reconstructFromJob`/`202`
+     * fallback is always safe to run next.
+     */
+    async function attemptNeverminedRecovery(): Promise<Response | null> {
+      if (rail !== 'nevermined' || !config.neverminedReconciliationClient) return null;
+      const recovery = await paymentAttempts.getSettlementRecoveryRecord(paymentIdentifier);
+      if (!recovery || recovery.lifecycleStage !== 'settlement_pending') return null;
+      if (!recovery.neverminedDelegationId) return null; // no correlation key — nothing to reconcile
+      const jobResult = await jobsRepo.getByIdempotencyKey(paymentIdentifier);
+      if (!jobResult.ok || !jobResult.value) return null;
+      const job = jobResult.value;
+      const draft = await results.getByJobId<PendingNeverminedSettlementDraft>(job.id);
+      if (!draft || draft.kind !== 'nevermined_settlement_pending_draft') return null;
+
+      const reconciliation = await reconcileNeverminedSettlementForRecovery(
+        config.neverminedReconciliationClient,
+        recovery.neverminedDelegationId,
+        {
+          planId: config.nevermined!.planId,
+          provider: 'erc4337',
+          currency: 'usdc',
+          payer: draft.verification_evidence.payer,
+        }
+      );
+      await audit('payment_recovery_reconciled', {
+        payment_identifier: paymentIdentifier,
+        state: reconciliation.state,
+      });
+      if (reconciliation.state !== 'SETTLED') {
+        // NOT_SETTLED / AMBIGUOUS: never auto-retry here. NOT_SETTLED
+        // leaves the payment retry-eligible for a separate, explicitly
+        // invoked settlement path (not implemented in this increment —
+        // see the report); AMBIGUOUS leaves it exactly where it is,
+        // pending manual/operator reconciliation. Both fall through to
+        // the existing 202 response, unchanged.
+        return null;
+      }
+      const transactionReference = reconciliation.transaction.providerTransactionId ?? undefined;
+      const recorded = await paymentAttempts.recordSettledExternal(
+        paymentIdentifier,
+        transactionReference
+      );
+      if (recorded.status !== 'transitioned') {
+        // A concurrent recovery already claimed this transition (or the
+        // row moved out from under us) — fail closed to 202, never
+        // fabricate a second success response from one settlement.
+        return null;
+      }
+
+      let link = await buildPaymentServiceLink({
+        link_version: 2,
+        payment_rail: 'nevermined',
+        payment_provider: NEVERMINED_PAYMENT_PROVIDER,
+        nevermined_agent_id: config.nevermined!.agentId,
+        nevermined_plan_id: config.nevermined!.planId,
+        payment_identifier: paymentIdentifier,
+        quote_id: draft.quote_id,
+        requirement_id: draft.requirement_id,
+        service_id: config.serviceId,
+        service_version: 'v1',
+        request_input_hash: draft.request_input_hash,
+        job_id: job.id,
+        service_output_hash: draft.output_hash,
+        verification_receipt_id: draft.receipt_id,
+        verification_receipt_hash: draft.receipt_hash,
+        verification_evidence_hash: draft.verification_evidence_hash,
+        ...(draft.usage_result_hash ? { usage_result_hash: draft.usage_result_hash } : {}),
+      });
+      const recoveredSettlementEvidenceHash = await hashPaymentObject({
+        kind: 'nevermined_settlement_recovered',
+        payment_identifier: paymentIdentifier,
+        transaction: reconciliation.transaction.providerTransactionId,
+      });
+      link = await extendWithSettlement(link, recoveredSettlementEvidenceHash);
+
+      await paymentAttempts.transitionLifecycleStage(
+        paymentIdentifier,
+        'settled_external',
+        'link_verified'
+      );
+      await paymentAttempts.transitionLifecycleStage(paymentIdentifier, 'link_verified', 'settled');
+      await paymentAttempts.markConsumed(paymentIdentifier);
+      if (job.current_state === 'SETTLING') {
+        await transition(job.id, 'SETTLING', 'DELIVERED', 'SETTLEMENT_COMPLETE');
+      }
+
+      const responseBody = {
+        service_id: config.serviceId,
+        result_class: 'success',
+        output: draft.output,
+        receipt_id: draft.receipt_id,
+        link_id: link.link_id,
+        link_hash: link.link_hash,
+        ...(draft.scheme === 'upto'
+          ? { authorized_maximum: draft.authorized_maximum, actual_amount: draft.actual_amount }
+          : {}),
+      };
+      const settleResponse: NeverminedPaymentResponse = {
+        success: true,
+        transaction: transactionReference ?? 'recovered:unknown',
+        network: config.network,
+        creditsRedeemed: draft.actual_amount,
+      };
+      await results.finalize(job.id, { status: 200, body: responseBody, settleResponse }, nowIso);
+      await audit('payment_recovered_settled_external', {
+        payment_identifier: paymentIdentifier,
+        job_id: job.id,
+      });
+
+      c.header('PAYMENT-RESPONSE', encodeNeverminedPaymentResponseHeaderSafe(settleResponse));
+      return c.json(responseBody, 200);
     }
 
     if (acquireOutcome.status === 'repository_error') {
@@ -545,6 +721,8 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
       );
     }
     if (acquireOutcome.status === 'duplicate_same') {
+      const recovered = await attemptNeverminedRecovery();
+      if (recovered) return recovered;
       const reconstructed = await reconstructFromJob();
       if (reconstructed) return reconstructed;
       // Same legitimate retry, but the original request has not finished
@@ -624,6 +802,7 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
               paymentRequired: neverminedRequired!,
               agentId: config.nevermined!.agentId,
               planId: config.nevermined!.planId,
+              delegationId: neverminedDelegationId!,
             },
           }
         : {
@@ -699,6 +878,9 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
       job_id: jobId,
       result_class: outcome.result.result_class,
     });
+    if (rail === 'nevermined') {
+      await paymentAttempts.transitionLifecycleStage(paymentIdentifier, 'verified', 'executed');
+    }
 
     const receiptHash = await hashPaymentObject(outcome.result.receipt as Record<string, unknown>);
 
@@ -790,6 +972,7 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
               paymentRequired: neverminedRequired!,
               agentId: config.nevermined!.agentId,
               planId: config.nevermined!.planId,
+              delegationId: neverminedDelegationId!,
             },
             ...(usageResult ? { usageResult } : {}),
           }
@@ -800,6 +983,56 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
             paymentRequirements: payload!.accepted,
             ...(usageResult ? { usageResult } : {}),
           };
+
+    if (rail === 'nevermined') {
+      // Durable persistence of every execution artifact recovery would
+      // need, written BEFORE the real settle call — a crash strictly
+      // during `settlePermissions` (directive crash scenario I) must
+      // never lose the ability to reconstruct the exact response a
+      // normal synchronous success would have produced.
+      const pendingDraft: PendingNeverminedSettlementDraft = {
+        kind: 'nevermined_settlement_pending_draft',
+        quote_id: stored.quote.quote_id,
+        requirement_id: stored.requirement_id,
+        request_input_hash: inputHash,
+        output: outcome.result.output,
+        output_hash: outcome.result.output_hash,
+        receipt_id: outcome.result.receipt_id,
+        receipt_hash: receiptHash,
+        verification_evidence: { payer: verificationEvidence.payer },
+        verification_evidence_hash: verificationEvidenceHash,
+        actual_amount: actualAmount,
+        ...(usageResultHash ? { usage_result_hash: usageResultHash } : {}),
+        scheme: config.scheme,
+        authorized_maximum: stored.quote.amount,
+      };
+      await results.createPending(jobId, paymentIdentifier, pendingDraft, nowIso);
+
+      const pending = await paymentAttempts.recordSettlementPending(paymentIdentifier, {
+        neverminedDelegationId,
+        settlementPermissionHash: verificationEvidenceHash,
+        serviceOutputHash: outcome.result.output_hash,
+        serviceReceiptId: outcome.result.receipt_id,
+      });
+      if (pending.status !== 'transitioned') {
+        // Durable persistence itself failed (or a concurrent request
+        // already claimed this transition) — the real facilitator settle
+        // call must never be reached without this write having
+        // committed first (directive requirement, proven by a route
+        // test asserting the settle call count stays 0).
+        await audit('settlement_pending_persist_failed', {
+          payment_identifier: paymentIdentifier,
+          reason: pending.status,
+        });
+        return jsonError(
+          c,
+          500,
+          'repository_failure',
+          'failed to durably record settlement_pending before settlement'
+        );
+      }
+    }
+
     const settlementEvidence = await evidenceProvider.settle(
       settlementContext,
       verificationEvidence,
@@ -813,9 +1046,21 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
     );
     if (!settleGate.allowed) {
       await transition(jobId, 'SETTLING', 'REFUND_REQUIRED', 'REFUND_INITIATED');
+      if (rail === 'nevermined' && settlementEvidence.reason === 'ambiguous_settlement') {
+        // Ambiguous external state is never a definitive failure — leave
+        // `lifecycle_stage` at `settlement_pending` (already durably
+        // persisted above) so a later reconciliation/retry can resolve
+        // it, instead of collapsing it into the terminal
+        // `settlement_failed` state a genuine provider rejection uses.
+        await audit('settlement_ambiguous', {
+          payment_identifier: paymentIdentifier,
+          reason: settleGate.reason,
+        });
+        return jsonError(c, 402, 'settlement_rejected', settleGate.reason);
+      }
       await paymentAttempts.transitionLifecycleStage(
         paymentIdentifier,
-        'verified',
+        rail === 'nevermined' ? 'settlement_pending' : 'verified',
         'settlement_failed'
       );
       await audit('settlement_failed', {
@@ -825,7 +1070,20 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
       return jsonError(c, 402, 'settlement_rejected', settleGate.reason);
     }
     await transition(jobId, 'SETTLING', 'DELIVERED', 'SETTLEMENT_COMPLETE');
-    await paymentAttempts.transitionLifecycleStage(paymentIdentifier, 'verified', 'settled');
+    if (rail === 'nevermined') {
+      await paymentAttempts.recordSettledExternal(
+        paymentIdentifier,
+        settlementEvidence.transaction_reference
+      );
+      await paymentAttempts.transitionLifecycleStage(
+        paymentIdentifier,
+        'settled_external',
+        'link_verified'
+      );
+      await paymentAttempts.transitionLifecycleStage(paymentIdentifier, 'link_verified', 'settled');
+    } else {
+      await paymentAttempts.transitionLifecycleStage(paymentIdentifier, 'verified', 'settled');
+    }
     await paymentAttempts.markConsumed(paymentIdentifier);
     await audit('payment_settled', { payment_identifier: paymentIdentifier });
 
@@ -885,12 +1143,19 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
             extra: { link_id: link.link_id, payment_identifier: paymentIdentifier },
           };
 
-    await results.create(
-      jobId,
-      paymentIdentifier,
-      { status: 200, body: responseBody, settleResponse },
-      nowIso
-    );
+    if (rail === 'nevermined') {
+      // A pending draft row already exists for this job_id (written just
+      // before the settle call above) — overwrite it with the final
+      // result rather than a second INSERT.
+      await results.finalize(jobId, { status: 200, body: responseBody, settleResponse }, nowIso);
+    } else {
+      await results.create(
+        jobId,
+        paymentIdentifier,
+        { status: 200, body: responseBody, settleResponse },
+        nowIso
+      );
+    }
     await audit('payment_consumed', { payment_identifier: paymentIdentifier, job_id: jobId });
 
     c.header(

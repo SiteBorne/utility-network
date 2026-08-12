@@ -65,6 +65,7 @@ import { Payments } from '@nevermined-io/payments';
 import {
   NEVERMINED_DECLARATIONS,
   NEVERMINED_ROUTES,
+  PAYMENT_DELEGATION_ID_HEADER,
   PAYMENT_IDENTIFIER_HEADER,
   SUN_0900B_CHECKPOINT_1_REGISTRATION,
   decodeNeverminedPaymentRequiredHeaderSafe,
@@ -144,6 +145,7 @@ describe.skipIf(!RUN_LIVE)(
     let accessToken: string;
     let agentId: string;
     let planId: string;
+    let delegationId: string;
     let executionCount = 0;
     const clockValue = () => new Date().toISOString();
 
@@ -342,7 +344,6 @@ describe.skipIf(!RUN_LIVE)(
         state: delegationReconciliation.state,
       });
 
-      let delegationId: string;
       if (delegationReconciliation.state === 'exact_existing') {
         delegationId = delegationReconciliation.delegationId;
       } else if (delegationReconciliation.state === 'no_match') {
@@ -478,6 +479,7 @@ describe.skipIf(!RUN_LIVE)(
           'content-type': 'application/json',
           'payment-signature': accessToken,
           [PAYMENT_IDENTIFIER_HEADER]: paymentIdentifier,
+          [PAYMENT_DELEGATION_ID_HEADER]: delegationId,
         },
         body: JSON.stringify(WEB_INPUT),
       });
@@ -523,6 +525,7 @@ describe.skipIf(!RUN_LIVE)(
           'content-type': 'application/json',
           'payment-signature': accessToken,
           [PAYMENT_IDENTIFIER_HEADER]: paymentIdentifier,
+          [PAYMENT_DELEGATION_ID_HEADER]: delegationId,
         },
         body: JSON.stringify(WEB_INPUT),
       });
@@ -538,6 +541,7 @@ describe.skipIf(!RUN_LIVE)(
           'content-type': 'application/json',
           'payment-signature': accessToken,
           [PAYMENT_IDENTIFIER_HEADER]: paymentIdentifier,
+          [PAYMENT_DELEGATION_ID_HEADER]: delegationId,
         },
         body: JSON.stringify({
           target_url: 'https://different.example/',
