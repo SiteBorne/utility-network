@@ -1292,3 +1292,129 @@ second real reuse exposed. The next attempt, whenever separately authorized, is
 the first one positioned to actually test the legal-consent hypothesis: local
 defect fixed, persistent D1 confirmed empty and ready, diagnostic error capture
 in place from the prior turn.
+
+## Migration-safety upgrade (`b893555`) and the post-legal-consent causal retry: real settlement #4 (unconsumed, recoverable) — a genuine milestone with one newly-surfaced gap
+
+**Terminology, corrected per operator direction throughout this section:** the
+project has three confirmed real historical Nevermined settlements (#1–#3, all
+`PAID_EXTERNAL_NOT_CONSUMED_LOCAL`). The live-harness invocations that never
+reached `createDelegation` (the `423073b` and `e855a1a` attempts) were
+`LIVE_TEST_INVOCATION`s with `PAYMENT_LIFECYCLE_STARTED=false` and
+`createDelegation calls=0` — never counted as payments. This section's live
+invocation is the first successful `createDelegation` since, and produces **real
+settlement #4**.
+
+### Migration-safety audit (before any live call)
+
+`e855a1a`'s fix was audited against this turn's own requirement and found to be
+**model C (broad error-message suppression)** — forbidden. Replaced in `b893555`
+with genuine schema introspection: `columnExists` reads the database's own real
+state via `PRAGMA table_info(<table>)` before deciding whether to run an
+`ALTER TABLE ... ADD COLUMN` statement (the one statement shape SQLite has no
+native `IF NOT EXISTS` form for); every other statement runs completely
+unconditionally, with zero error suppression anywhere. Proven with both required
+controls: two positive controls (fresh migration; a real Miniflare
+dispose+reopen cycle, twice, against the same persistent path — the exact
+scenario that failed before) both pass; two negative controls (a migration
+referencing a nonexistent table; a migration mixing one correctly-skipped
+already-applied statement with one genuinely broken one) both correctly throw.
+**Broad-error- suppression present: no.**
+
+### The live retry
+
+Pre-flight (all real, all confirmed, zero mutation): persistent D1 inspected
+directly — `payment_attempts: 0` rows. Registration reconciled unchanged. Payer
+balance `19,973,000` atomic USDC. Delegation reconciliation: `no_match`,
+confirmed independently.
+
+**`createDelegation` succeeded** — no `HTTP 412`. This is real, observed
+behavioral change after the human operator's legal-document acceptance.
+Classified **`LEGAL_CONSENT_HYPOTHESIS_SUPPORTED_BY_BEHAVIORAL_CHANGE`** — not
+rewritten as proof the original 412 body was `BCK.LEGAL_DOCS.0004` (it was never
+recovered), but the removal of the one account-level prerequisite the operator
+identified, followed immediately by success on the very next attempt, is real
+supporting evidence.
+
+New delegation: `f2c64337-3bb7-4109-a99a-bb3642addffb`. Real `verifyPermissions`
+succeeded (`external_verified`). Real service execution ran exactly once.
+`SETTLEMENT_PENDING` was durably persisted
+(`settlement_pending_at: 2026-08-15T04:34:08.854Z`) before the real
+`settlePermissions` call. That call was made exactly once. The local gate again
+returned
+`{"error":"settlement_rejected","message": "settlement_not_successful"}`, HTTP
+`402` — but this time, **`829354f`'s repair worked exactly as designed**:
+independently confirmed in D1,
+`payment_attempts.lifecycle_stage = 'settlement_pending'` (never the terminal
+`settlement_failed`) — the false-rejection-family defect no longer misclassifies
+an ambiguous post-settle response as definitive failure.
+
+**Independent, read-only external reconciliation (seller `NVM_API_KEY`) proves
+this was a real, clean, matching settlement:**
+
+```
+delegation f2c64337-3bb7-4109-a99a-bb3642addffb
+  status: Exhausted, spendingLimitCents: "1", transactionCount: 1
+  providerPaymentMethodId: 0xCa7DD940B5071Bbcb238901794B900CF9db376E7 (expected payer)
+
+transaction 700573f9-66fe-459d-a356-07f60bee8d70
+  status: succeeded
+  providerTransactionId: 0x847a6da0a6a63f1f12838bbe9269b8fd9798997b0680b0146b7147fcb715f417
+  amountCents: "1"
+  createdAt: 2026-08-15T04:34:11.972Z
+```
+
+Exactly one transaction, `succeeded`, matching delegation/payer — by this
+checkpoint's own classifier, unambiguously `SETTLED`. **Real settlement #4,
+confirmed.**
+
+### The newly-surfaced gap: no "resume a specific pending payment" entry point in the live harness itself
+
+Per the turn's absolute no-second-live-command rule, the live command was
+**not** rerun. On reflection this also revealed something worth recording
+honestly rather than assumed away:
+`apps/edge-api/tests/live/ nevermined-live-exact.test.ts`, as currently written,
+has no mechanism to resume a _specific_ prior Payment-Identifier/delegation. Its
+`beforeAll` always re-reconciles delegations (excluding the now-`Exhausted`
+`f2c64337-...` from `accessible: true`, exactly like all four prior delegations)
+and its `it()` block always mints a brand-new `Payment-Identifier` via
+`generateSiteborneePaymentId()`. A bare re- invocation of this exact test file
+would not retry `pay_7858b2f7de124dce98395a973eed2208` — it would create a
+**fifth** distinct delegation and attempt a **fifth** distinct payment, leaving
+real settlement #4 exactly where it is: `SETTLED` externally, durably
+`settlement_pending` locally, fully evidenced, not yet consumed. The
+`attemptNeverminedRecovery` mechanism this checkpoint built (`3bbf68f`, proven
+correct in `829354f`'s route-level reproduction tests) is real and correct — but
+reaching it for _this specific_ payment requires either a small, purpose-built
+resume path in the live harness, or a separate one-off recovery invocation
+against the persistent D1 using the known `Payment-Identifier`/delegation —
+neither of which this turn performed, since doing so was outside this turn's
+specific one-attempt authorization.
+
+### Regression, live-flag cleanup
+
+`RUN_LIVE_NEVERMINED`/`RUN_LIVE_X402` confirmed `MISSING` immediately after, in
+this shell and every persistent location checked. No code changed as a result of
+this specific live attempt (the migration-safety fix that made it possible was
+committed separately, before the attempt). `nevermined:check`, `x402:check`,
+`mcp:check`, `a2a:check`, `governance:validate`, `state:validate`,
+`tasks:validate`, `secrets:scan`, full `pnpm check` — all exit 0.
+
+### Outcome
+
+**Checkpoint 1B still not accepted** — real settlement #4 exists, externally
+confirmed, but is not yet locally consumed, so it cannot yet serve as the
+accepted fixed-PAYG lifecycle evidence (which requires
+`SETTLED_EXTERNAL → PaymentServiceLink → consumed`, not merely `SETTLED`
+externally with a durable, safely-recoverable local record). Real settlements
+#1–#3 remain `PAID_EXTERNAL_NOT_CONSUMED_LOCAL`/
+`LOCAL_ARTIFACTS_UNRECOVERABLE`. Real settlement #4 is **not**
+`LOCAL_ARTIFACTS_UNRECOVERABLE` — its local artifacts (job, durable pending
+draft with output/receipt/hashes, delegation correlation) are fully intact in
+the persistent D1
+(`$HOME/.local/share/siteborne/live-d1/ sun-0900b-checkpoint1`) and remain
+recoverable in principle; only the _mechanism to reach that recovery for this
+specific identifier_ is missing from the live harness today. SUN-0900B remains
+active. Production remains false. No new fresh live payment is needed to close
+Checkpoint 1B — the next step is building the narrow resume path (or running a
+one-off, credential-free-until-the-actual-reconciliation-call recovery script)
+for real settlement #4 specifically, not authorizing a fifth external mutation.
