@@ -62,3 +62,42 @@ export const SUN_0900B_CHECKPOINT_1_REGISTRATION: Sun0900BCheckpoint1Registratio
   billing_model: 'pay-as-you-go',
   registered_at: '2026-08-12T07:23:45.750Z',
 };
+
+/**
+ * SUN-0900B checkpoint 2J — frozen public registration for
+ * `company_evidence_graph.v1`. The identifiers and economics below were
+ * accepted only after a reconcile-first, builder-only registration and a full
+ * authoritative agent/plan GET read-back passed
+ * `validateNeverminedFixedPaygPlan`.
+ */
+export interface Sun0900BCompanyRegistration {
+  service_id: 'company_evidence_graph.v1';
+  environment: 'sandbox';
+  network: 'eip155:84532';
+  scheme: 'nvm:erc4337';
+  agent_id: string;
+  plan_id: string;
+  agent_name: string;
+  plan_name: string;
+  gross_buyer_amount_atomic: '39000';
+  seller_receiver: string;
+  asset_token_address: string;
+  is_trial_plan: false;
+  billing_model: 'pay-as-you-go';
+}
+
+export const SUN_0900B_COMPANY_REGISTRATION: Sun0900BCompanyRegistration = {
+  service_id: 'company_evidence_graph.v1',
+  environment: 'sandbox',
+  network: 'eip155:84532',
+  scheme: 'nvm:erc4337',
+  agent_id: '63058244394774357835944659628164807563769006924765007721830897155339294179447',
+  plan_id: '61176543225966665382887590264143689398477975837289843272089835781341158489584',
+  agent_name: 'Company Evidence Graph',
+  plan_name: 'Company Evidence Graph — PAYG plan',
+  gross_buyer_amount_atomic: '39000',
+  seller_receiver: '0x7f44a2dd237938F18632d4CcA40f4c690295E6E1',
+  asset_token_address: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+  is_trial_plan: false,
+  billing_model: 'pay-as-you-go',
+};
