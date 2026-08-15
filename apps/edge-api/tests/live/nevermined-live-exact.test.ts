@@ -109,28 +109,54 @@ const WEB_INPUT = { target_url: 'https://acme.example/', retrieval_mode: 'direct
 
 const MIGRATIONS_DIR = fileURLToPath(new URL('../../../../migrations', import.meta.url));
 
-/** Real, already-applied-migration signatures on a genuinely re-opened
- * database — every other test file's copy of this helper only ever runs
- * against a fresh, ephemeral D1 (a new random tempdir or an in-memory
- * instance), so it never needed this. This live test is the one caller
- * that opens a truly PERSISTENT, deliberately-reused D1
- * (`resolveLivePersistencePath`, `cfe3614`) — a second real invocation
- * against the same directory (payment-attempt #5, discovered live)
- * surfaced that bare `ALTER TABLE ... ADD COLUMN` statements (SQLite has
- * no `IF NOT EXISTS` form for those, unlike this repo's `CREATE TABLE`/
- * `CREATE INDEX` statements, which already guard themselves) fail with
- * `duplicate column name` on a database that already has them from a
- * prior run. Never masks a genuinely different schema error — only the
- * narrow "this exact statement was already applied" signatures. */
-const ALREADY_APPLIED_SCHEMA_ERROR = /duplicate column name|already exists/i;
+/**
+ * Genuinely idempotent migration application against a real, possibly
+ * already-migrated, PERSISTENT D1 (`resolveLivePersistencePath`,
+ * `cfe3614`). Every other test file's copy of this pattern only ever
+ * opens a fresh, ephemeral D1, so it never needed this; this live test
+ * is the one caller that deliberately reuses the same real database
+ * across separate process invocations (payment-attempt #4/#5 both used
+ * the same directory).
+ *
+ * Deliberately NOT a broad error-message catch (SUN-0900B checkpoint
+ * 1B's own migration-safety audit forbids that: masking "duplicate
+ * column"/"already exists" would just as happily hide a genuinely
+ * broken NEW migration that fails for an unrelated reason producing the
+ * same message text). Instead: for the one statement shape SQLite has no
+ * native `IF NOT EXISTS` form for (`ALTER TABLE ... ADD COLUMN`, unlike
+ * this repo's `CREATE TABLE`/`CREATE INDEX` statements, which already
+ * guard themselves and are executed completely unconditionally, exactly
+ * as `db.exec` throws if they're ever wrong), this function introspects
+ * the REAL current schema via `PRAGMA table_info(<table>)` before
+ * deciding whether to run it — a column that already exists (proven by
+ * reading the database's own actual state, not a side-table that could
+ * drift from reality, and with no bootstrap gap for a database migrated
+ * before this function existed) is skipped; a column that doesn't yet
+ * exist is added normally, and any real failure there still throws.
+ * Every other statement type runs completely unconditionally — no
+ * suppression of any kind, anywhere, for any other statement.
+ */
+const ADD_COLUMN_PATTERN = /^ALTER TABLE (\w+) ADD COLUMN (\w+)/i;
 
-function runMigrations(db: D1Database): Promise<void> {
-  const files = readdirSync(MIGRATIONS_DIR)
+/** Exported (not otherwise needed outside this file) solely so
+ * `nevermined-live-migration-idempotency.test.ts` can positive/negative-
+ * control this exact logic without ever running the credential-gated
+ * live suite it lives in. */
+export async function columnExists(
+  db: D1Database,
+  table: string,
+  column: string
+): Promise<boolean> {
+  const result = await db.prepare(`PRAGMA table_info(${table})`).all<{ name: string }>();
+  return (result.results ?? []).some((row) => row.name === column);
+}
+
+export async function runMigrationsFromDir(db: D1Database, dir: string): Promise<void> {
+  const files = readdirSync(dir)
     .filter((f) => f.endsWith('.sql'))
     .sort();
-  return files.reduce(async (prev, file) => {
-    await prev;
-    const sql = readFileSync(join(MIGRATIONS_DIR, file), 'utf-8');
+  for (const file of files) {
+    const sql = readFileSync(join(dir, file), 'utf-8');
     const statements = sql
       .split(';')
       .map((raw) =>
@@ -143,15 +169,21 @@ function runMigrations(db: D1Database): Promise<void> {
       )
       .filter((s) => s.length > 0);
     for (const stmt of statements) {
-      try {
-        await db.exec(stmt);
-      } catch (e) {
-        const message = e instanceof Error ? e.message : String(e);
-        if (ALREADY_APPLIED_SCHEMA_ERROR.test(message)) continue;
-        throw e;
+      const addColumnMatch = stmt.match(ADD_COLUMN_PATTERN);
+      if (addColumnMatch) {
+        const [, table, column] = addColumnMatch;
+        if (await columnExists(db, table!, column!)) continue; // genuinely already applied — proven by reading the real schema, not guessed from an error message
       }
+      // Every other statement (including every ADD COLUMN this database
+      // doesn't already have) runs unconditionally — a real failure here
+      // is a real failure, never swallowed.
+      await db.exec(stmt);
     }
-  }, Promise.resolve());
+  }
+}
+
+function runMigrations(db: D1Database): Promise<void> {
+  return runMigrationsFromDir(db, MIGRATIONS_DIR);
 }
 
 function requireEnvPresent(name: string): void {
