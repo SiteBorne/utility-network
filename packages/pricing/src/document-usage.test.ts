@@ -25,6 +25,24 @@ describe('document usage pricing authority', () => {
     expect(documentUsageToAtomicUnits(usage, 6)).toBe(String(expected));
   });
 
+  it('SUN-0900B checkpoint 2A acceptance fixture: single native page settles exactly 12000 atomic (dynamic PAYG matrix item A)', () => {
+    const usage = calculateDocumentUsage([{ page_number: 1, ocr_used: false, table_count: 0 }]);
+    expect(documentUsageToAtomicUnits(usage, 6)).toBe('12000');
+    expect(usage.capped).toBe(false);
+  });
+
+  it('SUN-0900B checkpoint 2A acceptance fixture: single OCR page settles exactly 19000 atomic (dynamic PAYG matrix item B)', () => {
+    const usage = calculateDocumentUsage([{ page_number: 1, ocr_used: true, table_count: 0 }]);
+    expect(documentUsageToAtomicUnits(usage, 6)).toBe('19000');
+    expect(usage.capped).toBe(false);
+  });
+
+  it('SUN-0900B checkpoint 2A acceptance fixture: single table page settles exactly 29000 atomic (dynamic PAYG matrix item C)', () => {
+    const usage = calculateDocumentUsage([{ page_number: 1, ocr_used: false, table_count: 1 }]);
+    expect(documentUsageToAtomicUnits(usage, 6)).toBe('29000');
+    expect(usage.capped).toBe(false);
+  });
+
   it('caps measured usage at the canonical maximum without exceeding it', () => {
     const usage = calculateDocumentUsage(
       Array.from({ length: 50 }, (_, index) => ({

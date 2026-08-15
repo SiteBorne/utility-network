@@ -266,6 +266,76 @@ describe('Nevermined alternative rail HTTP lifecycle', () => {
     expect(decoded).toMatchObject({ ok: true, value: { creditsRedeemed: '12000' } });
   });
 
+  it('SUN-0900B checkpoint 2A: dynamic actual_amount (12000) is durably persisted BEFORE settlePermissions is called, and survives a rejected/ambiguous settle unchanged — never recomputed (dynamic PAYG matrix items G/H)', async () => {
+    const rejectedCounters = { verify: 0, settle: 0 };
+    const rejectedApp = await buildNeverminedPaidServicesApp({
+      db,
+      evidenceMode: 'fixture',
+      evidenceProvider: NeverminedPaymentEvidenceProvider.fixture({
+        async verifyPermissions() {
+          rejectedCounters.verify += 1;
+          return {
+            isValid: true,
+            payer: BUYER,
+            network: 'eip155:84532',
+            agentRequestId: 'reject-settle-document-request',
+          };
+        },
+        async settlePermissions() {
+          rejectedCounters.settle += 1;
+          return {
+            success: false,
+            errorReason: 'settlement_denied',
+            transaction: '',
+            network: 'eip155:84532',
+          };
+        },
+      }),
+      clock: () => now,
+    });
+    await challenge(rejectedApp, NEVERMINED_ROUTES['document_evidence_json.v1'], DOCUMENT_INPUT);
+    const id = generateSiteborneePaymentId();
+    const response = await pay(
+      rejectedApp,
+      NEVERMINED_ROUTES['document_evidence_json.v1'],
+      DOCUMENT_INPUT,
+      id
+    );
+    // Settlement was rejected, exactly like the exact-scheme case above —
+    // but the dynamic economics must have already been made durable
+    // before that rejected settle call was ever placed.
+    expect(response.status).toBe(402);
+    expect(rejectedCounters).toEqual({ verify: 1, settle: 1 });
+    const attempt = await db
+      .prepare(
+        'SELECT lifecycle_stage, consumed_at FROM payment_attempts WHERE payment_identifier = ?'
+      )
+      .bind(id)
+      .first<Record<string, unknown>>();
+    expect(attempt).toEqual({ lifecycle_stage: 'settlement_failed', consumed_at: null });
+    const job = await db
+      .prepare('SELECT id FROM jobs WHERE idempotency_key = ?')
+      .bind(id)
+      .first<{ id: string }>();
+    expect(job).toBeTruthy();
+    const draftRow = await db
+      .prepare('SELECT result_json FROM x402_service_results WHERE job_id = ?')
+      .bind(job!.id)
+      .first<{ result_json: string }>();
+    expect(draftRow).toBeTruthy();
+    const draft = JSON.parse(draftRow!.result_json) as Record<string, unknown>;
+    // The durable draft — written before the (rejected) settlePermissions
+    // call — already carries the measured actual usage, distinct from
+    // the authorized ceiling. A future recovery reads exactly this
+    // value; it is never recomputed from the executor a second time.
+    expect(draft).toMatchObject({
+      kind: 'nevermined_settlement_pending_draft',
+      scheme: 'upto',
+      authorized_maximum: '190000',
+      actual_amount: '12000',
+    });
+  });
+
   it('reconstructs replay from D1 with no second verify, settle, job, or result', async () => {
     await challenge(app, NEVERMINED_ROUTES['web_context_verified.v1'], WEB_INPUT);
     const id = generateSiteborneePaymentId();

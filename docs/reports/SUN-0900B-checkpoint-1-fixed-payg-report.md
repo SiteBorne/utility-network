@@ -1425,76 +1425,72 @@ The prior turn's "successful external mutations = 1" undercounted. Corrected:
 **successful delegation mutations = 1, successful payment settlements = 1,
 successful external mutations ≥ 2** — real settlement #4's `createDelegation`
 AND its `settlePermissions` call both succeeded externally in that turn; only
-the *local* classification of the settlement result was (at the time)
+the _local_ classification of the settlement result was (at the time)
 incorrectly non-terminal-but-unrecovered. Token issuance is left out of this
 aggregate; the project has not explicitly defined it as a countable external
-mutation. This project has exactly **four** confirmed real historical
-Nevermined sandbox settlements to date (not five, not six) —
-`aafdab51-…`, `6a4979a9-…`, `eaa3929b-…`, and `f2c64337-…` (real settlement
-#4). No fifth payment was authorized or executed this turn.
+mutation. This project has exactly **four** confirmed real historical Nevermined
+sandbox settlements to date (not five, not six) — `aafdab51-…`, `6a4979a9-…`,
+`eaa3929b-…`, and `f2c64337-…` (real settlement #4). No fifth payment was
+authorized or executed this turn.
 
 ## Recovery-only operation: real settlement #4 → `consumed` (this turn)
 
 Authorized scope: **recovery only, explicitly not a new payment.** Absolute
 prohibitions for this turn (all honored): no `createDelegation`, no new x402
-token, no `verifyPermissions`, no service re-execution, no
-`settlePermissions`, no new Payment-Identifier, no new logical job, no fifth
-fixed-PAYG payment; `NVM_SUBSCRIBER_API_KEY` unused (seller `NVM_API_KEY`
-only); no public unauthenticated HTTP recovery endpoint; no fabricated
-authentication; `RUN_LIVE_NEVERMINED`/`RUN_LIVE_X402` both confirmed `MISSING`
-throughout (recovery is not gated behind either flag, since it performs no
-live payment-flow operation); eligibility restricted to `settlement_pending`
-only (deliberately narrower than the route's own `settlement_failed` edge,
-per this turn's explicit instruction not to broaden that recovery
-unnecessarily).
+token, no `verifyPermissions`, no service re-execution, no `settlePermissions`,
+no new Payment-Identifier, no new logical job, no fifth fixed-PAYG payment;
+`NVM_SUBSCRIBER_API_KEY` unused (seller `NVM_API_KEY` only); no public
+unauthenticated HTTP recovery endpoint; no fabricated authentication;
+`RUN_LIVE_NEVERMINED`/`RUN_LIVE_X402` both confirmed `MISSING` throughout
+(recovery is not gated behind either flag, since it performs no live
+payment-flow operation); eligibility restricted to `settlement_pending` only
+(deliberately narrower than the route's own `settlement_failed` edge, per this
+turn's explicit instruction not to broaden that recovery unnecessarily).
 
 ### Implementation
 
 - **`apps/edge-api/tests/live/nevermined-recover-operator.test.ts`** — the
   actual recovery logic. Gated by its own env var,
   `NEVERMINED_RECOVER_PAYMENT_ID` — deliberately never `RUN_LIVE_NEVERMINED`.
-  Loads the real persistent D1 (via the existing
-  `resolveLivePersistencePath` safety gate), inspects the durable
+  Loads the real persistent D1 (via the existing `resolveLivePersistencePath`
+  safety gate), inspects the durable
   `payment_attempts`/`jobs`/`x402_service_results` rows for the given
-  Payment-Identifier *before* mutating anything, fails closed unless
+  Payment-Identifier _before_ mutating anything, fails closed unless
   `payment_rail === 'nevermined'` and `lifecycle_stage === 'settlement_pending'`
   (an already-`consumed` row short-circuits to a zero-call, zero-mutation
   `ALREADY_CONSUMED` no-op), reconciles the correlated delegation seller-side
-  via GET-only calls (`sellerReconciliationClient`, a new, separate,
-  ungated `NeverminedDelegationLookupClient` implementation — deliberately
-  *not* the existing `NeverminedSandboxReconciliationClient`, whose
-  `.authenticated()` factory hard-requires `RUN_LIVE_NEVERMINED==='1'` and is
-  therefore unusable here), classifies via the existing
-  `reconcileNeverminedSettlementForRecovery`, and — only on a positive
-  `SETTLED` classification — transitions
+  via GET-only calls (`sellerReconciliationClient`, a new, separate, ungated
+  `NeverminedDelegationLookupClient` implementation — deliberately _not_ the
+  existing `NeverminedSandboxReconciliationClient`, whose `.authenticated()`
+  factory hard-requires `RUN_LIVE_NEVERMINED==='1'` and is therefore unusable
+  here), classifies via the existing `reconcileNeverminedSettlementForRecovery`,
+  and — only on a positive `SETTLED` classification — transitions
   `settlement_pending → settled_external → link_verified → settled`, marks
-  `consumed`, builds a `PaymentServiceLink` from the *original* durable
-  artifacts only (never a weaker recovery-only shape), and persists the
-  final result into `x402_service_results` via the same `finalize()` the
-  production route uses.
-- **`scripts/nevermined-recover.ts`** — a thin, zero-`@siteborne/*`-import
-  CLI wrapper (`pnpm nevermined:recover -- --payment-id <id>`). It refuses
-  to run at all if either live flag is set, and shells out to
-  `vitest run` scoped to the test file above (setting only
-  `NEVERMINED_RECOVER_PAYMENT_ID`). This indirection exists because a bare
-  `tsx` invocation of a root-level script hit a real ESM
-  export/binding resolution failure walking `@siteborne/protocol-x402`'s
-  transitive import of `@siteborne/pricing` (`pricing`'s `package.json`
-  points at an unbuilt `dist/` that vitest's explicit `vitest.config.ts`
-  aliases bypass but plain Node/tsx resolution does not) — vitest is this
-  project's only proven-working resolution path for the deep workspace
-  import graph, so the wrapper reuses it rather than reimplementing
-  resolution.
+  `consumed`, builds a `PaymentServiceLink` from the _original_ durable
+  artifacts only (never a weaker recovery-only shape), and persists the final
+  result into `x402_service_results` via the same `finalize()` the production
+  route uses.
+- **`scripts/nevermined-recover.ts`** — a thin, zero-`@siteborne/*`-import CLI
+  wrapper (`pnpm nevermined:recover -- --payment-id <id>`). It refuses to run at
+  all if either live flag is set, and shells out to `vitest run` scoped to the
+  test file above (setting only `NEVERMINED_RECOVER_PAYMENT_ID`). This
+  indirection exists because a bare `tsx` invocation of a root-level script hit
+  a real ESM export/binding resolution failure walking
+  `@siteborne/protocol-x402`'s transitive import of `@siteborne/pricing`
+  (`pricing`'s `package.json` points at an unbuilt `dist/` that vitest's
+  explicit `vitest.config.ts` aliases bypass but plain Node/tsx resolution does
+  not) — vitest is this project's only proven-working resolution path for the
+  deep workspace import graph, so the wrapper reuses it rather than
+  reimplementing resolution.
 
 ### Dry run (throwaway copy, before touching the real database)
 
-The entire real persistent D1 directory was copied to a disposable path
-outside the OS-temp root (required by `resolveLivePersistencePath`'s own
-safety gate) and the recovery command run against the copy first. Full
-lifecycle transition succeeded end-to-end; a second invocation against the
-same now-consumed copy correctly short-circuited to `ALREADY_CONSUMED` with
-zero further reads/writes. Only after this passed was the real database
-touched.
+The entire real persistent D1 directory was copied to a disposable path outside
+the OS-temp root (required by `resolveLivePersistencePath`'s own safety gate)
+and the recovery command run against the copy first. Full lifecycle transition
+succeeded end-to-end; a second invocation against the same now-consumed copy
+correctly short-circuited to `ALREADY_CONSUMED` with zero further reads/writes.
+Only after this passed was the real database touched.
 
 ### Real recovery run
 
@@ -1526,13 +1522,13 @@ consumed_at: 2026-08-15T04:57:13.253Z
 settlement_transaction_reference: 0x847a6da0a6a63f1f12838bbe9269b8fd9798997b0680b0146b7147fcb715f417
 ```
 
-Matching the independently-reconciled external transaction hash exactly.
-**Real settlement #4 is now `RECOVERED_TO_CONSUMED`.**
+Matching the independently-reconciled external transaction hash exactly. **Real
+settlement #4 is now `RECOVERED_TO_CONSUMED`.**
 
 ### Idempotency proof (real, not just dry-run)
 
-The same command was run a second time against the now-consumed real
-database. It read `lifecycle_stage: 'settled', consumed: true`, printed
+The same command was run a second time against the now-consumed real database.
+It read `lifecycle_stage: 'settled', consumed: true`, printed
 `ALREADY_CONSUMED: ... No further action taken.` and
 `verify+=0 execute+=0 settle+=0 jobs+=0 (idempotent no-op)`, and returned
 without making any external HTTP call — the eligibility check short-circuits
@@ -1540,84 +1536,81 @@ before `sellerReconciliationClient` is even constructed.
 
 ### Recovery-added counters
 
-All zero, both in the dry run and the real run: delegation creations,
-token creations, `verifyPermissions` calls, service executions,
-`settlePermissions` calls, new Payment-Identifiers, new logical jobs.
+All zero, both in the dry run and the real run: delegation creations, token
+creations, `verifyPermissions` calls, service executions, `settlePermissions`
+calls, new Payment-Identifiers, new logical jobs.
 
 ### Fresh-process D1 reopen proof
 
-Each `pnpm nevermined:recover` invocation is its own fresh `vitest run`
-process (a fresh Node process, a fresh `Miniflare` instance opened against
-the same persistent path). The second invocation, in a wholly separate
-process, correctly read the `settled`/`consumed:true` state durably written
-by the first — this is exactly the same proof shape as
+Each `pnpm nevermined:recover` invocation is its own fresh `vitest run` process
+(a fresh Node process, a fresh `Miniflare` instance opened against the same
+persistent path). The second invocation, in a wholly separate process, correctly
+read the `settled`/`consumed:true` state durably written by the first — this is
+exactly the same proof shape as
 `nevermined-live-migration-idempotency.test.ts`'s dispose+reopen positive
 control and `x402-service-route.test.ts`'s "D1 persistence survives a fresh
-app/repository instance" test, both of which remain unmodified and passing
-in this turn's regression run.
+app/repository instance" test, both of which remain unmodified and passing in
+this turn's regression run.
 
 ### `duplicate_conflict` proof
 
-The general mechanism (same Payment-Identifier reused with a mutated
-immutable binding field → HTTP 409 `replay_conflict`, zero service
-execution, zero provider calls) is mechanism-level code shared by every
-payment rail and is exercised, unmodified, by
-`x402-service-route.test.ts`'s `replay: duplicate_conflict is rejected
-without service execution` test and `nevermined-service-route.test.ts`'s
-equivalent — both pass in this turn's regression run, so the mechanism that
-now protects `pay_7858b2f7de124dce98395a973eed2208` (a `consumed` row, which
-`acquireForRequest` rejects even before reaching binding comparison) is
-proven correct in general. A *payment-identifier-specific* HTTP replay
-against the real production route for this exact recovered payment was not
-additionally attempted this turn — see classification below.
+The general mechanism (same Payment-Identifier reused with a mutated immutable
+binding field → HTTP 409 `replay_conflict`, zero service execution, zero
+provider calls) is mechanism-level code shared by every payment rail and is
+exercised, unmodified, by `x402-service-route.test.ts`'s
+`replay: duplicate_conflict is rejected without service execution` test and
+`nevermined-service-route.test.ts`'s equivalent — both pass in this turn's
+regression run, so the mechanism that now protects
+`pay_7858b2f7de124dce98395a973eed2208` (a `consumed` row, which
+`acquireForRequest` rejects even before reaching binding comparison) is proven
+correct in general. A _payment-identifier-specific_ HTTP replay against the real
+production route for this exact recovered payment was not additionally attempted
+this turn — see classification below.
 
 ### HTTP replay classification: `LIVE_HTTP_REPLAY_AUTH_CONTEXT_UNAVAILABLE`
 
 Replaying `pay_7858b2f7de124dce98395a973eed2208` through the real,
 production-wired HTTP route (`buildPaidServicesApp`/`createX402ServiceRoute`
 mounted against the real persistent D1) would require a `PAYMENT-SIGNATURE`
-header the route accepts as belonging to this specific payment. The
-original ephemeral x402 bearer token was, by design, never persisted
-(exactly the property this checkpoint's architecture requires — an ephemeral
-authorization is not a durable artifact). Reconstructing one now would mean
-either fabricating authentication material (explicitly forbidden) or
-minting a new one via a live delegation/token flow (explicitly forbidden
-this turn, since it is indistinguishable from a live payment attempt). Per
-the directive's own explicit alternative, this is classified
-`LIVE_HTTP_REPLAY_AUTH_CONTEXT_UNAVAILABLE` rather than fabricated — the
-general replay/duplicate_conflict *mechanism* is proven above via the
-existing, unmodified, real-route regression suite; only the
-payment-identifier-specific instance of that proof against the real
-production wiring for this one recovered row is unavailable without
-performing exactly the kind of live mutation this turn prohibits.
+header the route accepts as belonging to this specific payment. The original
+ephemeral x402 bearer token was, by design, never persisted (exactly the
+property this checkpoint's architecture requires — an ephemeral authorization is
+not a durable artifact). Reconstructing one now would mean either fabricating
+authentication material (explicitly forbidden) or minting a new one via a live
+delegation/token flow (explicitly forbidden this turn, since it is
+indistinguishable from a live payment attempt). Per the directive's own explicit
+alternative, this is classified `LIVE_HTTP_REPLAY_AUTH_CONTEXT_UNAVAILABLE`
+rather than fabricated — the general replay/duplicate*conflict \_mechanism* is
+proven above via the existing, unmodified, real-route regression suite; only the
+payment-identifier-specific instance of that proof against the real production
+wiring for this one recovered row is unavailable without performing exactly the
+kind of live mutation this turn prohibits.
 
 ### Regression (full, both live flags `MISSING` throughout)
 
 `nevermined:check`, `x402:check`, `mcp:check`, `a2a:check`,
-`governance:validate`, `state:validate`, `tasks:validate`, `secrets:scan`,
-full `pnpm check` — all exit 0. (One real defect was found and fixed during
-this turn's own type-check pass: a `string | undefined` narrowing gap in the
-new recovery test file's call into `reconcileNeverminedSettlementForRecovery`,
-fixed with a non-null assertion guarded by the preceding `expect(...)
-.toBeTruthy()` eligibility check — not a defect in any previously-accepted
-code.)
+`governance:validate`, `state:validate`, `tasks:validate`, `secrets:scan`, full
+`pnpm check` — all exit 0. (One real defect was found and fixed during this
+turn's own type-check pass: a `string | undefined` narrowing gap in the new
+recovery test file's call into `reconcileNeverminedSettlementForRecovery`, fixed
+with a non-null assertion guarded by the preceding `expect(...) .toBeTruthy()`
+eligibility check — not a defect in any previously-accepted code.)
 
 ### Outcome
 
 **Real settlement #4: `REAL_SETTLEMENT` / `EXTERNALLY_SETTLED` /
 `DURABLE_LOCAL_ARTIFACTS_PRESENT` / `RECOVERED_TO_CONSUMED`.** The full
 `SETTLED_EXTERNAL → PaymentServiceLink → consumed` chain this checkpoint's
-acceptance criteria requires is now satisfied for this payment, achieved
-with zero new live external mutations of any kind — only seller-side,
-read-only GET reconciliation against artifacts that were already real. Real
-settlements #1–#3 remain `PAID_EXTERNAL_NOT_CONSUMED_LOCAL`/
-`LOCAL_ARTIFACTS_UNRECOVERABLE` (their durable local artifacts predate this
-checkpoint's durable-recovery hardening and are not known to be
-reconstructable the way #4's were).
+acceptance criteria requires is now satisfied for this payment, achieved with
+zero new live external mutations of any kind — only seller-side, read-only GET
+reconciliation against artifacts that were already real. Real settlements #1–#3
+remain `PAID_EXTERNAL_NOT_CONSUMED_LOCAL`/ `LOCAL_ARTIFACTS_UNRECOVERABLE`
+(their durable local artifacts predate this checkpoint's durable-recovery
+hardening and are not known to be reconstructable the way #4's were).
 
 **SUN-0900B Checkpoint 1B (fixed PAYG): ACCEPTED.** SUN-0900B overall remains
-`active`; `production_ready=false`; `production_enabled=false`. This
-acceptance rests on a real settlement → local ambiguity → persisted
-crash/recovery state → independent external reconciliation → finalization
-without a second charge — a stronger proof of the architecture's intended
-reliability property than a pristine happy-path run would have been.
+`active`; `production_ready=false`; `production_enabled=false`. This acceptance
+rests on a real settlement → local ambiguity → persisted crash/recovery state →
+independent external reconciliation → finalization without a second charge — a
+stronger proof of the architecture's intended reliability property than a
+pristine happy-path run would have been.
