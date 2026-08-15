@@ -527,13 +527,57 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
       ttlMs: paymentAttemptTtlMs,
     });
 
-    async function reconstructFromJob(): Promise<Response | null> {
+    /**
+     * `requireDelivered` (SUN-0900B checkpoint 1B, replay-reconstruction
+     * repair): the pre-existing, still-correct default for a
+     * `duplicate_same` retry — the payment isn't independently known to be
+     * consumed yet, so `job.current_state === 'DELIVERED'` is the only
+     * signal that the original request actually finished (directive §13:
+     * never reconstruct a still-processing request as if it had).
+     *
+     * `false` is used only from the `already_consumed` branch, where
+     * `acquirePaymentAttempt`'s own `consumed` check (backed by
+     * `payment_attempts.consumed_at IS NOT NULL`) has ALREADY
+     * authoritatively established the payment is done — independently of
+     * whatever state the `Job` record happens to be in. Requiring
+     * `DELIVERED` on top of that was over-strict: a payment recovered via
+     * `attemptNeverminedRecovery`'s `settlement_failed -> settled_external`
+     * edge (this same checkpoint, `829354f`) is marked `consumed` but its
+     * `Job` deliberately stays at `REFUND_REQUIRED` forever (the frozen
+     * JobState machine has no `REFUND_REQUIRED -> DELIVERED` edge) — under
+     * the old unconditional check, an already-paid, already-consumed,
+     * already-linked payment could never be replayed, which is exactly
+     * the `REPLAY_BLOCKED_BY_JOB_STATE_DEPENDENCY` defect this fixes.
+     * `payment_attempts.consumed_at` (via `acquirePaymentAttempt`) — not
+     * `Job.current_state` — is the payment-idempotency authority; the two
+     * are related but not interchangeable (see the `x402_service_results`
+     * `kind` discriminant check below for the other half of this fix).
+     */
+    async function reconstructFromJob(
+      options: { requireDelivered: boolean } = { requireDelivered: true }
+    ): Promise<Response | null> {
       const jobResult = await jobsRepo.getByIdempotencyKey(paymentIdentifier);
       if (!jobResult.ok || !jobResult.value) return null;
       const job = jobResult.value;
-      if (job.current_state !== 'DELIVERED') return null;
+      if (options.requireDelivered && job.current_state !== 'DELIVERED') return null;
       const cached = await results.getByJobId<CachedResult>(job.id);
       if (!cached) return null;
+      if (
+        typeof cached === 'object' &&
+        cached !== null &&
+        'kind' in cached &&
+        (cached as { kind?: unknown }).kind === 'nevermined_settlement_pending_draft'
+      ) {
+        // The durable pre-settle draft `createPending` writes, never
+        // finalized (a crash landed exactly between `markConsumed` and
+        // `results.finalize`, or `finalize` itself hasn't run yet) — this
+        // is NOT the shape a caller of `reconstructFromJob` expects
+        // (`CachedResult`'s `status`/`body`/`settleResponse`). Never
+        // reconstruct from it; the caller's own fallback (409
+        // `already_consumed_result_missing`, or 202 `processing`) is the
+        // correct, honest response here.
+        return null;
+      }
       c.header(
         'PAYMENT-RESPONSE',
         rail === 'nevermined'
@@ -744,7 +788,7 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
           'payment identifier already consumed by a different immutable request binding'
         );
       }
-      const reconstructed = await reconstructFromJob();
+      const reconstructed = await reconstructFromJob({ requireDelivered: false });
       if (reconstructed) return reconstructed;
       await audit('payment_replay_rejected', {
         payment_identifier: paymentIdentifier,

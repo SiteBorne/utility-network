@@ -866,3 +866,145 @@ accepted. Production remains false. The next live run, whenever authorized, now
 runs against a fix that is proven correct — this specific failure mode (a
 transaction-reference validation gap treated as terminal rather than ambiguous)
 should not recur.
+
+## Final credential-free hardening turn: persistent live storage + replay reconstruction repair
+
+Froze `829354f` unchanged (explicit-vs-ambiguous classification, seller-side
+reconciliation, `PAYMENT-DELEGATION-ID` binding, `SETTLEMENT_PENDING` ordering,
+recovery eligibility rules, CDP semantics) — this turn only adds two
+independent, credential-free repairs.
+
+### A. Persistent live D1 storage, outside any OS-temporary root
+
+**Corrected claim.** The prior report stated macOS's tmp-cleanup as the cause of
+the third payment's lost local state. That was plausible, not proven. The proven
+conclusion, recorded now instead:
+`TEMPORARY_STORAGE_INSUFFICIENT_FOR_MULTI_DAY_PAYMENT_RECOVERY` — the location
+was under `$TMPDIR`, it is gone, and no further claim about _why_ is made.
+
+**New resolver** (`apps/edge-api/src/control-plane/live-persistence-path.ts`):
+`resolveLivePersistencePath` — explicit `SITEBORNE_LIVE_D1_DIR` override, else
+`$HOME/.local/share/siteborne/live-d1/sun-0900b-checkpoint1`.
+`validateLivePersistencePath` (pure, no filesystem access) rejects: any path
+inside a known OS-temp root (`/tmp`, `/var/tmp`, `os.tmpdir()`, `$TMPDIR`),
+inside the repository checkout, containing a `node_modules` path segment, `/`
+itself, `$HOME` itself, or empty — checked with separator-terminated prefix
+comparison so `/tmpfoo` is correctly NOT treated as inside `/tmp`.
+`resolveLivePersistencePath` throws `UnsafeLivePersistencePathError` immediately
+at call time — before any live external mutation is reachable — never falling
+back to a default silently. `ensureLivePersistenceDirectory` creates the
+directory (`mkdirSync recursive`) and best-effort restricts it to `0700`. The
+resolved path is never secret, never enters any payment hash, PCC, receipt, or
+`PaymentServiceLink` — purely operational.
+
+**Wired into the live harness**
+(`apps/edge-api/tests/live/nevermined-live-exact.test.ts`): replaced the
+`$TMPDIR`-based path with `resolveLivePersistencePath` +
+`ensureLivePersistenceDirectory`, called first in `beforeAll` — before
+`Payments.getInstance`, before any registration/delegation reconciliation. Logs
+the resolved path (safe, no secret) and a sanitized startup count of unfinished
+attempts (`settlement_pending`/`settled_external`/`link_verified`) grouped by
+stage — counts only, never credential/token contents. Retention policy unchanged
+from the prior design: never auto-deleted by this file; an operator recovers a
+failed run by rerunning the identical command, or forces a fresh checkpoint DB
+by deleting the resolved directory manually.
+
+**16 new unit tests** (`apps/edge-api/tests/live-persistence-path.test.ts`): the
+default path accepted; a safe explicit override accepted; every unsafe-path
+class rejected (`/tmp/...`, `os.tmpdir()`-based, `/var/tmp/...`, inside the repo
+checkout, inside `node_modules` — both under the repo and elsewhere, `/`,
+`$HOME` itself, empty); the `/tmpfoo`-is-not-`/tmp` false-positive guard; the
+override path throws immediately rather than silently falling back; the resolved
+value never contains anything credential-shaped.
+
+### B. `REPLAY_BLOCKED_BY_JOB_STATE_DEPENDENCY` — root-caused and fixed
+
+**Root cause.** `reconstructFromJob` (`x402-service.ts`) required
+`job.current_state === 'DELIVERED'` unconditionally. That's correct for a
+`duplicate_same` retry (the payment isn't yet known to be consumed, so `Job`
+state is the only signal something actually finished) — but the
+`already_consumed` branch calls the same helper, and by the time that branch is
+reached, `acquirePaymentAttempt`'s own `consumed` check (backed by
+`payment_attempts.consumed_at IS NOT NULL`) has ALREADY authoritatively
+established the payment is done, independently of `Job` state. A payment
+recovered via `attemptNeverminedRecovery`'s
+`settlement_failed -> settled_external` edge (`829354f`) is marked consumed but
+its `Job` deliberately stays at `REFUND_REQUIRED` forever (no
+`REFUND_REQUIRED -> DELIVERED` edge in the frozen JobState machine) — so the
+unconditional `DELIVERED` check made an already-paid, already-consumed,
+already-linked payment permanently unreplayable. That mismatch between the
+payment- idempotency authority (`payment_attempts.consumed_at`) and the
+job-execution authority (`Job.current_state`) — two related but not
+interchangeable concepts — was the entire defect.
+
+**The fix.** `reconstructFromJob` now takes `{ requireDelivered: boolean }`
+(default `true`, preserving the exact prior behavior everywhere it isn't
+explicitly overridden). The `already_consumed` branch now calls it with
+`{ requireDelivered: false }` — the caller there already independently knows the
+payment is consumed, so job state is no longer a gate. The `duplicate_same`
+branch is unchanged (`requireDelivered: true` — a payment not yet known to be
+consumed still requires `Job.current_state === 'DELIVERED'` before
+reconstructing, exactly as before). A second, unrelated safety fix landed
+alongside it: `reconstructFromJob` now explicitly rejects a cached
+`x402_service_results` row shaped like the pre-settle
+`PendingNeverminedSettlementDraft`
+(`kind === 'nevermined_settlement_pending_draft'`) rather than risking it being
+misinterpreted as a finalized `CachedResult` in the narrow window between
+`markConsumed` and `results.finalize`.
+
+**Proof — 2 new/updated tests**
+(`apps/edge-api/tests/nevermined-route-settlement-recovery.test.ts`, now 16):
+the existing historical-recovery test's replay step, which previously asserted
+the (now-understood-to-be-wrong) `409`, now asserts the correct `200` with the
+identical `link_id` and zero additional verify/execute/settle. A new, dedicated
+**process-restart replay** test (the directive's own hard acceptance gate):
+complete a payment through the **normal**, non-crash path to `settled`/consumed,
+fully `dispose()` the Miniflare instance, open a genuinely fresh one at the same
+`resourcePersistencePath`, issue the byte-identical request against a fresh
+route/app instance — `200`, same `link_id`, zero additional
+verify/execute/settle. Recovery-path replay and normal-path replay now converge
+on the exact same semantics, as required.
+
+**Unaffected, unchanged:** `duplicate_conflict` (mutated binding, same
+Payment-Identifier) still fires before any provider call regardless of which
+replay path a payment took to reach `consumed` — proven by the existing,
+untouched conflict tests continuing to pass. CDP's replay behavior is completely
+unchanged (`x402-service-route.test.ts`, 30/30, unmodified) — CDP never enters
+the `settlement_pending`/`settlement_failed` intermediate states this fix
+concerns, so its `duplicate_same`/`already_consumed` paths were never affected
+by the original defect.
+
+### Regression
+
+`nevermined:check`, `x402:check`, `mcp:check`, `a2a:check`,
+`governance:validate`, `state:validate`, `tasks:validate`, `secrets:scan` all
+exit 0. Full `pnpm run check` (format, lint, typecheck, every suite, migrations,
+contracts) run this turn — see the commit's own validation record.
+`RUN_LIVE_NEVERMINED`/`RUN_LIVE_X402` absent throughout; zero live Nevermined
+calls of any kind this turn (no read-only reconfirmation was even needed this
+time, since no new claim about the real third payment's external state was
+made).
+
+### Outcome
+
+Both pre-live blockers identified after the third-payment repair turn are now
+closed: live D1 state has a durable, non-OS-temporary home with an explicit
+safety guard, and an already-consumed payment (whether reached via the normal
+happy path or via evidence-gated historical recovery) now correctly reconstructs
+its original `200` on replay, with zero additional provider or execution calls.
+**SUN-0900B remains active, not accepted — no fourth live payment was made or
+attempted this turn**, per the directive's explicit instruction. All three
+historical real sandbox settlements remain distinct, documentary-only records:
+
+1. Externally settled, local artifacts unrecoverable (original validator defect,
+   fixed in `9d9e102`, but too late to recover payment #1 itself).
+2. Externally settled, local artifacts unrecoverable (same defect, same fix, too
+   late for payment #2).
+3. Externally settled, local artifacts unrecoverable for a different reason —
+   the classification defect this repaired (`829354f`) would have recovered it,
+   but its local D1 state was gone by the time the fix existed.
+
+The next live run, whenever authorized, is the first to run against every fix
+this checkpoint's incidents have produced: correct explicit-vs-ambiguous
+settlement classification, durable non-temporary storage, and correct
+already-consumed replay reconstruction.

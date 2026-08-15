@@ -53,8 +53,7 @@
  * (`createX402ServiceRoute`) through that durable path is the next
  * integration step before authorizing the final live run.
  */
-import { readFileSync, readdirSync, mkdirSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -94,6 +93,10 @@ import type { ExecutorOutcome } from '../../src/control-plane/routes/x402-servic
 import { buildPaidServicesApp } from '../../src/control-plane/routes/paid-services';
 import { NeverminedPaymentEvidenceProvider } from '../../src/control-plane/evidence/nevermined-provider';
 import { NeverminedSandboxReconciliationClient } from '../../src/control-plane/evidence/nevermined-reconciliation-client';
+import {
+  ensureLivePersistenceDirectory,
+  resolveLivePersistencePath,
+} from '../../src/control-plane/live-persistence-path';
 
 const RUN_LIVE = process.env.RUN_LIVE_NEVERMINED === '1';
 
@@ -158,23 +161,33 @@ describe.skipIf(!RUN_LIVE)(
         throw new Error('SUN-0900B live test: NVM_ENVIRONMENT must be "sandbox"');
       }
 
-      // Stable, deterministic path — deliberately NOT `mkdtempSync`
-      // (which mints a fresh random directory every run, making it
-      // impossible for an operator or a resumed process to reopen the
-      // same D1 state after a crash). One fixed path per checkpoint,
-      // under the OS temp root, containing no secret material — safe to
-      // name literally. Never auto-deleted by this file (no `rmSync` in
-      // `afterAll` below); an operator recovers from a failed final live
-      // run by re-running this exact test file with the exact same
-      // RUN_LIVE_NEVERMINED=1 command — the durable settlement-recovery
-      // lifecycle (packages/protocol-x402/src/lifecycle/stage.ts,
+      // Persistent, non-OS-temp path (SUN-0900B checkpoint 1B, final
+      // credential-free hardening turn). The prior `$TMPDIR`-based path
+      // was gone by the very next turn — proven conclusion:
+      // TEMPORARY_STORAGE_INSUFFICIENT_FOR_MULTI_DAY_PAYMENT_RECOVERY, not
+      // a specific claim about which OS mechanism reclaimed it. Resolved
+      // via `resolveLivePersistencePath` (explicit `SITEBORNE_LIVE_D1_DIR`
+      // override, else `$HOME/.local/share/siteborne/live-d1/
+      // sun-0900b-checkpoint1`), which throws immediately — before this
+      // `beforeAll` can reach any live external call — if the resolved
+      // path is inside an OS temp root, the repository checkout,
+      // `node_modules`, `/`, or `$HOME` itself. Contains no secret
+      // material — safe to log literally. Never auto-deleted by this file
+      // (no `rmSync` in `afterAll` below); an operator recovers from a
+      // failed final live run by re-running this exact test file with the
+      // exact same `RUN_LIVE_NEVERMINED=1` command — the durable
+      // settlement-recovery lifecycle
+      // (packages/protocol-x402/src/lifecycle/stage.ts,
       // packages/protocol-nevermined/src/settlement-recovery.ts) reads
       // back whatever state survives here instead of assuming a clean
       // slate. To force a genuinely fresh checkpoint DB, delete this
-      // directory manually first: `rm -rf
-      // $TMPDIR/siteborne-sun-0900b-checkpoint1-live-d1`.
-      tempDir = join(tmpdir(), 'siteborne-sun-0900b-checkpoint1-live-d1');
-      mkdirSync(tempDir, { recursive: true });
+      // directory manually first.
+      tempDir = resolveLivePersistencePath({
+        repositoryRoot: fileURLToPath(new URL('../../../..', import.meta.url)),
+      });
+      ensureLivePersistenceDirectory(tempDir);
+      // eslint-disable-next-line no-console
+      console.log('SUN-0900B live persistence path (sanitized, no secret material):', tempDir);
       mf = new Miniflare({
         modules: true,
         script: `export default { async fetch() { return new Response('OK'); } }`,
@@ -196,6 +209,26 @@ describe.skipIf(!RUN_LIVE)(
       // Seed the four frozen services (FK requirement) — same seeding
       // buildPaidServicesApp always does.
       await buildPaidServicesApp({ db, evidenceMode: 'fixture', clock: clockValue });
+
+      // Startup unfinished-payment inspection (directive requirement):
+      // report sanitized counts only — never credential/token contents —
+      // before any live delegation/token/verify/execute/settle activity.
+      // A real, non-test invocation would branch here to recover first;
+      // this live-test file's own scope (this same checkpoint's directive)
+      // is limited to reporting the counts, since PHASE A/B below already
+      // separately reconcile registration/delegation state.
+      const unfinished = await db
+        .prepare(
+          `SELECT lifecycle_stage, COUNT(*) as count FROM payment_attempts
+           WHERE lifecycle_stage IN ('settlement_pending', 'settled_external', 'link_verified')
+           GROUP BY lifecycle_stage`
+        )
+        .all<{ lifecycle_stage: string; count: number }>();
+      const unfinishedCounts = Object.fromEntries(
+        (unfinished.results ?? []).map((row) => [row.lifecycle_stage, row.count])
+      );
+      // eslint-disable-next-line no-console
+      console.log('SUN-0900B startup unfinished-attempt counts (sanitized):', unfinishedCounts);
 
       const builder = Payments.getInstance({ nvmApiKey: process.env.NVM_API_KEY! });
       const subscriber = Payments.getInstance({ nvmApiKey: process.env.NVM_SUBSCRIBER_API_KEY! });

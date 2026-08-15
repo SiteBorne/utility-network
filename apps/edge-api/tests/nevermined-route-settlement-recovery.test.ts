@@ -845,22 +845,19 @@ describe('Nevermined route-level durable settlement recovery (SUN-0900B checkpoi
     expect(finalRow).toMatchObject({ lifecycle_stage: 'settled' });
     expect(finalRow?.consumed_at).toBeTruthy();
 
-    // Replay feasibility audit (directive requirement): a payment
-    // recovered from historical `settlement_failed` is classified
-    // `REPLAY_BLOCKED_BY_JOB_STATE_DEPENDENCY`, not
-    // `REPLAY_AVAILABLE_WITH_EXISTING_SAFE_CONTEXT`. `reconstructFromJob`
-    // (the existing, pre-existing replay mechanism) requires
-    // `job.current_state === 'DELIVERED'` — but this recovery path
-    // deliberately never pushes the job there (see the comment above the
-    // `if (job.current_state === 'SETTLING')` guard in x402-service.ts:
-    // the frozen JobState machine has no `REFUND_REQUIRED -> DELIVERED`
-    // edge, and adding one is out of scope for this narrow repair). The
-    // safety property that actually matters — zero additional
-    // verify/execute/settle, no leaked/fabricated result — still holds:
-    // the replay is correctly rejected (`409`), never silently
-    // re-executed and never returns a wrong/different result. It is not
-    // the identical-`200`-reconstruction replay a `settlement_pending`-
-    // origin recovery gets; that gap is reported, not hidden.
+    // Replay feasibility audit (directive requirement) — now
+    // REPLAY_AVAILABLE_WITH_EXISTING_SAFE_CONTEXT. `reconstructFromJob`
+    // (x402-service.ts) no longer requires `job.current_state ===
+    // 'DELIVERED'` when called from the `already_consumed` branch —
+    // `payment_attempts.consumed_at` (already authoritatively established
+    // by `acquirePaymentAttempt` before this branch is ever reached) is
+    // the real payment-idempotency authority, not the `Job` record, which
+    // deliberately stays at `REFUND_REQUIRED` forever for a
+    // `settlement_failed`-origin recovery (the frozen JobState machine has
+    // no `REFUND_REQUIRED -> DELIVERED` edge). This closes the
+    // `REPLAY_BLOCKED_BY_JOB_STATE_DEPENDENCY` gap: identical replay now
+    // reconstructs the exact original `200`, zero additional
+    // verify/execute/settle, same link.
     const replayCounters = { verify: 0, settle: 0, execute: 0 };
     const replay = await recoveredApp.request(ROUTE_PATH, {
       method: 'POST',
@@ -872,9 +869,9 @@ describe('Nevermined route-level durable settlement recovery (SUN-0900B checkpoi
       },
       body: JSON.stringify(WEB_INPUT),
     });
-    expect(replay.status).toBe(409);
     const replayBody = (await replay.json()) as Record<string, unknown>;
-    expect(replayBody.error).toBe('already_consumed');
+    expect(replay.status, JSON.stringify(replayBody)).toBe(200);
+    expect(replayBody.link_id).toBe(body.link_id);
     expect(replayCounters.verify).toBe(0);
     expect(replayCounters.execute).toBe(0);
     expect(replayCounters.settle).toBe(0);
@@ -1023,6 +1020,80 @@ describe('Nevermined route-level durable settlement recovery (SUN-0900B checkpoi
       .first<Record<string, unknown>>();
     expect(stillFailed).toMatchObject({ lifecycle_stage: 'settlement_failed' });
     expect(stillFailed?.consumed_at).toBeFalsy();
+  });
+
+  it('process-restart replay (normal, non-crash path — hard acceptance gate): complete to consumed, fully dispose, fresh runtime at the same persistent path, identical request reconstructs 200 with zero additional verify/execute/settle/job', async () => {
+    await challenge();
+    const id = generateSiteborneePaymentId();
+    const first = await pay(id);
+    const firstBody = (await first.clone().json()) as Record<string, unknown>;
+    expect(first.status, JSON.stringify(firstBody)).toBe(200);
+    expect(counters.verify).toBe(1);
+    expect(counters.execute).toBe(1);
+    expect(counters.settle).toBe(1);
+
+    // Full process-restart proof: dispose the Miniflare instance entirely
+    // and open a genuinely fresh one at the same resourcePersistencePath —
+    // no object from "runtime A" survives into "runtime B".
+    await miniflare.dispose();
+    miniflare = new Miniflare({
+      modules: true,
+      script: `export default { async fetch() { return new Response('OK'); } }`,
+      d1Databases: ['DB'],
+      resourcePersistencePath: tempDir,
+    });
+    db = await miniflare.getD1Database('DB');
+
+    const restartCounters = { verify: 0, settle: 0, execute: 0 };
+    const restartApp = new Hono();
+    createX402ServiceRoute(restartApp, {
+      serviceId: SERVICE_ID,
+      scheme: 'exact',
+      pricingKey: 'web_context_verified_direct',
+      network: NETWORK,
+      asset: 'nevermined:credits',
+      path: ROUTE_PATH,
+      inputSchema: BUNDLED_SERVICE_INPUT_SCHEMAS[SERVICE_ID] as Record<string, unknown>,
+      contractRelease: '1.0.0',
+      inputSchemaHash: 'sha256:d3b0762020d4cc1d1e846960ed978cf1237b1741f90213adabe8ed931c2845ea',
+      outputSchemaHash: 'sha256:138bccc34ad8c320daec36890b8867fca9f709040b80c689710fd4bde49042de',
+      pccDependency: '1.0.0',
+      db,
+      clock: () => clockValue,
+      payTo: 'siteborne:nevermined-publisher-not-registered',
+      evidenceMode: 'production',
+      evidenceProvider: controllableProvider(restartCounters).provider,
+      rail: 'nevermined',
+      nevermined: { agentId: AGENT_ID, planId: PLAN_ID },
+      executor: async (): Promise<ExecutorOutcome> => {
+        restartCounters.execute += 1;
+        return {
+          result: {
+            result_class: 'success',
+            output: {},
+            output_hash: 'sha256:' + '4'.repeat(64),
+            receipt_id: 'rcpt_' + '5'.repeat(24),
+            receipt: { ok: true },
+          },
+        };
+      },
+    });
+    const replay = await restartApp.request(ROUTE_PATH, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'payment-signature': 'fixture_' + '0'.repeat(24),
+        [PAYMENT_IDENTIFIER_HEADER]: id,
+        [PAYMENT_DELEGATION_ID_HEADER]: DELEGATION_ID,
+      },
+      body: JSON.stringify(WEB_INPUT),
+    });
+    const replayBody = (await replay.json()) as Record<string, unknown>;
+    expect(replay.status, JSON.stringify(replayBody)).toBe(200);
+    expect(replayBody.link_id).toBe(firstBody.link_id);
+    expect(restartCounters.verify).toBe(0);
+    expect(restartCounters.execute).toBe(0);
+    expect(restartCounters.settle).toBe(0);
   });
 
   it('crash scenario A: the durable-persistence write itself failing means the real settle call is never reached', async () => {
