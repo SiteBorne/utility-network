@@ -100,35 +100,31 @@ function buildDeclaration(serviceId: SiteborneServiceId): NeverminedServiceDecla
       // still unproven for every service; stays false until that live
       // proof exists.
       //
-      // `registration_allowed` for the document plan stays FALSE
-      // (SUN-0900B checkpoint 2B). Two independent, real, on-chain Base
-      // Sepolia transactions (0x847a6da0a6a63f1f12838bbe9269b8fd9798997b
-      // 0680b0146b7147fcb715f417, 0x8fec56c49ee6e85a30105d308fd7b1788c98
-      // 66f8d3780395c8e0f5e549cfd0f2) prove that, for the ALREADY-
-      // REGISTERED web_context_verified.v1 plan, the atomic amount
-      // SITEBORNE passes as settlePermissions({maxAmount}) is
-      // transferred on-chain exactly, atomic-for-atomic — but in BOTH
-      // observed transactions maxAmount equaled the plan's registered
-      // price exactly (9000 == 9000). That evidence proves the
-      // credits<->atomic-currency conversion rate for `actual ===
-      // price`; it does NOT prove Nevermined's backend accepts, and
-      // settles exactly, a request for `actual < price` on this credits
-      // config shape (`getPayAsYouGoCreditsConfig()`'s amount/minAmount/
-      // maxAmount are hardcoded 1n/1n/1n placeholders the SDK's own
-      // comment calls "required for validation only" — whether that
-      // placeholder is genuinely unenforced, or silently clamps/rejects
-      // an actual below the registered price, has never been tested).
-      // The installed SDK also exposes a structurally SEPARATE
-      // credits/price pairing (`getDynamicCreditsConfig(creditsGranted,
-      // min, max)` + `registerCreditsPlan`/`registerPlan`) whose own
-      // doc example pairs `getNativeTokenPriceConfig(100n, ...)` with
-      // `getFixedCreditsConfig(100n)` — illustrating that price and
-      // credits are independent numeric arguments the AI Builder
-      // chooses separately, with no SDK-enforced 1:1 relationship
-      // between them. SITEBORNE's proposed document registration reuses
-      // the PAYG helper pair already proven on-chain (not
-      // getDynamicCreditsConfig), which narrows but does not eliminate
-      // this gap. Classification: DYNAMIC_UNIT_MAPPING_UNPROVEN. See
+      // `registration_allowed` for the document plan stays FALSE, now
+      // DEFINITIVELY (SUN-0900B checkpoint 2B differential probe, not
+      // merely unproven). A controlled sandbox experiment reused the
+      // already-registered web_context_verified.v1 plan (9000 atomic
+      // USDC price) and its exact getPayAsYouGoPriceConfig +
+      // getPayAsYouGoCreditsConfig() helper pair — verified maxAmount
+      // 9000 (the plan's own ceiling), then deliberately settled
+      // maxAmount 1000 (strictly less than the price) exactly once. The
+      // real on-chain Base Sepolia result
+      // (0x59a8bd0b7567e7cf3cc2489c539e41083ba424bd87d1b2920d539eebcd96
+      // 69d7) transferred 9000 atomic USDC gross (split 8910/90, byte-
+      // identical to the plan's fixed price), NOT the requested 1000 —
+      // proving `settlePermissions({maxAmount})` does NOT control the
+      // actual on-chain charge for this credits-config shape; the
+      // plan's REGISTERED PRICE dominates regardless of the settle-time
+      // maxAmount requested. Classification: PAYG_SETTLES_PLAN_PRICE.
+      // This is a hard incompatibility, not a gap: registering a
+      // document plan at a 190000 price using this same helper pair
+      // would always charge 190000 on settlement, never 12000/19000/
+      // 29000, regardless of measured actual usage — exactly the
+      // economic misrepresentation this checkpoint exists to prevent.
+      // A real dynamic plan would need the SDK's separate
+      // `getDynamicCreditsConfig(creditsGranted, min, max)` helper
+      // (+ `registerCreditsPlan`/`registerPlan`), entirely untested by
+      // SITEBORNE so far. See
       // docs/reports/SUN-0900B-checkpoint-2b-unit-economics-report.md.
       sandbox_capability_verified: false,
       registration_allowed: !document,

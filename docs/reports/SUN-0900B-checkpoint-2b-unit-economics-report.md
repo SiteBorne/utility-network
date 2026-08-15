@@ -1,13 +1,16 @@
-# SUN-0900B Checkpoint 2B — Dynamic Unit-Economics Audit + Registration Timeout Reconciliation
+# SUN-0900B Checkpoint 2B — Dynamic Unit-Economics Audit, Registration Timeout Reconciliation, and Differential PAYG Probe
 
 `controlled_sandbox_self_test`: independent_customer=false, revenue=false,
 open_market_purchase=false, production_ready=false, production_enabled=false.
 
-Committed baseline going into this turn: `658c559` (Checkpoint 2A). This turn
-performed **zero Nevermined mutations** — `registerAgentAndPlan`/
-`registerCreditsPlan`/`registerPlan` were never called. Two read-only GET
-listings (builder key) and two public, unauthenticated on-chain lookups (Base
-Sepolia block explorer) were made.
+This report covers two passes. The first (`ffb03dc`) performed zero Nevermined
+mutations — a registration-timeout reconciliation and a correction of an earlier
+overclaim. The second (this update) performed **exactly one deliberate, real,
+controlled sandbox capability probe** — `controlled_sandbox_capability_probe`,
+not revenue, not customer activity: one bounded delegation, one ephemeral token,
+one `verifyPermissions`, one `settlePermissions`, against the already-accepted
+`web_context_verified.v1` plan only, never `document_evidence_json.v1`. No
+document registration mutation occurred in either pass.
 
 ## 1. Registration-timeout reconciliation
 
@@ -143,16 +146,99 @@ Credential-free: `nevermined:check`, `x402:check`, `governance:validate`,
 Both `RUN_LIVE_NEVERMINED`/`RUN_LIVE_X402` absent throughout;
 `NEVERMINED_REGISTER_DOCUMENT` never set.
 
+## Outcome (as of the timeout-reconciliation pass)
+
+Registration state was positively known (`NO_MATCH`, zero mutation that
+checkpoint). Dynamic unit economics were conservatively classified
+`DYNAMIC_UNIT_MAPPING_UNPROVEN` and `registration_allowed` reflected that
+honestly. The harness timeout defect was fixed without weakening reconciliation
+safety or issuing a second registration call.
+
+## 9. Differential PAYG settlement-unit probe (definitive, this turn)
+
+A controlled sandbox capability probe
+(`apps/edge-api/tests/live/nevermined-differential-payg-probe.test.ts`,
+`NEVERMINED_PROBE_PAYG_DIFFERENTIAL=1`, never `RUN_LIVE_NEVERMINED`) closed the
+remaining `actual < price` question directly, by experiment, using the
+already-accepted `web_context_verified.v1` plan — never the document plan, never
+`createX402ServiceRoute`, never a PCC or SITEBORNE job.
+
+**Experiment**: one bounded delegation (`spendingLimitCents: 1`,
+`durationSecs: 3600`, `erc4337`/`usdc`, scoped to `planId`
+`94523930722525068656272128894334430057768353189467518442660086462546695282012`),
+one ephemeral x402 token, one real `verifyPermissions({maxAmount: 9000n})` (the
+plan's own control ceiling — succeeded, `isValid: true`), then one real,
+deliberate `settlePermissions({maxAmount: 1000n})` — strictly less than both the
+verified ceiling and the plan's registered price. Executed exactly once; never
+rerun.
+
+**Immediate response**: `success: true`,
+`transaction: 0x59a8bd0b7567e7cf3cc2489c539e41083ba424bd87d1b2920d539eebcd9669d7`,
+`creditsRedeemed: '0'`, `remainingBalance: '0'` — neither numeric field
+correlates cleanly with either `1000` or `9000`, reinforcing that these response
+fields are not a reliable read of the actual charge for this credits-config
+shape.
+
+**Read-only external reconciliation** (seller key, `GET /delegation/{id}` and
+`.../transactions`): delegation status `Exhausted`, exactly one `succeeded`
+transaction, `providerTransactionId` matching the response `transaction` field,
+`amountCents: '1'`.
+
+**On-chain ground truth** (public Base Sepolia lookup, same method as the prior
+two settlements):
+
+```
+9000 atomic USDC:  buyer → proxy (0x47A72d70…)
+  8910 atomic USDC: proxy → seller (0x7f44a2dd…)   [99%]
+    90 atomic USDC: proxy → platform fee address    [1%, exact]
+```
+
+**Byte-identical to the two prior `actual === price` settlements.** The
+requested `1000` was not transferred — the actual on-chain gross was **`9000`**,
+the plan's registered price, regardless of the settle-time `maxAmount`
+requested.
+
+### Classification: `PAYG_SETTLES_PLAN_PRICE` (matrix item B)
+
+Not `A` (`1000 → 1000`), not `C` (some other transformed value), not `D` (a
+positive rejection) — the plan's registered price silently dominates the actual
+settlement for this `getPayAsYouGoPriceConfig` + `getPayAsYouGoCreditsConfig()`
+shape. This is definitive: `maxAmount` at settle time does **not** control the
+actual on-chain charge here.
+
+### Why this matters beyond the probe
+
+This is a **hard incompatibility**, not merely a remaining gap. Registering a
+document plan with this exact helper pair at a 190000 price would charge 190000
+on every settlement, unconditionally — never 12000, 19000, or 29000, regardless
+of measured actual usage. That is exactly the economic misrepresentation this
+whole checkpoint exists to prevent. The already- accepted fixed-PAYG
+registrations (`web_context_verified.v1` and by extension
+`company_evidence_graph.v1`/`verify_agent_output.v1`) are unaffected and remain
+correctly accepted: every real settlement for those plans has always requested
+`actual === price` by construction (`exact` scheme), so this newly-discovered
+behavior never manifested as a defect there and does not change their
+acceptance.
+
+A real dynamic plan for `document_evidence_json.v1` would need the SDK's
+structurally separate `getDynamicCreditsConfig(creditsGranted, min, max)` helper
+together with `registerCreditsPlan`/`registerPlan` — entirely untested by
+SITEBORNE. That is a new, separate capability question, not something this
+probe's evidence can extend to by inference.
+
+### Declaration update
+
+`packages/protocol-nevermined/src/declarations.ts`: `registration_allowed` stays
+`false` for the document plan — now backed by a definitive negative result
+rather than an open question. Comment rewritten with the exact on-chain evidence
+and reasoning above.
+
 ## Outcome
 
-Registration state is now positively known (`NO_MATCH`, zero mutation this
-checkpoint). Dynamic unit economics are conservatively classified
-`DYNAMIC_UNIT_MAPPING_UNPROVEN` and `registration_allowed` reflects that
-honestly. The harness timeout defect is fixed without weakening reconciliation
-safety or issuing a second registration call. **No document registration has
-occurred. `registration_allowed=false`. Not safe to retry registration in this
-turn or the next without new positive evidence closing the `actual < price`
-gap** — most directly obtainable either by inspecting an authoritative
-Nevermined source (backend/contract) for how a below-price settle is handled
-under this credits-config shape, or by a live-gated proof explicitly scoped to
-that single question, separately authorized.
+**No document registration has occurred. `registration_allowed=false`,
+definitively, for the `getPayAsYouGoPriceConfig`/`getPayAsYouGoCreditsConfig`
+helper pair.** `sandbox_capability_verified` remains `false`. Registration under
+this specific helper pair should not be retried — it is now disproven, not
+merely unproven. The path forward, if pursued, is a separate capability
+investigation of `getDynamicCreditsConfig`/ `registerCreditsPlan`, starting from
+the same disciplined static-inspection step before any further live mutation.
