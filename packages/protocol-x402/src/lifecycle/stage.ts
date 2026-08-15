@@ -52,7 +52,20 @@ export const PAYMENT_LIFECYCLE_TRANSITIONS: Record<PaymentLifecycleStage, Paymen
     settled_external: ['link_verified'],
     link_verified: ['settled'],
     settled: [],
-    settlement_failed: [],
+    // `settlement_failed -> settled_external` (SUN-0900B checkpoint 1B,
+    // third real-live-run incident) is a narrow, additive exception to
+    // `settlement_failed` otherwise being terminal — it exists only
+    // because a real defect (fixed the same commit this edge was added)
+    // put a genuinely, externally settled real payment into
+    // `settlement_failed` before the fix existed. This is NOT a general
+    // "retry a failed payment" capability: nothing in this module lets a
+    // caller take this edge merely because it exists. The one caller that
+    // ever takes it (`x402-service.ts`'s `attemptNeverminedRecovery`)
+    // gates it behind independently-verified, read-only, positive
+    // `SETTLED` external evidence for that exact Payment-Identifier's own
+    // delegation before ever presenting this transition — see that
+    // function's own documentation for the full evidentiary requirement.
+    settlement_failed: ['settled_external'],
   };
 
 export function isLegalLifecycleTransition(

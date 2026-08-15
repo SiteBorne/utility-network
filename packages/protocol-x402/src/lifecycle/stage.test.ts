@@ -37,7 +37,7 @@ describe('PAYMENT_LIFECYCLE_TRANSITIONS legal graph (directive §7)', () => {
   });
 
   it('terminal stages have no outgoing legal transitions', () => {
-    for (const stage of ['verification_failed', 'settled', 'settlement_failed'] as const) {
+    for (const stage of ['verification_failed', 'settled'] as const) {
       expect(isTerminalLifecycleStage(stage)).toBe(true);
       expect(PAYMENT_LIFECYCLE_TRANSITIONS[stage]).toEqual([]);
     }
@@ -84,4 +84,27 @@ describe('durable settlement-recovery stages (SUN-0900B checkpoint 1B)', () => {
     expect(PAYMENT_LIFECYCLE_TRANSITIONS.settled).toEqual([]);
     expect(isTerminalLifecycleStage('settled')).toBe(true);
   });
+});
+
+describe('settlement_failed -> settled_external recovery edge (SUN-0900B checkpoint 1B, third real-live-run incident)', () => {
+  it('is legal — but is the ONLY outgoing edge from settlement_failed, never a general reopen-to-anything capability', () => {
+    expect(isLegalLifecycleTransition('settlement_failed', 'settled_external')).toBe(true);
+    expect(PAYMENT_LIFECYCLE_TRANSITIONS.settlement_failed).toEqual(['settled_external']);
+    expect(isTerminalLifecycleStage('settlement_failed')).toBe(false);
+  });
+
+  it.each([
+    ['settlement_failed', 'settled'],
+    ['settlement_failed', 'link_verified'],
+    ['settlement_failed', 'acquired'],
+    ['settlement_failed', 'verified'],
+    ['settlement_failed', 'executed'],
+    ['settlement_failed', 'settlement_pending'],
+    ['settlement_failed', 'verification_failed'],
+  ] as const)(
+    '%s -> %s remains illegal — the graph itself never lets a caller skip evidentiary recovery',
+    (from, to) => {
+      expect(isLegalLifecycleTransition(from, to)).toBe(false);
+    }
+  );
 });

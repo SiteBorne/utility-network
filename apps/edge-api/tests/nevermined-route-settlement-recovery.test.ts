@@ -90,7 +90,12 @@ const WEB_INPUT = { target_url: 'https://acme.example/', retrieval_mode: 'direct
 const BUYER = '0x516F57e1fB800ccEB2E70C42607Fb93E2abEcB99';
 const AMOUNT = '9000';
 
-type SettleMode = 'success' | 'explicit_failure' | 'ambiguous' | 'throw';
+type SettleMode =
+  | 'success'
+  | 'explicit_failure'
+  | 'ambiguous'
+  | 'transaction_reference_invalid'
+  | 'throw';
 
 /** A minimal, fully controllable `PaymentEvidenceProvider` standing in
  * for the real `NeverminedPaymentEvidenceProvider` — `providerKind:
@@ -160,6 +165,14 @@ function controllableProvider(counters: { verify: number; settle: number }): {
       }
       if (settleMode === 'explicit_failure') {
         return { ...base, success: false, reason: 'provider_rejected' };
+      }
+      if (settleMode === 'transaction_reference_invalid') {
+        // Reproduces the exact defect family from the third real live
+        // run (SUN-0900B checkpoint 1B): a response that *did* correspond
+        // to a real successful settlement but whose `transaction`
+        // reference the local validator couldn't confirm at the moment
+        // the synchronous HTTP response returned.
+        return { ...base, success: false, reason: 'transaction_reference_invalid' };
       }
       // ambiguous — mirrors the real normalizer's `ambiguous_settlement`
       // reason (SUN-0900B checkpoint 1B settlement-contract repair).
@@ -610,6 +623,406 @@ describe('Nevermined route-level durable settlement recovery (SUN-0900B checkpoi
       .first<Record<string, unknown>>();
     expect(row).toMatchObject({ lifecycle_stage: 'settlement_pending' });
     expect(row?.consumed_at).toBeFalsy();
+  });
+
+  it('transaction_reference_invalid (the exact defect family from the third real live run) also leaves lifecycle_stage at settlement_pending — never the terminal settlement_failed', async () => {
+    const hono = new Hono();
+    const controllable = controllableProvider(counters);
+    controllable.setSettleMode('transaction_reference_invalid');
+    createX402ServiceRoute(hono, {
+      serviceId: SERVICE_ID,
+      scheme: 'exact',
+      pricingKey: 'web_context_verified_direct',
+      network: NETWORK,
+      asset: 'nevermined:credits',
+      path: ROUTE_PATH,
+      inputSchema: BUNDLED_SERVICE_INPUT_SCHEMAS[SERVICE_ID] as Record<string, unknown>,
+      contractRelease: '1.0.0',
+      inputSchemaHash: 'sha256:d3b0762020d4cc1d1e846960ed978cf1237b1741f90213adabe8ed931c2845ea',
+      outputSchemaHash: 'sha256:138bccc34ad8c320daec36890b8867fca9f709040b80c689710fd4bde49042de',
+      pccDependency: '1.0.0',
+      db,
+      clock: () => clockValue,
+      payTo: 'siteborne:nevermined-publisher-not-registered',
+      evidenceMode: 'production',
+      evidenceProvider: controllable.provider,
+      rail: 'nevermined',
+      nevermined: { agentId: AGENT_ID, planId: PLAN_ID },
+      executor: async (): Promise<ExecutorOutcome> => {
+        counters.execute += 1;
+        return {
+          result: {
+            result_class: 'success',
+            output: {},
+            output_hash: 'sha256:' + '4'.repeat(64),
+            receipt_id: 'rcpt_' + '5'.repeat(24),
+            receipt: { ok: true },
+          },
+        };
+      },
+    });
+    await hono.request(ROUTE_PATH, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(WEB_INPUT),
+    });
+    const id = generateSiteborneePaymentId();
+    const res = await hono.request(ROUTE_PATH, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'payment-signature': 'fixture_' + '0'.repeat(24),
+        [PAYMENT_IDENTIFIER_HEADER]: id,
+        [PAYMENT_DELEGATION_ID_HEADER]: DELEGATION_ID,
+      },
+      body: JSON.stringify(WEB_INPUT),
+    });
+    expect(res.status).toBe(402);
+    const row = await db
+      .prepare(
+        `SELECT lifecycle_stage, consumed_at FROM payment_attempts WHERE payment_identifier = ?`
+      )
+      .bind(id)
+      .first<Record<string, unknown>>();
+    expect(row).toMatchObject({ lifecycle_stage: 'settlement_pending' });
+    expect(row?.consumed_at).toBeFalsy();
+  });
+
+  it('historical false-rejection recovery (the exact third real live run): a row already stuck at settlement_failed, with settlement_pending_at/delegation/durable artifacts intact and real external SETTLED evidence, recovers to 200/consumed — zero new verify/execute/settle', async () => {
+    // Simulates exactly what happened before this repair existed: a row
+    // legitimately reached `settlement_pending`, then (pre-fix) an
+    // uncertain post-settle response was wrongly classified as terminal
+    // and pushed to `settlement_failed`. This test forces that same
+    // historical shape directly against the real repository (the bug this
+    // reproduces no longer exists in the route itself — the ambiguous
+    // tests above prove a NEW occurrence now stays at settlement_pending)
+    // and then proves the narrow, evidence-gated recovery path added in
+    // this same repair can still finish an already-real, already-paid
+    // settlement that was left behind before the fix.
+    const { D1PaymentAttemptRepository } = await import(
+      '../src/control-plane/repositories/d1/payment-attempts'
+    );
+    const repo = new D1PaymentAttemptRepository(db);
+
+    await challenge();
+    const id = generateSiteborneePaymentId();
+
+    // First pass: real request through the (fixed) route, using
+    // 'transaction_reference_invalid' so it lands at settlement_pending —
+    // then manually push it one edge further to settlement_failed, to
+    // stand in for the historical pre-fix row exactly as found in D1 for
+    // the real incident (lifecycle_stage=settlement_failed,
+    // settlement_pending_at set, delegation id set, durable pending draft
+    // present, consumed_at null).
+    const hono = new Hono();
+    const controllable = controllableProvider(counters);
+    controllable.setSettleMode('transaction_reference_invalid');
+    createX402ServiceRoute(hono, {
+      serviceId: SERVICE_ID,
+      scheme: 'exact',
+      pricingKey: 'web_context_verified_direct',
+      network: NETWORK,
+      asset: 'nevermined:credits',
+      path: ROUTE_PATH,
+      inputSchema: BUNDLED_SERVICE_INPUT_SCHEMAS[SERVICE_ID] as Record<string, unknown>,
+      contractRelease: '1.0.0',
+      inputSchemaHash: 'sha256:d3b0762020d4cc1d1e846960ed978cf1237b1741f90213adabe8ed931c2845ea',
+      outputSchemaHash: 'sha256:138bccc34ad8c320daec36890b8867fca9f709040b80c689710fd4bde49042de',
+      pccDependency: '1.0.0',
+      db,
+      clock: () => clockValue,
+      payTo: 'siteborne:nevermined-publisher-not-registered',
+      evidenceMode: 'production',
+      evidenceProvider: controllable.provider,
+      rail: 'nevermined',
+      nevermined: { agentId: AGENT_ID, planId: PLAN_ID },
+      executor: async (): Promise<ExecutorOutcome> => {
+        counters.execute += 1;
+        return {
+          result: {
+            result_class: 'success',
+            output: { title: 'Fixture Page', text: 'hello' },
+            output_hash: 'sha256:' + '4'.repeat(64),
+            receipt_id: 'rcpt_' + '5'.repeat(24),
+            receipt: { kind: 'fixture-receipt', ok: true },
+          },
+        };
+      },
+    });
+    const firstRes = await hono.request(ROUTE_PATH, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'payment-signature': 'fixture_' + '0'.repeat(24),
+        [PAYMENT_IDENTIFIER_HEADER]: id,
+        [PAYMENT_DELEGATION_ID_HEADER]: DELEGATION_ID,
+      },
+      body: JSON.stringify(WEB_INPUT),
+    });
+    expect(firstRes.status).toBe(402);
+    const pendingRow = await db
+      .prepare(`SELECT lifecycle_stage FROM payment_attempts WHERE payment_identifier = ?`)
+      .bind(id)
+      .first<Record<string, unknown>>();
+    expect(pendingRow).toMatchObject({ lifecycle_stage: 'settlement_pending' });
+
+    // Force the one additional edge a pre-fix build would have taken —
+    // this is the ONLY place in this test suite that ever presents
+    // `settlement_pending -> settlement_failed` directly; it exists
+    // solely to reproduce the historical shape, never as a general
+    // technique.
+    const forced = await repo.transitionLifecycleStage(
+      id,
+      'settlement_pending',
+      'settlement_failed'
+    );
+    expect(forced).toEqual({ status: 'transitioned' });
+
+    // "Restart": fresh route, fresh reconciliation client reporting the
+    // exact real external evidence — one succeeded transaction, matching
+    // delegation/context.
+    const recoveredCounters = { verify: 0, settle: 0, execute: 0 };
+    const recoveredApp = new Hono();
+    createX402ServiceRoute(recoveredApp, {
+      serviceId: SERVICE_ID,
+      scheme: 'exact',
+      pricingKey: 'web_context_verified_direct',
+      network: NETWORK,
+      asset: 'nevermined:credits',
+      path: ROUTE_PATH,
+      inputSchema: BUNDLED_SERVICE_INPUT_SCHEMAS[SERVICE_ID] as Record<string, unknown>,
+      contractRelease: '1.0.0',
+      inputSchemaHash: 'sha256:d3b0762020d4cc1d1e846960ed978cf1237b1741f90213adabe8ed931c2845ea',
+      outputSchemaHash: 'sha256:138bccc34ad8c320daec36890b8867fca9f709040b80c689710fd4bde49042de',
+      pccDependency: '1.0.0',
+      db,
+      clock: () => clockValue,
+      payTo: 'siteborne:nevermined-publisher-not-registered',
+      evidenceMode: 'production',
+      evidenceProvider: controllableProvider(recoveredCounters).provider,
+      rail: 'nevermined',
+      nevermined: { agentId: AGENT_ID, planId: PLAN_ID },
+      neverminedReconciliationClient: fakeReconciliationClient(
+        [succeededTx()],
+        consistentDelegation()
+      ),
+      executor: async (): Promise<ExecutorOutcome> => {
+        recoveredCounters.execute += 1;
+        return {
+          result: {
+            result_class: 'success',
+            output: {},
+            output_hash: 'sha256:' + '4'.repeat(64),
+            receipt_id: 'rcpt_' + '5'.repeat(24),
+            receipt: { ok: true },
+          },
+        };
+      },
+    });
+    const retry = await recoveredApp.request(ROUTE_PATH, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'payment-signature': 'fixture_' + '0'.repeat(24),
+        [PAYMENT_IDENTIFIER_HEADER]: id,
+        [PAYMENT_DELEGATION_ID_HEADER]: DELEGATION_ID,
+      },
+      body: JSON.stringify(WEB_INPUT),
+    });
+    const body = (await retry.clone().json()) as Record<string, unknown>;
+    expect(retry.status, JSON.stringify(body)).toBe(200);
+    expect(body.link_id).toBeTruthy();
+    expect(recoveredCounters.verify).toBe(0);
+    expect(recoveredCounters.execute).toBe(0);
+    expect(recoveredCounters.settle).toBe(0);
+
+    const finalRow = await db
+      .prepare(
+        `SELECT lifecycle_stage, consumed_at FROM payment_attempts WHERE payment_identifier = ?`
+      )
+      .bind(id)
+      .first<Record<string, unknown>>();
+    expect(finalRow).toMatchObject({ lifecycle_stage: 'settled' });
+    expect(finalRow?.consumed_at).toBeTruthy();
+
+    // Replay feasibility audit (directive requirement): a payment
+    // recovered from historical `settlement_failed` is classified
+    // `REPLAY_BLOCKED_BY_JOB_STATE_DEPENDENCY`, not
+    // `REPLAY_AVAILABLE_WITH_EXISTING_SAFE_CONTEXT`. `reconstructFromJob`
+    // (the existing, pre-existing replay mechanism) requires
+    // `job.current_state === 'DELIVERED'` — but this recovery path
+    // deliberately never pushes the job there (see the comment above the
+    // `if (job.current_state === 'SETTLING')` guard in x402-service.ts:
+    // the frozen JobState machine has no `REFUND_REQUIRED -> DELIVERED`
+    // edge, and adding one is out of scope for this narrow repair). The
+    // safety property that actually matters — zero additional
+    // verify/execute/settle, no leaked/fabricated result — still holds:
+    // the replay is correctly rejected (`409`), never silently
+    // re-executed and never returns a wrong/different result. It is not
+    // the identical-`200`-reconstruction replay a `settlement_pending`-
+    // origin recovery gets; that gap is reported, not hidden.
+    const replayCounters = { verify: 0, settle: 0, execute: 0 };
+    const replay = await recoveredApp.request(ROUTE_PATH, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'payment-signature': 'fixture_' + '0'.repeat(24),
+        [PAYMENT_IDENTIFIER_HEADER]: id,
+        [PAYMENT_DELEGATION_ID_HEADER]: DELEGATION_ID,
+      },
+      body: JSON.stringify(WEB_INPUT),
+    });
+    expect(replay.status).toBe(409);
+    const replayBody = (await replay.json()) as Record<string, unknown>;
+    expect(replayBody.error).toBe('already_consumed');
+    expect(replayCounters.verify).toBe(0);
+    expect(replayCounters.execute).toBe(0);
+    expect(replayCounters.settle).toBe(0);
+
+    // duplicate_conflict after recovered consumption: mutate an immutable
+    // binding field (different input body -> different
+    // request_input_hash), same Payment-Identifier -> 409 before any
+    // provider call, zero additional calls, no leaked prior result.
+    const conflictCounters = { verify: 0, settle: 0, execute: 0 };
+    const conflictApp = new Hono();
+    createX402ServiceRoute(conflictApp, {
+      serviceId: SERVICE_ID,
+      scheme: 'exact',
+      pricingKey: 'web_context_verified_direct',
+      network: NETWORK,
+      asset: 'nevermined:credits',
+      path: ROUTE_PATH,
+      inputSchema: BUNDLED_SERVICE_INPUT_SCHEMAS[SERVICE_ID] as Record<string, unknown>,
+      contractRelease: '1.0.0',
+      inputSchemaHash: 'sha256:d3b0762020d4cc1d1e846960ed978cf1237b1741f90213adabe8ed931c2845ea',
+      outputSchemaHash: 'sha256:138bccc34ad8c320daec36890b8867fca9f709040b80c689710fd4bde49042de',
+      pccDependency: '1.0.0',
+      db,
+      clock: () => clockValue,
+      payTo: 'siteborne:nevermined-publisher-not-registered',
+      evidenceMode: 'production',
+      evidenceProvider: controllableProvider(conflictCounters).provider,
+      rail: 'nevermined',
+      nevermined: { agentId: AGENT_ID, planId: PLAN_ID },
+      executor: async (): Promise<ExecutorOutcome> => {
+        conflictCounters.execute += 1;
+        return {
+          result: {
+            result_class: 'success',
+            output: {},
+            output_hash: 'sha256:' + '4'.repeat(64),
+            receipt_id: 'rcpt_' + '5'.repeat(24),
+            receipt: { ok: true },
+          },
+        };
+      },
+    });
+    const differentInput = { target_url: 'https://different.example/', retrieval_mode: 'direct' };
+    await conflictApp.request(ROUTE_PATH, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(differentInput),
+    });
+    const conflict = await conflictApp.request(ROUTE_PATH, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'payment-signature': 'fixture_' + '0'.repeat(24),
+        [PAYMENT_IDENTIFIER_HEADER]: id,
+        [PAYMENT_DELEGATION_ID_HEADER]: DELEGATION_ID,
+      },
+      body: JSON.stringify(differentInput),
+    });
+    expect(conflict.status).toBe(409);
+    expect(conflictCounters.verify).toBe(0);
+    expect(conflictCounters.execute).toBe(0);
+    expect(conflictCounters.settle).toBe(0);
+  });
+
+  it('a settlement_failed row from a real, positively explicit provider rejection is never recoverable this way — the recovery path only fires for settlement_pending/settlement_failed rows a client actually reconciles as SETTLED', async () => {
+    const hono = new Hono();
+    const controllable = controllableProvider(counters);
+    controllable.setSettleMode('explicit_failure');
+    createX402ServiceRoute(hono, {
+      serviceId: SERVICE_ID,
+      scheme: 'exact',
+      pricingKey: 'web_context_verified_direct',
+      network: NETWORK,
+      asset: 'nevermined:credits',
+      path: ROUTE_PATH,
+      inputSchema: BUNDLED_SERVICE_INPUT_SCHEMAS[SERVICE_ID] as Record<string, unknown>,
+      contractRelease: '1.0.0',
+      inputSchemaHash: 'sha256:d3b0762020d4cc1d1e846960ed978cf1237b1741f90213adabe8ed931c2845ea',
+      outputSchemaHash: 'sha256:138bccc34ad8c320daec36890b8867fca9f709040b80c689710fd4bde49042de',
+      pccDependency: '1.0.0',
+      db,
+      clock: () => clockValue,
+      payTo: 'siteborne:nevermined-publisher-not-registered',
+      evidenceMode: 'production',
+      evidenceProvider: controllable.provider,
+      rail: 'nevermined',
+      nevermined: { agentId: AGENT_ID, planId: PLAN_ID },
+      neverminedReconciliationClient: fakeReconciliationClient([], consistentDelegation()),
+      executor: async (): Promise<ExecutorOutcome> => {
+        counters.execute += 1;
+        return {
+          result: {
+            result_class: 'success',
+            output: {},
+            output_hash: 'sha256:' + '4'.repeat(64),
+            receipt_id: 'rcpt_' + '5'.repeat(24),
+            receipt: { ok: true },
+          },
+        };
+      },
+    });
+    await hono.request(ROUTE_PATH, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(WEB_INPUT),
+    });
+    const id = generateSiteborneePaymentId();
+    const first = await hono.request(ROUTE_PATH, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'payment-signature': 'fixture_' + '0'.repeat(24),
+        [PAYMENT_IDENTIFIER_HEADER]: id,
+        [PAYMENT_DELEGATION_ID_HEADER]: DELEGATION_ID,
+      },
+      body: JSON.stringify(WEB_INPUT),
+    });
+    expect(first.status).toBe(402);
+    const row = await db
+      .prepare(`SELECT lifecycle_stage FROM payment_attempts WHERE payment_identifier = ?`)
+      .bind(id)
+      .first<Record<string, unknown>>();
+    expect(row).toMatchObject({ lifecycle_stage: 'settlement_failed' });
+
+    // Retry: even with a reconciliation client configured, a genuine
+    // explicit-failure row's own external delegation never has a real
+    // succeeded transaction (fakeReconciliationClient here returns zero
+    // transactions) — reconciliation reports NOT_SETTLED, so recovery
+    // never fires; the row stays exactly where it is, 402/202 only.
+    const retry = await hono.request(ROUTE_PATH, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'payment-signature': 'fixture_' + '0'.repeat(24),
+        [PAYMENT_IDENTIFIER_HEADER]: id,
+        [PAYMENT_DELEGATION_ID_HEADER]: DELEGATION_ID,
+      },
+      body: JSON.stringify(WEB_INPUT),
+    });
+    expect(retry.status).toBe(202);
+    const stillFailed = await db
+      .prepare(
+        `SELECT lifecycle_stage, consumed_at FROM payment_attempts WHERE payment_identifier = ?`
+      )
+      .bind(id)
+      .first<Record<string, unknown>>();
+    expect(stillFailed).toMatchObject({ lifecycle_stage: 'settlement_failed' });
+    expect(stillFailed?.consumed_at).toBeFalsy();
   });
 
   it('crash scenario A: the durable-persistence write itself failing means the real settle call is never reached', async () => {

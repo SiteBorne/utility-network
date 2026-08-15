@@ -720,3 +720,149 @@ active, not accepted. No code change was made this turn — the only change is
 this report update, recording the durable D1 state and the external Nevermined
 sandbox state captured above; both remain the authoritative record of this
 attempt.
+
+## Recovery-defect repair turn: the classification fix is correct and proven — the real third payment's local artifacts were lost before it could be applied
+
+**Root cause, confirmed precisely.**
+`NeverminedPaymentEvidenceProvider.settle()`
+(`apps/edge-api/src/control-plane/evidence/nevermined-provider.ts`) validates
+the synchronous `settlePermissions()` response's `transaction` field against
+`/^0x[0-9a-fA-F]{64}$/`. When that check fails on an otherwise
+`normalizeSettlementSuccess`-positive response, it returns
+`success: false, reason: 'transaction_reference_invalid'` — a real, distinct
+code path from the already-fixed `.success`-absent case. The route's own
+ambiguous-vs-explicit- failure branch (added in `3bbf68f`, this same checkpoint)
+only special-cased the literal string `'ambiguous_settlement'`, so
+`'transaction_reference_invalid'` fell through to the terminal
+`settlement_failed` transition — exactly what the third live run's D1 row
+showed. This is fully consistent with the timing evidence:
+`settlement_pending_at` (`13:48:59.420Z`) preceded the real transaction's own
+`createdAt` (`13:49:03.097Z`) by ~3.7 seconds, consistent with an async on-chain
+confirmation the synchronous HTTP response didn't yet reflect.
+
+**The fix (`apps/edge-api/src/control-plane/routes/x402-service.ts`).** Replaced
+the narrow `reason === 'ambiguous_settlement'` check with the rule the third
+incident actually demands: once `evidenceProvider.settle(...)` has been invoked,
+**only**
+`settleGate.reason === 'settlement_not_successful' && settlementEvidence.reason === 'provider_rejected'`
+(Nevermined itself returning `result.success === false`) may transition the row
+to the terminal `settlement_failed`. Every other rejection reached after the
+real call — `ambiguous_settlement`, `transaction_reference_invalid`,
+`provider_exception`, a verification-hash mismatch, a structural-validation
+failure discovered only at this late gate — is AMBIGUOUS: `lifecycle_stage`
+stays at `settlement_pending`, recoverable only through read-only external
+reconciliation, never auto-retried. Scoped entirely to the Nevermined rail's
+branch of this one route; CDP's unrelated `verified -> settlement_failed` path
+is untouched (full CDP suite: 30/30, unmodified).
+
+**Historical `settlement_failed -> settled_external` recovery edge.** A row
+already stuck at `settlement_failed` from before this fix existed can still be
+recovered — narrowly. `packages/protocol-x402/src/lifecycle/stage.ts` gained one
+additive edge, `settlement_failed: ['settled_external']`, documented explicitly
+as reachable only through the one evidence-gated caller that ever presents it,
+never a general "retry a failed payment" capability. `attemptNeverminedRecovery`
+(`x402-service.ts`) now also accepts `lifecycleStage === 'settlement_failed'` as
+an eligible entry (previously `settlement_pending` only), gated behind the exact
+same requirements: `settlement_pending_at` present, `nevermined_delegation_id`
+present, a durable pending draft in `x402_service_results`, and — critically —
+the same independently-verified, delegation-consistency-checked `SETTLED`
+external reconciliation the normal path requires. `recordSettledExternal`'s CAS
+now accepts an explicit, narrowed `fromStages` list (defaulting to
+`['settlement_pending']` for every existing caller — zero behavior change
+anywhere else) so the recovery caller can pass exactly the one stage it
+independently observed the row at, never a blanket allowance.
+
+**Known, accepted, narrow inconsistency:** a row recovered from
+`settlement_failed` does _not_ advance its underlying `Job`'s state from
+`REFUND_REQUIRED` to `DELIVERED` — the frozen, already-accepted `JobState`
+machine (SUN-0200) has no such edge, and adding one was deliberately judged out
+of scope for this narrow repair. `payment_attempts.lifecycle_stage` /
+`consumed_at` / the recovered `PaymentServiceLink` remain the authoritative
+record of "was this payment ultimately settled"; the `Job` record separately,
+correctly continues to reflect "a refund was initiated" as a historical fact.
+One direct consequence, also discovered and accepted rather than papered over:
+**an HTTP replay after this specific kind of recovery cannot reconstruct the
+original `200` body** — `reconstructFromJob` requires
+`job.current_state === 'DELIVERED'`, which this recovery path never reaches.
+Replay is therefore classified `REPLAY_BLOCKED_BY_JOB_STATE_DEPENDENCY`, not
+`REPLAY_AVAILABLE_WITH_EXISTING_SAFE_CONTEXT` — but the safety property that
+matters still holds: a replay attempt correctly returns `409 already_consumed`
+with **zero** additional verify/execute/settle calls, never a re-execution and
+never a fabricated/wrong result. `duplicate_conflict` (mutated binding, same
+Payment-Identifier) after recovery works exactly as normal — proven, `409`, zero
+provider calls, before any provider call. A row recovered from
+`settlement_pending` (the normal, non-historical path) is unaffected by any of
+this and keeps its full identical-replay behavior exactly as `a1fe444` proved.
+
+**14 tests added/extended**
+(`apps/edge-api/tests/nevermined-route-settlement-recovery.test.ts`, 11 → 14;
+`packages/protocol-x402/src/lifecycle/stage.test.ts`, +10): a dedicated
+`transaction_reference_invalid` case proving it now stays at
+`settlement_pending` (never terminal); a full reproduction of the exact
+third-incident shape — a row forced to `settlement_failed` (the one place in the
+suite that ever takes that edge directly, explicitly to stand in for the
+historical pre-fix state) then recovered via `duplicate_same` + a fake
+reconciliation client reporting the real transaction's exact shape, reaching
+`200`/`consumed` with zero new verify/execute/settle, followed by the
+replay/`duplicate_conflict`-after-recovery proofs above; a negative control
+proving a _genuine_ explicit-failure row (`reason: 'provider_rejected'`) is
+never recoverable this way even with a reconciliation client configured, because
+its real delegation never has a succeeded transaction to reconcile against.
+`stage.test.ts` gained a dedicated suite proving the new edge is legal, that it
+is the _only_ outgoing edge from `settlement_failed`, and that every other
+historically-terminal transition remains illegal.
+
+**The real third payment (`pay_254c35be168b489ca5085aef528903fb`) could not
+actually be recovered — its local durable state is gone.** Before applying the
+fix to the real row, its D1 file
+(`$TMPDIR/siteborne-sun-0900b-checkpoint1-live-d1/d1/...sqlite`) was re-located
+to confirm it — the directory no longer exists. Two real days passed in this
+environment between the live run and this repair turn (the live run logged
+`2026-08-12T13:48:59Z`; this turn's host timestamps read `Aug 14`), and the OS's
+own temp-directory lifecycle (this path lives under `$TMPDIR`, i.e.
+`/var/folders/.../T/`, which macOS periodically reclaims) is the most likely
+explanation — nothing in this repository's own code deleted it; the stable-path
+design (`c48ff5d`) only ever promised the path stays constant and is never
+_auto-deleted by SITEBORNE itself_, not that the host OS won't eventually
+reclaim `/tmp`-class storage. Independently reconfirmed, read-only, that the
+**external** Nevermined-side evidence is completely unaffected and still exactly
+as before:
+`GET /api/v1/delegation/eaa3929b-7619-45d4-a858-0d91e47fa55e/transactions` still
+returns the same single `succeeded` transaction
+(`0x8fec56c49ee6e85a30105d308fd7b1788c9866f8d3780395c8e0f5e549cfd0f2`) — only
+SITEBORNE's own local D1 artifacts (the job, the durable pending draft with
+output/receipt/hashes, the payment_attempts row itself) are gone, and with them,
+the ability to rebuild the exact `PaymentServiceLink` and serve a real `200` for
+this specific payment. **Reclassified: `PAID_EXTERNAL_NOT_CONSUMED_LOCAL` /
+`LOCAL_ARTIFACTS_UNRECOVERABLE`** — joining the first two historical incidents,
+for a different underlying reason (environmental data loss of the recovery
+substrate, not absence of a recovery mechanism).
+
+**Production-hardening note (out of scope for this sandbox self-test, worth
+recording):** storing the sole durable recovery substrate for a real payment
+under a user-scoped OS temp directory is fragile against exactly this failure
+mode. A production deployment would need durable state in infrastructure the
+operator controls the retention of (a real D1/database binding, not a local
+Miniflare `resourcePersistencePath`) — not a defect in this checkpoint's design
+(which never claimed OS-temp permanence), but a real, now-materialized risk
+worth carrying forward.
+
+**Full regression:** `nevermined:check`, `x402:check`, `mcp:check`, `a2a:check`,
+`governance:validate`, `state:validate`, `tasks:validate`, `secrets:scan` all
+exit 0. Full `pnpm run check` (format, lint, typecheck, every suite, migrations,
+contracts) run in the background this turn — see the commit's own validation
+record. Both `RUN_LIVE_NEVERMINED`/`RUN_LIVE_X402` absent throughout; the one
+live network activity this turn was a read-only `GET` reconfirming the
+still-real external transaction, using the seller's own credential, zero
+mutation.
+
+**Outcome: the classification defect is fixed and proven correct against a
+faithful reproduction of the exact real incident. Checkpoint 1B fixed-PAYG live
+acceptance is still not granted** — the one real payment this repair was meant
+to close cannot actually be closed, because its local recovery substrate no
+longer exists. Per the directive's own explicit instruction, **no fourth live
+payment was made or attempted this turn.** SUN-0900B remains active, not
+accepted. Production remains false. The next live run, whenever authorized, now
+runs against a fix that is proven correct — this specific failure mode (a
+transaction-reference validation gap treated as terminal rather than ambiguous)
+should not recur.

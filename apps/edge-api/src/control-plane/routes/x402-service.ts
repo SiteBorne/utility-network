@@ -561,7 +561,23 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
     async function attemptNeverminedRecovery(): Promise<Response | null> {
       if (rail !== 'nevermined' || !config.neverminedReconciliationClient) return null;
       const recovery = await paymentAttempts.getSettlementRecoveryRecord(paymentIdentifier);
-      if (!recovery || recovery.lifecycleStage !== 'settlement_pending') return null;
+      if (!recovery) return null;
+      // `settlement_failed` is included ONLY for the narrow, evidence-gated
+      // historical-false-rejection recovery (SUN-0900B checkpoint 1B,
+      // third real-live-run incident — see `stage.ts`'s
+      // `settlement_failed -> settled_external` edge doc comment for the
+      // full reasoning). This function itself is the sole caller that
+      // ever presents that transition, and only after the exact same
+      // `SETTLED` reconciliation proof required for the normal
+      // `settlement_pending` recovery path below — no row reaches
+      // `settled_external` here on weaker evidence merely because it
+      // started at `settlement_failed` instead of `settlement_pending`.
+      if (
+        recovery.lifecycleStage !== 'settlement_pending' &&
+        recovery.lifecycleStage !== 'settlement_failed'
+      ) {
+        return null;
+      }
       if (!recovery.neverminedDelegationId) return null; // no correlation key — nothing to reconcile
       const jobResult = await jobsRepo.getByIdempotencyKey(paymentIdentifier);
       if (!jobResult.ok || !jobResult.value) return null;
@@ -595,7 +611,12 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
       const transactionReference = reconciliation.transaction.providerTransactionId ?? undefined;
       const recorded = await paymentAttempts.recordSettledExternal(
         paymentIdentifier,
-        transactionReference
+        transactionReference,
+        // Narrowed to exactly the stage this row was independently
+        // observed at above — never a blanket allowance — so the CAS
+        // itself can't silently "recover" a row that moved to some other
+        // stage between the read and this write.
+        [recovery.lifecycleStage]
       );
       if (recorded.status !== 'transitioned') {
         // A concurrent recovery already claimed this transition (or the
@@ -637,6 +658,22 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
       );
       await paymentAttempts.transitionLifecycleStage(paymentIdentifier, 'link_verified', 'settled');
       await paymentAttempts.markConsumed(paymentIdentifier);
+      // Recovering from `settlement_pending`: the job is still at
+      // `SETTLING` (its local rejection branch never ran), so it legally
+      // advances to `DELIVERED` here, same as the normal synchronous
+      // success path. Recovering from `settlement_failed`: the job
+      // already moved to `REFUND_REQUIRED` when the false rejection
+      // happened, and the frozen, already-accepted JobState machine (SUN-
+      // 0200, `apps/edge-api/src/control-plane/state-machine`) has no
+      // `REFUND_REQUIRED -> DELIVERED` edge — deliberately not added here
+      // to keep this recovery narrowly scoped to the payment-attempt
+      // layer. The job record correctly continues to reflect "a refund
+      // was initiated" as a historical fact; `payment_attempts.
+      // lifecycle_stage`/`consumed_at` and the `PaymentServiceLink` below
+      // are the authoritative record of the payment's true final outcome
+      // — the two questions ("does this job need refund follow-up" vs.
+      // "was this payment ultimately settled") are intentionally allowed
+      // to diverge for this one historical, evidence-recovered row.
       if (job.current_state === 'SETTLING') {
         await transition(job.id, 'SETTLING', 'DELIVERED', 'SETTLEMENT_COMPLETE');
       }
@@ -1046,12 +1083,28 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
     );
     if (!settleGate.allowed) {
       await transition(jobId, 'SETTLING', 'REFUND_REQUIRED', 'REFUND_INITIATED');
-      if (rail === 'nevermined' && settlementEvidence.reason === 'ambiguous_settlement') {
-        // Ambiguous external state is never a definitive failure — leave
-        // `lifecycle_stage` at `settlement_pending` (already durably
-        // persisted above) so a later reconciliation/retry can resolve
-        // it, instead of collapsing it into the terminal
-        // `settlement_failed` state a genuine provider rejection uses.
+      // Real-incident-derived rule (SUN-0900B checkpoint 1B, third live
+      // settlement): once `evidenceProvider.settle(...)` has actually been
+      // invoked, a LOCAL inability to positively validate its response is
+      // never proof the settlement failed — the real sandbox transaction
+      // it produced can (and, in the incident this rule was written for,
+      // did) succeed externally regardless of what the local gate thought
+      // of the response shape. Only a settlement Nevermined itself
+      // *positively, explicitly* declared failed (`result.success ===
+      // false`, surfaced here as `settlementEvidence.reason ===
+      // 'provider_rejected'`) may ever go straight to the terminal
+      // `settlement_failed` state. Every other rejection reached after the
+      // real call — an ambiguous/ill-shaped response, a malformed or
+      // absent transaction reference, a provider exception/transport
+      // failure, a verification-hash/structural mismatch discovered only
+      // at this late gate — is AMBIGUOUS: `lifecycle_stage` stays at
+      // `settlement_pending` (already durably persisted above), never
+      // auto-retried, recoverable only through
+      // `attemptNeverminedRecovery`'s read-only external reconciliation.
+      const isExplicitProviderFailure =
+        settleGate.reason === 'settlement_not_successful' &&
+        settlementEvidence.reason === 'provider_rejected';
+      if (rail === 'nevermined' && !isExplicitProviderFailure) {
         await audit('settlement_ambiguous', {
           payment_identifier: paymentIdentifier,
           reason: settleGate.reason,

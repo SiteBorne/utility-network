@@ -430,21 +430,33 @@ export class D1PaymentAttemptRepository implements PaymentAttemptRepository {
    * (the correlation data from the first write is enough to reconcile). */
   async recordSettledExternal(
     paymentIdentifier: string,
-    settlementTransactionReference: string | undefined
+    settlementTransactionReference: string | undefined,
+    /** Defaults to the normal, forward-path predecessor only. The single
+     * additional value this ever needs — `'settlement_failed'` — exists
+     * only for `attemptNeverminedRecovery`'s narrow, evidence-gated
+     * recovery of a historical false-rejection (SUN-0900B checkpoint 1B,
+     * third real-live-run incident); every other caller keeps the exact
+     * prior behavior by omitting this parameter. This CAS `WHERE ...IN`
+     * clause is still the sole atomicity guarantee — it does not itself
+     * decide whether recovering FROM `settlement_failed` is appropriate,
+     * only enforces that the row was in one of the stages the caller
+     * declared acceptable. */
+    fromStages: readonly ('settlement_pending' | 'settlement_failed')[] = ['settlement_pending']
   ): Promise<
     | { status: 'transitioned' }
     | { status: 'illegal_transition' }
     | { status: 'error'; reason: string }
   > {
     try {
+      const placeholders = fromStages.map(() => '?').join(', ');
       const result = await this.db
         .prepare(
           `UPDATE payment_attempts SET
              lifecycle_stage = 'settled_external',
              settlement_transaction_reference = ?
-           WHERE payment_identifier = ? AND lifecycle_stage = 'settlement_pending'`
+           WHERE payment_identifier = ? AND lifecycle_stage IN (${placeholders})`
         )
-        .bind(settlementTransactionReference ?? null, paymentIdentifier)
+        .bind(settlementTransactionReference ?? null, paymentIdentifier, ...fromStages)
         .run();
       const failure = getD1Failure(result);
       if (failure) return { status: 'error', reason: failure };
