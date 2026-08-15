@@ -57,4 +57,22 @@ describe('document usage pricing authority', () => {
     expect(usage.total_usd_micro).toBe(maximum);
     expect(usage.capped).toBe(true);
   });
+
+  it('SUN-0900B checkpoint 2I: ten measured OCR pages derive exactly the 190000 maximum without an override', () => {
+    const usage = calculateDocumentUsage(
+      Array.from({ length: 10 }, (_, index) => ({
+        page_number: index + 1,
+        ocr_used: true,
+        table_count: 0,
+      }))
+    );
+
+    expect(usage.page_costs).toHaveLength(10);
+    expect(usage.page_costs.every((page) => page.tier === 'ocr')).toBe(true);
+    expect(usage.subtotal_usd_micro).toBe(190000);
+    expect(usage.max_job_usd_micro).toBe(190000);
+    expect(usage.total_usd_micro).toBe(190000);
+    expect(usage.capped).toBe(false);
+    expect(documentUsageToAtomicUnits(usage, 6)).toBe('190000');
+  });
 });

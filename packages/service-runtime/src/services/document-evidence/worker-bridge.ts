@@ -32,6 +32,15 @@ const MEDIA_TYPE_EXTENSION: Record<DocumentWorkerRequest['mediaType'], string> =
   'image/jpeg': '.jpg',
 };
 
+const OCR_POLICY_CLI_VALUE: Record<
+  NonNullable<DocumentWorkerRequest['ocrPolicy']>,
+  'required' | 'if_needed' | 'forbidden'
+> = {
+  always: 'required',
+  if_needed: 'if_needed',
+  never: 'forbidden',
+};
+
 /**
  * The production-shaped bridge: writes the artifact to a temp file and
  * shells out to `python -m modal_worker.local_runner`, the same
@@ -53,7 +62,7 @@ export class SubprocessDocumentWorkerBridge implements DocumentWorkerBridge {
     try {
       await writeFile(filePath, request.bytes);
       const args = ['-m', 'modal_worker.local_runner', filePath];
-      if (request.ocrPolicy) args.push('--ocr-policy', request.ocrPolicy);
+      if (request.ocrPolicy) args.push('--ocr-policy', OCR_POLICY_CLI_VALUE[request.ocrPolicy]);
       if (request.tablePolicy) args.push('--table-policy', request.tablePolicy);
 
       const stdout = await runProcess(this.pythonExecutable, args, this.workerCwd);

@@ -55,6 +55,66 @@ describe('Nevermined dynamic-credit settlement evidence', () => {
   });
 
   it.each([
+    [
+      'FULL_BUNDLE_TOPUP',
+      {
+        starting_balance: '178000',
+        credits_acquired: '190000',
+        credits_redeemed: '190000',
+        usage_value_atomic: '190000',
+        remaining_balance: '178000',
+        cash_movement_atomic: '190000',
+      },
+    ],
+    [
+      'DEFICIT_ONLY_TOPUP',
+      {
+        starting_balance: '178000',
+        credits_acquired: '12000',
+        credits_redeemed: '190000',
+        usage_value_atomic: '190000',
+        remaining_balance: '0',
+        cash_movement_atomic: '12000',
+      },
+    ],
+  ] as const)('validates an exact positive-insufficient %s equation', async (_policy, fields) => {
+    const evidence = await buildNeverminedCreditsSettlementEvidence(validInput(fields));
+    expect(
+      await validateNeverminedCreditsSettlementEvidence(evidence, {
+        payment_identifier: PAYMENT_IDENTIFIER,
+        plan_id: PLAN_ID,
+        authorized_maximum: '190000',
+        actual_usage: '190000',
+        expected_starting_balance: '178000',
+        expected_acquisition: fields.credits_acquired,
+      })
+    ).toEqual({ valid: true });
+  });
+
+  it('rejects a partial-balance observation whose cash and acquired credits disagree', async () => {
+    const evidence = await buildNeverminedCreditsSettlementEvidence(
+      validInput({
+        starting_balance: '178000',
+        credits_acquired: '12000',
+        credits_redeemed: '190000',
+        usage_value_atomic: '190000',
+        remaining_balance: '0',
+        cash_movement_atomic: '190000',
+      })
+    );
+    expect(
+      await validateNeverminedCreditsSettlementEvidence(evidence, {
+        payment_identifier: PAYMENT_IDENTIFIER,
+        plan_id: PLAN_ID,
+        authorized_maximum: '190000',
+        actual_usage: '190000',
+        expected_starting_balance: '178000',
+        expected_acquisition: '12000',
+      })
+    ).toEqual({ valid: false, reason: 'CASH_ACQUISITION_MISMATCH' });
+  });
+
+  it.each([
     ['credits_redeemed', '11999', 'CREDITS_REDEEMED_MISMATCH'],
     ['usage_value_atomic', '11999', 'USAGE_VALUE_MISMATCH'],
     ['remaining_balance', '177999', 'CREDIT_BALANCE_EQUATION_MISMATCH'],

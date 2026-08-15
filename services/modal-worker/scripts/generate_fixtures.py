@@ -80,7 +80,7 @@ def make_multi_table_pdf(path: Path) -> None:
     )
 
 
-def make_scanned_image_pdf(path: Path) -> None:
+def make_scanned_image_pdf(path: Path, pages: int = 1) -> None:
     """A page whose only content is a large embedded image (no native text) —
     exercises the scanned/OCR-required classification + OCR path.
     """
@@ -98,7 +98,10 @@ def make_scanned_image_pdf(path: Path) -> None:
     img.save(img_path)
 
     c = canvas.Canvas(str(path), pagesize=letter)
-    c.drawImage(str(img_path), 0, 0, width=letter[0], height=letter[1])
+    for page in range(pages):
+        c.drawImage(str(img_path), 0, 0, width=letter[0], height=letter[1])
+        if page + 1 < pages:
+            c.showPage()
     c.save()
     img_path.unlink()
 
@@ -169,6 +172,7 @@ def main() -> None:
     make_table_pdf(pdf_dir / "single_table.pdf", rows=5)
     make_multi_table_pdf(pdf_dir / "multi_table.pdf")
     make_scanned_image_pdf(pdf_dir / "scanned_page.pdf")
+    make_scanned_image_pdf(pdf_dir / "scanned_ten_page.pdf", pages=10)
     make_encrypted_pdf(pdf_dir / "encrypted.pdf", pdf_dir / "native_text_one_page.pdf")
     make_malformed_pdf(pdf_dir / "malformed.pdf")
     make_over_page_limit_pdf(pdf_dir / "over_page_limit.pdf", pages=12)

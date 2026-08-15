@@ -1,5 +1,5 @@
 /**
- * SUN-0900B checkpoint 2H — recovery-only finalizer for the single document
+ * SUN-0900B checkpoints 2H/2I — recovery-only finalizer for a single document
  * dynamic-credit lifecycle. This surface cannot create delegations/tokens,
  * verify permissions, execute a service, or settle permissions. It only
  * reconciles the already-persisted Payment-Identifier through seller GETs,
@@ -46,6 +46,7 @@ import { resolveLivePersistencePath } from '../../src/control-plane/live-persist
 import { createStateEvent } from '../../src/control-plane/state-machine';
 
 const PAYMENT_ID = process.env.NEVERMINED_RECOVER_DOCUMENT_PAYMENT_ID;
+const PARTIAL_BALANCE_RECOVERY = process.env.NEVERMINED_DOCUMENT_PARTIAL_BALANCE === '1';
 const REPOSITORY_ROOT = fileURLToPath(new URL('../../../..', import.meta.url));
 const SANDBOX_BACKEND = 'https://api.sandbox.nevermined.app/';
 const AGENT_ID = '109760621961288696094411057321700210583752765344624386042713081041578011828571';
@@ -55,6 +56,8 @@ const NETWORK = 'eip155:84532';
 const USDC = '0x036CbD53842c5426634e7929541eC2318f3dCF7e' as Address;
 const SELLER = '0x7f44a2dd237938F18632d4CcA40f4c690295E6E1' as Address;
 const PLATFORM = '0x2020949c1B565421AC21b76e70340266c4CA9A90' as Address;
+const STARTING_BALANCE = PARTIAL_BALANCE_RECOVERY ? '178000' : '0';
+const ACTUAL_USAGE = PARTIAL_BALANCE_RECOVERY ? '190000' : '12000';
 const publicClient = createPublicClient({ chain: baseSepolia, transport: http() });
 
 interface PendingDraft {
@@ -148,7 +151,9 @@ function readCashTransfers(
 }
 
 describe.skipIf(!PAYMENT_ID)(
-  'SUN-0900B checkpoint 2H — document dynamic-credit same-payment recovery',
+  PARTIAL_BALANCE_RECOVERY
+    ? 'SUN-0900B checkpoint 2I — document partial-balance same-payment recovery'
+    : 'SUN-0900B checkpoint 2H — document zero-balance same-payment recovery',
   () => {
     let mf: Miniflare;
     let db: D1Database;
@@ -215,15 +220,22 @@ describe.skipIf(!PAYMENT_ID)(
             payment_service_link: PaymentServiceLink;
           };
         }>(completedJob.value.id);
+        const cachedCredit = cached!.durableEvidence.settlement_evidence
+          .nevermined_credits_settlement as {
+          starting_balance: string;
+          credits_acquired: string;
+          credits_redeemed: string;
+          remaining_balance: string;
+          cash_movement_atomic: string;
+        };
         expect(cached).toMatchObject({
           status: 200,
-          body: { actual_amount: '12000', authorized_maximum: '190000' },
+          body: { actual_amount: ACTUAL_USAGE, authorized_maximum: '190000' },
           durableEvidence: {
             settlement_evidence: {
               nevermined_credits_settlement: {
-                cash_movement_atomic: '190000',
-                credits_redeemed: '12000',
-                remaining_balance: '178000',
+                starting_balance: STARTING_BALANCE,
+                credits_redeemed: ACTUAL_USAGE,
               },
             },
           },
@@ -238,9 +250,9 @@ describe.skipIf(!PAYMENT_ID)(
               payment_identifier: paymentIdentifier,
               plan_id: PLAN_ID,
               authorized_maximum: '190000',
-              actual_usage: '12000',
-              expected_starting_balance: '0',
-              expected_acquisition: '190000',
+              actual_usage: ACTUAL_USAGE,
+              expected_starting_balance: STARTING_BALANCE,
+              expected_acquisition: cachedCredit.credits_acquired,
             }
           )
         ).toEqual({ valid: true });
@@ -260,17 +272,22 @@ describe.skipIf(!PAYMENT_ID)(
               request_input_hash: 'sha256:' + 'f'.repeat(64),
             })
         ).toBe(true);
-        console.log('SUN-0900B 2H RECOVERY AUDIT (sanitized):', {
-          payment_identifier: paymentIdentifier,
-          lifecycle_stage: recovery?.lifecycleStage,
-          job_id: completedJob.value.id,
-          link_id: cached!.durableEvidence.payment_service_link.link_id,
-          duplicate_conflict: 'replay_conflict',
-          replay_additional_verify: 0,
-          replay_additional_execute: 0,
-          replay_additional_settle: 0,
-          replay_additional_jobs: 0,
-        });
+        console.log(
+          PARTIAL_BALANCE_RECOVERY
+            ? 'SUN-0900B 2I RECOVERY AUDIT (sanitized):'
+            : 'SUN-0900B 2H RECOVERY AUDIT (sanitized):',
+          {
+            payment_identifier: paymentIdentifier,
+            lifecycle_stage: recovery?.lifecycleStage,
+            job_id: completedJob.value.id,
+            link_id: cached!.durableEvidence.payment_service_link.link_id,
+            duplicate_conflict: 'replay_conflict',
+            replay_additional_verify: 0,
+            replay_additional_execute: 0,
+            replay_additional_settle: 0,
+            replay_additional_jobs: 0,
+          }
+        );
         return;
       }
 
@@ -286,10 +303,10 @@ describe.skipIf(!PAYMENT_ID)(
       expect(draft?.kind).toBe('nevermined_settlement_pending_draft');
       if (!draft || draft.kind !== 'nevermined_settlement_pending_draft') return;
       expect(draft).toMatchObject({
-        actual_amount: '12000',
+        actual_amount: ACTUAL_USAGE,
         authorized_maximum: '190000',
         scheme: 'upto',
-        usage_result: { actual_amount: '12000', authorized_maximum: '190000' },
+        usage_result: { actual_amount: ACTUAL_USAGE, authorized_maximum: '190000' },
         pcc: { decision: 'pass' },
       });
       expect(draft.usage_result.usage_result_hash).toBe(draft.usage_result_hash);
@@ -332,7 +349,6 @@ describe.skipIf(!PAYMENT_ID)(
       if (reconciliation.state !== 'SETTLED') return;
       expect(reconciliation.transaction).toMatchObject({
         status: 'succeeded',
-        amountCents: '19',
         currency: 'USDC',
       });
       const transactionReference = reconciliation.transaction.providerTransactionId;
@@ -343,36 +359,40 @@ describe.skipIf(!PAYMENT_ID)(
       });
       expect(receipt.status).toBe('success');
       const cash = readCashTransfers(receipt);
-      expect(cash).toMatchObject({ seller: 188_100n, platform: 1_900n, gross: 190_000n });
       expect(cash.payers).toHaveLength(1);
       const settlementSource = cash.payers[0]!;
       const verifiedPayer = draft.verification_evidence.payer!.toLowerCase();
+      const planBalance = await builder.plans.getPlanBalance(
+        PLAN_ID,
+        draft.verification_evidence.payer as Address
+      );
+      const remainingBalance = String(planBalance.balance);
+      const acquired = BigInt(remainingBalance) + BigInt(ACTUAL_USAGE) - BigInt(STARTING_BALANCE);
+      const deficit = BigInt(ACTUAL_USAGE) - BigInt(STARTING_BALANCE);
+      expect(acquired).toBeGreaterThanOrEqual(deficit);
+      expect(cash.gross).toBe(acquired);
+      expect(cash.seller * 100n).toBe(cash.gross * 99n);
+      expect(cash.platform * 100n).toBe(cash.gross);
       if (settlementSource !== verifiedPayer) {
         expect(
           cash.transfers.some(
             (transfer) =>
               transfer.from === verifiedPayer &&
               transfer.to === settlementSource &&
-              transfer.value === 190_000n
+              transfer.value === acquired
           )
         ).toBe(true);
       }
 
-      const planBalance = await builder.plans.getPlanBalance(
-        PLAN_ID,
-        draft.verification_evidence.payer as Address
-      );
-      expect(BigInt(planBalance.balance)).toBe(178_000n);
-
       const creditEvidence = await buildNeverminedCreditsSettlementEvidence({
         payment_identifier: paymentIdentifier,
         plan_id: PLAN_ID,
-        starting_balance: '0',
-        credits_acquired: '190000',
-        credits_redeemed: '12000',
-        usage_value_atomic: '12000',
-        remaining_balance: '178000',
-        cash_movement_atomic: '190000',
+        starting_balance: STARTING_BALANCE,
+        credits_acquired: String(acquired),
+        credits_redeemed: ACTUAL_USAGE,
+        usage_value_atomic: ACTUAL_USAGE,
+        remaining_balance: remainingBalance,
+        cash_movement_atomic: String(cash.gross),
         transaction: transactionReference!,
         observed_at: reconciliation.transaction.createdAt,
       });
@@ -381,9 +401,9 @@ describe.skipIf(!PAYMENT_ID)(
           payment_identifier: paymentIdentifier,
           plan_id: PLAN_ID,
           authorized_maximum: '190000',
-          actual_usage: '12000',
-          expected_starting_balance: '0',
-          expected_acquisition: '190000',
+          actual_usage: ACTUAL_USAGE,
+          expected_starting_balance: STARTING_BALANCE,
+          expected_acquisition: String(acquired),
         })
       ).toEqual({ valid: true });
 
@@ -394,8 +414,8 @@ describe.skipIf(!PAYMENT_ID)(
         delegation_id: recovery.neverminedDelegationId,
         transaction: transactionReference,
         amount_cents: reconciliation.transaction.amountCents,
-        credits_redeemed: '12000',
-        remaining_balance: '178000',
+        credits_redeemed: ACTUAL_USAGE,
+        remaining_balance: remainingBalance,
       };
       const settlementEvidence: ExternalSettlementEvidence & {
         nevermined_credits_settlement: typeof creditEvidence;
@@ -406,7 +426,7 @@ describe.skipIf(!PAYMENT_ID)(
         asset: attempt.binding.asset,
         payer: draft.verification_evidence.payer,
         payee: attempt.binding.payee,
-        actual_amount: '12000',
+        actual_amount: ACTUAL_USAGE,
         authorized_maximum: '190000',
         quote_id: draft.quote_id,
         requirement_id: draft.requirement_id,
@@ -458,15 +478,15 @@ describe.skipIf(!PAYMENT_ID)(
         link_id: link.link_id,
         link_hash: link.link_hash,
         authorized_maximum: '190000',
-        actual_amount: '12000',
+        actual_amount: ACTUAL_USAGE,
       };
       const settleResponse = {
         success: true,
         transaction: transactionReference!,
         network: NETWORK,
         payer: draft.verification_evidence.payer,
-        creditsRedeemed: '12000',
-        remainingBalance: '178000',
+        creditsRedeemed: ACTUAL_USAGE,
+        remainingBalance,
       };
       await results.finalize(
         job.id,
@@ -558,29 +578,36 @@ describe.skipIf(!PAYMENT_ID)(
         .first<{ count: number }>();
       expect(finalJobCount?.count).toBe(1);
 
-      console.log('SUN-0900B 2H RECOVERY COMPLETE (sanitized):', {
-        payment_identifier: paymentIdentifier,
-        delegation_id: recovery.neverminedDelegationId,
-        agent_id: AGENT_ID,
-        plan_id: PLAN_ID,
-        job_id: job.id,
-        transaction_hash: transactionReference,
-        cash_movement_atomic: String(cash.gross),
-        seller_atomic: String(cash.seller),
-        platform_atomic: String(cash.platform),
-        credits_acquired: '190000',
-        credits_redeemed: '12000',
-        remaining_credits: '178000',
-        usage_result_hash: draft.usage_result_hash,
-        receipt_id: draft.receipt_id,
-        receipt_hash: draft.receipt_hash,
-        link_id: link.link_id,
-        link_hash: link.link_hash,
-        recovery_added_verify: 0,
-        recovery_added_execute: 0,
-        recovery_added_settle: 0,
-        recovery_added_jobs: 0,
-      });
+      console.log(
+        PARTIAL_BALANCE_RECOVERY
+          ? 'SUN-0900B 2I RECOVERY COMPLETE (sanitized):'
+          : 'SUN-0900B 2H RECOVERY COMPLETE (sanitized):',
+        {
+          payment_identifier: paymentIdentifier,
+          delegation_id: recovery.neverminedDelegationId,
+          agent_id: AGENT_ID,
+          plan_id: PLAN_ID,
+          job_id: job.id,
+          transaction_hash: transactionReference,
+          cash_movement_atomic: String(cash.gross),
+          seller_atomic: String(cash.seller),
+          platform_atomic: String(cash.platform),
+          transaction_amount_cents: reconciliation.transaction.amountCents,
+          starting_credits: STARTING_BALANCE,
+          credits_acquired: String(acquired),
+          credits_redeemed: ACTUAL_USAGE,
+          remaining_credits: remainingBalance,
+          usage_result_hash: draft.usage_result_hash,
+          receipt_id: draft.receipt_id,
+          receipt_hash: draft.receipt_hash,
+          link_id: link.link_id,
+          link_hash: link.link_hash,
+          recovery_added_verify: 0,
+          recovery_added_execute: 0,
+          recovery_added_settle: 0,
+          recovery_added_jobs: 0,
+        }
+      );
     }, 180_000);
   }
 );

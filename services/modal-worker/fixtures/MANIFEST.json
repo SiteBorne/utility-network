@@ -17,6 +17,7 @@
     "native_text_one_page.pdf",
     "over_page_limit.pdf",
     "scanned_page.pdf",
+    "scanned_ten_page.pdf",
     "single_table.pdf"
   ]
 }

@@ -86,6 +86,18 @@ export class DocumentEvidenceJsonService
       return workerFailed(context, startedMs, inputHash, worker);
     }
 
+    if (
+      !input.ocr_permission &&
+      worker.pages.some(
+        (page) =>
+          (page.classification === 'scanned_image' || page.classification === 'mixed') &&
+          !page.ocr_used &&
+          page.extraction_method === 'none'
+      )
+    ) {
+      return ocrPermissionRequired(context, startedMs, inputHash);
+    }
+
     const claims: PccClaim[] = [];
     const evidence: PccEvidenceItem[] = [];
     const pageClassifications: NonNullable<DocumentEvidenceExtension['page_classifications']> = [];
@@ -343,6 +355,22 @@ function artifactUnavailable(
   return {
     ...baseFailureResult(context, startedMs, inputHash, 'rejected'),
     failure: { code: 'artifact_unavailable', message, retryable: false },
+  };
+}
+
+function ocrPermissionRequired(
+  context: ServiceExecutionContext,
+  startedMs: number,
+  inputHash: string
+): ServiceExecutionResult<DocumentEvidenceExtension> {
+  return {
+    ...baseFailureResult(context, startedMs, inputHash, 'rejected'),
+    limitations: ['OCR-required document content was not processed without explicit permission'],
+    failure: {
+      code: 'ocr_permission_required',
+      message: 'explicit ocr_permission=true is required for OCR-only document content',
+      retryable: false,
+    },
   };
 }
 

@@ -1150,6 +1150,100 @@ describe('Nevermined route-level durable settlement recovery (SUN-0900B checkpoi
     // equivalent to "the real settle call is never reached".
   });
 
+  it('a verified payment whose service fails remains pre-settlement and recovery refuses to settle or execute it again', async () => {
+    const rejectedCounters = { verify: 0, settle: 0, execute: 0 };
+    const rejectedApp = new Hono();
+    createX402ServiceRoute(rejectedApp, {
+      serviceId: SERVICE_ID,
+      scheme: 'exact',
+      pricingKey: 'web_context_verified_direct',
+      network: NETWORK,
+      asset: 'nevermined:credits',
+      path: ROUTE_PATH,
+      inputSchema: BUNDLED_SERVICE_INPUT_SCHEMAS[SERVICE_ID] as Record<string, unknown>,
+      contractRelease: '1.0.0',
+      inputSchemaHash: 'sha256:d3b0762020d4cc1d1e846960ed978cf1237b1741f90213adabe8ed931c2845ea',
+      outputSchemaHash: 'sha256:138bccc34ad8c320daec36890b8867fca9f709040b80c689710fd4bde49042de',
+      pccDependency: '1.0.0',
+      db,
+      clock: () => clockValue,
+      payTo: 'siteborne:nevermined-publisher-not-registered',
+      evidenceMode: 'production',
+      evidenceProvider: controllableProvider(rejectedCounters).provider,
+      rail: 'nevermined',
+      nevermined: { agentId: AGENT_ID, planId: PLAN_ID },
+      neverminedReconciliationClient: fakeReconciliationClient(
+        [succeededTx()],
+        consistentDelegation()
+      ),
+      executor: async (): Promise<ExecutorOutcome> => {
+        rejectedCounters.execute += 1;
+        return {
+          result: {
+            result_class: 'permanent_failure',
+            failure: { code: 'document_processing_failed', message: 'OCR required' },
+          },
+        };
+      },
+    });
+
+    const challengeResponse = await rejectedApp.request(ROUTE_PATH, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(WEB_INPUT),
+    });
+    expect(challengeResponse.status).toBe(402);
+    const paymentIdentifier = generateSiteborneePaymentId();
+    const headers = {
+      'content-type': 'application/json',
+      'payment-signature': 'fixture_' + '0'.repeat(24),
+      [PAYMENT_IDENTIFIER_HEADER]: paymentIdentifier,
+      [PAYMENT_DELEGATION_ID_HEADER]: DELEGATION_ID,
+    };
+    const failed = await rejectedApp.request(ROUTE_PATH, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(WEB_INPUT),
+    });
+    expect(failed.status).toBe(502);
+    expect(await failed.json()).toMatchObject({ error: 'service_execution_failed' });
+    expect(rejectedCounters).toEqual({ verify: 1, execute: 1, settle: 0 });
+
+    const attempt = await db
+      .prepare(
+        `SELECT lifecycle_stage, settlement_pending_at, settlement_transaction_reference,
+                consumed_at, service_output_hash, service_receipt_id
+         FROM payment_attempts WHERE payment_identifier = ?`
+      )
+      .bind(paymentIdentifier)
+      .first<Record<string, unknown>>();
+    expect(attempt).toEqual({
+      lifecycle_stage: 'verified',
+      settlement_pending_at: null,
+      settlement_transaction_reference: null,
+      consumed_at: null,
+      service_output_hash: null,
+      service_receipt_id: null,
+    });
+    const cached = await db
+      .prepare('SELECT COUNT(*) AS count FROM x402_service_results WHERE payment_identifier = ?')
+      .bind(paymentIdentifier)
+      .first<{ count: number }>();
+    expect(cached?.count).toBe(0);
+
+    const retry = await rejectedApp.request(ROUTE_PATH, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(WEB_INPUT),
+    });
+    expect(retry.status).toBe(202);
+    expect(await retry.json()).toMatchObject({
+      status: 'processing',
+      payment_identifier: paymentIdentifier,
+    });
+    expect(rejectedCounters).toEqual({ verify: 1, execute: 1, settle: 0 });
+  });
+
   it('crash scenario I: SETTLEMENT_PENDING already committed, "restart" (fresh Miniflare instance, same path), reconciliation finds NOT_SETTLED — zero re-execution, zero re-settlement, never auto-retried within reconciliation', async () => {
     await challenge();
     const id = generateSiteborneePaymentId();

@@ -61,6 +61,7 @@ export type ServiceFailureCode =
   | 'provider_policy_blocked'
   | 'source_changed'
   | 'artifact_unavailable'
+  | 'ocr_permission_required'
   | 'document_processing_failed'
   | 'verification_failed'
   | 'reproduction_unavailable'

@@ -1,5 +1,5 @@
 /**
- * SUN-0900B checkpoint 2H — exactly one controlled real Nevermined sandbox
+ * SUN-0900B checkpoints 2H/2I — one controlled real Nevermined sandbox
  * lifecycle for the frozen document dynamic-credit plan.
  *
  * Normal tests/CI perform zero credential reads and zero network calls because
@@ -12,6 +12,7 @@
  * provider or service work.
  */
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -50,12 +51,14 @@ import {
 } from '@siteborne/protocol-nevermined';
 import {
   BUNDLED_SERVICE_INPUT_SCHEMAS,
+  bindingsAreIdentical,
   generateSiteborneePaymentId,
   hashPaymentObject,
   verifyPaymentServiceLink,
   type ExternalSettlementEvidence,
   type ExternalVerificationEvidence,
   type PaymentEvidenceProvider,
+  type PaymentAttemptBinding,
   type PaymentServiceLink,
   type PaymentSettlementContext,
   type PaymentVerificationContext,
@@ -64,6 +67,7 @@ import {
 import { calculateDocumentUsage, documentUsageToAtomicUnits } from '@siteborne/pricing';
 import {
   FixtureDocumentWorkerBridge,
+  SubprocessDocumentWorkerBridge,
   buildFixtureRegistry,
   buildServiceContext,
   createFixtureSigner,
@@ -90,6 +94,7 @@ import {
 } from '../../src/control-plane/routes/x402-service';
 
 const RUN_LIVE = process.env.RUN_LIVE_NEVERMINED === '1';
+const PARTIAL_BALANCE_RUN = process.env.NEVERMINED_DOCUMENT_PARTIAL_BALANCE === '1';
 const AGENT_ID = '109760621961288696094411057321700210583752765344624386042713081041578011828571';
 const PLAN_ID = '64977106381472769302826211192910538031161833107493020584806963732279386695975';
 const SERVICE_ID = 'document_evidence_json.v1' as const;
@@ -99,25 +104,114 @@ const USDC = '0x036CbD53842c5426634e7929541eC2318f3dCF7e' as Address;
 const SELLER = '0x7f44a2dd237938F18632d4CcA40f4c690295E6E1' as Address;
 const PLATFORM = '0x2020949c1B565421AC21b76e70340266c4CA9A90' as Address;
 const AUTHORIZED_MAXIMUM = '190000';
-const ACTUAL_USAGE = '12000';
-const EXPECTED_REMAINING = '178000';
+const ACTUAL_USAGE = PARTIAL_BALANCE_RUN ? '190000' : '12000';
+const STARTING_BALANCE = PARTIAL_BALANCE_RUN ? '178000' : '0';
 const DELEGATION_BUDGET_CENTS = 19;
-const FIXTURE_ARTIFACT_ID = 'doc/native-fixture.pdf';
-const FIXTURE_BYTES = registerFixtureScenario(
-  new Uint8Array([9]),
-  'nevermined-live-document-native'
+const MINIMUM_DELEGATION_LIFETIME_MS = 45 * 60 * 1_000;
+const FIXTURE_ARTIFACT_ID = PARTIAL_BALANCE_RUN
+  ? 'doc/scanned-ten-page-fixture.pdf'
+  : 'doc/native-fixture.pdf';
+const MAXIMUM_FIXTURE_PATH = fileURLToPath(
+  new URL('../../../../services/modal-worker/fixtures/pdf/scanned_ten_page.pdf', import.meta.url)
 );
+const MAXIMUM_FIXTURE_BYTES = new Uint8Array(readFileSync(MAXIMUM_FIXTURE_PATH));
+const FIXTURE_BYTES = PARTIAL_BALANCE_RUN
+  ? MAXIMUM_FIXTURE_BYTES
+  : registerFixtureScenario(new Uint8Array([9]), 'nevermined-live-document-native');
 const DOCUMENT_WORKER_RESULT = DOCUMENT_WORKER_RESULT_JSON as unknown as WorkerResult;
-const DOCUMENT_INPUT = {
+const PARTIAL_BALANCE_OCR_DISABLED_INPUT = {
   artifact_reference: {
-    artifact_id: FIXTURE_ARTIFACT_ID,
-    media_type: 'application/pdf',
+    artifact_id: 'doc/scanned-ten-page-fixture.pdf',
+    media_type: 'application/pdf' as const,
+    // This is the exact immutable input from the failed first attempt. The
+    // harness had not yet replaced the old one-byte fixture declaration.
     size_bytes: 1,
   },
 };
+const PARTIAL_BALANCE_OCR_ENABLED_SAME_SIZE_INPUT = {
+  ...PARTIAL_BALANCE_OCR_DISABLED_INPUT,
+  ocr_permission: true,
+};
+const PARTIAL_BALANCE_OCR_ENABLED_INPUT = {
+  artifact_reference: {
+    ...PARTIAL_BALANCE_OCR_DISABLED_INPUT.artifact_reference,
+    size_bytes: MAXIMUM_FIXTURE_BYTES.length,
+  },
+  // The maximum-cost fixture is image-only. This permission is part of
+  // the immutable service input and must be present before the payment
+  // identifier is acquired; the document runtime correctly refuses OCR
+  // when it is absent.
+  ocr_permission: true,
+};
+const DOCUMENT_INPUT = PARTIAL_BALANCE_RUN
+  ? PARTIAL_BALANCE_OCR_ENABLED_INPUT
+  : {
+      artifact_reference: {
+        artifact_id: FIXTURE_ARTIFACT_ID,
+        media_type: 'application/pdf' as const,
+        size_bytes: FIXTURE_BYTES.length,
+      },
+    };
 const MIGRATIONS_DIR = fileURLToPath(new URL('../../../../migrations', import.meta.url));
 const REPOSITORY_ROOT = fileURLToPath(new URL('../../../..', import.meta.url));
+const WORKER_CWD = fileURLToPath(new URL('../../../../services/modal-worker', import.meta.url));
+const WORKER_PYTHON = join(WORKER_CWD, '.venv', 'bin', 'python');
 const publicClient = createPublicClient({ chain: baseSepolia, transport: http() });
+
+function hasMinimumDelegationLifetime(expiresAt: string, nowMs: number): boolean {
+  const expiryMs = Date.parse(expiresAt);
+  return Number.isFinite(expiryMs) && expiryMs - nowMs >= MINIMUM_DELEGATION_LIFETIME_MS;
+}
+
+describe('SUN-0900B checkpoint 2I credential-free immutable-input guards', () => {
+  it('binds the rejected OCR-disabled input to its preserved incident hash and separates the corrected input', async () => {
+    const failedHash = await hashPaymentObject(PARTIAL_BALANCE_OCR_DISABLED_INPUT);
+    const ocrOnlyHash = await hashPaymentObject(PARTIAL_BALANCE_OCR_ENABLED_SAME_SIZE_INPUT);
+    const correctedHash = await hashPaymentObject(PARTIAL_BALANCE_OCR_ENABLED_INPUT);
+
+    expect(failedHash).toBe(
+      'sha256:b889fc62ece7d0c68e0173fb91d7d075bd880aa595266043ed35b02d7884aba2'
+    );
+    expect(ocrOnlyHash).toMatch(/^sha256:[a-f0-9]{64}$/);
+    expect(ocrOnlyHash).not.toBe(failedHash);
+    expect(correctedHash).toMatch(/^sha256:[a-f0-9]{64}$/);
+    expect(correctedHash).not.toBe(failedHash);
+
+    const baseBinding: PaymentAttemptBinding = {
+      binding_version: 2,
+      payment_rail: 'nevermined',
+      payment_provider: 'nevermined-payments@1.10.0',
+      nevermined_agent_id: AGENT_ID,
+      nevermined_plan_id: PLAN_ID,
+      nevermined_delegation_id: 'fde6e86c-1415-4bac-966f-2228526078bd',
+      payment_identifier: 'pay_f9cfc34bac0d46bc980d71b286bf39a6',
+      quote_id: 'qte_' + '1'.repeat(24),
+      requirement_id: 'req_' + '2'.repeat(24),
+      service_id: SERVICE_ID,
+      service_version: 'v1',
+      contract_release: '1.0.0',
+      request_input_hash: failedHash,
+      resource_id: 'https://utility.siteborne.net/v1/nevermined/document/evidence-json',
+      scheme: 'upto',
+      network: NETWORK,
+      asset: 'nevermined:credits',
+      amount: AUTHORIZED_MAXIMUM,
+      payee: 'siteborne:nevermined-publisher-not-registered',
+    };
+    expect(
+      bindingsAreIdentical(baseBinding, {
+        ...baseBinding,
+        request_input_hash: ocrOnlyHash,
+      })
+    ).toBe(false);
+  });
+
+  it('refuses delegation reuse unless at least 45 minutes remain', () => {
+    const now = Date.parse('2026-08-15T20:00:00.000Z');
+    expect(hasMinimumDelegationLifetime('2026-08-15T20:44:59.999Z', now)).toBe(false);
+    expect(hasMinimumDelegationLifetime('2026-08-15T20:45:00.000Z', now)).toBe(true);
+  });
+});
 
 const ADD_COLUMN_PATTERN = /^ALTER TABLE (\w+) ADD COLUMN (\w+)/i;
 
@@ -152,7 +246,7 @@ async function runMigrations(db: D1Database): Promise<void> {
 
 function requireEnv(name: string): string {
   const value = process.env[name];
-  if (!value) throw new Error(`SUN-0900B 2H: required environment variable ${name} is missing`);
+  if (!value) throw new Error(`SUN-0900B document live: required variable ${name} is missing`);
   return value;
 }
 
@@ -163,13 +257,13 @@ function sleep(ms: number): Promise<void> {
 async function readPlanBalanceEventually(
   builder: Payments,
   accountAddress: Address,
-  expected: bigint
+  expected?: bigint
 ): Promise<Awaited<ReturnType<Payments['plans']['getPlanBalance']>>> {
   let last: Awaited<ReturnType<Payments['plans']['getPlanBalance']>> | undefined;
   for (const delay of [0, 2_000, 5_000, 10_000]) {
     if (delay > 0) await sleep(delay);
     last = await builder.plans.getPlanBalance(PLAN_ID, accountAddress);
-    if (BigInt(last.balance) === expected) return last;
+    if (expected === undefined || BigInt(last.balance) === expected) return last;
   }
   return last!;
 }
@@ -227,24 +321,37 @@ function makeRegistryClient(builder: Payments): NeverminedRegistryClient {
   };
 }
 
-function transferAmounts(receipt: TransactionReceipt, payer: Address) {
+function transferAmounts(receipt: TransactionReceipt) {
   let seller = 0n;
   let platform = 0n;
+  const payers = new Set<string>();
+  const transfers: Array<{ from: string; to: string; value: bigint }> = [];
   for (const log of receipt.logs) {
     if (log.address.toLowerCase() !== USDC.toLowerCase()) continue;
     try {
       const decoded = decodeEventLog({ abi: erc20Abi, data: log.data, topics: log.topics });
       if (decoded.eventName !== 'Transfer') continue;
       const args = decoded.args as { from: Address; to: Address; value: bigint };
-      if (args.from.toLowerCase() !== payer.toLowerCase()) continue;
-      if (args.to.toLowerCase() === SELLER.toLowerCase()) seller += args.value;
-      if (args.to.toLowerCase() === PLATFORM.toLowerCase()) platform += args.value;
+      const transfer = {
+        from: args.from.toLowerCase(),
+        to: args.to.toLowerCase(),
+        value: args.value,
+      };
+      transfers.push(transfer);
+      if (transfer.to === SELLER.toLowerCase()) {
+        seller += transfer.value;
+        payers.add(transfer.from);
+      }
+      if (transfer.to === PLATFORM.toLowerCase()) {
+        platform += transfer.value;
+        payers.add(transfer.from);
+      }
     } catch {
       // Non-Transfer USDC log; ignored. Exact expected transfer totals below
       // remain the fail-closed authority.
     }
   }
-  return { seller, platform, gross: seller + platform };
+  return { seller, platform, gross: seller + platform, payers: [...payers], transfers };
 }
 
 const FRESH_PROCESS_INSPECTOR = String.raw`
@@ -288,7 +395,9 @@ process.stdout.write(JSON.stringify(summary));
 `;
 
 describe.skipIf(!RUN_LIVE)(
-  'SUN-0900B checkpoint 2H — real zero-balance document prepaid-credit lifecycle',
+  PARTIAL_BALANCE_RUN
+    ? 'SUN-0900B checkpoint 2I — positive-insufficient document credit lifecycle'
+    : 'SUN-0900B checkpoint 2H — real zero-balance document prepaid-credit lifecycle',
   () => {
     let mf: Miniflare | undefined;
     let db: D1Database;
@@ -307,7 +416,17 @@ describe.skipIf(!RUN_LIVE)(
       | undefined;
     let usageResult: UsageResult | undefined;
     let transactionReceipt: TransactionReceipt | undefined;
-    let onchainAmounts = { seller: 0n, platform: 0n, gross: 0n };
+    let onchainAmounts = {
+      seller: 0n,
+      platform: 0n,
+      gross: 0n,
+      payers: [] as string[],
+      transfers: [] as Array<{ from: string; to: string; value: bigint }>,
+    };
+    let endingBalance: string | undefined;
+    let creditsAcquired: string | undefined;
+    let transactionAmountCents: string | undefined;
+    let documentWorkerResult: WorkerResult | undefined;
     let executionCount = 0;
     let verifyCount = 0;
     let settleCount = 0;
@@ -386,12 +505,17 @@ describe.skipIf(!RUN_LIVE)(
           await context.artifact_store.put(
             {
               id: FIXTURE_ARTIFACT_ID,
-              contentHash: DOCUMENT_WORKER_RESULT.document!.sha256,
+              contentHash: 'sha256:' + createHash('sha256').update(FIXTURE_BYTES).digest('hex'),
               media_type: 'application/pdf',
               byte_length: FIXTURE_BYTES.length,
             },
             FIXTURE_BYTES
           );
+          const baseWorker = PARTIAL_BALANCE_RUN
+            ? new SubprocessDocumentWorkerBridge(WORKER_PYTHON, WORKER_CWD)
+            : new FixtureDocumentWorkerBridge(
+                new Map([['nevermined-live-document-native', DOCUMENT_WORKER_RESULT]])
+              );
           const registry = buildFixtureRegistry({
             httpClient: {
               async fetch() {
@@ -399,9 +523,13 @@ describe.skipIf(!RUN_LIVE)(
               },
             },
             context,
-            worker: new FixtureDocumentWorkerBridge(
-              new Map([['nevermined-live-document-native', DOCUMENT_WORKER_RESULT]])
-            ),
+            worker: {
+              async run(request) {
+                const workerResult = await baseWorker.run(request);
+                documentWorkerResult = workerResult;
+                return workerResult;
+              },
+            },
             signer,
             keyRegistry,
           });
@@ -418,13 +546,20 @@ describe.skipIf(!RUN_LIVE)(
           receiptVerificationCount += 1;
           if (!receiptCheck.valid) throw new Error('SITEBORNE receipt self-verification failed');
 
+          if (!documentWorkerResult || documentWorkerResult.status !== 'success') {
+            throw new Error('document worker did not produce a successful measured result');
+          }
+          const measuredPages = documentWorkerResult.pages;
           const usage = calculateDocumentUsage(
-            DOCUMENT_WORKER_RESULT.pages.map((page) => ({
+            measuredPages.map((page) => ({
               page_number: page.page_number,
               ocr_used: page.ocr_used,
               table_count: page.tables.length,
             }))
           );
+          if (documentUsageToAtomicUnits(usage, 6) !== ACTUAL_USAGE) {
+            throw new Error('document fixture actual usage did not match the frozen scenario');
+          }
           outputHash = result.output_hash;
           receiptId = result.receipt_id;
           receiptHash = await hashPaymentObject(
@@ -435,8 +570,8 @@ describe.skipIf(!RUN_LIVE)(
             result,
             actualAmountAtomic: documentUsageToAtomicUnits(usage, 6),
             resourceMetrics: {
-              page_count: DOCUMENT_WORKER_RESULT.pages.length,
-              pages: DOCUMENT_WORKER_RESULT.pages.map((page) => ({
+              page_count: measuredPages.length,
+              pages: measuredPages.map((page) => ({
                 page_number: page.page_number,
                 ocr_used: page.ocr_used,
                 table_count: page.tables.length,
@@ -460,7 +595,7 @@ describe.skipIf(!RUN_LIVE)(
       requireEnv('NVM_API_KEY');
       requireEnv('NVM_SUBSCRIBER_API_KEY');
       if (requireEnv('NVM_ENVIRONMENT') !== 'sandbox') {
-        throw new Error('SUN-0900B 2H: NVM_ENVIRONMENT must equal sandbox');
+        throw new Error('SUN-0900B document live: NVM_ENVIRONMENT must equal sandbox');
       }
       if (process.env.RUN_LIVE_X402) throw new Error('RUN_LIVE_X402 must remain absent');
       if (process.env.NEVERMINED_REGISTER_DOCUMENT) {
@@ -477,7 +612,12 @@ describe.skipIf(!RUN_LIVE)(
       ensureLivePersistenceDirectory(persistencePath);
       // Public, non-secret operational path.
       // eslint-disable-next-line no-console
-      console.log('SUN-0900B 2H persistent D1 path:', persistencePath);
+      console.log(
+        PARTIAL_BALANCE_RUN
+          ? 'SUN-0900B 2I persistent D1 path:'
+          : 'SUN-0900B 2H persistent D1 path:',
+        persistencePath
+      );
       await openPersistentD1();
 
       const unfinished = await db
@@ -490,8 +630,22 @@ describe.skipIf(!RUN_LIVE)(
         .all<{ payment_identifier: string; lifecycle_stage: string }>();
       if ((unfinished.results ?? []).length > 0) {
         throw new Error(
-          `SUN-0900B 2H: recoverable document lifecycle already exists (${unfinished.results![0]!.lifecycle_stage}); refusing fresh creation`
+          `SUN-0900B document live: recoverable lifecycle already exists (${unfinished.results![0]!.lifecycle_stage}); refusing fresh creation`
         );
+      }
+      if (PARTIAL_BALANCE_RUN) {
+        const existingState = await db
+          .prepare(
+            `SELECT
+               (SELECT COUNT(*) FROM payment_attempts) AS payment_attempts,
+               (SELECT COUNT(*) FROM jobs) AS jobs`
+          )
+          .first<{ payment_attempts: number; jobs: number }>();
+        if (existingState?.payment_attempts !== 0 || existingState?.jobs !== 0) {
+          throw new Error(
+            `SUN-0900B 2I: attempt-2 D1 must be empty (payment_attempts=${existingState?.payment_attempts ?? 'unknown'}, jobs=${existingState?.jobs ?? 'unknown'})`
+          );
+        }
       }
 
       builder = Payments.getInstance({
@@ -526,8 +680,8 @@ describe.skipIf(!RUN_LIVE)(
       subscriberSmartAccount = smartAccounts[0]!;
       expect(subscriberSmartAccount.toLowerCase()).not.toBe(SELLER.toLowerCase());
 
-      const startingBalance = await builder.plans.getPlanBalance(PLAN_ID, subscriberAccount);
-      expect(BigInt(startingBalance.balance)).toBe(0n);
+      const startingBalance = await builder.plans.getPlanBalance(PLAN_ID, subscriberSmartAccount);
+      expect(BigInt(startingBalance.balance)).toBe(BigInt(STARTING_BALANCE));
       const payerUsdc = await publicClient.readContract({
         address: USDC,
         abi: erc20Abi,
@@ -535,6 +689,32 @@ describe.skipIf(!RUN_LIVE)(
         args: [subscriberSmartAccount],
       });
       expect(payerUsdc).toBeGreaterThanOrEqual(190_000n);
+
+      // Checkpoint 2I must prove the maximum-cost fixture through the real
+      // local worker and canonical pricing before delegation/token/payment
+      // mutation is reachable. This is a document-worker preflight, not a
+      // paid service execution and does not create a control-plane job.
+      if (PARTIAL_BALANCE_RUN) {
+        const preflightWorker = new SubprocessDocumentWorkerBridge(WORKER_PYTHON, WORKER_CWD);
+        const preflightResult = await preflightWorker.run({
+          bytes: FIXTURE_BYTES,
+          mediaType: 'application/pdf',
+          ocrPolicy: 'if_needed',
+          tablePolicy: 'extract',
+        });
+        expect(preflightResult.status).toBe('success');
+        expect(preflightResult.pages).toHaveLength(10);
+        expect(preflightResult.pages.every((page) => page.ocr_used)).toBe(true);
+        const preflightUsage = calculateDocumentUsage(
+          preflightResult.pages.map((page) => ({
+            page_number: page.page_number,
+            ocr_used: page.ocr_used,
+            table_count: page.tables.length,
+          }))
+        );
+        expect(documentUsageToAtomicUnits(preflightUsage, 6)).toBe('190000');
+        expect(preflightUsage.capped).toBe(false);
+      }
 
       const delegationListing = await subscriber.delegation.listDelegations({ accessible: true });
       const now = Date.now();
@@ -544,7 +724,7 @@ describe.skipIf(!RUN_LIVE)(
           delegation.currency.toLowerCase() === 'usdc' &&
           delegation.status.toLowerCase() === 'active' &&
           Number(delegation.remainingBudgetCents) >= DELEGATION_BUDGET_CENTS &&
-          Date.parse(delegation.expiresAt) > now
+          hasMinimumDelegationLifetime(delegation.expiresAt, now)
       );
       const exact: typeof usable = [];
       for (const delegation of usable) {
@@ -653,9 +833,11 @@ describe.skipIf(!RUN_LIVE)(
           if (
             !observation ||
             observation.credits_redeemed !== ACTUAL_USAGE ||
-            observation.remaining_balance !== EXPECTED_REMAINING ||
             !/^0x[0-9a-fA-F]{64}$/.test(observation.transaction)
           ) {
+            throw new Error('dynamic_credit_settlement_observation_mismatch');
+          }
+          if (!PARTIAL_BALANCE_RUN && observation.remaining_balance !== '178000') {
             throw new Error('dynamic_credit_settlement_observation_mismatch');
           }
           transactionReceipt = await publicClient.waitForTransactionReceipt({
@@ -666,34 +848,73 @@ describe.skipIf(!RUN_LIVE)(
           if (transactionReceipt.status !== 'success') {
             throw new Error('document_acquisition_transaction_failed');
           }
-          onchainAmounts = transferAmounts(transactionReceipt, subscriberSmartAccount);
-          if (
-            onchainAmounts.seller !== 188_100n ||
-            onchainAmounts.platform !== 1_900n ||
-            onchainAmounts.gross !== 190_000n
-          ) {
-            throw new Error('document_acquisition_transfer_mismatch');
-          }
+          onchainAmounts = transferAmounts(transactionReceipt);
           const finalBalance = await readPlanBalanceEventually(
             builder,
-            subscriberAccount,
-            178_000n
+            subscriberSmartAccount,
+            observation.remaining_balance === null
+              ? undefined
+              : BigInt(observation.remaining_balance)
           );
-          if (BigInt(finalBalance.balance) !== 178_000n) {
+          endingBalance = String(finalBalance.balance);
+          if (
+            observation.remaining_balance !== null &&
+            endingBalance !== observation.remaining_balance
+          ) {
             throw new Error('document_credit_balance_mismatch');
+          }
+          const acquired = BigInt(endingBalance) + BigInt(ACTUAL_USAGE) - BigInt(STARTING_BALANCE);
+          const deficit = BigInt(ACTUAL_USAGE) - BigInt(STARTING_BALANCE);
+          if (acquired < deficit || acquired < 0n) {
+            throw new Error('document_credit_balance_equation_mismatch');
+          }
+          creditsAcquired = String(acquired);
+          if (onchainAmounts.gross !== acquired) {
+            throw new Error('document_acquisition_transfer_mismatch');
+          }
+          if (
+            onchainAmounts.payers.length !== 1 ||
+            onchainAmounts.seller * 100n !== onchainAmounts.gross * 99n ||
+            onchainAmounts.platform * 100n !== onchainAmounts.gross
+          ) {
+            throw new Error('document_acquisition_split_mismatch');
+          }
+          const settlementSource = onchainAmounts.payers[0]!;
+          const verifiedPayer = acceptedVerification.payer?.toLowerCase();
+          if (
+            verifiedPayer &&
+            settlementSource !== verifiedPayer &&
+            !onchainAmounts.transfers.some(
+              (transfer) =>
+                transfer.from === verifiedPayer &&
+                transfer.to === settlementSource &&
+                transfer.value === acquired
+            )
+          ) {
+            throw new Error('document_acquisition_payer_trace_mismatch');
           }
           const creditEvidence = await buildNeverminedCreditsSettlementEvidence({
             payment_identifier: context.payment_identifier,
             plan_id: PLAN_ID,
-            starting_balance: '0',
-            credits_acquired: '190000',
+            starting_balance: STARTING_BALANCE,
+            credits_acquired: creditsAcquired,
             credits_redeemed: ACTUAL_USAGE,
             usage_value_atomic: ACTUAL_USAGE,
-            remaining_balance: EXPECTED_REMAINING,
-            cash_movement_atomic: '190000',
+            remaining_balance: endingBalance,
+            cash_movement_atomic: String(onchainAmounts.gross),
             transaction: observation.transaction,
             observed_at: new Date().toISOString(),
           });
+          expect(
+            await validateNeverminedCreditsSettlementEvidence(creditEvidence, {
+              payment_identifier: context.payment_identifier,
+              plan_id: PLAN_ID,
+              authorized_maximum: AUTHORIZED_MAXIMUM,
+              actual_usage: ACTUAL_USAGE,
+              expected_starting_balance: STARTING_BALANCE,
+              expected_acquisition: creditsAcquired,
+            })
+          ).toEqual({ valid: true });
           const enriched: ExternalSettlementEvidence & {
             nevermined_credits_settlement: unknown;
           } = { ...base, nevermined_credits_settlement: creditEvidence };
@@ -704,7 +925,7 @@ describe.skipIf(!RUN_LIVE)(
       await mountRoute(countingProvider);
     }, 180_000);
 
-    it('executes one zero-credit acquisition/burn lifecycle, reopens durable D1 in a fresh process, replays without work, and rejects a conflict', async () => {
+    it('executes one bounded document credit lifecycle, reopens durable D1, replays without work, and rejects a conflict', async () => {
       const challenge = await app.request(ROUTE, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -740,13 +961,18 @@ describe.skipIf(!RUN_LIVE)(
       });
       const responseBody = (await response.clone().json()) as Record<string, unknown>;
       // eslint-disable-next-line no-console
-      console.log('SUN-0900B 2H lifecycle result (sanitized):', {
-        status: response.status,
-        payment_identifier: paymentIdentifier,
-        receipt_id: responseBody.receipt_id,
-        link_id: responseBody.link_id,
-        transaction: settlementEvidence?.transaction_reference,
-      });
+      console.log(
+        PARTIAL_BALANCE_RUN
+          ? 'SUN-0900B 2I lifecycle result (sanitized):'
+          : 'SUN-0900B 2H lifecycle result (sanitized):',
+        {
+          status: response.status,
+          payment_identifier: paymentIdentifier,
+          receipt_id: responseBody.receipt_id,
+          link_id: responseBody.link_id,
+          transaction: settlementEvidence?.transaction_reference,
+        }
+      );
       expect(response.status, JSON.stringify(responseBody)).toBe(200);
       expect(responseBody).toMatchObject({
         service_id: SERVICE_ID,
@@ -784,7 +1010,7 @@ describe.skipIf(!RUN_LIVE)(
         value: {
           success: true,
           creditsRedeemed: ACTUAL_USAGE,
-          remainingBalance: EXPECTED_REMAINING,
+          remainingBalance: endingBalance,
         },
       });
       const creditEvidence = (
@@ -798,8 +1024,8 @@ describe.skipIf(!RUN_LIVE)(
           plan_id: PLAN_ID,
           authorized_maximum: AUTHORIZED_MAXIMUM,
           actual_usage: ACTUAL_USAGE,
-          expected_starting_balance: '0',
-          expected_acquisition: '190000',
+          expected_starting_balance: STARTING_BALANCE,
+          expected_acquisition: creditsAcquired!,
         })
       ).toEqual({ valid: true });
 
@@ -848,9 +1074,11 @@ describe.skipIf(!RUN_LIVE)(
       );
       expect(cached.durableEvidence.settlement_evidence).toMatchObject({
         nevermined_credits_settlement: {
-          cash_movement_atomic: '190000',
+          cash_movement_atomic: creditsAcquired,
+          starting_balance: STARTING_BALANCE,
+          credits_acquired: creditsAcquired,
           credits_redeemed: ACTUAL_USAGE,
-          remaining_balance: EXPECTED_REMAINING,
+          remaining_balance: endingBalance,
         },
       });
 
@@ -866,11 +1094,13 @@ describe.skipIf(!RUN_LIVE)(
       expect(transactions.transactions[0]).toMatchObject({
         status: 'succeeded',
         providerTransactionId: settlementEvidence!.transaction_reference,
-        amountCents: '19',
         currency: 'USDC',
       });
+      transactionAmountCents = transactions.transactions[0]!.amountCents;
       expect(transactionReceipt?.transactionHash).toBe(settlementEvidence!.transaction_reference);
-      expect(onchainAmounts).toEqual({ seller: 188_100n, platform: 1_900n, gross: 190_000n });
+      expect(onchainAmounts.gross).toBe(BigInt(creditsAcquired!));
+      expect(onchainAmounts.seller * 100n).toBe(onchainAmounts.gross * 99n);
+      expect(onchainAmounts.platform * 100n).toBe(onchainAmounts.gross);
 
       // A genuinely separate child process reopens the persisted Miniflare/D1
       // store with every credential/live variable removed. Only bounded public
@@ -926,8 +1156,8 @@ describe.skipIf(!RUN_LIVE)(
         pcc_present: true,
         receipt_present: true,
         credits_redeemed: ACTUAL_USAGE,
-        remaining_balance: EXPECTED_REMAINING,
-        cash_movement_atomic: '190000',
+        remaining_balance: endingBalance,
+        cash_movement_atomic: creditsAcquired,
       });
       expect(await verifyPaymentServiceLink(inspection.result.payment_service_link)).toEqual({
         valid: true,
@@ -964,9 +1194,11 @@ describe.skipIf(!RUN_LIVE)(
       });
       expect({ verifyCount, executionCount, settleCount }).toEqual(beforeReplay);
 
-      const changedInput = {
-        artifact_reference: { ...DOCUMENT_INPUT.artifact_reference, size_bytes: 2 },
-      };
+      const changedInput = PARTIAL_BALANCE_RUN
+        ? { ...DOCUMENT_INPUT, ocr_permission: false }
+        : {
+            artifact_reference: { ...DOCUMENT_INPUT.artifact_reference, size_bytes: 2 },
+          };
       expect(
         (
           await app.request(ROUTE, {
@@ -1000,27 +1232,35 @@ describe.skipIf(!RUN_LIVE)(
       expect(validateNeverminedDocumentDynamicPlan(finalAgent, finalPlan)).toEqual({ valid: true });
 
       // eslint-disable-next-line no-console
-      console.log('SUN-0900B 2H COMPLETE (sanitized):', {
-        agent_id: AGENT_ID,
-        plan_id: PLAN_ID,
-        delegation_id: delegationId,
-        payment_identifier: paymentIdentifier,
-        job_id: jobId,
-        transaction_hash: settlementEvidence!.transaction_reference,
-        cash_movement_atomic: String(onchainAmounts.gross),
-        seller_atomic: String(onchainAmounts.seller),
-        platform_atomic: String(onchainAmounts.platform),
-        credits_acquired: '190000',
-        credits_redeemed: ACTUAL_USAGE,
-        remaining_credits: EXPECTED_REMAINING,
-        verify_count: verifyCount,
-        execute_count: executionCount,
-        settle_count: settleCount,
-        delegation_creations: delegationCreateCount,
-        token_creations: tokenCount,
-        replay_additional_work: 0,
-        registration_mutations: 0,
-      });
+      console.log(
+        PARTIAL_BALANCE_RUN
+          ? 'SUN-0900B 2I COMPLETE (sanitized):'
+          : 'SUN-0900B 2H COMPLETE (sanitized):',
+        {
+          agent_id: AGENT_ID,
+          plan_id: PLAN_ID,
+          delegation_id: delegationId,
+          payment_identifier: paymentIdentifier,
+          corrected_input_hash: inspection.attempt.request_input_hash,
+          job_id: jobId,
+          transaction_hash: settlementEvidence!.transaction_reference,
+          cash_movement_atomic: String(onchainAmounts.gross),
+          seller_atomic: String(onchainAmounts.seller),
+          platform_atomic: String(onchainAmounts.platform),
+          starting_credits: STARTING_BALANCE,
+          credits_acquired: creditsAcquired,
+          credits_redeemed: ACTUAL_USAGE,
+          remaining_credits: endingBalance,
+          transaction_amount_cents: transactionAmountCents,
+          verify_count: verifyCount,
+          execute_count: executionCount,
+          settle_count: settleCount,
+          delegation_creations: delegationCreateCount,
+          token_creations: tokenCount,
+          replay_additional_work: 0,
+          registration_mutations: 0,
+        }
+      );
     }, 300_000);
   }
 );
