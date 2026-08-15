@@ -1,5 +1,5 @@
 /**
- * SUN-0900B checkpoint 2B — narrow, registration-only operator entry
+ * SUN-0900B checkpoint 2F — narrow, registration-only operator entry
  * point for `document_evidence_json.v1`.
  *
  * This file does exactly one thing: reconcile-then-register (never
@@ -18,28 +18,14 @@
  * Requires: NVM_API_KEY (builder credential only — NVM_SUBSCRIBER_API_KEY
  * is never read here, registration is never subscriber-side).
  *
- * NOT YET SAFE TO RUN (SUN-0900B checkpoint 2B, corrected from an
- * earlier overclaim this same checkpoint): two real Base Sepolia
- * transactions (0x847a6da0a6a63f1f12838bbe9269b8fd9798997b0680b0146b71
- * 47fcb715f417, 0x8fec56c49ee6e85a30105d308fd7b1788c9866f8d3780395c8e0
- * f5e549cfd0f2) prove the atomic amount SITEBORNE passes as
- * `settlePermissions({maxAmount})` is transferred on-chain exactly,
- * atomic-for-atomic, WHEN maxAmount equals the plan's registered price
- * (both observed transactions had actual === price, 9000 === 9000).
- * That is not the same claim as "actual < price settles exactly
- * actual" — Nevermined's own SDK exposes price and credits as
- * independent, builder-chosen numeric arguments with no enforced 1:1
- * relationship (`getDynamicCreditsConfig(creditsGranted, min, max)`'s
- * own doc example pairs an unrelated price and credit amount), and
- * whether a below-price settle is even accepted for the PAYG helper
- * pair this file uses (`getPayAsYouGoPriceConfig`/
- * `getPayAsYouGoCreditsConfig`) has never been tested live. Pending
- * that proof, `packages/protocol-nevermined/src/declarations.ts` keeps
- * `registration_allowed: false` for the document plan, and this file's
- * own first assertion (`registration_allowed` must be `true`) will
- * correctly refuse to proceed until that changes. Do not flip it back
- * without a positive live or read-back proof — see
- * docs/reports/SUN-0900B-checkpoint-2b-unit-economics-report.md.
+ * Checkpoint 2E accepted the real, reusable prepaid dynamic-credit
+ * model. This harness therefore registers exactly the accepted shape:
+ * 190000 atomic Base Sepolia USDC buys 190000 credits; a request may
+ * redeem 12000..190000 credits. It does not use the disproven PAYG
+ * 1/1/1 helper shape. Before reuse and after any one-time registration,
+ * authoritative agent/plan GETs must pass
+ * `validateNeverminedDocumentDynamicPlan`; a name match with wrong
+ * economics is a conflict, never an exact registration.
  *
  * `controlled_sandbox_self_test`: independent_customer=false, revenue=false,
  * open_market_purchase=false, production_ready=false, production_enabled=false.
@@ -48,7 +34,11 @@ import { describe, it, expect } from 'vitest';
 import { Payments } from '@nevermined-io/payments';
 import {
   NEVERMINED_DECLARATIONS,
+  DOCUMENT_DYNAMIC_PLAN_REQUIREMENTS,
+  reconcileNeverminedDocumentDynamicRegistration,
   reconcileNeverminedRegistration,
+  type NeverminedAgentReadback,
+  type NeverminedPlanReadback,
   type NeverminedRegistryClient,
 } from '@siteborne/protocol-nevermined';
 
@@ -57,7 +47,7 @@ const SELLER_ADDRESS = '0x7f44a2dd237938F18632d4CcA40f4c690295E6E1' as const;
 const BASE_SEPOLIA_USDC = '0x036CbD53842c5426634e7929541eC2318f3dCF7e' as const;
 
 describe.skipIf(process.env.NEVERMINED_REGISTER_DOCUMENT !== '1')(
-  'SUN-0900B checkpoint 2B — document_evidence_json.v1 registration (registration-only, no payment)',
+  'SUN-0900B checkpoint 2F — document_evidence_json.v1 registration (registration-only, no payment)',
   () => {
     it('reconciles first; registers exactly once only if genuinely absent; reads back and verifies', async () => {
       const apiKey = process.env.NVM_API_KEY;
@@ -70,7 +60,7 @@ describe.skipIf(process.env.NEVERMINED_REGISTER_DOCUMENT !== '1')(
       expect(declaration.plan.siteborne_payment_semantics).toBe('upto');
 
       const agentName = declaration.agent.title;
-      const planName = `${declaration.agent.title} — PAYG plan`;
+      const planName = DOCUMENT_DYNAMIC_PLAN_REQUIREMENTS.plan_name;
 
       // ---------------------------------------------------------------
       // Reconcile FIRST. Never register from a single failed read —
@@ -118,7 +108,7 @@ describe.skipIf(process.env.NEVERMINED_REGISTER_DOCUMENT !== '1')(
         },
       };
 
-      const reconciliation = await reconcileNeverminedRegistration(registryClient, {
+      let reconciliation = await reconcileNeverminedRegistration(registryClient, {
         agentName,
         planName,
       });
@@ -131,17 +121,41 @@ describe.skipIf(process.env.NEVERMINED_REGISTER_DOCUMENT !== '1')(
       let planId: string;
 
       if (reconciliation.state === 'existing') {
-        agentId = reconciliation.agentId;
-        planId = reconciliation.planId;
-        // eslint-disable-next-line no-console
-        console.log('Document agent/plan already exists — reusing, NOT registering a second time.');
-      } else if (reconciliation.state === 'absent') {
-        const priceConfig = await builder.plans.getPayAsYouGoPriceConfig(
-          BigInt(declaration.plan.gross_buyer_amount_atomic),
-          SELLER_ADDRESS,
-          BASE_SEPOLIA_USDC
+        const readAgent = (await builder.agents.getAgent(
+          reconciliation.agentId
+        )) as NeverminedAgentReadback;
+        const readPlan = (await builder.plans.getPlan(
+          reconciliation.planId
+        )) as NeverminedPlanReadback;
+        const exactExisting = reconcileNeverminedDocumentDynamicRegistration(
+          reconciliation,
+          readAgent,
+          readPlan
         );
-        const creditsConfig = builder.plans.getPayAsYouGoCreditsConfig();
+        if (exactExisting.state !== 'EXACT_EXISTING') {
+          const detail =
+            exactExisting.state === 'CONFLICT' ? exactExisting.reason : exactExisting.state;
+          throw new Error(
+            `document registration: identity matched but authoritative read-back conflicted (${detail})`
+          );
+        }
+        agentId = exactExisting.agentId;
+        planId = exactExisting.planId;
+        // eslint-disable-next-line no-console
+        console.log('Document agent/plan is EXACT_EXISTING — reusing, NOT registering again.');
+      } else if (reconciliation.state === 'absent') {
+        const noMatch = reconcileNeverminedDocumentDynamicRegistration(reconciliation);
+        expect(noMatch).toEqual({ state: 'NO_MATCH' });
+        const priceConfig = builder.plans.getERC20PriceConfig(
+          DOCUMENT_DYNAMIC_PLAN_REQUIREMENTS.gross_price_atomic,
+          BASE_SEPOLIA_USDC,
+          SELLER_ADDRESS
+        );
+        const creditsConfig = builder.plans.getDynamicCreditsConfig(
+          DOCUMENT_DYNAMIC_PLAN_REQUIREMENTS.credits_granted,
+          DOCUMENT_DYNAMIC_PLAN_REQUIREMENTS.min_redemption,
+          DOCUMENT_DYNAMIC_PLAN_REQUIREMENTS.max_redemption
+        );
         const registered = await builder.agents.registerAgentAndPlan(
           { name: declaration.agent.title, description: declaration.agent.description },
           { endpoints: [{ POST: `https://utility.siteborne.net${declaration.agent.endpoint}` }] },
@@ -150,10 +164,43 @@ describe.skipIf(process.env.NEVERMINED_REGISTER_DOCUMENT !== '1')(
           creditsConfig,
           'credits'
         );
-        agentId = registered.agentId;
-        planId = registered.planId;
         // eslint-disable-next-line no-console
         console.log('Document agent/plan registered (sanitized): registration_performed=true');
+
+        // Registration is eventually consistent. Reconcile the exact
+        // returned IDs over the same bounded schedule, then validate the
+        // authoritative full read-back before declaring success.
+        reconciliation = await reconcileNeverminedRegistration(registryClient, {
+          agentName,
+          planName,
+          knownAgentId: registered.agentId,
+          knownPlanId: registered.planId,
+        });
+        if (reconciliation.state !== 'existing') {
+          throw new Error(
+            `document registration: post-registration reconciliation was ${reconciliation.state}; refusing ambiguous state`
+          );
+        }
+        const readAgent = (await builder.agents.getAgent(
+          reconciliation.agentId
+        )) as NeverminedAgentReadback;
+        const readPlan = (await builder.plans.getPlan(
+          reconciliation.planId
+        )) as NeverminedPlanReadback;
+        const exactRegistered = reconcileNeverminedDocumentDynamicRegistration(
+          reconciliation,
+          readAgent,
+          readPlan
+        );
+        if (exactRegistered.state !== 'EXACT_EXISTING') {
+          const detail =
+            exactRegistered.state === 'CONFLICT' ? exactRegistered.reason : exactRegistered.state;
+          throw new Error(
+            `document registration: persisted authoritative read-back conflicted (${detail})`
+          );
+        }
+        agentId = exactRegistered.agentId;
+        planId = exactRegistered.planId;
       } else {
         throw new Error(
           `document registration: reconciliation did not resolve to 'existing' or 'absent' (got "${reconciliation.state}") — refusing to guess. Never register when reconciliation reports partial/conflicting/timeout state.`
@@ -168,24 +215,14 @@ describe.skipIf(process.env.NEVERMINED_REGISTER_DOCUMENT !== '1')(
       // predicted — never merely trust the registration call's own
       // return value.
       // ---------------------------------------------------------------
-      const readAgent = (await builder.agents.getAgent(agentId)) as {
-        metadata?: { main?: { name?: string } };
-        endpoints?: unknown;
-      };
-      const readPlan = (await builder.plans.getPlan(planId)) as {
-        metadata?: { main?: { name?: string } };
-        price?: { amounts?: bigint[] | string[]; receivers?: string[]; tokenAddress?: string };
-        credits?: { isRedemptionAmountFixed?: boolean };
-        isTrialPlan?: boolean;
-      };
-      const agentPlansResult = await builder.agents.getAgentPlans(agentId);
-      const linkedPlanIds: string[] = Array.isArray(agentPlansResult)
-        ? (agentPlansResult as { id?: string; planId?: string }[])
-            .map((p) => p.id ?? p.planId)
-            .filter((x): x is string => Boolean(x))
-        : ((agentPlansResult?.plans ?? []) as { id?: string; planId?: string }[])
-            .map((p) => p.id ?? p.planId)
-            .filter((x): x is string => Boolean(x));
+      const readAgent = (await builder.agents.getAgent(agentId)) as NeverminedAgentReadback;
+      const readPlan = (await builder.plans.getPlan(planId)) as NeverminedPlanReadback;
+      const finalValidation = reconcileNeverminedDocumentDynamicRegistration(
+        { state: 'existing', agentId, planId, registeredThisCall: false },
+        readAgent,
+        readPlan
+      );
+      expect(finalValidation).toEqual({ state: 'EXACT_EXISTING', agentId, planId });
 
       // eslint-disable-next-line no-console
       console.log('Read-back (sanitized):', {
@@ -193,26 +230,20 @@ describe.skipIf(process.env.NEVERMINED_REGISTER_DOCUMENT !== '1')(
         agent_name: readAgent?.metadata?.main?.name,
         plan_id: planId,
         plan_name: readPlan?.metadata?.main?.name,
-        plan_amounts: readPlan?.price?.amounts?.map((a) => String(a)),
-        plan_receivers: readPlan?.price?.receivers,
-        plan_token: readPlan?.price?.tokenAddress,
-        plan_is_redemption_fixed: readPlan?.credits?.isRedemptionAmountFixed,
-        plan_is_trial: readPlan?.isTrialPlan,
-        agent_plan_linkage_includes_plan: linkedPlanIds.includes(planId),
+        plan_amounts: readPlan.registry?.price?.amounts?.map((a) => String(a)),
+        plan_receivers: readPlan.registry?.price?.receivers,
+        plan_token: readPlan.registry?.price?.tokenAddress,
+        credits_amount: String(readPlan.registry?.credits?.amount),
+        credits_min: String(readPlan.registry?.credits?.minAmount),
+        credits_max: String(readPlan.registry?.credits?.maxAmount),
+        plan_is_redemption_fixed: readPlan.registry?.credits?.isRedemptionAmountFixed,
+        plan_is_trial: readPlan.metadata?.plan?.isTrialPlan,
+        agent_plan_linkage_includes_plan: readAgent.registry?.plans?.includes(planId),
       });
 
       expect(readAgent?.metadata?.main?.name).toBe(agentName);
       expect(readPlan?.metadata?.main?.name).toBe(planName);
-      expect(linkedPlanIds).toContain(planId);
-      const totalAmounts = (readPlan?.price?.amounts ?? []).reduce(
-        (sum: bigint, a: string | bigint) => sum + BigInt(a),
-        0n
-      );
-      expect(totalAmounts).toBe(BigInt(declaration.plan.gross_buyer_amount_atomic));
-      expect(readPlan?.price?.receivers?.[0]).toBe(SELLER_ADDRESS);
-      expect(readPlan?.price?.tokenAddress?.toLowerCase()).toBe(BASE_SEPOLIA_USDC.toLowerCase());
-      expect(readPlan?.credits?.isRedemptionAmountFixed).toBe(false);
-      expect(readPlan?.isTrialPlan).not.toBe(true);
+      expect(readAgent.registry?.plans).toEqual([planId]);
 
       // eslint-disable-next-line no-console
       console.log(

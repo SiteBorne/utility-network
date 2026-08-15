@@ -25,14 +25,14 @@ describe('four canonical Nevermined declarations', () => {
     expect(NEVERMINED_DECLARATIONS[id].plan.gross_buyer_amount_atomic).toBe(amount);
   });
 
-  it('models document maximum and measured tiers without claiming registration is allowed (SUN-0900B checkpoint 2B: DYNAMIC_UNIT_MAPPING_UNPROVEN — on-chain evidence covers actual===price only, never actual<price)', () => {
+  it('models the accepted prepaid dynamic document registration while keeping live capability unproven', () => {
     const document = NEVERMINED_DECLARATIONS['document_evidence_json.v1'];
     expect(document.plan).toMatchObject({
       siteborne_payment_semantics: 'upto',
       gross_buyer_amount_atomic: '190000',
       dynamic_actual_settlement_required: true,
       sandbox_capability_verified: false,
-      registration_allowed: false,
+      registration_allowed: true,
       actual_tiers_atomic: { native: '12000', ocr: '19000', table: '29000' },
     });
   });
@@ -48,7 +48,7 @@ describe('four canonical Nevermined declarations', () => {
     }
   });
 
-  it('the document declaration (registration_allowed=false) validates as-is', () => {
+  it('the document declaration (registration_allowed=true) validates as-is', () => {
     expect(
       validateNeverminedDeclaration(NEVERMINED_DECLARATIONS['document_evidence_json.v1'])
     ).toEqual({
@@ -56,7 +56,7 @@ describe('four canonical Nevermined declarations', () => {
     });
   });
 
-  it('validator would allow an upto plan marked registration_allowed ONLY when dynamic_actual_settlement_required is also explicitly true (documents the shape a future, evidence-backed flip must take)', () => {
+  it('allows an upto plan marked registration_allowed only when dynamic accounting is explicit', () => {
     const document = NEVERMINED_DECLARATIONS['document_evidence_json.v1'];
     expect(
       validateNeverminedDeclaration({

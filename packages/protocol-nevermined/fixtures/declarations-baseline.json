@@ -23,7 +23,7 @@
       "payment_semantics": "upto",
       "gross_buyer_amount_atomic": "190000",
       "dynamic_actual_settlement_required": true,
-      "registration_allowed": false,
+      "registration_allowed": true,
       "actual_tiers_atomic": {
         "native": "12000",
         "ocr": "19000",

@@ -44,12 +44,12 @@ accepts a supplied config record and never reads `process.env` itself.
 Each service has one local agent identity and one positive-price, non-trial PAYG
 plan declaration. No upstream registration is performed.
 
-| Service                     | Semantics           | Gross buyer amount (USDC atomic) | Registration state                  |
-| --------------------------- | ------------------- | -------------------------------: | ----------------------------------- |
-| `company_evidence_graph.v1` | exact               |                            39000 | locally eligible; not registered    |
-| `web_context_verified.v1`   | exact               |                             9000 | locally eligible; not registered    |
-| `document_evidence_json.v1` | upto / actual usage |                   190000 maximum | prohibited pending capability proof |
-| `verify_agent_output.v1`    | exact               |                            19000 | locally eligible; not registered    |
+| Service                     | Semantics               | Gross buyer amount (USDC atomic) | Registration state                 |
+| --------------------------- | ----------------------- | -------------------------------: | ---------------------------------- |
+| `company_evidence_graph.v1` | exact                   |                            39000 | locally eligible; not registered   |
+| `web_context_verified.v1`   | exact                   |                             9000 | locally eligible; not registered   |
+| `document_evidence_json.v1` | prepaid dynamic credits |                      190000 pool | validator-approved; not registered |
+| `verify_agent_output.v1`    | exact                   |                            19000 | locally eligible; not registered   |
 
 Amounts are derived through `@siteborne/pricing` from
 `governance/RISK_LIMITS.yaml`; they are not independent Nevermined constants.
@@ -57,14 +57,17 @@ The amount is the canonical gross buyer amount. Eventual Nevermined provider net
 proceeds/platform split is a distinct registration-time concern and is not
 invented here.
 
-The document declaration also binds actual modes of 12000/native page, 19000/OCR
-page, and 29000/table page. It states
+The document declaration also binds usage-value modes of 12000/native page,
+19000/OCR page, and 29000/table page. Checkpoint 2E accepted the Nevermined
+prepaid dynamic-credit model; Checkpoint 2F added an authoritative read-back
+validator for a 190000-atomic purchase granting 190000 credits with variable
+12000..190000 redemption. It now states
 `dynamic_actual_settlement_required: true`,
-`sandbox_capability_verified: false`, and `registration_allowed: false`.
-Deterministic tests prove a 12000 actual charge is sent to the settlement
-adapter under a 190000 authorization ceiling and that over-authorization fails
-without settlement. This is a local contract proof, not evidence that the
-Nevermined sandbox supports post-execution dynamic settlement.
+`sandbox_capability_verified: false`, and `registration_allowed: true`.
+Registration permission means only that one exact, reconcile-first registration
+attempt is structurally safe. It is not evidence that the document plan has been
+registered or that its live lifecycle, replay, or partial-balance top-up
+behavior has passed.
 
 Free, zero-price, credit-trial, and time-trial declarations fail policy
 validation. SITEBORNE does not create a free test plan.

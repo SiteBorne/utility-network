@@ -100,39 +100,16 @@ function buildDeclaration(serviceId: SiteborneServiceId): NeverminedServiceDecla
       // still unproven for every service; stays false until that live
       // proof exists.
       //
-      // `registration_allowed` for the document plan stays FALSE, now
-      // DEFINITIVELY (SUN-0900B checkpoint 2B differential probe, not
-      // merely unproven). A controlled sandbox experiment reused the
-      // already-registered web_context_verified.v1 plan (9000 atomic
-      // USDC price) and its exact getPayAsYouGoPriceConfig +
-      // getPayAsYouGoCreditsConfig() helper pair — verified maxAmount
-      // 9000 (the plan's own ceiling), then deliberately settled
-      // maxAmount 1000 (strictly less than the price) exactly once. The
-      // real on-chain Base Sepolia result
-      // (0x59a8bd0b7567e7cf3cc2489c539e41083ba424bd87d1b2920d539eebcd96
-      // 69d7) transferred 9000 atomic USDC gross (split 8910/90, byte-
-      // identical to the plan's fixed price), NOT the requested 1000 —
-      // proving `settlePermissions({maxAmount})` did NOT control the
-      // actual on-chain charge for THIS PROBED CONFIGURATION — the
-      // plan's registered price dominated regardless of the requested
-      // settle-time maxAmount. Classification:
-      // PAYG_ACTUAL_BELOW_PRICE_UNSUPPORTED_FOR_PROBED_CONFIGURATION
-      // (narrower, evidence-scoped — this does NOT generalize to "all
-      // PAYG plans always charge their registered price under every
-      // configuration," only to the specific getPayAsYouGoPriceConfig +
-      // getPayAsYouGoCreditsConfig() pairing actually tested). Using
-      // that same probed pairing for a document plan at a 190000 price
-      // is forbidden regardless: it has positive evidence that
-      // actual=12000 would not reliably control the monetary charge —
-      // exactly the economic misrepresentation this checkpoint exists
-      // to prevent. SUN-0900B checkpoint 2C traces the SDK's separate
-      // `getDynamicCreditsConfig(creditsGranted, min, max)` helper
-      // (+ `registerCreditsPlan`/`registerPlan`) as a distinct
-      // candidate — statically only, no further live mutation yet. See
-      // docs/reports/SUN-0900B-checkpoint-2b-unit-economics-report.md
-      // and docs/reports/SUN-0900B-checkpoint-2c-dynamic-credits-mechanism-report.md.
+      // Checkpoint 2F permits one exact document registration only after
+      // authoritative GET read-back passes the credential-independent
+      // dynamic-plan validator. The accepted shape is a prepaid pool:
+      // 190000 atomic USDC acquires 190000 credits, with 12000..190000
+      // variable redemption. This is deliberately not the disproven
+      // PAYG 1/1/1 configuration. Registration permission is not a live
+      // capability claim: the real document lifecycle, partial-balance
+      // top-up behavior, and replay still require a later sandbox proof.
       sandbox_capability_verified: false,
-      registration_allowed: !document,
+      registration_allowed: true,
       ...(document
         ? {
             actual_tiers_atomic: {

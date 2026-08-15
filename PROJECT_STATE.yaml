@@ -15,7 +15,7 @@ execution:
   last_completed_increment: 'SUN-0900A'
   frontier_status: 'executable'
   blocked_on: []
-  reason: 'SUN-0900B is active for a controlled Nevermined sandbox self-test after sandbox builder/subscriber authentication, payer/payee separation, Base Sepolia nvm:erc4337 capability discovery, rotated credential confirmation, and a 20 USDC subscriber smart-account funding proof. Checkpoint 1 is limited to one fixed web_context_verified.v1 PAYG registration and one verify/settle/replay proof. Dynamic document proof and the remaining registrations are not authorized in this checkpoint. Production remains disabled and not ready.'
+  reason: 'SUN-0900B remains active. Checkpoint 2F completed the credential-independent, fail-closed validator for the accepted Nevermined prepaid dynamic-credit document plan, so exactly one guarded document registration attempt is now structurally permitted. No document registration or lifecycle call occurred; sandbox_capability_verified and dynamic_live_allowed remain false pending authoritative registration read-back plus the real document credit-burn/replay/partial-balance matrix. Production remains disabled and not ready.'
 
 implemented:
   - 'governance_validation'
