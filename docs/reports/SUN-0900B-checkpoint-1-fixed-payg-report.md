@@ -1008,3 +1008,81 @@ The next live run, whenever authorized, is the first to run against every fix
 this checkpoint's incidents have produced: correct explicit-vs-ambiguous
 settlement classification, durable non-temporary storage, and correct
 already-consumed replay reconstruction.
+
+## Payment #4 attempt — new external failure, zero mutation, not accepted
+
+**Outcome: the live run failed before any payment lifecycle began. No
+Payment-Identifier was ever acquired; the persistent live D1 directory itself
+worked correctly (real proof of the new storage design) but simply has nothing
+to recover, because nothing was ever created.**
+
+**Pre-flight (all real, all confirmed, zero mutation):** registration reconciled
+`existing` — agent/plan linkage, PAYG, non-trial, `scheme=nvm:erc4337`,
+`network=84532`, economics matching exactly (`8910+90=9000`, correct receivers,
+correct token) via a direct read of `payments.plans.getPlan`. Payer balance
+`19,973,000` atomic USDC (≫ the required `9000`). Persistent live D1 resolved to
+`/Users/meta4ickal/.local/share/siteborne/live-d1/sun-0900b-checkpoint1` —
+confirmed empty and freshly created (`0700`, first use of this location, zero
+prior attempts, zero unfinished/recoverable state by construction). Delegation
+reconciliation: zero currently accessible delegations
+(`listDelegations({ accessible: true })` → `[]`) — only the three known
+historical exhausted ones exist — classified `no_match`, independently confirmed
+before the live command and again by the live test's own internal reconciliation
+log.
+
+**The failure.** The live test's own delegation-creation step
+(`subscriber.delegation.createDelegation({ provider: 'erc4337', ... })`) failed
+with `PaymentsError: Failed to create delegation (HTTP 412)`. This happened
+entirely inside the test's `beforeAll`, before the `it()` block that drives the
+actual PAYMENT-SIGNATURE/D1-acquire/verify/execute/settle HTTP flow ever ran —
+so no Payment-Identifier, no `payment_attempts` row, no `Job`, nothing
+payment-shaped was ever created locally.
+
+**Confirmed, read-only, that zero external mutation occurred:**
+`listDelegations({})` immediately afterward still shows exactly the same three
+historical delegations (`aafdab51-...`, `6a4979a9-...`, `eaa3929b-...`) — no
+fourth delegation exists. `listPaymentMethods`/`getPurchasingPower` confirm the
+erc4337 wallet payment method is still `Active`, `totalRemainingBudgetCents: 0`
+(no active delegation, consistent with the create having genuinely failed rather
+than silently succeeding). The persistent D1 database itself was inspected
+directly: `payment_attempts` and `jobs` are both empty (`0` rows); `services` is
+correctly seeded (proof migrations + seeding ran successfully against the new
+persistent path). This is not a `PAID_EXTERNAL_NOT_CONSUMED_LOCAL` incident like
+#1-#3 — there is nothing local to be inconsistent with, because there is nothing
+external to reconcile against either. It is a clean, safe, pre-mutation external
+API rejection.
+
+**Root cause: not yet diagnosed.** `HTTP 412 Precondition Failed` on
+`createDelegation` is a new failure mode, distinct from all three prior
+incidents (which all occurred at or after `settlePermissions`, not at delegation
+creation). The SDK's own error surfacing includes a `hint` field when the
+backend supplies one; none was present here, so the specific failed precondition
+is not yet known from this attempt alone. Candidate causes not yet ruled in or
+out: a sandbox-side policy change (e.g. a cap on distinct delegations per
+wallet, now at 3 exhausted + this attempt), a transient backend issue, a changed
+required field/shape in the `createDelegation` payload versus what `1.10.0`
+sends, or an unrelated sandbox outage. Diagnosing this further requires either a
+Nevermined-side status/support check or a subsequent, separately-authorized live
+attempt with response-body capture added — not performed in this turn, per the
+explicit "no blind rerun" instruction.
+
+**Per the directive's explicit rule, the live command was not run a second time
+this turn.** `RUN_LIVE_NEVERMINED` confirmed cleared (`MISSING`) immediately
+after, in this shell and in every persistent location checked (`~/.zshenv`
+absent; `~/.config/siteborne/nevermined-sandbox.env` present but unmodified,
+contains only `NVM_ENVIRONMENT=sandbox`). Full regression (`nevermined:check`,
+`x402:check`, `mcp:check`, `a2a:check`, `governance:validate`, `state:validate`,
+`tasks:validate`, `secrets:scan`, full `pnpm check`) all exit 0 with both live
+flags absent.
+
+**Checkpoint 1B fixed-PAYG live acceptance is not granted this turn.** Zero new
+real settlements were made. SUN-0900B remains active, not accepted. Production
+remains false. All three historical incidents (#1-#3) remain exactly as
+previously classified, distinct from this attempt. The persistent live D1
+location and the replay-reconstruction fix from `cfe3614` remain unexercised by
+a real payment lifecycle — this attempt never reached far enough to test either
+— so their validity against a real run is still only proven by the
+credential-free reproduction tests, not yet by a live payment. The next attempt,
+whenever separately authorized, should capture the raw `createDelegation`
+response body/status detail before deciding whether a retry, a payload change,
+or an operator-side Nevermined check is needed.
