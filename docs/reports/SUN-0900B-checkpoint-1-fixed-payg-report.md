@@ -1038,7 +1038,14 @@ actual PAYMENT-SIGNATURE/D1-acquire/verify/execute/settle HTTP flow ever ran —
 so no Payment-Identifier, no `payment_attempts` row, no `Job`, nothing
 payment-shaped was ever created locally.
 
-**Confirmed, read-only, that zero external mutation occurred:**
+**Correction:** one mutating request (`POST createDelegation`) was genuinely
+attempted — the server rejected it before creating anything.
+`MUTATION_REQUEST_ATTEMPTED=true`, `SUCCESSFUL_EXTERNAL_MUTATION=0`,
+`PAYMENT_LIFECYCLE_STARTED=false`, `REAL_SETTLEMENTS_THIS_ATTEMPT=0`. "Zero
+external mutation" (as originally written below) undersold this — the correct
+statement is **zero successful external mutation**.
+
+**Confirmed, read-only, that zero successful external mutation occurred:**
 `listDelegations({})` immediately afterward still shows exactly the same three
 historical delegations (`aafdab51-...`, `6a4979a9-...`, `eaa3929b-...`) — no
 fourth delegation exists. `listPaymentMethods`/`getPurchasingPower` confirm the
@@ -1086,3 +1093,119 @@ credential-free reproduction tests, not yet by a live payment. The next attempt,
 whenever separately authorized, should capture the raw `createDelegation`
 response body/status detail before deciding whether a retry, a payload change,
 or an operator-side Nevermined check is needed.
+
+## HTTP 412 precondition diagnosis (read-only/local inspection only)
+
+**No `createDelegation` call, no new delegation, no token, no verify, no service
+execution, no settlement, no paid HTTP request was made this turn.**
+`RUN_LIVE_NEVERMINED` was never set. Everything below is inspection of
+already-existing local evidence, the installed SDK's source, read-only
+Nevermined GET-shaped calls (`listPaymentMethods`, `getPurchasingPower`,
+`listDelegations`), and Nevermined's own public documentation.
+
+**Original 412 response body: `ORIGINAL_412_BODY_NOT_RETAINED`.** The captured
+log records only `PaymentsError: Failed to create delegation (HTTP 412)` — the
+SDK's own generic default message, not a server-supplied one.
+
+**Installed SDK's non-2xx handling** (`@nevermined-io/payments@1.10.0`'s
+`DelegationAPI.fetchJSON`, read directly): on a non-2xx response, it attempts
+`response.json()`; if that succeeds AND the body has a `.message` field, that
+replaces the generic default; if it has a `.code` field, that becomes
+`PaymentsError.code` (a real, accessible property — `this.code = code` in the
+`PaymentsError` constructor); if it has `.hint`, that's appended to the message
+text. `retryable`/`category`/`correlationId` — fields Nevermined's current
+public error catalogue documents as optional envelope fields — are **not**
+extracted by this SDK version at all; even a fully-conformant server response
+would lose those three at this layer, unconditionally, for every caller.
+
+**Signal from what WAS captured:** the message stayed the generic default
+(`"Failed to create delegation"`), not a substituted server message. Per the
+SDK's own logic, that only happens when `response.json()` either throws
+(non-JSON or empty body) or succeeds with no `.message` field. This is a
+genuine, evidentiary reason **not** to treat the legal-consent hypothesis as
+confirmed from this log alone: had the server returned Nevermined's documented
+`BCK.LEGAL_DOCS.0004` envelope
+(`{code, message: "Legal consent is required for the current document versions", hint: "..."}`
+— confirmed verbatim from Nevermined's own current public docs,
+`nevermined.ai/docs/development-guide/api-errors/codes`), the SDK would very
+likely have surfaced that exact message text in the log, and it didn't. It does
+**not** rule the hypothesis out either — an intermediate proxy/gateway 412, a
+non-JSON error page, or a differently-shaped body would produce the same generic
+default regardless of the true underlying cause.
+
+**Credential role check:** confirmed correct.
+`apps/edge-api/tests/live/nevermined-live-exact.test.ts` calls
+`subscriber.delegation.createDelegation(...)`, where
+`subscriber = Payments.getInstance({ nvmApiKey: process.env.NVM_SUBSCRIBER_API_KEY! })`
+— never the builder credential (`NVM_API_KEY`). No
+`SITEBORNE_ROLE_WIRING_DEFECT`.
+
+**Request-shape comparison against Nevermined's current documented contract**
+(`nevermined.ai/docs/api-reference/delegation/create-delegation`): SITEBORNE
+sent exactly
+`{ provider: 'erc4337', spendingLimitCents: 1, durationSecs: 3600, currency: 'usdc', planId }`
+— every field the current docs list as required (`provider`,
+`spendingLimitCents`, `durationSecs`, `currency`) plus the documented-optional
+`planId` (bind to the authoritative plan). `providerPaymentMethodId` was
+correctly omitted (docs: "ignored for erc4337"). Nothing sent falls outside the
+current contract — no `REQUEST_CONTRACT_DEFECT` found. This also weighs against
+the two documented 400-class delegation-validation codes (`BCK.DELEGATION.0004`
+"required input missing", `BCK.DELEGATION.0003` "unknown provider") — both
+require a malformed request, which this wasn't, and both are HTTP 400, not 412,
+anyway.
+
+**Read-only wallet/purchasing-power reconfirmation (unchanged from the attempt
+itself):** `listPaymentMethods({ accessible: true })` still shows exactly one
+entry, the erc4337 smart-account wallet, `status: "Active"`.
+`getPurchasingPower()` shows `delegations: []`, `totalRemainingBudgetCents: 0`.
+`listDelegations({})` still shows exactly the same 3 historical delegations,
+`totalResults: 3` — no fourth. No credential-capability restriction is evident
+from what's readable here (an OAuth-scope restriction, if present, isn't
+distinguishable from this API surface without attempting the mutation again,
+which this turn does not do).
+
+**Final primary classification: `F. UNKNOWN_412_BODY_NOT_RETAINED`.** The
+legal-consent hypothesis (`BCK.LEGAL_DOCS.0004`) remains
+`LEGAL_CONSENT_PLAUSIBLE_NOT_PROVEN` — plausible (412 is the only documented
+Nevermined-catalogue code at that status, and it's exactly the kind of
+account-level precondition an otherwise-correct, previously-working request
+could newly trip), but not confirmed, and the one piece of local evidence
+available (the un-substituted generic message) argues mildly against a clean
+JSON match rather than for it. `SITEBORNE_ROLE_WIRING_DEFECT` and
+`REQUEST_CONTRACT_DEFECT` are both ruled out by direct inspection.
+
+**No SITEBORNE code defect identified.** No operator action is prescribed by
+this turn's evidence with certainty — the legal-consent-acceptance step the
+operator described (signing into the Nevermined sandbox UI as the subscriber
+account and accepting current legal documents) is a reasonable and low-risk
+thing to do before the next attempt regardless of whether it turns out to be the
+actual cause, since it is not a SITEBORNE-side action and cannot make anything
+worse; whether it was in fact the cause will only be provable retroactively (the
+next attempt succeeding, or — if the diagnostic hardening below is exercised —
+the next attempt's captured `error.code` reading `BCK.LEGAL_DOCS.0004`
+explicitly).
+
+**Diagnostic-observability hardening (implemented, credential-safe,
+deterministic):** `apps/edge-api/tests/live/nevermined-live-exact.test.ts`'s
+`createDelegation` call is now wrapped in a `try/catch` that logs `error.code`
+and `error.message` (both Nevermined's own public error-catalogue values,
+confirmed never secret) via
+`console.error('SUN-0900B live createDelegation failure (sanitized):', { code, message })`
+before rethrowing — never touching credentials, authorization headers, tokens,
+or JWTs. A future failed attempt at this exact call site will no longer be
+`ORIGINAL_412_BODY_NOT_RETAINED`. No new dedicated unit test was added (the
+change is a diagnostic log statement inside the credential-gated live test
+itself, not independently unit-testable logic); typecheck and the live test's
+own collect-and-skip-with-flag-absent behavior were both verified unchanged.
+
+**Regression (code changed — diagnostic logging only):** `nevermined:check`,
+`x402:check`, `secrets:scan`, full `pnpm check` all exit 0.
+
+**Outcome: still not accepted.** `LEGAL_CONSENT_CONFIRMED` was not reached —
+only `LEGAL_CONSENT_PLAUSIBLE_NOT_PROVEN`. No code fix was applied (none was
+warranted — no defect was found). No live retry occurred. SUN-0900B remains
+active, not accepted. Production remains false. Recommended next step, unchanged
+from the operator's own plan: sign into Nevermined as the subscriber account and
+personally accept current legal documents, then authorize exactly one more live
+attempt (now with the diagnostic capture in place) behind a fresh read-only
+preflight.

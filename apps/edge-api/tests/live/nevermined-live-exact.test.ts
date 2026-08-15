@@ -60,7 +60,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Miniflare } from 'miniflare';
 import type { D1Database } from '@cloudflare/workers-types';
 import { Hono } from 'hono';
-import { Payments } from '@nevermined-io/payments';
+import { Payments, PaymentsError } from '@nevermined-io/payments';
 import {
   NEVERMINED_DECLARATIONS,
   NEVERMINED_ROUTES,
@@ -384,13 +384,38 @@ describe.skipIf(!RUN_LIVE)(
         // Guarded: only reachable when reconciliation positively found
         // zero erc4337 delegations at all — never merely because one
         // read failed. Subscriber credential only, never builder.
-        const created = await subscriber.delegation.createDelegation({
-          provider: 'erc4337',
-          spendingLimitCents: 1, // >= $0.009, least-privilege ceiling for one call
-          durationSecs: 3600,
-          currency: 'usdc',
-          planId, // scopes the delegation to the authoritative web plan
-        });
+        //
+        // Diagnostic-observability hardening (SUN-0900B checkpoint 1B,
+        // HTTP 412 precondition diagnosis): the installed SDK's
+        // `DelegationAPI.fetchJSON` DOES parse and preserve a non-2xx
+        // response's `code`/`message`/`hint` into the thrown
+        // `PaymentsError` (`.code`, folded `.message`) when the body is
+        // valid JSON — but a payment-attempt #4-class failure left only
+        // the generic default message in every log this repository
+        // captures, because nothing here ever read `error.code`
+        // separately. Both fields are Nevermined's own PUBLIC error-
+        // catalogue values (https://nevermined.ai/docs/development-guide/
+        // api-errors/codes) — never secret, safe to log — so a future
+        // failure here is diagnosable without another live attempt.
+        let created: Awaited<ReturnType<typeof subscriber.delegation.createDelegation>>;
+        try {
+          created = await subscriber.delegation.createDelegation({
+            provider: 'erc4337',
+            spendingLimitCents: 1, // >= $0.009, least-privilege ceiling for one call
+            durationSecs: 3600,
+            currency: 'usdc',
+            planId, // scopes the delegation to the authoritative web plan
+          });
+        } catch (e) {
+          if (e instanceof PaymentsError) {
+            // eslint-disable-next-line no-console
+            console.error('SUN-0900B live createDelegation failure (sanitized):', {
+              code: e.code,
+              message: e.message,
+            });
+          }
+          throw e;
+        }
         delegationId = created.delegationId;
       } else {
         throw new Error(
