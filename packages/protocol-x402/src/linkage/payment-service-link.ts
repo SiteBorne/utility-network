@@ -167,3 +167,32 @@ export async function extendWithSettlement(
       : common;
   return buildPaymentServiceLink(input);
 }
+
+export type PaymentServiceLinkVerification =
+  | { valid: true }
+  | { valid: false; reason: 'MALFORMED_LINK' | 'LINK_HASH_MISMATCH' | 'LINK_ID_MISMATCH' };
+
+/**
+ * Recomputes a PaymentServiceLink from its bound public fields and compares
+ * both its hash and deterministic ID. Callers use this after settlement
+ * evidence is appended and before a payment is marked consumed; possession of
+ * a link-shaped object is never treated as cryptographic self-verification.
+ */
+export async function verifyPaymentServiceLink(
+  link: PaymentServiceLink
+): Promise<PaymentServiceLinkVerification> {
+  const { link_id, link_hash, ...input } = link;
+  let rebuilt: PaymentServiceLink;
+  try {
+    rebuilt = await buildPaymentServiceLink(input);
+  } catch {
+    return { valid: false, reason: 'MALFORMED_LINK' };
+  }
+  if (rebuilt.link_hash !== link_hash) {
+    return { valid: false, reason: 'LINK_HASH_MISMATCH' };
+  }
+  if (rebuilt.link_id !== link_id) {
+    return { valid: false, reason: 'LINK_ID_MISMATCH' };
+  }
+  return { valid: true };
+}

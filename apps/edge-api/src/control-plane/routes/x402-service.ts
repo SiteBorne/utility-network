@@ -33,6 +33,7 @@ import {
   encodeNeverminedPaymentResponseHeaderSafe,
   parseNeverminedDelegationId,
   parseNeverminedPaymentIdentifier,
+  readNeverminedSettlementObservation,
   reconcileNeverminedSettlementForRecovery,
   validateNeverminedAccessToken,
   validateNeverminedPaymentRequired,
@@ -47,6 +48,7 @@ import type {
   PaymentEvidenceMode,
   PaymentEvidenceProvider,
   PaymentPayload,
+  PaymentServiceLink,
   PaymentSettlementContext,
   PaymentVerificationContext,
   PricingKey,
@@ -82,6 +84,7 @@ import {
   resolveServiceMaxPriceUsd,
   usdToAtomicUnits,
   validatePaymentPayloadStructure,
+  verifyPaymentServiceLink,
   UsageExceedsAuthorizationError,
 } from '@siteborne/protocol-x402';
 import type { D1Database } from '@cloudflare/workers-types';
@@ -103,6 +106,7 @@ export interface ExecutorOutcome {
     output_hash?: string;
     receipt_id?: string;
     receipt?: unknown;
+    verification?: unknown;
     failure?: { code: string; message: string };
   };
   /** Required when the route's scheme is `upto`: the atomic-unit actual
@@ -176,6 +180,13 @@ interface CachedResult {
   status: number;
   body: unknown;
   settleResponse: SettleResponse | NeverminedPaymentResponse;
+  durableEvidence?: {
+    usage_result?: UsageResult;
+    pcc?: unknown;
+    receipt?: unknown;
+    settlement_evidence: unknown;
+    payment_service_link: PaymentServiceLink;
+  };
 }
 
 /** Durably persisted (`X402ServiceResultRepository.createPending`)
@@ -194,10 +205,13 @@ interface PendingNeverminedSettlementDraft {
   output_hash: string;
   receipt_id: string;
   receipt_hash: string;
+  receipt: unknown;
+  pcc?: unknown;
   verification_evidence: { payer?: string };
   verification_evidence_hash: string;
   actual_amount: string;
   usage_result_hash?: string;
+  usage_result?: UsageResult;
   scheme: 'exact' | 'upto';
   authorized_maximum: string;
 }
@@ -1080,10 +1094,13 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
         output_hash: outcome.result.output_hash,
         receipt_id: outcome.result.receipt_id,
         receipt_hash: receiptHash,
+        receipt: outcome.result.receipt,
+        ...(outcome.result.verification !== undefined ? { pcc: outcome.result.verification } : {}),
         verification_evidence: { payer: verificationEvidence.payer },
         verification_evidence_hash: verificationEvidenceHash,
         actual_amount: actualAmount,
         ...(usageResultHash ? { usage_result_hash: usageResultHash } : {}),
+        ...(usageResult ? { usage_result: usageResult } : {}),
         scheme: config.scheme,
         authorized_maximum: stored.quote.amount,
       };
@@ -1166,23 +1183,23 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
       });
       return jsonError(c, 402, 'settlement_rejected', settleGate.reason);
     }
-    await transition(jobId, 'SETTLING', 'DELIVERED', 'SETTLEMENT_COMPLETE');
+    // External settlement is only the first half of finalization. The
+    // payment remains unconsumed until the rail-aware PaymentServiceLink is
+    // constructed, independently self-verified, and durably stored.
     if (rail === 'nevermined') {
-      await paymentAttempts.recordSettledExternal(
+      const recorded = await paymentAttempts.recordSettledExternal(
         paymentIdentifier,
         settlementEvidence.transaction_reference
       );
-      await paymentAttempts.transitionLifecycleStage(
-        paymentIdentifier,
-        'settled_external',
-        'link_verified'
-      );
-      await paymentAttempts.transitionLifecycleStage(paymentIdentifier, 'link_verified', 'settled');
-    } else {
-      await paymentAttempts.transitionLifecycleStage(paymentIdentifier, 'verified', 'settled');
+      if (recorded.status !== 'transitioned') {
+        return jsonError(
+          c,
+          500,
+          'repository_failure',
+          'failed to durably record settled_external before linkage'
+        );
+      }
     }
-    await paymentAttempts.markConsumed(paymentIdentifier);
-    await audit('payment_settled', { payment_identifier: paymentIdentifier });
 
     let link = await buildPaymentServiceLink({
       link_version: 2,
@@ -1209,6 +1226,14 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
     });
     const settlementEvidenceHash = await hashPaymentObject(settlementEvidence);
     link = await extendWithSettlement(link, settlementEvidenceHash);
+    const linkVerification = await verifyPaymentServiceLink(link);
+    if (!linkVerification.valid) {
+      await audit('payment_link_verification_failed', {
+        payment_identifier: paymentIdentifier,
+        reason: linkVerification.reason,
+      });
+      return jsonError(c, 500, 'payment_link_invalid', linkVerification.reason);
+    }
 
     const responseBody = {
       service_id: config.serviceId,
@@ -1222,6 +1247,8 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
         : {}),
     };
 
+    const neverminedObservation =
+      rail === 'nevermined' ? readNeverminedSettlementObservation(settlementEvidence) : null;
     const settleResponse: SettleResponse | NeverminedPaymentResponse =
       rail === 'nevermined'
         ? {
@@ -1229,7 +1256,11 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
             transaction: settlementEvidence.transaction_reference ?? 'fixture:settlement:unknown',
             network: config.network,
             ...(settlementEvidence.payer ? { payer: settlementEvidence.payer } : {}),
-            creditsRedeemed: actualAmount,
+            creditsRedeemed: neverminedObservation?.credits_redeemed ?? actualAmount,
+            ...(neverminedObservation?.remaining_balance !== null &&
+            neverminedObservation?.remaining_balance !== undefined
+              ? { remainingBalance: neverminedObservation.remaining_balance }
+              : {}),
           }
         : {
             success: true,
@@ -1240,19 +1271,64 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
             extra: { link_id: link.link_id, payment_identifier: paymentIdentifier },
           };
 
+    const durableEvidence: NonNullable<CachedResult['durableEvidence']> = {
+      ...(usageResult ? { usage_result: usageResult } : {}),
+      ...(outcome.result.verification !== undefined ? { pcc: outcome.result.verification } : {}),
+      receipt: outcome.result.receipt,
+      settlement_evidence: settlementEvidence,
+      payment_service_link: link,
+    };
+
     if (rail === 'nevermined') {
       // A pending draft row already exists for this job_id (written just
       // before the settle call above) — overwrite it with the final
       // result rather than a second INSERT.
-      await results.finalize(jobId, { status: 200, body: responseBody, settleResponse }, nowIso);
+      await results.finalize(
+        jobId,
+        { status: 200, body: responseBody, settleResponse, durableEvidence },
+        nowIso
+      );
     } else {
       await results.create(
         jobId,
         paymentIdentifier,
-        { status: 200, body: responseBody, settleResponse },
+        { status: 200, body: responseBody, settleResponse, durableEvidence },
         nowIso
       );
     }
+
+    if (rail === 'nevermined') {
+      const linkRecorded = await paymentAttempts.transitionLifecycleStage(
+        paymentIdentifier,
+        'settled_external',
+        'link_verified'
+      );
+      if (linkRecorded.status !== 'transitioned') {
+        return jsonError(c, 500, 'repository_failure', 'failed to record link_verified');
+      }
+      await audit('payment_link_verified', { payment_identifier: paymentIdentifier });
+      const settled = await paymentAttempts.transitionLifecycleStage(
+        paymentIdentifier,
+        'link_verified',
+        'settled'
+      );
+      if (settled.status !== 'transitioned') {
+        return jsonError(c, 500, 'repository_failure', 'failed to record settled lifecycle');
+      }
+    } else {
+      const settled = await paymentAttempts.transitionLifecycleStage(
+        paymentIdentifier,
+        'verified',
+        'settled'
+      );
+      if (settled.status !== 'transitioned') {
+        return jsonError(c, 500, 'repository_failure', 'failed to record settled lifecycle');
+      }
+      await audit('payment_link_verified', { payment_identifier: paymentIdentifier });
+    }
+    await paymentAttempts.markConsumed(paymentIdentifier);
+    await transition(jobId, 'SETTLING', 'DELIVERED', 'SETTLEMENT_COMPLETE');
+    await audit('payment_settled', { payment_identifier: paymentIdentifier });
     await audit('payment_consumed', { payment_identifier: paymentIdentifier, job_id: jobId });
 
     c.header(

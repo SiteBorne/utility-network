@@ -11,6 +11,8 @@ describe('Nevermined deterministic declaration baseline', () => {
       gross_buyer_amount_atomic: plan.gross_buyer_amount_atomic,
       dynamic_actual_settlement_required: plan.dynamic_actual_settlement_required,
       registration_allowed: plan.registration_allowed,
+      sandbox_capability_verified: plan.sandbox_capability_verified,
+      dynamic_live_allowed: plan.dynamic_live_allowed,
       ...(plan.actual_tiers_atomic ? { actual_tiers_atomic: plan.actual_tiers_atomic } : {}),
     }));
     expect(actual).toEqual(declarationBaseline.declarations);
@@ -23,7 +25,6 @@ describe('Nevermined deterministic declaration baseline', () => {
         asset: plan.asset,
         asset_decimals: plan.asset_decimals,
         pricing_source_version: plan.pricing_source_version,
-        sandbox_capability_verified: plan.sandbox_capability_verified,
         production_enabled: agent.production_enabled,
       }).toEqual(declarationBaseline.shared_plan_policy);
     }

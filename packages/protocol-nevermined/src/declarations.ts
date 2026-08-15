@@ -39,7 +39,8 @@ export interface NeverminedPlanDeclaration {
   provider_net_proceeds: 'resolved_by_nevermined_registration';
   pricing_source_version: string;
   dynamic_actual_settlement_required: boolean;
-  sandbox_capability_verified: false;
+  sandbox_capability_verified: boolean;
+  dynamic_live_allowed: boolean;
   registration_allowed: boolean;
   actual_tiers_atomic?: { native: string; ocr: string; table: string };
 }
@@ -95,10 +96,10 @@ function buildDeclaration(serviceId: SiteborneServiceId): NeverminedServiceDecla
       provider_net_proceeds: 'resolved_by_nevermined_registration',
       pricing_source_version: resolvePricingSourceVersion(),
       dynamic_actual_settlement_required: document,
-      // `sandbox_capability_verified` tracks the DYNAMIC SETTLEMENT itself
-      // (a real settle(actual) call with actual < authorized_maximum) —
-      // still unproven for every service; stays false until that live
-      // proof exists.
+      // The document values below are scoped to the frozen zero-credit native
+      // lifecycle proven in SUN-0900B checkpoint 2H. They do not claim that a
+      // positive-but-insufficient balance auto-tops up correctly, and they do
+      // not enable production. Fixed services do not use this dynamic gate.
       //
       // Checkpoint 2F permits one exact document registration only after
       // authoritative GET read-back passes the credential-independent
@@ -106,9 +107,11 @@ function buildDeclaration(serviceId: SiteborneServiceId): NeverminedServiceDecla
       // 190000 atomic USDC acquires 190000 credits, with 12000..190000
       // variable redemption. This is deliberately not the disproven
       // PAYG 1/1/1 configuration. Registration permission is not a live
-      // capability claim: the real document lifecycle, partial-balance
-      // top-up behavior, and replay still require a later sandbox proof.
-      sandbox_capability_verified: false,
+      // capability claim by itself. Checkpoint 2H separately proved the
+      // zero-credit native lifecycle and replay; partial-balance top-up
+      // behavior still requires its own sandbox proof.
+      sandbox_capability_verified: document,
+      dynamic_live_allowed: document,
       registration_allowed: true,
       ...(document
         ? {
@@ -162,6 +165,13 @@ export function validateNeverminedDeclaration(
     !fields.dynamic_actual_settlement_required
   ) {
     return { valid: false, reason: 'dynamic_document_registration_is_capability_gated' };
+  }
+  if (
+    fields.dynamic_live_allowed === true &&
+    (fields.sandbox_capability_verified !== true ||
+      fields.dynamic_actual_settlement_required !== true)
+  ) {
+    return { valid: false, reason: 'dynamic_live_requires_verified_dynamic_capability' };
   }
   return { valid: true };
 }

@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { buildPaymentServiceLink, extendWithSettlement } from './payment-service-link';
+import {
+  buildPaymentServiceLink,
+  extendWithSettlement,
+  verifyPaymentServiceLink,
+} from './payment-service-link';
 import type { PaymentServiceLinkInput } from './payment-service-link';
 import { CDP_PAYMENT_PROVIDER, NEVERMINED_PAYMENT_PROVIDER } from '../replay/binding';
 
@@ -153,6 +157,37 @@ describe('extendWithSettlement', () => {
       payment_provider: NEVERMINED_PAYMENT_PROVIDER,
       nevermined_agent_id: 'agent_company_v1',
       nevermined_plan_id: 'plan_company_payg_v1',
+    });
+  });
+});
+
+describe('verifyPaymentServiceLink', () => {
+  it('cryptographically self-verifies a complete Nevermined v2 link', async () => {
+    const base = await buildPaymentServiceLink({
+      ...baseInput(),
+      link_version: 2,
+      payment_rail: 'nevermined',
+      payment_provider: NEVERMINED_PAYMENT_PROVIDER,
+      nevermined_agent_id: 'agent_company_v1',
+      nevermined_plan_id: 'plan_company_payg_v1',
+    });
+    const complete = await extendWithSettlement(base, 'sha256:' + '8'.repeat(64));
+    expect(await verifyPaymentServiceLink(complete)).toEqual({ valid: true });
+  });
+
+  it.each([
+    ['link_hash', 'sha256:' + '0'.repeat(64)],
+    ['link_id', 'lnk_' + '0'.repeat(24)],
+    ['payment_identifier', 'pay_' + '9'.repeat(28)],
+    ['settlement_evidence_hash', 'sha256:' + '9'.repeat(64)],
+  ] as const)('rejects a post-build mutation of %s', async (field, value) => {
+    const complete = await extendWithSettlement(
+      await buildPaymentServiceLink(baseInput()),
+      'sha256:' + '8'.repeat(64)
+    );
+    expect(await verifyPaymentServiceLink({ ...complete, [field]: value })).toEqual({
+      valid: false,
+      reason: field === 'link_id' ? 'LINK_ID_MISMATCH' : 'LINK_HASH_MISMATCH',
     });
   });
 });

@@ -25,13 +25,14 @@ describe('four canonical Nevermined declarations', () => {
     expect(NEVERMINED_DECLARATIONS[id].plan.gross_buyer_amount_atomic).toBe(amount);
   });
 
-  it('models the accepted prepaid dynamic document registration while keeping live capability unproven', () => {
+  it('models the accepted prepaid dynamic document registration and frozen zero-credit live capability', () => {
     const document = NEVERMINED_DECLARATIONS['document_evidence_json.v1'];
     expect(document.plan).toMatchObject({
       siteborne_payment_semantics: 'upto',
       gross_buyer_amount_atomic: '190000',
       dynamic_actual_settlement_required: true,
-      sandbox_capability_verified: false,
+      sandbox_capability_verified: true,
+      dynamic_live_allowed: true,
       registration_allowed: true,
       actual_tiers_atomic: { native: '12000', ocr: '19000', table: '29000' },
     });
@@ -79,9 +80,25 @@ describe('four canonical Nevermined declarations', () => {
           ...document.plan,
           registration_allowed: true,
           dynamic_actual_settlement_required: false,
+          dynamic_live_allowed: false,
         },
       })
     ).toMatchObject({ valid: false, reason: 'dynamic_document_registration_is_capability_gated' });
+  });
+
+  it('rejects dynamic live enablement without both sandbox and dynamic-accounting proof', () => {
+    const document = NEVERMINED_DECLARATIONS['document_evidence_json.v1'];
+    for (const patch of [
+      { sandbox_capability_verified: false },
+      { dynamic_actual_settlement_required: false, registration_allowed: false },
+    ]) {
+      expect(
+        validateNeverminedDeclaration({
+          ...document,
+          plan: { ...document.plan, dynamic_live_allowed: true, ...patch },
+        })
+      ).toEqual({ valid: false, reason: 'dynamic_live_requires_verified_dynamic_capability' });
+    }
   });
 
   it('rejects free, zero-price, credits-trial, and time-trial declarations', () => {

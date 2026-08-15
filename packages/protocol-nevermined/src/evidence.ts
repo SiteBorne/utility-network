@@ -2,6 +2,53 @@ import { NEVERMINED_PAYMENT_PROVIDER, hashPaymentObject } from '@siteborne/proto
 import type { NeverminedSettlementResult, NeverminedVerificationResult } from './client';
 import { normalizeSettlementSuccess } from './validation';
 
+export interface NeverminedSettlementObservation {
+  credits_redeemed: string | null;
+  remaining_balance: string | null;
+  transaction: string;
+}
+
+export interface NeverminedSettlementEvidenceCarrier {
+  nevermined_settlement_observation: NeverminedSettlementObservation;
+}
+
+function optionalCanonicalAtomic(value: unknown): string | null | undefined {
+  if (value === undefined) return null;
+  return typeof value === 'string' && /^(0|[1-9][0-9]*)$/.test(value) ? value : undefined;
+}
+
+/**
+ * Reads the bounded public provider observation attached by the edge SDK
+ * adapter. Unknown or malformed extensions fail closed as `null`; callers
+ * never inspect raw SDK responses, authorization material, or free-form
+ * provider objects.
+ */
+export function readNeverminedSettlementObservation(
+  value: unknown
+): NeverminedSettlementObservation | null {
+  if (!value || typeof value !== 'object') return null;
+  const observation = (value as { nevermined_settlement_observation?: unknown })
+    .nevermined_settlement_observation;
+  if (!observation || typeof observation !== 'object' || Array.isArray(observation)) return null;
+  const v = observation as Record<string, unknown>;
+  const credits = optionalCanonicalAtomic(v.credits_redeemed);
+  const remaining = optionalCanonicalAtomic(v.remaining_balance);
+  if (
+    credits === undefined ||
+    remaining === undefined ||
+    typeof v.transaction !== 'string' ||
+    v.transaction.length === 0 ||
+    v.transaction.length > 256
+  ) {
+    return null;
+  }
+  return {
+    credits_redeemed: credits,
+    remaining_balance: remaining,
+    transaction: v.transaction,
+  };
+}
+
 export interface NeverminedEvidenceBinding {
   paymentIdentifier: string;
   agentId: string;

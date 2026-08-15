@@ -25,6 +25,7 @@ import {
   type NeverminedFacilitatorClient,
   type NeverminedSettlePermissionsInput,
   type NeverminedSettlementResult,
+  type NeverminedSettlementEvidenceCarrier,
   type NeverminedVerificationResult,
   type NeverminedVerifyPermissionsInput,
 } from '@siteborne/protocol-nevermined';
@@ -301,7 +302,7 @@ export class NeverminedPaymentEvidenceProvider implements PaymentEvidenceProvide
       result
     );
     this.requestIds.delete(context.payment_identifier);
-    return {
+    const evidence: ExternalSettlementEvidence & NeverminedSettlementEvidenceCarrier = {
       x402_version: 2,
       scheme: context.scheme,
       network: context.network,
@@ -325,6 +326,11 @@ export class NeverminedPaymentEvidenceProvider implements PaymentEvidenceProvide
       raw_evidence_hash: sanitized.evidence_hash,
       verification_evidence_hash,
       trust_class: trustClass(this.source, true),
+      nevermined_settlement_observation: {
+        credits_redeemed: result.creditsRedeemed ?? null,
+        remaining_balance: result.remainingBalance ?? null,
+        transaction: result.transaction,
+      },
       ...(context.usageResult
         ? {
             authorized_maximum: context.amount,
@@ -332,6 +338,7 @@ export class NeverminedPaymentEvidenceProvider implements PaymentEvidenceProvide
           }
         : {}),
     };
+    return evidence;
   }
 
   private async verificationFailure(

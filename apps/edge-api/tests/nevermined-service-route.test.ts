@@ -14,7 +14,11 @@ import {
   type NeverminedFacilitatorClient,
   type NeverminedPaymentRequired,
 } from '@siteborne/protocol-nevermined';
-import { generateSiteborneePaymentId } from '@siteborne/protocol-x402';
+import {
+  generateSiteborneePaymentId,
+  verifyPaymentServiceLink,
+  type PaymentServiceLink,
+} from '@siteborne/protocol-x402';
 import { NeverminedPaymentEvidenceProvider } from '../src/control-plane/evidence/nevermined-provider';
 import { buildNeverminedPaidServicesApp } from '../src/control-plane/routes/paid-services';
 import { buildPaidServicesApp } from '../src/control-plane/routes/paid-services';
@@ -87,7 +91,7 @@ function client(counters: { verify: number; settle: number }): NeverminedFacilit
         transaction: `fixture:settlement:${counters.settle}`,
         network: 'eip155:84532',
         creditsRedeemed: input.actualAmount,
-        remainingBalance: '988000',
+        remainingBalance: input.actualAmount === '12000' ? '178000' : '988000',
       };
     },
   };
@@ -251,11 +255,12 @@ describe('Nevermined alternative rail HTTP lifecycle', () => {
 
   it('authorizes document maximum 190000 but calculates and settles actual usage 12000', async () => {
     await challenge(app, NEVERMINED_ROUTES['document_evidence_json.v1'], DOCUMENT_INPUT);
+    const paymentIdentifier = generateSiteborneePaymentId();
     const response = await pay(
       app,
       NEVERMINED_ROUTES['document_evidence_json.v1'],
       DOCUMENT_INPUT,
-      generateSiteborneePaymentId()
+      paymentIdentifier
     );
     expect(response.status).toBe(200);
     const body = (await response.json()) as Record<string, unknown>;
@@ -264,6 +269,53 @@ describe('Nevermined alternative rail HTTP lifecycle', () => {
       response.headers.get('PAYMENT-RESPONSE') ?? ''
     );
     expect(decoded).toMatchObject({ ok: true, value: { creditsRedeemed: '12000' } });
+
+    const job = await db
+      .prepare('SELECT id FROM jobs WHERE idempotency_key = ?')
+      .bind(paymentIdentifier)
+      .first<{ id: string }>();
+    expect(job).toBeTruthy();
+    const persisted = await db
+      .prepare('SELECT result_json FROM x402_service_results WHERE job_id = ?')
+      .bind(job!.id)
+      .first<{ result_json: string }>();
+    const cached = JSON.parse(persisted!.result_json) as {
+      durableEvidence?: {
+        usage_result?: { actual_amount?: string; authorized_maximum?: string };
+        pcc?: unknown;
+        receipt?: unknown;
+        settlement_evidence?: Record<string, unknown>;
+        payment_service_link?: PaymentServiceLink;
+      };
+    };
+    expect(cached.durableEvidence).toMatchObject({
+      usage_result: { actual_amount: '12000', authorized_maximum: '190000' },
+      settlement_evidence: {
+        nevermined_settlement_observation: {
+          credits_redeemed: '12000',
+          remaining_balance: '178000',
+        },
+      },
+    });
+    expect(cached.durableEvidence?.pcc).toBeTruthy();
+    expect(cached.durableEvidence?.receipt).toBeTruthy();
+    expect(await verifyPaymentServiceLink(cached.durableEvidence!.payment_service_link!)).toEqual({
+      valid: true,
+    });
+
+    const lifecycleAudits = await db
+      .prepare(
+        `SELECT rowid, event_type FROM audit_events
+         WHERE json_extract(details, '$.payment_identifier') = ?
+         AND event_type IN ('payment_link_verified', 'payment_consumed')
+         ORDER BY rowid`
+      )
+      .bind(paymentIdentifier)
+      .all<{ rowid: number; event_type: string }>();
+    expect(lifecycleAudits.results?.map((row) => row.event_type)).toEqual([
+      'payment_link_verified',
+      'payment_consumed',
+    ]);
   });
 
   it('SUN-0900B checkpoint 2A: dynamic actual_amount (12000) is durably persisted BEFORE settlePermissions is called, and survives a rejected/ambiguous settle unchanged — never recomputed (dynamic PAYG matrix items G/H)', async () => {

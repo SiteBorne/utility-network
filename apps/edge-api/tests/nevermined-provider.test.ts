@@ -4,7 +4,10 @@ import type {
   PaymentSettlementContext,
   PaymentVerificationContext,
 } from '@siteborne/protocol-x402';
-import type { NeverminedFacilitatorClient } from '@siteborne/protocol-nevermined';
+import {
+  readNeverminedSettlementObservation,
+  type NeverminedFacilitatorClient,
+} from '@siteborne/protocol-nevermined';
 
 const sdk = vi.hoisted(() => ({
   getInstance: vi.fn(),
@@ -232,6 +235,13 @@ describe('NeverminedPaymentEvidenceProvider trust boundary', () => {
       usage_result_hash: SETTLE_CONTEXT.usageResult!.usage_result_hash,
       trust_class: 'external_verified',
     });
+    expect(readNeverminedSettlementObservation(evidence)).toEqual({
+      credits_redeemed: '12000',
+      remaining_balance: '988000',
+      transaction: '0x' + 'c'.repeat(64),
+    });
+    expect(JSON.stringify(evidence)).not.toContain(BASE_CONTEXT.authorizationContext.accessToken);
+    expect(JSON.stringify(evidence)).not.toContain('secret-never-serialized');
   });
 
   it('fails closed before settlement when actual usage exceeds authorization', async () => {
