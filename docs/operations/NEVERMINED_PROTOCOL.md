@@ -42,14 +42,15 @@ accepts a supplied config record and never reads `process.env` itself.
 ## Four local declarations
 
 Each service has one local agent identity and one positive-price, non-trial PAYG
-plan declaration. No upstream registration is performed.
+plan declaration. Declarations themselves perform no upstream registration; the
+registration state below records separately authorized sandbox checkpoints.
 
-| Service                     | Semantics               | Gross buyer amount (USDC atomic) | Registration state                 |
-| --------------------------- | ----------------------- | -------------------------------: | ---------------------------------- |
-| `company_evidence_graph.v1` | exact                   |                            39000 | locally eligible; not registered   |
-| `web_context_verified.v1`   | exact                   |                             9000 | locally eligible; not registered   |
-| `document_evidence_json.v1` | prepaid dynamic credits |                      190000 pool | validator-approved; not registered |
-| `verify_agent_output.v1`    | exact                   |                            19000 | locally eligible; not registered   |
+| Service                     | Semantics               | Gross buyer amount (USDC atomic) | Registration state                        |
+| --------------------------- | ----------------------- | -------------------------------: | ----------------------------------------- |
+| `company_evidence_graph.v1` | exact                   |                            39000 | locally eligible; not registered          |
+| `web_context_verified.v1`   | exact                   |                             9000 | registered; fixed PAYG proven             |
+| `document_evidence_json.v1` | prepaid dynamic credits |                      190000 pool | registered; authoritative read-back valid |
+| `verify_agent_output.v1`    | exact                   |                            19000 | locally eligible; not registered          |
 
 Amounts are derived through `@siteborne/pricing` from
 `governance/RISK_LIMITS.yaml`; they are not independent Nevermined constants.
@@ -64,10 +65,17 @@ validator for a 190000-atomic purchase granting 190000 credits with variable
 12000..190000 redemption. It now states
 `dynamic_actual_settlement_required: true`,
 `sandbox_capability_verified: false`, and `registration_allowed: true`.
-Registration permission means only that one exact, reconcile-first registration
-attempt is structurally safe. It is not evidence that the document plan has been
-registered or that its live lifecycle, replay, or partial-balance top-up
-behavior has passed.
+Checkpoint 2G executed that single reconcile-first builder registration after a
+read-only `NO_MATCH` result. The registration is frozen at agent ID
+`109760621961288696094411057321700210583752765344624386042713081041578011828571`
+and plan ID
+`64977106381472769302826211192910538031161833107493020584806963732279386695975`.
+Authoritative GET read-back passed the Checkpoint 2F validator and reconciled as
+`EXACT_EXISTING`; another registration is neither required nor authorized. This
+proves registration only. The live document lifecycle, replay, and
+partial-balance top-up behavior have not passed, so
+`sandbox_capability_verified: false` and `dynamic_live_allowed: false` remain
+unchanged.
 
 Free, zero-price, credit-trial, and time-trial declarations fail policy
 validation. SITEBORNE does not create a free test plan.

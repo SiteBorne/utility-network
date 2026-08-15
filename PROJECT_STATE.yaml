@@ -15,7 +15,7 @@ execution:
   last_completed_increment: 'SUN-0900A'
   frontier_status: 'executable'
   blocked_on: []
-  reason: 'SUN-0900B remains active. Checkpoint 2F completed the credential-independent, fail-closed validator for the accepted Nevermined prepaid dynamic-credit document plan, so exactly one guarded document registration attempt is now structurally permitted. No document registration or lifecycle call occurred; sandbox_capability_verified and dynamic_live_allowed remain false pending authoritative registration read-back plus the real document credit-burn/replay/partial-balance matrix. Production remains disabled and not ready.'
+  reason: 'SUN-0900B remains active. Checkpoint 2G completed exactly one reconcile-first builder-side registration of the prepaid dynamic-credit document plan. The frozen agent/plan IDs passed authoritative GET read-back, the fail-closed Checkpoint 2F validator, and EXACT_EXISTING reconciliation; no second registration is necessary. No subscriber delegation, token, verification, service execution, settlement, Payment-Identifier, job, or document payment occurred. sandbox_capability_verified and dynamic_live_allowed remain false pending the real document credit-burn/recovery/replay matrix and the separately isolated positive-but-insufficient balance case. Production remains disabled and not ready.'
 
 implemented:
   - 'governance_validation'
@@ -109,6 +109,7 @@ implemented:
   - 'nevermined_payment_evidence_provider_boundary' # SUN-0900A checkpoint 2; authenticated SDK and synthetic fixture trust paths remain distinct
   - 'nevermined_four_route_deterministic_runtime' # SUN-0900A checkpoint 2; shared D1/service/PCC/UsageResult/linkage lifecycle
   - 'nevermined_fixed_and_actual_usage_fixture_settlement' # deterministic only; no sandbox capability or external settlement claim
+  - 'nevermined_document_dynamic_credit_registration' # SUN-0900B checkpoint 2G; frozen agent/plan passed authoritative read-back, lifecycle remains unproven
 
 not_implemented:
   - 'company_evidence_graph_xbrl_facts_and_repository_signals_field_groups'
@@ -120,7 +121,7 @@ not_implemented:
   - 'mcp_publication_and_public_endpoint' # SUN-0800B blocked_external
   - 'a2a_publication_and_public_endpoint' # SUN-0800B blocked_external
   - 'a2a_production_signing_identity' # SUN-0800B blocked_external
-  - 'nevermined_sandbox_registration_and_live_settlement' # SUN-0900B blocked_external
+  - 'nevermined_remaining_service_registration_and_document_live_settlement' # SUN-0900B active; document registration complete, live document lifecycle remains unproven
   - 'agentverse'
   - 'modal_document_processing'
   - 'production_deployment'
