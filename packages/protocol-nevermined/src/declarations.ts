@@ -112,20 +112,25 @@ function buildDeclaration(serviceId: SiteborneServiceId): NeverminedServiceDecla
       // (0x59a8bd0b7567e7cf3cc2489c539e41083ba424bd87d1b2920d539eebcd96
       // 69d7) transferred 9000 atomic USDC gross (split 8910/90, byte-
       // identical to the plan's fixed price), NOT the requested 1000 —
-      // proving `settlePermissions({maxAmount})` does NOT control the
-      // actual on-chain charge for this credits-config shape; the
-      // plan's REGISTERED PRICE dominates regardless of the settle-time
-      // maxAmount requested. Classification: PAYG_SETTLES_PLAN_PRICE.
-      // This is a hard incompatibility, not a gap: registering a
-      // document plan at a 190000 price using this same helper pair
-      // would always charge 190000 on settlement, never 12000/19000/
-      // 29000, regardless of measured actual usage — exactly the
-      // economic misrepresentation this checkpoint exists to prevent.
-      // A real dynamic plan would need the SDK's separate
+      // proving `settlePermissions({maxAmount})` did NOT control the
+      // actual on-chain charge for THIS PROBED CONFIGURATION — the
+      // plan's registered price dominated regardless of the requested
+      // settle-time maxAmount. Classification:
+      // PAYG_ACTUAL_BELOW_PRICE_UNSUPPORTED_FOR_PROBED_CONFIGURATION
+      // (narrower, evidence-scoped — this does NOT generalize to "all
+      // PAYG plans always charge their registered price under every
+      // configuration," only to the specific getPayAsYouGoPriceConfig +
+      // getPayAsYouGoCreditsConfig() pairing actually tested). Using
+      // that same probed pairing for a document plan at a 190000 price
+      // is forbidden regardless: it has positive evidence that
+      // actual=12000 would not reliably control the monetary charge —
+      // exactly the economic misrepresentation this checkpoint exists
+      // to prevent. SUN-0900B checkpoint 2C traces the SDK's separate
       // `getDynamicCreditsConfig(creditsGranted, min, max)` helper
-      // (+ `registerCreditsPlan`/`registerPlan`), entirely untested by
-      // SITEBORNE so far. See
-      // docs/reports/SUN-0900B-checkpoint-2b-unit-economics-report.md.
+      // (+ `registerCreditsPlan`/`registerPlan`) as a distinct
+      // candidate — statically only, no further live mutation yet. See
+      // docs/reports/SUN-0900B-checkpoint-2b-unit-economics-report.md
+      // and docs/reports/SUN-0900B-checkpoint-2c-dynamic-credits-mechanism-report.md.
       sandbox_capability_verified: false,
       registration_allowed: !document,
       ...(document
