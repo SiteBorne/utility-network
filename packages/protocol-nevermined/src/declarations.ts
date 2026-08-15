@@ -96,10 +96,12 @@ function buildDeclaration(serviceId: SiteborneServiceId): NeverminedServiceDecla
       provider_net_proceeds: 'resolved_by_nevermined_registration',
       pricing_source_version: resolvePricingSourceVersion(),
       dynamic_actual_settlement_required: document,
-      // The document values below are scoped to the frozen zero-credit native
-      // lifecycle proven in SUN-0900B checkpoint 2H. They do not claim that a
-      // positive-but-insufficient balance auto-tops up correctly, and they do
-      // not enable production. Fixed services do not use this dynamic gate.
+      // The document values below are scoped to the frozen controlled-sandbox
+      // lifecycles proven in SUN-0900B checkpoints 2H and 2I. Checkpoint 2I
+      // proved positive-but-insufficient behavior is FULL_BUNDLE_TOPUP:
+      // 178000 + 190000 acquired - 190000 redeemed = 178000 remaining. This
+      // capability evidence does not enable production. Fixed services do not
+      // use this dynamic gate.
       //
       // Checkpoint 2F permits one exact document registration only after
       // authoritative GET read-back passes the credential-independent
@@ -107,9 +109,9 @@ function buildDeclaration(serviceId: SiteborneServiceId): NeverminedServiceDecla
       // 190000 atomic USDC acquires 190000 credits, with 12000..190000
       // variable redemption. This is deliberately not the disproven
       // PAYG 1/1/1 configuration. Registration permission is not a live
-      // capability claim by itself. Checkpoint 2H separately proved the
-      // zero-credit native lifecycle and replay; partial-balance top-up
-      // behavior still requires its own sandbox proof.
+      // capability claim by itself. Checkpoint 2H proved the zero-credit native
+      // lifecycle and replay; checkpoint 2I proved the full-bundle partial-
+      // balance top-up policy and the same exactly-once recovery properties.
       sandbox_capability_verified: document,
       dynamic_live_allowed: document,
       registration_allowed: true,

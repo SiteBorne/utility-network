@@ -1,216 +1,314 @@
 # SUN-0900B Checkpoint 2I — Positive-But-Insufficient Document Balance
 
-Date: 2026-08-15
-Starting commit: `4309cc067cdab703477473d107ad65e16c2e613f`
-Classification: `controlled_sandbox_self_test`
-Checkpoint result: **INCOMPLETE / FAIL-CLOSED BEFORE SETTLEMENT**
+Date: 2026-08-15 Starting accepted commit:
+`4309cc067cdab703477473d107ad65e16c2e613f` Pre-live repair commit:
+`066fb5fb41491a05610fdbf03e7b8632440afdd5` Classification:
+`controlled_sandbox_self_test` Checkpoint result: **ACCEPTED —
+`FULL_BUNDLE_TOPUP`**
 
-This report records the single authorized Checkpoint 2I invocation. It is not an
-acceptance report. No second payment was attempted after the invocation failed
-locally. Checkpoint 2H remains accepted and unchanged; the partial
-positive-but-insufficient balance behavior remains unproven.
+Checkpoint 2I proved the frozen Nevermined document plan's behavior when a
+subscriber starts with a positive but insufficient reusable credit balance. The
+accepted corrected payment started with `178000` credits, required a real
+service-derived `190000`-credit burn, acquired a full new `190000`-credit bundle
+for `190000` atomic Base Sepolia USDC, redeemed `190000`, and ended with
+`178000` credits:
 
-## Frozen external preconditions
+```text
+178000 starting + 190000 acquired - 190000 redeemed = 178000 ending
+```
+
+This is a full-bundle top-up, not a deficit-only `12000`-credit acquisition. The
+provider settlement succeeded once. The initial process rejected an immediate
+settlement-observation mismatch and returned no paid success, then the same
+durable `Payment-Identifier` was recovered from seller GET-only and public-chain
+evidence with zero additional verify, execution, settlement, or jobs. A separate
+credential-free process reopened and replay-audited the consumed result.
+
+This checkpoint does not claim production readiness, revenue, customer activity,
+an independent customer, or an open-market purchase.
+
+## Frozen registration and economics
 
 - Network: Base Sepolia, `eip155:84532`.
+- Asset: Base Sepolia USDC, `0x036CbD53842c5426634e7929541eC2318f3dCF7e`.
+- Subscriber smart account: `0xCa7DD940B5071Bbcb238901794B900CF9db376E7`.
+- SITEBORNE receiver: `0x7f44a2dd237938F18632d4CcA40f4c690295E6E1`.
 - Frozen document agent:
   `109760621961288696094411057321700210583752765344624386042713081041578011828571`.
 - Frozen document plan:
   `64977106381472769302826211192910538031161833107493020584806963732279386695975`.
-- Registration validator: `valid=true`.
-- Registration reconciliation: `EXACT_EXISTING`.
+- Registration validator: `valid=true` before and after settlement.
+- Registration reconciliation: `EXACT_EXISTING` before and after settlement.
 - Registration mutations: `0`.
-- Subscriber smart account: `0xCa7DD940B5071Bbcb238901794B900CF9db376E7`.
+- Gross acquisition price: `190000` atomic USDC.
+- Credits per acquisition: `190000`.
+- Variable redemption range: `12000..190000`.
+- Exact acquisition value: `190000 / 190000 = 1` atomic USDC per credit.
 - Authoritative starting document balance: `178000` credits.
-- Pre-live payer balance: `19756000` atomic Base Sepolia USDC (`19.756` USDC);
-  native balance `0` wei.
-- Frozen maximum/required burn for this test: `190000` credits.
+- Required measured burn: `190000` credits.
 - Positive-but-insufficient deficit: `12000` credits.
+- Pre-live payer balance: `19756000` atomic Base Sepolia USDC.
 
 ## Deterministic maximum-cost fixture
 
-The new tracked fixture is
+The accepted fixture is
 `services/modal-worker/fixtures/pdf/scanned_ten_page.pdf`:
 
 - PDF version 1.3;
 - 10 pages;
 - file SHA-256:
   `d0b09ad4ccceb8dbaad8647fe0eb19f13793a11fcb5ca91a047b0b8576d3750f`;
-- real local Python document worker result: 10 processed pages, all OCR, no
-  tables;
+- normal request field `ocr_permission=true`;
+- actual file length `size_bytes=29001`;
+- real local Python worker result: 10 processed pages, all OCR, no tables;
 - canonical pricing subtotal: `190000`;
-- canonical pricing maximum: `190000`;
-- canonical actual amount: `190000` atomic;
+- canonical maximum: `190000`;
+- canonical `actual_amount`: `190000`;
 - capped: `false`.
 
-This is a normal `document_evidence_json.v1` OCR case. There is no caller-
-supplied amount and no test-only price override.
+The fixture uses the normal `document_evidence_json.v1` request schema and
+service runtime. There is no caller-supplied amount, pricing override, or
+fabricated UsageResult. Its corrected immutable input hash is:
 
-## One authorized invocation
+`sha256:f2bf49622791b31d01307cad7daf171908bcc26e94d543975af8222a34c05f82`.
 
-Exactly one guarded live command was invoked with `RUN_LIVE_NEVERMINED=1` and
-the Checkpoint 2I scenario flag scoped to that command. It used the dedicated
-persistent D1 directory:
+## Attempt 1 — preserved fail-closed incident
 
-`$HOME/.local/share/siteborne/live-d1/sun-0900b-document-partial-balance`
+The first Checkpoint 2I payment remains immutable and separate:
 
-The directory did not exist before the run. The harness created it, applied
-migrations, and found no unfinished payment or job before external activity.
-
-Sanitized identifiers created by the one invocation:
-
-- Delegation ID: `fde6e86c-1415-4bac-966f-2228526078bd`.
-- Delegation provider/currency: `erc4337` / `usdc`.
-- Delegation limit: `19` cents.
-- Delegation created: `2026-08-15T21:11:54.037Z`.
-- Delegation expiry: `2026-08-15T22:11:53.730Z`.
 - Payment-Identifier: `pay_f9cfc34bac0d46bc980d71b286bf39a6`.
-- D1 job: `418c712b-542a-42dc-b08c-9f63a5c08d5a`.
+- Persistent D1 path:
+  `$HOME/.local/share/siteborne/live-d1/sun-0900b-document-partial-balance`.
+- Input hash:
+  `sha256:b889fc62ece7d0c68e0173fb91d7d075bd880aa595266043ed35b02d7884aba2`.
+- Delegation: `fde6e86c-1415-4bac-966f-2228526078bd`.
+- Job: `418c712b-542a-42dc-b08c-9f63a5c08d5a`.
+- Provider verification: one accepted verification.
+- Lifecycle stage: `verified`.
+- Job state: `REJECTED`, attempt count `1`.
+- Delegation transaction count: `0`.
+- Delegation spent: `0` cents.
+- Service output, PCC, receipt, settlement draft, settlement, and cached paid
+  result: absent.
+- Consumed state: false.
 
-The real Nevermined verification succeeded once. D1 durably records the payment
-lifecycle at `verified`. The service was entered once, but the job ended
-`REJECTED` before a PCC, signed receipt, UsageResult, or settlement draft could
-be produced.
+The initiating request omitted OCR permission and retained the old one-byte
+fixture declaration. The service correctly rejected it before settlement. The
+bridge vocabulary defect exposed by that failure was repaired before the second
+authorization: TypeScript `always` / `if_needed` / `never` now maps to Python
+`required` / `if_needed` / `forbidden`, and OCR-required content without
+permission fails closed before PCC/receipt generation. The first D1 directory
+and payment were never rewritten, reused, or settled.
 
-## Failure and root cause
+## Pre-live repair and controls
 
-The HTTP result was `500 service_execution_failed` with the bounded local
-message `document fixture did not produce its signed receipt`.
+Commit `066fb5fb41491a05610fdbf03e7b8632440afdd5` froze the repair before
+external mutation. It also added deterministic regression coverage for:
 
-The failure was traced through the complete input path:
+- immutable separation of the rejected and corrected inputs;
+- exact ten-page OCR worker/pricing proof at `190000`;
+- signed receipt generation and self-verification for the corrected input;
+- no PCC/receipt for the same fixture without OCR permission;
+- no settlement draft or cached paid response after local service rejection;
+- identical rejected retry adding no provider/work activity;
+- minimum 45-minute delegation lifetime;
+- a distinct Attempt 2 D1 store containing zero payment attempts and zero jobs.
 
-1. The maximum-cost fixture is image-only and requires OCR.
-2. The credential-free preflight called the worker directly with
-   `ocrPolicy=if_needed`, proving the worker classification and price.
-3. The live service input did not include the normal schema field
-   `ocr_permission=true` and still declared the prior fixture byte length as
-   `size_bytes=1`.
-4. `DocumentEvidenceJsonService` selected its safe `ocrPolicy=never` boundary
-   value.
-5. The subprocess bridge forwarded that TypeScript vocabulary literally, while
-   the Python CLI accepts `forbidden` for the same policy. The CLI rejected the
-   invalid argument before document processing, the route quarantined/rejected
-   the job, and the harness correctly refused settlement.
+Immediately before Attempt 2, read-only reconciliation proved:
 
-The initiating defect was the harness's missing explicit OCR authorization; a
-separate TypeScript-to-Python policy-vocabulary mismatch made the actual local
-failure occur one boundary earlier than the first incident analysis stated.
-Neither Nevermined nor pricing caused the failure. Both failures were closed: no
-service result, PCC, receipt, usage result, settlement draft, provider
-settlement, cash movement, or credit movement was produced.
+- frozen registration validator: pass;
+- frozen registration: `EXACT_EXISTING`;
+- starting credits: exactly `178000`;
+- Attempt 1 delegation transactions: `0`;
+- Attempt 1 successful transactions: `0`;
+- payer USDC: `19756000` atomic;
+- corrected real-worker/pricing fixture: exactly `190000`;
+- Attempt 2 D1 path: absent/empty;
+- repository tree: clean;
+- all live, registration, recovery, and capability-probe flags: absent.
 
-The Payment-Identifier is immutably bound to the exact OCR-disabled,
-`size_bytes=1` input. Adding OCR permission alone changes the canonical input
-hash; correcting the byte length changes it again. Either change is a binding
-conflict for the old identifier. The run was therefore not retried.
+## Attempt 2 — one corrected logical lifecycle
 
-## External reconciliation after failure
+Exactly one new live command was issued for the corrected input. It used:
 
-A seller-credential GET-only reconciliation established:
+- Persistent D1 path:
+  `$HOME/.local/share/siteborne/live-d1/sun-0900b-document-partial-balance-attempt2`.
+- Payment-Identifier: `pay_889841069efe4410908ed76a7c1ad18c`.
+- Delegation: `c34e15a8-1f94-4b5c-b721-a6743e2662d5`.
+- Delegation limit: `19` cents.
+- Payment token: minted once, memory-only, never printed or persisted.
+- Job: `8e765d08-6530-4c08-8fdf-88d8a070fa12`.
+- Quote: `qte_5ff9a2d9523f572027a6adab`.
+- Requirement: `req_459b511194344bc77f581fc6`.
 
-- delegation status: `Active`;
-- delegation amount spent: `0` cents;
-- delegation transactions: `0`;
-- Nevermined settlements: `0`;
-- public settlement transaction: none;
-- document plan balance after the failure: `178000` credits.
+The new payment was acquired in D1 before provider verification. Real
+`verifyPermissions` accepted once, and external-verification evidence was
+persisted before service execution. The corrected service executed exactly once,
+produced one logical job, derived `actual_amount=190000`, passed PCC, created an
+Ed25519-signed SITEBORNE receipt, and self-verified that receipt.
 
-D1 established:
+Sanitized durable service evidence:
 
-- payment lifecycle: `verified`;
-- job state: `REJECTED`;
-- job attempt count: `1`;
-- cached paid result count: `0`;
-- settlement-pending timestamp: absent;
-- service output hash: absent;
-- receipt ID: absent;
-- settlement transaction reference: absent;
-- consumed state: false.
+- Output hash:
+  `sha256:fa52e70f82c0cdd9f1b60e09668be658e75c963b752653e19e9bdca339edf1d2`.
+- PCC decision: `pass`; schema, provenance, and material-claim checks: pass;
+  score `1`.
+- Receipt ID: `rcpt_f5887ed77da2e85534debce6`.
+- Receipt hash:
+  `sha256:284fbef1d455735c4a5fe0870cf33ec9276356692adc8376bb809173c23d2d9c`.
+- Receipt evidence hash:
+  `sha256:292ad0e61f951602a6953f36b6ae239c4e1b949237b87eb7dfeb46595a227781`.
+- Receipt signature algorithm: `Ed25519`; self-verification: pass before
+  settlement.
+- UsageResult ID: `usg_e5a02aedf79d29be0aa414d0`.
+- UsageResult hash:
+  `sha256:6f1bf1b3fc9e70f61d23dd920fe5e30335f954f6d6723325925f5c36d2cd3a5a`.
+- Resource-metrics hash:
+  `sha256:0169d4ba5d52807ed1daa32704f39345805c22afd91e66b43e7eefa3b64ba1aa`.
+- Verification-evidence hash:
+  `sha256:872a21c55504add36cfcec835b4038e46ff024e417081611027c185b2c5a0062`.
+- Durable `SETTLEMENT_PENDING` timestamp: `2026-08-15T22:10:44.952Z`.
 
-No credit or monetary equation can be classified because no settlement took
-place. In particular, this run proves neither `FULL_BUNDLE_TOPUP` nor
-`DEFICIT_ONLY_TOPUP`.
+## Provider settlement and recovery
 
-## Local repair and regression
+Real `settlePermissions` was called exactly once with `190000`, the measured
+usage for this fixture. Nevermined succeeded externally but the first local
+process rejected its immediate settlement observation as
+`dynamic_credit_settlement_observation_mismatch`. The route returned no HTTP
+paid success and left the payment durably `settlement_pending`; it did not call
+settlement again.
 
-The failed and corrected canonical input hashes are:
+Seller GET-only reconciliation then proved exactly one succeeded delegation
+transaction:
 
-- failed (`size_bytes=1`, OCR absent):
-  `sha256:b889fc62ece7d0c68e0173fb91d7d075bd880aa595266043ed35b02d7884aba2`;
-- OCR-only correction with the old byte declaration:
-  `sha256:505bdbb911d1643fa09c9752863b1078d8b9a119b43c9dce2434d005e19d615b`;
-- fully corrected (`size_bytes=29001`, `ocr_permission=true`):
-  `sha256:f2bf49622791b31d01307cad7daf171908bcc26e94d543975af8222a34c05f82`.
+- Transaction:
+  `0xbc3693feca26bfc9282e3e0c746123d89f45e40dbb9b42679567426e97d46aa4`.
+- Provider status: `succeeded`.
+- Provider transaction time: `2026-08-15T22:10:48.848Z`.
+- Delegation amount: `19` cents.
+- Delegation transaction count: `1`.
+- Delegation final status: `Exhausted`.
+- Immediate/provider credits redeemed: `190000`.
+- Immediate/provider remaining balance: `178000`.
 
-The local repair now:
+The recovery-only finalizer used the same Payment-Identifier, delegation, job,
+and durable settlement draft. It performed seller GETs and public Base Sepolia
+receipt validation only. It added:
 
-- binds the real fixture byte length and `ocr_permission=true` before quote,
-  Payment-Identifier acquisition, provider verification, or execution;
-- maps TypeScript `always` / `if_needed` / `never` onto the Python CLI's
-  `required` / `if_needed` / `forbidden` vocabulary;
-- rejects OCR-required content without explicit permission before PCC or receipt
-  signing, even though the worker can truthfully return partial
-  page-classification metadata under the `forbidden` policy;
-- requires a reusable delegation to retain at least 45 minutes of lifetime;
-- requires the second-attempt persistent D1 store to contain zero payment
-  attempts and zero jobs before any external mutation.
+```text
+verify       0
+execute      0
+settle       0
+jobs         0
+```
 
-The credential-free regression was strengthened in two package-correct layers:
-the pricing package proves ten measured OCR pages derive canonical `190000`
-usage with no override, while the real-subprocess service-runtime test executes
-the same ten-page OCR case through `DocumentEvidenceJsonService`, requires a
-successful result and signed receipt, and cryptographically self-verifies that
-receipt. Its paired negative proves the same fixture without OCR permission is
-rejected with no PCC/receipt. Route-level D1 coverage proves a
-verified-but-service-rejected payment has no settlement draft and cannot be
-recovered into a settlement. Targeted results after the repair:
+Public Base Sepolia USDC Transfer evidence proves:
 
-- edge-api normal and live-test TypeScript projects: pass;
-- focused pricing, Nevermined credit-evidence, route/recovery, and document
-  subprocess matrix: 99 passed / 2 live tests skipped;
-- ten-page OCR service/receipt regression: pass;
-- guarded live/recovery tests with live flags absent: skipped, with zero
-  credential reads and zero network mutation.
+```text
+seller       188100 atomic
+platform       1900 atomic
+gross        190000 atomic
+```
 
-The final credential-stripped repository regression also passed after being
-rerun outside the restricted shell required by Miniflare/tsx local sockets:
+The authoritative plan-balance equation proves:
 
-- normal repository tests: 1639 passed, 20 skipped;
-- Nevermined protocol tests: 199 passed;
-- Nevermined compatibility matrix: 155 passed;
-- x402 protocol tests: 451 passed, plus 20 property tests and fixture audit;
-- MCP and A2A checks: pass;
-- document worker: 81 passed;
-- service runtime: 90 passed;
-- governance, state, tasks, contracts, migrations, D1, control plane, adapters,
-  verification, and generated-artifact drift checks: pass;
-- `pnpm check`: pass;
-- secret-scan scope: 837 tracked files / 5341638 bytes / 8 required risk classes
-  / 9 redacted detector probes;
-- Gitleaks history scan: 90 commits / approximately 5.81 MB / no leaks;
-- Gitleaks working-directory scan: approximately 12.46 MB / no leaks.
+```text
+starting credits     178000
+credits acquired     190000
+credits redeemed     190000
+ending credits       178000
 
-The local repair does not retroactively change the immutable failed payment. It
-prepares a later, separately authorized checkpoint only.
+178000 + 190000 - 190000 = 178000
+```
 
-## State and claims
+The cash acquisition and credit acquisition agree under the frozen 1-credit =
+1-atomic acquisition value. The observed policy is therefore exactly:
 
-- `sandbox_capability_verified=true` remains unchanged, scoped to accepted
-  Checkpoint 2H.
-- `dynamic_live_allowed=true` remains unchanged, scoped to accepted Checkpoint
-  2H.
-- `PARTIAL_POSITIVE_INSUFFICIENT_BALANCE_UNPROVEN` remains true.
+`FULL_BUNDLE_TOPUP`.
+
+It is not `DEFICIT_ONLY_TOPUP`; Nevermined acquired a complete `190000`-credit
+bundle rather than only the `12000`-credit deficit.
+
+## Settlement linkage, consumed state, and replay
+
+Recovery built and verified the additive Nevermined credits-settlement evidence:
+
+- Credits-settlement evidence hash:
+  `sha256:b9993b48a65c4e758475581ead185e453725f7a46c78e5e34eeea28dd56c533e`.
+- External settlement-evidence hash:
+  `sha256:e03126c7332bba8f206d46fdaf1bc44afa0c4f086ef870f155f4d03c919af67f`.
+- PaymentServiceLink ID: `lnk_8a191d31963f4bd181cb2539`.
+- PaymentServiceLink hash:
+  `sha256:86e07dbd6c51be9f8c6874b2091e4fcfe36563866be9d0d4b615d04d22beb049`.
+- PaymentServiceLink version: `2`; validation: pass.
+- Final HTTP result reconstructed in durable cache: `200`.
+- Final payment lifecycle: `settled`, consumed at `2026-08-15T22:12:43.354Z`.
+- Final job state: `DELIVERED`, attempt count `1`.
+- Jobs for the Payment-Identifier: `1`.
+
+A separate process reopened the same persistent D1 path with all Nevermined,
+CDP, and live variables removed. It verified the stored credits evidence and
+PaymentServiceLink, reconstructed the same consumed result, and proved:
+
+```text
+replay additional verify      0
+replay additional execute     0
+replay additional settle      0
+replay additional jobs        0
+changed immutable binding     replay_conflict
+```
+
+No token was minted for replay. Attempt 1 remained `verified` / `REJECTED` and
+unconsumed in its separate D1 store; Attempt 2 alone became settled/consumed.
+
+## Acceptance and remaining scope
+
+- `PARTIAL_POSITIVE_INSUFFICIENT_BALANCE_PROVEN=true`.
+- Proven policy: `FULL_BUNDLE_TOPUP`.
+- `sandbox_capability_verified=true` remains true.
+- `dynamic_live_allowed=true` remains true for the frozen controlled sandbox
+  document capability.
 - `production_ready=false`.
 - `production_enabled=false`.
-- This controlled sandbox attempt is not revenue, customer activity, an
-  independent customer, or an open-market purchase.
+- New real Attempt 2 settlements: `1`.
+- Additional settlements during recovery/replay: `0`.
+- Registration mutations: `0`.
 - No mainnet operation occurred.
+- No revenue or customer claim is made.
+- No further partial-balance payment is required.
 
-## Required next action
+SUN-0900B remains active because the remaining canonical fixed Nevermined
+services have not all been registered and reconciled. The next checkpoint is a
+serial, reconcile-first registration checkpoint for one remaining fixed-price
+service; it must not repeat either document payment or create another document
+plan.
 
-Do not reuse or modify `pay_f9cfc34bac0d46bc980d71b286bf39a6`, do not delete its
-durable D1 evidence, and do not settle it. Completing Checkpoint 2I now requires
-a separately authorized new logical payment using the corrected immutable
-OCR-enabled input and a distinct persistent D1 path. Before that authorization,
-reconcile the frozen plan balance again and require it to remain exactly
-`178000`.
+## Final deterministic regression
+
+The acceptance state passed with every live, registration, recovery, and probe
+flag absent and every external credential removed from child processes:
+
+- `pnpm nevermined:check`;
+- `pnpm x402:check`;
+- `pnpm mcp:check`;
+- `pnpm a2a:check`;
+- governance, state, and task validation;
+- migrations and D1 validation;
+- `pnpm secrets:scan`;
+- full `pnpm check`.
+
+Recorded final results:
+
+- root Vitest suite: `1639` passed, `20` skipped;
+- Nevermined protocol: `199` passed;
+- Nevermined compatibility matrix: `155` passed;
+- x402 protocol: `451` passed, plus `20` property tests and fixture audit;
+- document worker: `81` passed;
+- service runtime: `90` passed;
+- MCP/A2A, governance/state/tasks, contracts, migrations, D1, control plane,
+  adapters, verification, and generated-artifact drift gates: pass;
+- secret-scan scope: `839` tracked files / `5385180` bytes / `8` required
+  classes / `9` redacted detector probes;
+- Gitleaks history: `91` commits / approximately `5.88 MB` / no leaks;
+- Gitleaks working directory: approximately `12.48 MB` / no leaks;
+- final `pnpm check`: pass.
