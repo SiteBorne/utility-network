@@ -25,7 +25,7 @@ describe('four canonical Nevermined declarations', () => {
     expect(NEVERMINED_DECLARATIONS[id].plan.gross_buyer_amount_atomic).toBe(amount);
   });
 
-  it('models document maximum and measured tiers without claiming sandbox capability', () => {
+  it('models document maximum and measured tiers without claiming registration is allowed (SUN-0900B checkpoint 2B: DYNAMIC_UNIT_MAPPING_UNPROVEN — on-chain evidence covers actual===price only, never actual<price)', () => {
     const document = NEVERMINED_DECLARATIONS['document_evidence_json.v1'];
     expect(document.plan).toMatchObject({
       siteborne_payment_semantics: 'upto',
@@ -46,6 +46,42 @@ describe('four canonical Nevermined declarations', () => {
       expect(declaration.agent.protocol_references).toEqual({ mcp: '/mcp', a2a: '/a2a' });
       expect(declaration.agent.production_enabled).toBe(false);
     }
+  });
+
+  it('the document declaration (registration_allowed=false) validates as-is', () => {
+    expect(
+      validateNeverminedDeclaration(NEVERMINED_DECLARATIONS['document_evidence_json.v1'])
+    ).toEqual({
+      valid: true,
+    });
+  });
+
+  it('validator would allow an upto plan marked registration_allowed ONLY when dynamic_actual_settlement_required is also explicitly true (documents the shape a future, evidence-backed flip must take)', () => {
+    const document = NEVERMINED_DECLARATIONS['document_evidence_json.v1'];
+    expect(
+      validateNeverminedDeclaration({
+        ...document,
+        plan: {
+          ...document.plan,
+          registration_allowed: true,
+          dynamic_actual_settlement_required: true,
+        },
+      })
+    ).toEqual({ valid: true });
+  });
+
+  it('still rejects an upto plan marked registration_allowed without the explicit dynamic-settlement accounting', () => {
+    const document = NEVERMINED_DECLARATIONS['document_evidence_json.v1'];
+    expect(
+      validateNeverminedDeclaration({
+        ...document,
+        plan: {
+          ...document.plan,
+          registration_allowed: true,
+          dynamic_actual_settlement_required: false,
+        },
+      })
+    ).toMatchObject({ valid: false, reason: 'dynamic_document_registration_is_capability_gated' });
   });
 
   it('rejects free, zero-price, credits-trial, and time-trial declarations', () => {

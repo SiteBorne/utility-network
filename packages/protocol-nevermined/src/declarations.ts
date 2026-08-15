@@ -95,6 +95,41 @@ function buildDeclaration(serviceId: SiteborneServiceId): NeverminedServiceDecla
       provider_net_proceeds: 'resolved_by_nevermined_registration',
       pricing_source_version: resolvePricingSourceVersion(),
       dynamic_actual_settlement_required: document,
+      // `sandbox_capability_verified` tracks the DYNAMIC SETTLEMENT itself
+      // (a real settle(actual) call with actual < authorized_maximum) —
+      // still unproven for every service; stays false until that live
+      // proof exists.
+      //
+      // `registration_allowed` for the document plan stays FALSE
+      // (SUN-0900B checkpoint 2B). Two independent, real, on-chain Base
+      // Sepolia transactions (0x847a6da0a6a63f1f12838bbe9269b8fd9798997b
+      // 0680b0146b7147fcb715f417, 0x8fec56c49ee6e85a30105d308fd7b1788c98
+      // 66f8d3780395c8e0f5e549cfd0f2) prove that, for the ALREADY-
+      // REGISTERED web_context_verified.v1 plan, the atomic amount
+      // SITEBORNE passes as settlePermissions({maxAmount}) is
+      // transferred on-chain exactly, atomic-for-atomic — but in BOTH
+      // observed transactions maxAmount equaled the plan's registered
+      // price exactly (9000 == 9000). That evidence proves the
+      // credits<->atomic-currency conversion rate for `actual ===
+      // price`; it does NOT prove Nevermined's backend accepts, and
+      // settles exactly, a request for `actual < price` on this credits
+      // config shape (`getPayAsYouGoCreditsConfig()`'s amount/minAmount/
+      // maxAmount are hardcoded 1n/1n/1n placeholders the SDK's own
+      // comment calls "required for validation only" — whether that
+      // placeholder is genuinely unenforced, or silently clamps/rejects
+      // an actual below the registered price, has never been tested).
+      // The installed SDK also exposes a structurally SEPARATE
+      // credits/price pairing (`getDynamicCreditsConfig(creditsGranted,
+      // min, max)` + `registerCreditsPlan`/`registerPlan`) whose own
+      // doc example pairs `getNativeTokenPriceConfig(100n, ...)` with
+      // `getFixedCreditsConfig(100n)` — illustrating that price and
+      // credits are independent numeric arguments the AI Builder
+      // chooses separately, with no SDK-enforced 1:1 relationship
+      // between them. SITEBORNE's proposed document registration reuses
+      // the PAYG helper pair already proven on-chain (not
+      // getDynamicCreditsConfig), which narrows but does not eliminate
+      // this gap. Classification: DYNAMIC_UNIT_MAPPING_UNPROVEN. See
+      // docs/reports/SUN-0900B-checkpoint-2b-unit-economics-report.md.
       sandbox_capability_verified: false,
       registration_allowed: !document,
       ...(document
@@ -134,7 +169,20 @@ export function validateNeverminedDeclaration(
   ) {
     return { valid: false, reason: 'price_must_be_positive' };
   }
-  if (fields.siteborne_payment_semantics === 'upto' && fields.registration_allowed) {
+  // Historical rule (pre SUN-0900B checkpoint 2B): an `upto`-semantics
+  // plan could never be `registration_allowed`, because the unit
+  // economics between a settle-time atomic amount and the actual
+  // on-chain charge were unproven. That gate is now evidence-based
+  // rather than blanket: `registration_allowed` may be true for an
+  // `upto` plan only once `dynamic_actual_settlement_required` is also
+  // true (i.e., only the deliberately-modeled dynamic case, never a
+  // plan that skipped the explicit dynamic-economics accounting this
+  // shape requires).
+  if (
+    fields.siteborne_payment_semantics === 'upto' &&
+    fields.registration_allowed &&
+    !fields.dynamic_actual_settlement_required
+  ) {
     return { valid: false, reason: 'dynamic_document_registration_is_capability_gated' };
   }
   return { valid: true };
