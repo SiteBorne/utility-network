@@ -1209,3 +1209,86 @@ from the operator's own plan: sign into Nevermined as the subscriber account and
 personally accept current legal documents, then authorize exactly one more live
 attempt (now with the diagnostic capture in place) behind a fresh read-only
 preflight.
+
+## Payment #5 attempt — causal retry after human legal-document acceptance: a new, unrelated local defect, not the 412 hypothesis test
+
+**The human operator personally accepted current Nevermined legal documents
+before this attempt** (per the authorizing directive). This attempt did **not**
+test the legal-consent hypothesis — it failed for a completely different, purely
+local reason, before reaching `createDelegation` (or even registration
+reconciliation) at all.
+
+**Pre-flight (all real, all confirmed, zero mutation):** persistent D1 at
+`$HOME/.local/share/siteborne/live-d1/sun-0900b-checkpoint1` inspected directly
+— `payment_attempts: 0` rows (unchanged from payment #4's attempt, confirming
+nothing was left unfinished). Registration reconciled (`agent.registry.plans`
+linkage, plan economics/metadata unchanged). Payer balance `19,973,000` atomic
+USDC. Delegation reconciliation: `no_match` (zero accessible delegations),
+confirmed independently before the live command.
+
+**The failure.** The live command failed inside `beforeAll`, before registration
+reconciliation's own log line even printed:
+
+```
+Error: D1_EXEC_ERROR: Error in line 1: ALTER TABLE payment_attempts ADD COLUMN
+lifecycle_stage TEXT NOT NULL DEFAULT 'acquired': duplicate column name:
+lifecycle_stage: SQLITE_ERROR
+```
+
+**Root cause, confirmed:** `runMigrations` (this live test's own local copy of a
+pattern duplicated across ~9 test files in this repository) blindly re-executes
+every statement from every `migrations/*.sql` file on every invocation, with no
+migration-tracking mechanism. Every other copy of this helper is safe because
+every other caller always opens a **fresh**, ephemeral D1 (a new random tempdir,
+or in-memory) — migrations only ever run once per database's lifetime there.
+This live test is the **one** caller that opens a genuinely **persistent**,
+deliberately-reused D1 (`resolveLivePersistencePath`, `cfe3614`) — and
+payment-attempt #4's own migration run had already fully applied the schema to
+this exact directory. This second real invocation re-ran the same
+`ALTER TABLE payment_attempts ADD COLUMN lifecycle_stage ...` statement
+(migration 0003) against a database that already has that column — SQLite's
+`ALTER TABLE ADD COLUMN` has no `IF NOT EXISTS` form (unlike this repository's
+`CREATE TABLE`/ `CREATE INDEX` statements, which already guard themselves), so
+it threw. This is a real, newly-discovered gap that the persistent-storage
+design introduced by definitionally succeeding at its own job — the DB really
+did survive from #4 to #5, and the naive migration runner had never been
+exercised against a database that was already migrated.
+
+**Confirmed zero external mutation, zero external read even:** no
+registration-reconciliation or delegation-reconciliation log line ever printed —
+the failure occurred before any Nevermined API call of any kind was attempted.
+`RUN_LIVE_NEVERMINED` cleared immediately after.
+
+**Fix (credential-free, local-only, no live call involved):** `runMigrations` in
+`nevermined-live-exact.test.ts` now catches exactly
+`duplicate column name`/`already exists`-shaped errors per statement and
+continues — a real, different schema error still throws and fails the run.
+**Verified empirically**, without touching the real persistent live directory: a
+throwaway Miniflare instance at a disposable temp path ran the full migration
+set three times in a row (fresh, reopened-and-rerun, reopened-and-rerun-again) —
+all three passes succeeded, reproducing and resolving the exact real failure. No
+dedicated permanent unit test was added (the fix lives inside the
+credential-gated live test's own test-local helper, mirroring the existing
+un-tested-in-isolation pattern every other copy of this helper already has in
+this repository); typecheck and the live test's own
+collect-and-skip-with-flag-absent behavior were both reverified unchanged.
+
+**Per the absolute "no second fresh live attempt this turn" rule, the live
+command was not rerun after this fix**, even though the fix is complete and
+verified. The causal test of the legal-consent hypothesis remains **not yet
+performed** — payment-attempt #5 never reached `createDelegation` at all, so it
+provides no evidence either way about `BCK.LEGAL_DOCS.0004`.
+
+**Full regression (code changed):** `nevermined:check`, `x402:check`,
+`mcp:check`, `a2a:check`, `governance:validate`, `state:validate`,
+`tasks:validate`, `secrets:scan`, full `pnpm check` — all exit 0.
+
+**Outcome: Checkpoint 1B still not accepted.** Zero new real settlements.
+`LEGAL_CONSENT_HYPOTHESIS_SUPPORTED_BY_BEHAVIORAL_CHANGE` does not apply —
+delegation creation was never reached this attempt, so no behavioral change was
+observed at all. SUN-0900B remains active. Production remains false. The
+persistent-storage design is now proven robust against the exact failure mode a
+second real reuse exposed. The next attempt, whenever separately authorized, is
+the first one positioned to actually test the legal-consent hypothesis: local
+defect fixed, persistent D1 confirmed empty and ready, diagnostic error capture
+in place from the prior turn.

@@ -109,6 +109,21 @@ const WEB_INPUT = { target_url: 'https://acme.example/', retrieval_mode: 'direct
 
 const MIGRATIONS_DIR = fileURLToPath(new URL('../../../../migrations', import.meta.url));
 
+/** Real, already-applied-migration signatures on a genuinely re-opened
+ * database — every other test file's copy of this helper only ever runs
+ * against a fresh, ephemeral D1 (a new random tempdir or an in-memory
+ * instance), so it never needed this. This live test is the one caller
+ * that opens a truly PERSISTENT, deliberately-reused D1
+ * (`resolveLivePersistencePath`, `cfe3614`) — a second real invocation
+ * against the same directory (payment-attempt #5, discovered live)
+ * surfaced that bare `ALTER TABLE ... ADD COLUMN` statements (SQLite has
+ * no `IF NOT EXISTS` form for those, unlike this repo's `CREATE TABLE`/
+ * `CREATE INDEX` statements, which already guard themselves) fail with
+ * `duplicate column name` on a database that already has them from a
+ * prior run. Never masks a genuinely different schema error — only the
+ * narrow "this exact statement was already applied" signatures. */
+const ALREADY_APPLIED_SCHEMA_ERROR = /duplicate column name|already exists/i;
+
 function runMigrations(db: D1Database): Promise<void> {
   const files = readdirSync(MIGRATIONS_DIR)
     .filter((f) => f.endsWith('.sql'))
@@ -128,7 +143,13 @@ function runMigrations(db: D1Database): Promise<void> {
       )
       .filter((s) => s.length > 0);
     for (const stmt of statements) {
-      await db.exec(stmt);
+      try {
+        await db.exec(stmt);
+      } catch (e) {
+        const message = e instanceof Error ? e.message : String(e);
+        if (ALREADY_APPLIED_SCHEMA_ERROR.test(message)) continue;
+        throw e;
+      }
     }
   }, Promise.resolve());
 }
