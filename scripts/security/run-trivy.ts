@@ -18,6 +18,8 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { bootstrapAll } from './bootstrap';
 
+export class RepositoryCacheDirError extends Error {}
+
 const REPO_ROOT = fileURLToPath(new URL('../..', import.meta.url));
 const OUTPUT_DIR = join(REPO_ROOT, 'security', 'output');
 const OUTPUT_PATH = join(OUTPUT_DIR, 'trivy.json');
@@ -47,9 +49,42 @@ interface TrivyReport {
 
 const BLOCKING_SEVERITIES = new Set(['CRITICAL', 'HIGH']);
 
+/**
+ * SUN-1000 checkpoint 1F — optional external cache-directory override.
+ *
+ * Trivy's vulnerability DB (~108 MB) and its extraction/working files
+ * must land somewhere with real free space. This repository's default
+ * disk has repeatedly been at or near capacity (checkpoint 1B: 1.1 GiB
+ * free; checkpoint 1F baseline: 2.9 GiB free — both on the single local
+ * APFS container, there is no separate higher-capacity volume on this
+ * host). Rather than hard-coding a personal absolute path into source,
+ * accept a non-secret override via `TRIVY_CACHE_DIR`; when unset, Trivy
+ * falls through to its own built-in default cache location unchanged
+ * (no behavior change for any caller that doesn't opt in). The
+ * repository source tree itself is never a valid cache target — reject
+ * it outright rather than silently caching inside tracked files.
+ */
+export function resolveCacheDir(
+  env: Record<string, string | undefined>,
+  repoRoot: string
+): string | undefined {
+  const override = env.TRIVY_CACHE_DIR;
+  if (!override) return undefined;
+  const resolved = join(override);
+  if (resolved === repoRoot || resolved.startsWith(repoRoot + '/')) {
+    throw new RepositoryCacheDirError(
+      `TRIVY_CACHE_DIR must not be inside the repository source tree (got: ${resolved})`
+    );
+  }
+  return resolved;
+}
+
 async function main(): Promise<void> {
   const { trivy } = await bootstrapAll();
   mkdirSync(OUTPUT_DIR, { recursive: true });
+
+  const cacheDir = resolveCacheDir(process.env, REPO_ROOT);
+  const cacheArgs = cacheDir ? ['--cache-dir', cacheDir] : [];
 
   const result = spawnSync(
     trivy,
@@ -65,6 +100,7 @@ async function main(): Promise<void> {
       'node_modules,.security-tools,dist,.venv,services/modal-worker/.venv',
       '--exit-code',
       '0', // never let trivy's own exit code stand in for our policy decision — we classify the JSON ourselves below
+      ...cacheArgs,
       REPO_ROOT,
     ],
     { cwd: REPO_ROOT, stdio: 'inherit' }
@@ -118,7 +154,9 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((e) => {
-  console.error('TRIVY BOOTSTRAP/EXECUTION FAILURE:', e instanceof Error ? e.message : String(e));
-  process.exitCode = 1;
-});
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  main().catch((e) => {
+    console.error('TRIVY BOOTSTRAP/EXECUTION FAILURE:', e instanceof Error ? e.message : String(e));
+    process.exitCode = 1;
+  });
+}

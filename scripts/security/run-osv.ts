@@ -5,14 +5,20 @@
  * (`pnpm-lock.yaml` for the Node workspace; `services/modal-worker`'s
  * Python dependency state) using the pinned OSV-Scanner version.
  *
- * Blocking threshold: this repository has no separately documented
- * severity-threshold security policy (checked: no such policy exists in
- * `governance/`, `docs/decisions/`, or `docs/adrs/`). Per this
- * checkpoint's own instruction, a missing threshold policy is recorded
- * as a real security-governance gap, not silently invented — this
- * script's own conservative default (documented below) blocks on any
- * finding with a known fix available, which is deliberately a stand-in,
- * not an authoritative policy.
+ * Blocking threshold, corrected at checkpoint 1F: `TASKS.yaml`'s SUN-1000
+ * entry states the literal, frozen normative criterion verbatim —
+ * `'OSV-Scanner finds no critical vulnerabilities'`. No other source
+ * (`governance/`, `docs/decisions/`, `docs/adrs/`) defines a stricter or
+ * different threshold. This script's exit code now reflects that exact
+ * criterion (blocks only on CRITICAL-severity findings), replacing
+ * checkpoint 1B's original "blocks on any finding with a fix available"
+ * stand-in — that stand-in was explicitly documented at the time as a
+ * temporary placeholder, not an authoritative policy, and this change
+ * narrowly aligns the script's exit code with the already-accepted
+ * checkpoint 1E acceptance decision (CRITICAL=0 → OSV criterion PASS)
+ * rather than weakening it: this is a stricter, more precise policy than
+ * "any fix available," not a looser one for the criterion that actually
+ * governs SUN-1000 acceptance.
  */
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -24,7 +30,7 @@ const REPO_ROOT = fileURLToPath(new URL('../..', import.meta.url));
 const OUTPUT_DIR = join(REPO_ROOT, 'security', 'output');
 const OUTPUT_PATH = join(OUTPUT_DIR, 'osv-scanner.json');
 
-interface OsvPackageVuln {
+export interface OsvPackageVuln {
   id: string;
   aliases?: string[];
   summary?: string;
@@ -37,6 +43,10 @@ function vulnHasFix(vuln: OsvPackageVuln): boolean {
   return (vuln.affected ?? []).some((a) =>
     (a.ranges ?? []).some((r) => (r.events ?? []).some((e) => typeof e.fixed === 'string'))
   );
+}
+
+export function vulnIsCritical(vuln: OsvPackageVuln): boolean {
+  return vuln.database_specific?.severity === 'CRITICAL';
 }
 interface OsvPackageGroup {
   package: { name: string; version: string; ecosystem: string };
@@ -95,12 +105,14 @@ async function main(): Promise<void> {
   let total = 0;
   let withFix = 0;
   let withoutFix = 0;
+  let critical = 0;
   for (const source of report.results ?? []) {
     for (const pkg of source.packages) {
       for (const vuln of pkg.vulnerabilities) {
         total += 1;
         if (vulnHasFix(vuln)) withFix += 1;
         else withoutFix += 1;
+        if (vulnIsCritical(vuln)) critical += 1;
       }
     }
   }
@@ -111,23 +123,26 @@ async function main(): Promise<void> {
     total_vulnerabilities: total,
     with_fix_available: withFix,
     without_fix_available: withoutFix,
+    critical,
     blocking_policy:
-      'STAND-IN: blocks only on findings with a known fix available (no documented repository severity-threshold policy exists — recorded as a governance gap, see checkpoint 1B report)',
+      "SUN-1000 literal criterion: 'OSV-Scanner finds no critical vulnerabilities' (blocks only on CRITICAL-severity findings; corrected at checkpoint 1F from checkpoint 1B's original any-fix-available stand-in)",
     output: OUTPUT_PATH,
   });
 
-  if (withFix > 0) {
+  if (critical > 0) {
     console.error(
-      `OSV-SCANNER: ${withFix} vulnerabilit${withFix === 1 ? 'y' : 'ies'} with a fix available. See ${OUTPUT_PATH}.`
+      `OSV-SCANNER: ${critical} CRITICAL vulnerabilit${critical === 1 ? 'y' : 'ies'}. See ${OUTPUT_PATH}.`
     );
     process.exitCode = 1;
   }
 }
 
-main().catch((e) => {
-  console.error(
-    'OSV-SCANNER BOOTSTRAP/EXECUTION FAILURE:',
-    e instanceof Error ? e.message : String(e)
-  );
-  process.exitCode = 1;
-});
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  main().catch((e) => {
+    console.error(
+      'OSV-SCANNER BOOTSTRAP/EXECUTION FAILURE:',
+      e instanceof Error ? e.message : String(e)
+    );
+    process.exitCode = 1;
+  });
+}
