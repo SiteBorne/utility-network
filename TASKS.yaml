@@ -1045,8 +1045,9 @@ tasks:
       - 'Payment suite passes'
       - 'Chaos suite passes'
       - 'Load suite passes'
-    evidence: []
-    next_action: 'Selected as the next dependency-ready serial frontier after SUN-0900B acceptance. Run the complete security release gate in its own separately authorized checkpoint; do not infer production readiness from selection alone.'
+    evidence:
+      - 'Checkpoint 1A (release-gate baseline audit): 6 of 12 required criteria PASS with evidence (ESLint 9.18.0, Ruff 0.16.1, mypy 2.3.0 strict=true, Gitleaks 8.30.1, property tests, payment suite -- interpreted as the existing distributed payment/replay/lifecycle coverage). 6 of 12 are FAIL_INTERNAL: Semgrep, OSV-Scanner, Trivy, and Schemathesis are not installed and not wired into CI (.github/workflows/ci.yml only runs ESLint/typecheck/test, Ruff/mypy/pytest, and Gitleaks); no chaos suite or load suite exists anywhere in the repository. All six are missing local tooling/test coverage, not blocked external infrastructure -- 0 BLOCKED_EXTERNAL, 0 CONTRADICTION. Also re-verified, via existing deterministic tests only (no live payment): Payment-Identifier uniqueness, immutable v2 binding/duplicate_conflict, no double execution/settlement, SETTLEMENT_PENDING durability/recovery, PCC/receipt/PSL/A2A signing and tamper-detection, document-processing bounds, SSRF boundary (ADR 0004, gaps already documented), sandbox/production separation, and production_enabled=false hardcoded at the route-construction layer independent of environment config. See docs/reports/SUN-1000-security-release-gate-baseline.md.'
+    next_action: 'SUN-1000 remains active (decision B: internal gaps, not external blockers). Next checkpoint: SUN-1000 Checkpoint 1B -- install and wire Semgrep, OSV-Scanner, and Trivy (the most homogeneous group of the six gaps: single-binary/single-command CLI scanners, no account/credential required, near-identical integration pattern), establish a no-critical-findings baseline. Schemathesis and the chaos/load suites are deliberately left for later, separate checkpoints. Do not begin SUN-0800B/SUN-1100/SUN-1200.'
     blocker: null
     commit_ref: null
 
