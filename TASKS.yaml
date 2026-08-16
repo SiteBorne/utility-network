@@ -988,7 +988,7 @@ tasks:
   - id: 'SUN-0900B'
     title: 'Nevermined Sandbox Registration and Live Settlement Verification'
     phase: 'phase_11_nevermined'
-    state: 'active'
+    state: 'accepted'
     owner_agent: 'operator'
     dependencies:
       - 'SUN-0900A'
@@ -1019,14 +1019,15 @@ tasks:
       - 'Checkpoint 2I (positive-but-insufficient document balance): ACCEPTED. The first OCR-disabled payment pay_f9cfc34bac0d46bc980d71b286bf39a6 remains an immutable fail-closed verified/REJECTED incident with zero provider transactions or settlement. After a committed OCR/input-boundary repair, one new corrected payment pay_889841069efe4410908ed76a7c1ad18c started at 178000 credits and measured a real ten-page OCR UsageResult of 190000. Real verifyPermissions and service execution each occurred once; PCC and the Ed25519 receipt passed before durable SETTLEMENT_PENDING. Real settlePermissions occurred once. The provider succeeded externally while the local immediate-observation gate failed closed; same-payment seller GET/on-chain recovery added zero verify/execute/settle/jobs. Base Sepolia tx 0xbc3693feca26bfc9282e3e0c746123d89f45e40dbb9b42679567426e97d46aa4 proves a full 190000-atomic acquisition (188100 seller + 1900 platform), 190000 credits acquired/redeemed, and 178000 ending credits. Classification: PARTIAL_POSITIVE_INSUFFICIENT_BALANCE_PROVEN=true, FULL_BUNDLE_TOPUP. PSL v2 verified, consumed state persisted, credential-free fresh-process replay added zero work/provider calls, and changed binding returned replay_conflict. See docs/reports/SUN-0900B-checkpoint-2i-document-partial-balance.md.'
       - 'Checkpoint 2J (company evidence registration): ACCEPTED. Builder-only reconciliation proved authoritative NO_MATCH across six bounded passes (0 matching agents and 0 matching plans) before exactly one guarded registerAgentAndPlan mutation. The frozen company registration is agentId 63058244394774357835944659628164807563769006924765007721830897155339294179447 and planId 61176543225966665382887590264143689398477975837289843272089835781341158489584. Authoritative GET read-back passed validateNeverminedFixedPaygPlan and reconciled EXACT_EXISTING: exact agent/plan identity, one canonical POST endpoint, exact linkage, 38610 seller + 390 platform = 39000 atomic Base Sepolia USDC, PAYG credits 1/1/1, credits access, non-trial, non-recurring, and no document dynamic-credit configuration. Delegation/token/verify/execute/settle/Payment-Identifier/job/payment/USDC-movement totals remained zero. See docs/reports/SUN-0900B-checkpoint-2j-company-registration.md.'
       - 'Checkpoint 2K (verify-agent-output registration): ACCEPTED. Builder-only reconciliation proved authoritative NO_MATCH across six bounded passes (0 matching agents and 0 matching plans) before exactly one guarded registerAgentAndPlan mutation. The frozen verify registration is agentId 75096875289866166059253207097165867959384005104090226106621988801798698661167 and planId 106105151389083481380363516765690985250481102170794631056207896452064676707220. The reused credential-independent fixed-PAYG validator passed authoritative GET read-back and final reconciliation returned EXACT_EXISTING: exact identity/POST endpoint/linkage, 18810 seller + 190 platform = 19000 atomic Base Sepolia USDC, PAYG credits 1/1/1, credits access, non-trial, non-recurring, and explicit rejection of document dynamic credits. Delegation/token/verify/execute/settle/Payment-Identifier/job/payment/USDC-movement totals remained zero. See docs/reports/SUN-0900B-checkpoint-2k-verify-registration.md.'
-    next_action: 'Do not register another verify, company, web, or document plan and do not execute or pay for verify_agent_output.v1. The next separately authorized checkpoint is the SUN-0900B final completeness audit: reconcile all four frozen registrations and external IDs, enumerate accepted live capabilities and controlled settlements, test master-directive acceptance criteria, identify only genuine remaining gaps, and decide whether SUN-0900B can be accepted. Do not invent another payment checkpoint or begin the audit automatically. Production remains false.'
+      - 'Checkpoint 2L (final completeness audit): ACCEPTED. Builder-only exhaustive GET pagination found 5 published agents and 5 plans: exactly one authoritative canonical agent/plan pair for each of the four services plus one clearly segregated dynamic capability probe. All four frozen IDs passed their accepted authoritative validators and reconciled EXACT_EXISTING with zero duplicate canonical registrations. The eight normative SUN-0900B acceptance tests all pass; the accepted web lifecycle generalizes the shared fixed-PAYG provider mechanism to the registered company/verify declarations, while the document zero-balance and positive-insufficient lifecycles prove prepaid dynamic credits and FULL_BUNDLE_TOPUP. This audit made zero registrations, delegations, tokens, verification, service, settlement, payment, job, or USDC mutations. See docs/reports/SUN-0900B-final-completeness-audit.md.'
+    next_action: 'ACCEPTED. The Nevermined sandbox rail is frozen infrastructure: four canonical positive-price non-trial registrations, fixed-PAYG live settlement/recovery, document prepaid-credit zero-balance and FULL_BUNDLE_TOPUP lifecycles, authoritative D1 replay, Model D, and secret boundaries are proven. No additional Nevermined sandbox payment or registration is required for SUN-0900B. SUN-1000 is the next dependency-ready serial frontier; do not begin it without a separate directive. Production remains disabled and not ready.'
     blocker: null
-    commit_ref: null
+    commit_ref: '39484d0923ce82110c47973b89b63cf0ce596acc'
 
   - id: 'SUN-1000'
     title: 'Security release gate (Semgrep, ESLint, Ruff, mypy, OSV-Scanner, Trivy, Gitleaks, Schemathesis, property, payment, chaos, load)'
     phase: 'phase_12_security_gate'
-    state: 'pending'
+    state: 'active'
     owner_agent: 'architect'
     dependencies:
       - 'SUN-0900B'
@@ -1045,7 +1046,7 @@ tasks:
       - 'Chaos suite passes'
       - 'Load suite passes'
     evidence: []
-    next_action: 'Public registry launch'
+    next_action: 'Selected as the next dependency-ready serial frontier after SUN-0900B acceptance. Run the complete security release gate in its own separately authorized checkpoint; do not infer production readiness from selection alone.'
     blocker: null
     commit_ref: null
 

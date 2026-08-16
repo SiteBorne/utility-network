@@ -75,9 +75,18 @@ amount redeemed, and a bounded reason code.
 ## Current state
 
 The CDP rail has accepted live Base Sepolia exact and upto evidence. The
-Nevermined rail now has a deterministic Edge provider, official-SDK adapter, and
-exactly four explicit local fixture-test routes through the shared lifecycle.
-Its fixture provider cannot produce external trust, and the default application
-fails closed without an authenticated sandbox provider. No Nevermined account,
-credential, registration, network verification, or settlement has occurred.
+Nevermined sandbox rail is also accepted: all four canonical positive-price,
+non-trial registrations reconcile exactly; the web plan proves the shared fixed
+PAYG provider mechanism; and the document plan proves reusable prepaid dynamic
+credits for both zero and positive-insufficient starting balances. The latter
+uses `FULL_BUNDLE_TOPUP`, so cash movement, credits acquired, credits redeemed,
+and usage value remain distinct evidence facts.
+
+Both live proof families demonstrate durable `SETTLEMENT_PENDING`, seller-side
+GET reconciliation, rail-aware PaymentServiceLink v2, consumed state,
+fresh-process reconstruction, zero-work replay, and changed-binding conflict
+without a second settlement or execution. Fixture trust remains ineligible for
+`external_verified`, access tokens remain ephemeral, and the default application
+still fails closed without authenticated configuration. These are controlled
+Base Sepolia sandbox proofs, not revenue or independent-customer evidence.
 Production remains disabled and not ready.

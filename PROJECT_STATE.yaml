@@ -10,12 +10,12 @@ source_directive:
 execution:
   mode: 'serial'
   active_mutation_tasks: 1
-  current_increment: 'SUN-0900B'
-  current_phase: 'phase_11_nevermined'
-  last_completed_increment: 'SUN-0900A'
+  current_increment: 'SUN-1000'
+  current_phase: 'phase_12_security_gate'
+  last_completed_increment: 'SUN-0900B'
   frontier_status: 'executable'
   blocked_on: []
-  reason: 'SUN-0900B remains active pending its separately authorized final completeness audit. Checkpoints 2H and 2I accept the frozen Nevermined document prepaid-credit lifecycle, including FULL_BUNDLE_TOPUP for positive-but-insufficient balance. Checkpoint 2J freezes company_evidence_graph.v1. Checkpoint 2K now freezes verify_agent_output.v1 after one reconcile-first builder registration and authoritative GET validation: agent 75096875289866166059253207097165867959384005104090226106621988801798698661167, plan 106105151389083481380363516765690985250481102170794631056207896452064676707220, exact fixed PAYG gross 19000 atomic Base Sepolia USDC. Registration caused no payment, service, delegation, token, verification, settlement, job, or USDC movement. All four canonical Nevermined service registrations are now frozen; SUN-0900B acceptance itself has not yet been audited. Production remains disabled and not ready.'
+  reason: 'SUN-0900B is accepted after its zero-mutation final completeness audit proved all eight normative criteria: builder-only exhaustive GET reconciliation found exactly one canonical registration for each of the four services plus one segregated capability probe; all frozen IDs validate and reconcile EXACT_EXISTING; fixed PAYG, document prepaid credits, FULL_BUNDLE_TOPUP, durable recovery/replay, Model D, trial prohibitions, and secret boundaries are accepted. The major-package burn-down is 4 remaining. SUN-1000 is now the sole dependency-ready active frontier, selected but not started. Production remains disabled and not ready.'
 
 implemented:
   - 'governance_validation'
@@ -114,6 +114,7 @@ implemented:
   - 'nevermined_document_partial_balance_full_bundle_topup' # SUN-0900B checkpoint 2I; 178000 start, 190000 acquisition/burn, 178000 end, durable recovery/replay
   - 'nevermined_company_evidence_registration' # SUN-0900B checkpoint 2J; fixed PAYG agent/plan frozen after authoritative read-back
   - 'nevermined_verify_agent_output_registration' # SUN-0900B checkpoint 2K; fixed PAYG agent/plan frozen after authoritative read-back
+  - 'nevermined_sandbox_payment_rail_accepted' # SUN-0900B checkpoint 2L; four exact registrations, fixed/dynamic live proof, recovery/replay, no production claim
 
 not_implemented:
   - 'company_evidence_graph_xbrl_facts_and_repository_signals_field_groups'
@@ -140,7 +141,6 @@ blocked_external:
   - 'cloudflare_account_configuration'
   - 'cloudflare_production_provisioning'
   - 'ionos_dns_migration'
-  - 'nevermined_credentials'
   - 'registry_publication'
   - 'modal_deployment_token'
   - 'startup_program_approvals'
@@ -216,4 +216,4 @@ pcc_schema:
   extension_namespace: 'reverse-domain-qualified'
   drift_check: 'enabled'
 
-last_updated: '2026-08-11T04:05:27Z'
+last_updated: '2026-08-16T00:23:04Z'

@@ -45,12 +45,12 @@ Each service has one local agent identity and one positive-price, non-trial PAYG
 plan declaration. Declarations themselves perform no upstream registration; the
 registration state below records separately authorized sandbox checkpoints.
 
-| Service                     | Semantics               | Gross buyer amount (USDC atomic) | Registration state                        |
-| --------------------------- | ----------------------- | -------------------------------: | ----------------------------------------- |
-| `company_evidence_graph.v1` | exact                   |                            39000 | locally eligible; not registered          |
-| `web_context_verified.v1`   | exact                   |                             9000 | registered; fixed PAYG proven             |
-| `document_evidence_json.v1` | prepaid dynamic credits |                      190000 pool | registered; authoritative read-back valid |
-| `verify_agent_output.v1`    | exact                   |                            19000 | locally eligible; not registered          |
+| Service                     | Semantics               | Gross buyer amount (USDC atomic) | Frozen agent ID                                                                  | Frozen plan ID                                                                   |
+| --------------------------- | ----------------------- | -------------------------------: | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `company_evidence_graph.v1` | fixed PAYG              |                            39000 | `63058244394774357835944659628164807563769006924765007721830897155339294179447`  | `61176543225966665382887590264143689398477975837289843272089835781341158489584`  |
+| `web_context_verified.v1`   | fixed PAYG              |                             9000 | `37714377069519076502259354421538507339628407587207707299869594618861814144272`  | `94523930722525068656272128894334430057768353189467518442660086462546695282012`  |
+| `document_evidence_json.v1` | prepaid dynamic credits |                      190000 pool | `109760621961288696094411057321700210583752765344624386042713081041578011828571` | `64977106381472769302826211192910538031161833107493020584806963732279386695975`  |
+| `verify_agent_output.v1`    | fixed PAYG              |                            19000 | `75096875289866166059253207097165867959384005104090226106621988801798698661167`  | `106105151389083481380363516765690985250481102170794631056207896452064676707220` |
 
 Amounts are derived through `@siteborne/pricing` from
 `governance/RISK_LIMITS.yaml`; they are not independent Nevermined constants.
@@ -58,24 +58,28 @@ The amount is the canonical gross buyer amount. Eventual Nevermined provider net
 proceeds/platform split is a distinct registration-time concern and is not
 invented here.
 
-The document declaration also binds usage-value modes of 12000/native page,
-19000/OCR page, and 29000/table page. Checkpoint 2E accepted the Nevermined
-prepaid dynamic-credit model; Checkpoint 2F added an authoritative read-back
-validator for a 190000-atomic purchase granting 190000 credits with variable
-12000..190000 redemption. It now states
-`dynamic_actual_settlement_required: true`,
-`sandbox_capability_verified: false`, and `registration_allowed: true`.
-Checkpoint 2G executed that single reconcile-first builder registration after a
-read-only `NO_MATCH` result. The registration is frozen at agent ID
-`109760621961288696094411057321700210583752765344624386042713081041578011828571`
-and plan ID
-`64977106381472769302826211192910538031161833107493020584806963732279386695975`.
-Authoritative GET read-back passed the Checkpoint 2F validator and reconciled as
-`EXACT_EXISTING`; another registration is neither required nor authorized. This
-proves registration only. The live document lifecycle, replay, and
-partial-balance top-up behavior have not passed, so
-`sandbox_capability_verified: false` and `dynamic_live_allowed: false` remain
-unchanged.
+The final Checkpoint 2L builder-only audit exhaustively paginated the published
+objects and found exactly five agent/plan pairs: one exact canonical pair for
+each service and one clearly segregated dynamic-capability probe. All four
+frozen pairs passed the accepted authoritative read-back validators and
+reconciled `EXACT_EXISTING`; there are no duplicate canonical registrations.
+
+The document declaration binds usage-value modes of 12000/native page, 19000/OCR
+page, and 29000/table page. The accepted plan acquires 190000 reusable credits
+for 190000 atomic USDC and permits variable 12000..190000 redemption. Checkpoint
+2H proved zero-balance acquisition followed by a 12000-credit burn and durable
+same-payment recovery. Checkpoint 2I proved positive-insufficient behavior is
+`FULL_BUNDLE_TOPUP`: 178000 starting + 190000 acquired - 190000 redeemed =
+178000 remaining. Therefore `sandbox_capability_verified: true` and
+`dynamic_live_allowed: true` are truthful for this bounded sandbox capability.
+They do not enable production.
+
+The accepted real web lifecycle is the shared fixed-PAYG provider-mechanism
+proof for company, web, and verify: all three use the same SDK/provider,
+`nvm:erc4337` scheme, 1/1/1 credits helper, verification/settlement adapter, D1
+lifecycle, PCC/receipt path, and PaymentServiceLink v2; only identity, endpoint,
+and fixed amount vary. The normative SUN-0900B criteria do not require a
+separate controlled payment for every fixed service.
 
 Free, zero-price, credit-trial, and time-trial declarations fail policy
 validation. SITEBORNE does not create a free test plan.
@@ -114,6 +118,8 @@ authenticated SDK factory can produce evidence eligible for `external_verified`.
 Default paths are absent, or return provider-unavailable when explicitly enabled
 without authenticated configuration. They never fall back to CDP.
 
-SUN-0900B owns credentials, builder/subscriber identities, agent/plan
-registration, live sandbox verification/settlement, and proof of document
-actual-usage capability. Production and `live` remain disabled.
+SUN-0900B is accepted as controlled sandbox infrastructure. Its registrations,
+fixed-PAYG settlement/recovery proof, document dynamic-credit proof, and
+historical evidence are frozen. Controlled self-tests are not revenue,
+independent-customer evidence, or production evidence. Production and the
+Nevermined `live` environment remain disabled.

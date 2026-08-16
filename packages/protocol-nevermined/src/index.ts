@@ -9,6 +9,7 @@ export * from './evidence';
 export * from './live-guard';
 export * from './payment-identifier';
 export * from './registry-reconciliation';
+export * from './registration-completeness';
 export * from './document-dynamic-plan-validator';
 export * from './fixed-payg-plan-validator';
 export * from './delegation-reconciliation';
