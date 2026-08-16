@@ -101,3 +101,40 @@ export const SUN_0900B_COMPANY_REGISTRATION: Sun0900BCompanyRegistration = {
   is_trial_plan: false,
   billing_model: 'pay-as-you-go',
 };
+
+/**
+ * SUN-0900B checkpoint 2K — frozen public registration for
+ * `verify_agent_output.v1`. Accepted after one builder-only,
+ * reconcile-first registration and authoritative fixed-PAYG GET validation.
+ */
+export interface Sun0900BVerifyRegistration {
+  service_id: 'verify_agent_output.v1';
+  environment: 'sandbox';
+  network: 'eip155:84532';
+  scheme: 'nvm:erc4337';
+  agent_id: string;
+  plan_id: string;
+  agent_name: string;
+  plan_name: string;
+  gross_buyer_amount_atomic: '19000';
+  seller_receiver: string;
+  asset_token_address: string;
+  is_trial_plan: false;
+  billing_model: 'pay-as-you-go';
+}
+
+export const SUN_0900B_VERIFY_REGISTRATION: Sun0900BVerifyRegistration = {
+  service_id: 'verify_agent_output.v1',
+  environment: 'sandbox',
+  network: 'eip155:84532',
+  scheme: 'nvm:erc4337',
+  agent_id: '75096875289866166059253207097165867959384005104090226106621988801798698661167',
+  plan_id: '106105151389083481380363516765690985250481102170794631056207896452064676707220',
+  agent_name: 'Agent Output Verification',
+  plan_name: 'Agent Output Verification — PAYG plan',
+  gross_buyer_amount_atomic: '19000',
+  seller_receiver: '0x7f44a2dd237938F18632d4CcA40f4c690295E6E1',
+  asset_token_address: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+  is_trial_plan: false,
+  billing_model: 'pay-as-you-go',
+};

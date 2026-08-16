@@ -15,7 +15,7 @@ execution:
   last_completed_increment: 'SUN-0900A'
   frontier_status: 'executable'
   blocked_on: []
-  reason: 'SUN-0900B remains active. Checkpoints 2H and 2I accept the frozen Nevermined document prepaid-credit lifecycle, including FULL_BUNDLE_TOPUP for positive-but-insufficient balance. Checkpoint 2J now freezes the company_evidence_graph.v1 sandbox registration after one reconcile-first builder mutation and authoritative GET validation: agent 63058244394774357835944659628164807563769006924765007721830897155339294179447, plan 61176543225966665382887590264143689398477975837289843272089835781341158489584, exact fixed PAYG gross 39000 atomic Base Sepolia USDC. Registration caused no payment, service, delegation, token, verification, settlement, job, or USDC movement. verify_agent_output.v1 remains the only canonical Nevermined service registration not yet frozen. Production remains disabled and not ready.'
+  reason: 'SUN-0900B remains active pending its separately authorized final completeness audit. Checkpoints 2H and 2I accept the frozen Nevermined document prepaid-credit lifecycle, including FULL_BUNDLE_TOPUP for positive-but-insufficient balance. Checkpoint 2J freezes company_evidence_graph.v1. Checkpoint 2K now freezes verify_agent_output.v1 after one reconcile-first builder registration and authoritative GET validation: agent 75096875289866166059253207097165867959384005104090226106621988801798698661167, plan 106105151389083481380363516765690985250481102170794631056207896452064676707220, exact fixed PAYG gross 19000 atomic Base Sepolia USDC. Registration caused no payment, service, delegation, token, verification, settlement, job, or USDC movement. All four canonical Nevermined service registrations are now frozen; SUN-0900B acceptance itself has not yet been audited. Production remains disabled and not ready.'
 
 implemented:
   - 'governance_validation'
@@ -113,6 +113,7 @@ implemented:
   - 'nevermined_document_zero_balance_dynamic_credit_lifecycle' # SUN-0900B checkpoint 2H; controlled sandbox only, 190000 acquisition then 12000 burn, durable recovery/replay
   - 'nevermined_document_partial_balance_full_bundle_topup' # SUN-0900B checkpoint 2I; 178000 start, 190000 acquisition/burn, 178000 end, durable recovery/replay
   - 'nevermined_company_evidence_registration' # SUN-0900B checkpoint 2J; fixed PAYG agent/plan frozen after authoritative read-back
+  - 'nevermined_verify_agent_output_registration' # SUN-0900B checkpoint 2K; fixed PAYG agent/plan frozen after authoritative read-back
 
 not_implemented:
   - 'company_evidence_graph_xbrl_facts_and_repository_signals_field_groups'
@@ -124,7 +125,6 @@ not_implemented:
   - 'mcp_publication_and_public_endpoint' # SUN-0800B blocked_external
   - 'a2a_publication_and_public_endpoint' # SUN-0800B blocked_external
   - 'a2a_production_signing_identity' # SUN-0800B blocked_external
-  - 'nevermined_verify_agent_output_registration' # SUN-0900B active; verify_agent_output.v1 remains to register/reconcile
   - 'agentverse'
   - 'modal_document_processing'
   - 'production_deployment'
