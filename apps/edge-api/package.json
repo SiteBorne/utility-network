@@ -49,6 +49,6 @@
     "fast-check": "^3.17.0",
     "miniflare": "5.20260801.0-alpha",
     "typescript": "^5.5.0",
-    "vitest": "^2.1.9"
+    "vitest": "^3.2.7"
   }
 }
