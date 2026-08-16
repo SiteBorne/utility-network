@@ -62,6 +62,14 @@ pip-wheel-metadata
 yarn.lock
 package-lock.json
 
+# SUN-1000 checkpoint 1B — provisioned security scanners (Semgrep venv,
+# OSV-Scanner/Trivy binaries). Versions are pinned in
+# security/tool-versions.json; the binaries themselves are never
+# committed. Reports/output are also excluded (real findings, not
+# committed evidence — the checkpoint report is the durable record).
+.security-tools
+security/output
+
 # Turbo
 .turbo
 

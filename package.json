@@ -83,6 +83,11 @@
     "nevermined:check": "pnpm --filter @siteborne/protocol-nevermined run format:check && pnpm --filter @siteborne/protocol-nevermined run lint && pnpm --filter @siteborne/protocol-nevermined run typecheck && pnpm nevermined:test && pnpm nevermined:fixtures:verify && pnpm nevermined:spec:verify && pnpm nevermined:compat:verify",
     "secrets:scope:verify": "tsx scripts/verify-secret-scan-scope.ts",
     "secrets:scan": "pnpm secrets:scope:verify && gitleaks git . --config=.gitleaks.toml --redact --verbose && gitleaks dir . --config=.gitleaks.toml --redact --verbose",
+    "security:bootstrap": "tsx scripts/security/bootstrap.ts",
+    "security:semgrep": "tsx scripts/security/run-semgrep.ts",
+    "security:osv": "tsx scripts/security/run-osv.ts",
+    "security:trivy": "tsx scripts/security/run-trivy.ts",
+    "security:release": "pnpm security:semgrep && pnpm security:osv && pnpm security:trivy",
     "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm pcc:generate:check && pnpm services:generate:check && pnpm openapi:generate:check && pnpm python:test:pcc && pnpm python:test:modal && pnpm governance:validate && pnpm state:validate && pnpm tasks:validate && pnpm contracts:baseline:verify && pnpm contracts:compat:check && pnpm contracts:release:verify && pnpm migrations:verify && pnpm d1:test && pnpm control-plane:test && pnpm control-plane:check && pnpm adapters:check && pnpm document-worker:check && pnpm document-worker:fixtures:verify && pnpm verification:check && pnpm services-runtime:check && pnpm x402:check && pnpm mcp:check && pnpm a2a:check && pnpm nevermined:check && pnpm secrets:scan"
   },
   "devDependencies": {

@@ -112,6 +112,42 @@ jobs:
         with:
           args: detect --source="." --verbose --redact
 
+  security-release:
+    name: Security Release Gate (Semgrep, OSV-Scanner, Trivy)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+          run_install: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Bootstrap pinned scanners (Semgrep, OSV-Scanner, Trivy)
+        run: pnpm security:bootstrap
+
+      - name: Run release security gate
+        run: pnpm security:release
+        # SUN-1000 checkpoint 1B: this job runs the real scanners and
+        # reports genuinely (never swallowed) — it is deliberately NOT
+        # yet in `check`'s `needs` list, since real, evidenced,
+        # not-yet-remediated dependency findings exist today (see
+        # docs/reports/SUN-1000-checkpoint-1b-security-scanner-integration.md).
+        # Wiring it as a hard merge-blocking requirement is the explicit
+        # next checkpoint, once that remediation lands — not silently
+        # weakened here, just deliberately scoped out of this one.
+
   check:
     name: All Checks Passed
     needs: [validate, python-validate, secret-scan]
