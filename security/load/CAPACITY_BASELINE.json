@@ -1,0 +1,62 @@
+{
+  "baseline_id": "SUN-1000-1N-B2-v2-load-capacity-baseline",
+  "baseline_version": 1,
+  "environment_classification": "LOCAL_PREPRODUCTION_CAPACITY_BASELINE",
+  "source_checkpoint": "SUN-1000 Checkpoint 1N-B2",
+  "source_commit_parent": "5bc6c4d",
+  "not_a_production_sla": true,
+  "purpose": "Regression guard against this codebase's own measured local capacity on the accepted v2 load harness. Not a customer-facing latency/throughput guarantee, and not tuned to any external SLA -- none is defined anywhere in this repository's governance for the SUN-1000 load criterion.",
+  "update_policy": "A normal `pnpm security:load` run NEVER rewrites this file or loosens any threshold derived from it -- there is no 'learn mode' in ordinary release execution. Updating this baseline is a separate, deliberate, human-reviewed action (a new checkpoint, exactly like this one), requiring fresh measured evidence and an explicit commit reviewing the new numbers against the old ones.",
+  "measured_p95_evidence_ms": {
+    "_comment": "Worst-observed p95 (ms) across multiple real, unmodified campaigns against the accepted 1N-B harness (same profiles/concurrency/request-counts as committed at 5bc6c4d and unchanged since), collected across this checkpoint and the prior one. Real machine-to-machine/run-to-run variance is visible directly in this evidence (e.g. STEADY_CONCURRENCY ranged ~4012-6367ms across 3 runs) -- this is exactly why a same-run self-normalizing threshold cannot serve as a regression guard, and why the frozen ceilings below use a generous fixed margin over the worst value observed, not the typical one.",
+    "WARMUP": [980.8, 1550.3, 1002.4, 1040.8],
+    "STEADY_CONCURRENCY": [4011.8, 6367.2, 4180.1, 3964.7],
+    "BURST": [7422.2, 8008.0, 8132.5, 7384.8],
+    "D1_CONTENTION": [7271.0, 7629.7, 7736.2, 7780.4],
+    "MIXED_SERVICE": [5028.1, 4102.1, 4090.5, 4448.8]
+  },
+  "official_baseline_freeze_campaign": {
+    "_comment": "Full aggregate/per-service evidence from the single official 1N-B2 baseline-freeze campaign (post-instrumentation, pre-threshold-finalization run), dumped by RESOURCE_STABILITY to security/output/load-campaign-metrics.json and copied here for permanent record. Request counts/concurrency unchanged from the accepted 1N-B harness.",
+    "campaign_duration_ms": 55128.5,
+    "request_count": 118,
+    "aggregate": {
+      "min_ms": 556.0,
+      "mean_ms": 4376.2,
+      "p50_ms": 3960.6,
+      "p95_ms": 7718.0,
+      "p99_ms": 7780.4,
+      "max_ms": 7789.2,
+      "throughput_req_s": 2.14
+    },
+    "per_service": {
+      "company": { "requests": 64, "p95_ms": 7718.3, "throughput_req_s": 1.16 },
+      "web": { "requests": 18, "p95_ms": 4473.5, "throughput_req_s": 0.33 },
+      "document": { "requests": 18, "p95_ms": 4343.1, "throughput_req_s": 0.33 },
+      "verify": { "requests": 18, "p95_ms": 4241.3, "throughput_req_s": 0.33 }
+    },
+    "resource": {
+      "rss_before_mb": 308.1,
+      "rss_after_mb": 622.7,
+      "growth_factor": 2.02
+    }
+  },
+  "frozen_thresholds": {
+    "_derivation": "fixed_p95_ceiling_ms = max(worst_observed_p95 * margin, floor_ms). margin=3 (already-observed same-machine run-to-run variance alone reaches ~1.6x for STEADY_CONCURRENCY; a further 3x on top of the WORST observed value, not the typical one, gives ample headroom for CI-machine variability while still catching a genuine multi-x regression). floor_ms=5000 (CI-machine floor, matching 1N-B's original floor rationale, applied uniformly). Values rounded UP to the nearest 500ms for a small extra safety margin -- never rounded down.",
+    "margin": 3,
+    "floor_ms": 5000,
+    "p95_ceiling_ms": {
+      "WARMUP": 5000,
+      "STEADY_CONCURRENCY": 19500,
+      "BURST": 24500,
+      "D1_CONTENTION": 23500,
+      "MIXED_SERVICE": 15500
+    }
+  },
+  "throughput_policy": "THROUGHPUT_MEASURED_NOT_RELEASE_BLOCKING. Measured throughput (~1.8-2.2 req/s per profile) is recorded as evidence in security/output/load-campaign-metrics.json on every run, but is bounded by this harness's own deliberately-small concurrency settings (2-16) and real per-request cryptographic/D1 work, not by any system-wide capacity ceiling -- no trustworthy cross-machine minimum QPS can be justified from this evidence alone. Latency (this file), correctness (0 unexpected failures/duplicates), and resource-growth guards (RESOURCE_STABILITY, growth < 5x, already a fixed relative bound) are what release-gate this criterion.",
+  "resource_guard": {
+    "type": "RELATIVE_GROWTH_FIXED_BOUND",
+    "guard": "rss_after / rss_before < 5",
+    "measured_growth_evidence": [1.68, 2.01, 2.15, 2.12, 2.02],
+    "note": "Already a fixed constant (5x), not derived from any candidate run's own measurement -- retained unchanged at 1N-B2, not part of this checkpoint's correction."
+  }
+}

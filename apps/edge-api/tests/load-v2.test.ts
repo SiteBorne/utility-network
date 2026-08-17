@@ -1,5 +1,5 @@
 /**
- * SUN-1000 checkpoint 1N-B — v2 load / capacity release gate.
+ * SUN-1000 checkpoint 1N-B / 1N-B2 — v2 load / capacity release gate.
  *
  * Boots the exact same real Miniflare-backed D1 database + real
  * `buildPaidServicesApp` Hono app already used throughout this project's
@@ -16,13 +16,23 @@
  * `governance/PROMOTION_STATES.yaml`'s "Load test passes at Nx expected
  * traffic" both reference an SLA/traffic figure that is never itself
  * defined anywhere, and govern a different axis — per-service production
- * promotion, not this preproduction security-release gate). Per the
- * checkpoint directive: no production SLA is fabricated. Instead, a
- * `RELEASE_GATE_THRESHOLD` is derived empirically from this run's own
- * `WARMUP` profile, with a generous multiplier — its purpose is to catch
- * catastrophic regressions, not to certify a production capacity number.
+ * promotion, not this preproduction security-release gate). No production
+ * SLA is fabricated.
+ *
+ * Checkpoint 1N-B2 correction: 1N-B's original `RELEASE_GATE_THRESHOLD`
+ * (`max(warmupP95 * 10, 2000ms)`) was self-normalizing — computed fresh
+ * from the SAME candidate run's own `WARMUP` measurement, so a uniformly
+ * slower run would raise its own ceiling along with it
+ * (`SELF_NORMALIZING_REGRESSION_THRESHOLD`, confirmed at 1N-B2 by direct
+ * inspection). `WARMUP` still runs (it removes real startup/JIT/connection
+ * noise from the measurement), but it no longer determines its own release
+ * ceiling. Latency-gated profiles now compare against fixed, per-profile
+ * ceilings frozen in `security/load/CAPACITY_BASELINE.json` (loaded via
+ * `scripts/security/load-thresholds.ts`) — a committed, human-reviewed
+ * regression guard derived from real 1N-B campaign evidence, not
+ * recomputed by any ordinary `pnpm security:load` run.
  */
-import { readFileSync, readdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { readFileSync, readdirSync, mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -45,6 +55,18 @@ import {
   throughputPerSecond,
   type LatencyStats,
 } from '../../../scripts/security/load-stats';
+import { FIXED_P95_CEILING_MS } from '../../../scripts/security/load-thresholds';
+
+/** Test-only, credential-independent hook for the §11 uniform-global-
+ * slowdown negative control: a deterministic delay applied identically to
+ * EVERY real request (warmup included), simulating a broad system
+ * regression. Zero by default -- inert in every ordinary run. */
+const ARTIFICIAL_DELAY_MS = Number(process.env.LOAD_TEST_ARTIFICIAL_DELAY_MS ?? '0');
+async function applyArtificialDelay(): Promise<void> {
+  if (ARTIFICIAL_DELAY_MS > 0) {
+    await new Promise((r) => setTimeout(r, ARTIFICIAL_DELAY_MS));
+  }
+}
 
 const MIGRATIONS_DIR = fileURLToPath(new URL('../../../migrations', import.meta.url));
 
@@ -72,8 +94,9 @@ function runMigrations(db: D1Database): Promise<void> {
   }, Promise.resolve());
 }
 
-const V2_ROUTES: Record<string, { path: string; input: unknown }> = {
+const V2_ROUTES: Record<string, { serviceName: string; path: string; input: unknown }> = {
   company: {
+    serviceName: 'company',
     path: '/v2/company/evidence-graph',
     input: {
       identifiers: { cik: '0000320193' },
@@ -81,10 +104,12 @@ const V2_ROUTES: Record<string, { path: string; input: unknown }> = {
     },
   },
   web: {
+    serviceName: 'web',
     path: '/v2/web/context',
     input: { target_url: 'https://acme.example/', retrieval_mode: 'direct' },
   },
   document: {
+    serviceName: 'document',
     path: '/v2/document/evidence-json',
     input: {
       artifact_reference: {
@@ -95,6 +120,7 @@ const V2_ROUTES: Record<string, { path: string; input: unknown }> = {
     },
   },
   verify: {
+    serviceName: 'verify',
     path: '/v2/verify/agent-output',
     input: {
       verification_contract: {
@@ -116,13 +142,16 @@ interface RequestOutcome {
 }
 
 /** One full, real, HTTP 402 -> pay -> 200 lifecycle against a real port —
- * the genuine unit of work every profile below is built from. */
+ * the genuine unit of work every profile below is built from. Subject to
+ * `ARTIFICIAL_DELAY_MS` (zero by default) so the §11 uniform-slowdown
+ * negative control affects every request identically, warmup included. */
 async function runPaidLifecycle(
   baseUrl: string,
   route: { path: string; input: unknown },
   paymentIdentifier: string = generateSiteborneePaymentId()
 ): Promise<RequestOutcome> {
   const started = performance.now();
+  await applyArtificialDelay();
   const challengeRes = await fetch(baseUrl + route.path, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -150,6 +179,7 @@ async function runPaidLifecycle(
     extensions,
   };
   const header = encodePaymentSignatureHeaderSafe(payload);
+  await applyArtificialDelay();
   const payRes = await fetch(baseUrl + route.path, {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'PAYMENT-SIGNATURE': header },
@@ -178,16 +208,29 @@ interface ProfileResult {
   unexpectedFailures: number;
 }
 
+/** Every real request's outcome across the whole campaign, tagged with its
+ * profile and service -- the source of the aggregate/per-service summary
+ * dumped by `RESOURCE_STABILITY` at the end of the run (§1/§12 evidence,
+ * not a release gate itself). */
+interface TaggedOutcome extends RequestOutcome {
+  profile: string;
+  serviceName: string;
+}
+const CAMPAIGN_OUTCOMES: TaggedOutcome[] = [];
+const CAMPAIGN_STARTED = performance.now();
+
 async function runProfile(
   label: string,
-  routes: { path: string; input: unknown }[],
+  routes: { serviceName: string; path: string; input: unknown }[],
   concurrency: number,
   uniqueIds: boolean
 ): Promise<ProfileResult> {
   const started = performance.now();
-  const tasks = routes.map((route, i) => async () => {
+  const tasks = routes.map((route) => async () => {
     const id = uniqueIds ? generateSiteborneePaymentId() : undefined;
-    return runPaidLifecycle(GLOBAL_BASE_URL, route, id);
+    const outcome = await runPaidLifecycle(GLOBAL_BASE_URL, route, id);
+    CAMPAIGN_OUTCOMES.push({ ...outcome, profile: label, serviceName: route.serviceName });
+    return outcome;
   });
   const outcomes = await runWithConcurrency(tasks, concurrency);
   const durationMs = performance.now() - started;
@@ -197,7 +240,7 @@ async function runProfile(
   const throughput = throughputPerSecond(outcomes.length, durationMs);
   // eslint-disable-next-line no-console
   console.log(
-    `[load:${label}] attempted=${outcomes.length} successes=${successes} unexpected_failures=${unexpectedFailures} p50=${stats.p50.toFixed(1)}ms p95=${stats.p95.toFixed(1)}ms throughput=${throughput.toFixed(1)}req/s`
+    `[load:${label}] attempted=${outcomes.length} successes=${successes} unexpected_failures=${unexpectedFailures} min=${stats.min.toFixed(1)}ms mean=${stats.mean.toFixed(1)}ms p50=${stats.p50.toFixed(1)}ms p95=${stats.p95.toFixed(1)}ms p99=${stats.p99.toFixed(1)}ms max=${stats.max.toFixed(1)}ms throughput=${throughput.toFixed(1)}req/s`
   );
   return {
     attempted: outcomes.length,
@@ -219,8 +262,6 @@ describe('SUN-1000 checkpoint 1N-B — v2 load/capacity gate', () => {
   let tempDir: string;
   let mf: Miniflare;
   let server: ServerType;
-  let warmupStats: LatencyStats;
-  let releaseGateThresholdMs = 0;
   const rssBefore = process.memoryUsage().rss;
 
   beforeAll(async () => {
@@ -256,13 +297,12 @@ describe('SUN-1000 checkpoint 1N-B — v2 load/capacity gate', () => {
     );
     const result = await runProfile('WARMUP', routes, 2, true);
     expect(result.unexpectedFailures).toBe(0);
-    warmupStats = result.stats;
-    // SUN-1000 checkpoint 1N-B: a deliberately generous, empirically
-    // derived RELEASE_GATE_THRESHOLD -- 10x the measured warmup p95, with
-    // a 2000ms floor for CI-machine variability. This is a regression
-    // guard, not a production SLA (no such SLA is defined anywhere in
-    // this repository's governance for this criterion).
-    releaseGateThresholdMs = Math.max(warmupStats.p95 * 10, 2000);
+    // SUN-1000 checkpoint 1N-B2: WARMUP still removes real startup/JIT/
+    // connection noise from the measurement, but it no longer computes its
+    // own pass/fail ceiling from this same run (that was the 1N-B defect,
+    // SELF_NORMALIZING_REGRESSION_THRESHOLD). It is instead checked against
+    // the same fixed, committed ceiling every other run is checked against.
+    expect(result.stats.p95).toBeLessThan(FIXED_P95_CEILING_MS.WARMUP);
   }, 30_000);
 
   it('STEADY_CONCURRENCY: bounded sustained concurrency across all four v2 services stays within the release-gate threshold', async () => {
@@ -272,7 +312,10 @@ describe('SUN-1000 checkpoint 1N-B — v2 load/capacity gate', () => {
     const result = await runProfile('STEADY_CONCURRENCY', routes, 8, true);
     expect(result.unexpectedFailures).toBe(0);
     expect(result.successes).toBe(result.attempted);
-    expect(result.stats.p95).toBeLessThan(releaseGateThresholdMs);
+    // Fixed, committed ceiling (security/load/CAPACITY_BASELINE.json) --
+    // never derived from this or any other candidate run's own
+    // measurement. See scripts/security/load-thresholds.ts.
+    expect(result.stats.p95).toBeLessThan(FIXED_P95_CEILING_MS.STEADY_CONCURRENCY);
   }, 60_000);
 
   it('BURST: a short bounded concurrency spike completes with zero unexpected failures', async () => {
@@ -280,6 +323,7 @@ describe('SUN-1000 checkpoint 1N-B — v2 load/capacity gate', () => {
     const result = await runProfile('BURST', routes, 16, true);
     expect(result.unexpectedFailures).toBe(0);
     expect(result.successes).toBe(result.attempted);
+    expect(result.stats.p95).toBeLessThan(FIXED_P95_CEILING_MS.BURST);
   }, 30_000);
 
   it('D1_CONTENTION: concurrent unique-identifier requests against the same service exercise real D1 acquire/settle paths with zero contention errors', async () => {
@@ -291,6 +335,7 @@ describe('SUN-1000 checkpoint 1N-B — v2 load/capacity gate', () => {
     // no cross-request leakage under concurrent D1 access.
     const receiptClasses = new Set(result.outcomes.map((o) => o.resultClass));
     expect(receiptClasses.size).toBeLessThanOrEqual(1); // all report the same result_class ('success'), never a mixed/wrong class
+    expect(result.stats.p95).toBeLessThan(FIXED_P95_CEILING_MS.D1_CONTENTION);
   }, 60_000);
 
   it('MIXED_SERVICE: an even distribution across all four v2 services reports no single service silently dominating or failing', async () => {
@@ -302,6 +347,7 @@ describe('SUN-1000 checkpoint 1N-B — v2 load/capacity gate', () => {
     expect(result.unexpectedFailures).toBe(0);
     expect(result.successes).toBe(result.attempted);
     expect(result.attempted).toBe(perService * 4);
+    expect(result.stats.p95).toBeLessThan(FIXED_P95_CEILING_MS.MIXED_SERVICE);
   }, 60_000);
 
   it('DUPLICATE_ID_CONTENTION: 10 concurrent requests sharing one Payment-Identifier and the same quote binding produce at most one successful lifecycle, never duplicate execution', async () => {
@@ -345,11 +391,18 @@ describe('SUN-1000 checkpoint 1N-B — v2 load/capacity gate', () => {
       });
       const elapsedMs = performance.now() - t0;
       const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-      return {
+      const outcome = {
+        ok: res.status === 200,
         status: res.status,
         elapsedMs,
         resultClass: body.result_class as string | undefined,
       };
+      CAMPAIGN_OUTCOMES.push({
+        ...outcome,
+        profile: 'DUPLICATE_ID_CONTENTION',
+        serviceName: 'company',
+      });
+      return outcome;
     });
     const outcomes = await runWithConcurrency(tasks, 10);
     const durationMs = performance.now() - started;
@@ -378,7 +431,58 @@ describe('SUN-1000 checkpoint 1N-B — v2 load/capacity gate', () => {
     // A relative catastrophic-growth guard, not a tight absolute number
     // (machine-dependent) -- generous enough to tolerate normal Node/V8
     // heap growth from this bounded campaign, tight enough to catch a
-    // genuine unbounded leak.
+    // genuine unbounded leak. This guard is already a fixed constant, not
+    // derived from this run's own measurement -- retained unchanged at
+    // 1N-B2.
     expect(growthFactor).toBeLessThan(5);
+
+    // SUN-1000 checkpoint 1N-B2 §1/§12 evidence: aggregate + per-service
+    // summary across the entire campaign, dumped for baseline-freeze
+    // review. Not itself a release gate -- per-profile gates above (and
+    // RESOURCE_STABILITY's own guard) are what block the release.
+    const campaignDurationMs = performance.now() - CAMPAIGN_STARTED;
+    const aggregateStats = computeLatencyStats(CAMPAIGN_OUTCOMES.map((o) => o.elapsedMs));
+    const aggregateThroughput = throughputPerSecond(CAMPAIGN_OUTCOMES.length, campaignDurationMs);
+    const perService: Record<string, { count: number; p95: number; throughput: number }> = {};
+    for (const serviceName of new Set(CAMPAIGN_OUTCOMES.map((o) => o.serviceName))) {
+      const serviceOutcomes = CAMPAIGN_OUTCOMES.filter((o) => o.serviceName === serviceName);
+      const serviceStats = computeLatencyStats(serviceOutcomes.map((o) => o.elapsedMs));
+      perService[serviceName] = {
+        count: serviceOutcomes.length,
+        p95: serviceStats.p95,
+        throughput: throughputPerSecond(serviceOutcomes.length, campaignDurationMs),
+      };
+    }
+    // eslint-disable-next-line no-console
+    console.log(
+      `[load:AGGREGATE] requests=${CAMPAIGN_OUTCOMES.length} duration=${campaignDurationMs.toFixed(0)}ms p50=${aggregateStats.p50.toFixed(1)}ms p95=${aggregateStats.p95.toFixed(1)}ms p99=${aggregateStats.p99.toFixed(1)}ms max=${aggregateStats.max.toFixed(1)}ms throughput=${aggregateThroughput.toFixed(1)}req/s`
+    );
+    for (const [serviceName, s] of Object.entries(perService)) {
+      // eslint-disable-next-line no-console
+      console.log(
+        `[load:PER_SERVICE:${serviceName}] requests=${s.count} p95=${s.p95.toFixed(1)}ms throughput=${s.throughput.toFixed(1)}req/s`
+      );
+    }
+    const outputDir = fileURLToPath(new URL('../../../security/output', import.meta.url));
+    mkdirSync(outputDir, { recursive: true });
+    writeFileSync(
+      join(outputDir, 'load-campaign-metrics.json'),
+      JSON.stringify(
+        {
+          campaign_duration_ms: campaignDurationMs,
+          request_count: CAMPAIGN_OUTCOMES.length,
+          aggregate: aggregateStats,
+          aggregate_throughput_req_s: aggregateThroughput,
+          per_service: perService,
+          resource: {
+            rss_before_bytes: rssBefore,
+            rss_after_bytes: rssAfter,
+            growth_factor: growthFactor,
+          },
+        },
+        null,
+        2
+      )
+    );
   });
 });
