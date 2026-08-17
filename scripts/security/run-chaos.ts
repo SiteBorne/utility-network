@@ -1,21 +1,26 @@
 #!/usr/bin/env tsx
 /**
- * SUN-1000 checkpoint 1N-A — deterministic v2 chaos / failure-injection
- * gate orchestrator.
+ * SUN-1000 checkpoint 1N-A/1N-A2 — deterministic v2 chaos / failure-
+ * injection gate orchestrator.
  *
  * Runs the real, credential-free chaos matrix
- * (`apps/edge-api/tests/chaos-v2.test.ts`) via Vitest's JSON reporter,
- * then fails closed unless *every* named scenario in
- * `security/chaos/CHAOS_MATRIX.md` actually ran and passed — not merely
- * that the overall process exit code was 0. This catches the case a
- * generic "did vitest exit 0" check would miss: a scenario silently
- * skipped, renamed, or removed without anyone noticing, since Vitest
- * itself would still report success for the remaining tests.
+ * (`apps/edge-api/tests/chaos-v2.test.ts` — general v2 lifecycle faults;
+ * `apps/edge-api/tests/chaos-v2-settlement-recovery.test.ts` — v2
+ * settlement_pending durability/post-settlement uncertainty/
+ * reconciliation/restart recovery, checkpoint 1N-A2's completion of the
+ * gap 1N-A left open) via Vitest's JSON reporter, then fails closed
+ * unless *every* named scenario in `security/chaos/CHAOS_MATRIX.md`
+ * actually ran and passed — not merely that the overall process exit
+ * code was 0. This catches the case a generic "did vitest exit 0" check
+ * would miss: a scenario silently skipped, renamed, or removed without
+ * anyone noticing, since Vitest itself would still report success for
+ * the remaining tests.
  *
  * No provider credentials are used or required — every fault in the
  * matrix is injected at the `PaymentEvidenceProvider`/executor seam
  * already exposed by `apps/edge-api/src/control-plane/routes/
- * paid-services.ts`, never a real network call.
+ * paid-services.ts` and `x402-service.ts`'s `createX402ServiceRoute`,
+ * never a real network call.
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -25,7 +30,10 @@ import { spawnSync } from 'node:child_process';
 const REPO_ROOT = fileURLToPath(new URL('../..', import.meta.url));
 const OUTPUT_DIR = join(REPO_ROOT, 'security', 'output');
 const OUTPUT_PATH = join(OUTPUT_DIR, 'chaos.json');
-const TEST_FILE = join(REPO_ROOT, 'apps', 'edge-api', 'tests', 'chaos-v2.test.ts');
+const TEST_FILES = [
+  join(REPO_ROOT, 'apps', 'edge-api', 'tests', 'chaos-v2.test.ts'),
+  join(REPO_ROOT, 'apps', 'edge-api', 'tests', 'chaos-v2-settlement-recovery.test.ts'),
+];
 const VITEST_JSON_PATH = join(OUTPUT_DIR, 'chaos-vitest-report.json');
 
 /** The exact, named, deterministic scenario set this gate requires —
@@ -46,6 +54,18 @@ export const REQUIRED_CHAOS_SCENARIOS = [
   'PROCESS_RESTART_AT_PERSISTED_BOUNDARY: a v2 payment consumed through one app instance is recognized by a brand-new instance sharing the same D1',
   'DOCUMENT_WORKER_FAILURE: an unrecognized v2 document artifact fails safely, no false success, no settlement',
   'NO_SECRET_LEAK: a v2 verify-rejection response never leaks raw signature material or internal paths',
+  // SUN-1000 checkpoint 1N-A2 — settlement/recovery completion (the
+  // checkpoint 1N-A gap): these exercise the shared settlement_pending/
+  // reconciliation/restart-recovery implementation directly with a real
+  // .v2 identity, via createX402ServiceRoute (not the currently
+  // CDP-only live /v2/... wiring, which this checkpoint deliberately
+  // leaves untouched — see chaos-v2-settlement-recovery.test.ts's own
+  // module doc for why that is the correct, disclosed scope).
+  'SETTLEMENT_PENDING_PREWRITE_FAILURE: a v2 row never advanced past acquired can never be pushed into settlement_pending, real settle is never reached',
+  'SETTLEMENT_PENDING_POSTWRITE_DURABILITY: a v2 payment durably writes settlement_pending before the real settle call, then advances to settled/consumed',
+  'POST_SETTLEMENT_LOCAL_FAILURE: an ambiguous v2 settlement response leaves lifecycle_stage at settlement_pending, never settlement_failed, never auto-retried',
+  'RESTART_FROM_SETTLEMENT_PENDING: a v2 payment stuck mid-settle survives a real Miniflare restart, and NOT_SETTLED reconciliation never re-executes, re-verifies, or re-settles',
+  'RECONCILIATION_READ_SUCCESS_PSL_FINALIZATION: a v2 payment settled externally but crashed locally recovers SETTLED via read-only reconciliation after restart, zero re-execution/re-verify/re-settle, PaymentServiceLink verified, consumed, 200',
 ] as const;
 
 export interface VitestJsonReport {
@@ -89,7 +109,7 @@ async function main(): Promise<void> {
 
   const result = spawnSync(
     'npx',
-    ['vitest', 'run', TEST_FILE, '--reporter=json', `--outputFile=${VITEST_JSON_PATH}`],
+    ['vitest', 'run', ...TEST_FILES, '--reporter=json', `--outputFile=${VITEST_JSON_PATH}`],
     { cwd: REPO_ROOT, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] }
   );
 
@@ -105,7 +125,7 @@ async function main(): Promise<void> {
   const problems = evaluateChaosReport(report, REQUIRED_CHAOS_SCENARIOS);
 
   const summary = {
-    test_file: TEST_FILE,
+    test_files: TEST_FILES,
     required_scenario_count: REQUIRED_CHAOS_SCENARIOS.length,
     total_tests: report.numTotalTests,
     passed_tests: report.numPassedTests,
