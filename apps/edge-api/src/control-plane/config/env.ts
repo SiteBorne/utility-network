@@ -51,6 +51,14 @@ export interface Env {
   /** Additive Nevermined route-family gate. Checkpoint 2 still has no
    * authenticated sandbox provider, so setting this alone fails closed. */
   NEVERMINED_ROUTES_ENABLED?: string;
+  /** SUN-1000 checkpoint 1O-B2: the explicit future-live guard flag
+   * consumed by `evaluateNeverminedLiveGuard` (via
+   * `NeverminedPaymentEvidenceProvider.authenticated()`) — must be
+   * exactly `'1'`, together with `NVM_ENVIRONMENT === 'sandbox'` and a
+   * sandbox-prefixed API key, before any real Nevermined SDK call can
+   * occur. Setting this alone (without the other two conditions) does
+   * nothing; all three are required simultaneously. */
+  RUN_LIVE_NEVERMINED?: string;
   CF_PAGES_COMMIT_SHA?: string;
   CF_WORKER_VERSION?: string;
 }

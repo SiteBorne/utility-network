@@ -136,6 +136,16 @@ export interface PaidServicesConfig {
    * unchanged — so every deployment that hasn't supplied one keeps its
    * exact prior behavior. */
   neverminedReconciliationClient?: NeverminedDelegationLookupClient;
+  /** SUN-1000 checkpoint 1O-B2: additive, structural opt-in for the four
+   * genuine v2 Nevermined-rail routes (`/v2/nevermined/...`, real
+   * registered agent/plan IDs). Default/unset: those four routes are not
+   * registered on the app at all -- unset is the exact prior behavior,
+   * every existing caller (v1 tests, the CDP-only mounts) is completely
+   * unaffected. Independent of `rail` (which only selects v1's single
+   * route) -- v2's CDP routes (`v2CdpRoute()`) are always registered
+   * regardless of this flag; this only adds the parallel Nevermined
+   * family alongside them. */
+  neverminedV2Enabled?: boolean;
 }
 
 /**
@@ -164,9 +174,16 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
         asset: 'nevermined:credits',
         payTo: 'siteborne:nevermined-publisher-not-registered',
         path: NEVERMINED_ROUTES[serviceId],
+        // SUN-1000 checkpoint 1O-B2: prefers the real, provider-issued
+        // ID from the checkpoint 1O-B registration when one exists
+        // (currently only the 4 v2 services); falls back to the
+        // symbolic local_agent_id/local_plan_id exactly as before for
+        // any unregistered major (v1 today). Binding data only -- this
+        // branch remains unreachable for any live v2 HTTP request
+        // (v2CdpRoute() is the only mounted v2 wiring).
         nevermined: {
-          agentId: declaration.agent.local_agent_id,
-          planId: declaration.plan.local_plan_id,
+          agentId: declaration.agent.registered_agent_id ?? declaration.agent.local_agent_id,
+          planId: declaration.plan.registered_plan_id ?? declaration.plan.local_plan_id,
         },
         neverminedReconciliationClient: config.neverminedReconciliationClient,
       };
@@ -212,6 +229,40 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
       asset: CDP_PREPRODUCTION_ASSET,
       payTo: config.payTo ?? PAYTO_NOT_CONFIGURED,
       path,
+    };
+  }
+
+  /** SUN-1000 checkpoint 1O-B2: the genuine v2 Nevermined-rail route,
+   * additive and structurally separate from `v2CdpRoute()` (which stays
+   * unconditional CDP, per its own doc comment, unchanged). Only
+   * registered on the app at all when `config.neverminedV2Enabled` is
+   * explicitly `true` (default/unset: not registered -- structurally
+   * absent, not merely unreachable). Uses the real, provider-issued
+   * agent/plan IDs bound in checkpoint 1O-B2 (`registered_agent_id`/
+   * `registered_plan_id`); throws if a service has no real registration
+   * bound yet, rather than silently falling back to the symbolic
+   * `local_agent_id`/`local_plan_id` placeholder -- unlike
+   * `paymentRoute()`'s nevermined branch (v1, still symbolic-fallback,
+   * unchanged), this path exists specifically to reach real settlement,
+   * so an unregistered service must fail loudly, not silently. */
+  function v2NeverminedRoute(serviceId: (typeof ALL_BAZAAR_SERVICE_IDS)[number]) {
+    const declaration = NEVERMINED_DECLARATIONS[serviceId];
+    if (!declaration.agent.registered_agent_id || !declaration.plan.registered_plan_id) {
+      throw new Error(
+        `v2_nevermined_route_unregistered: ${serviceId} has no real Nevermined registration bound`
+      );
+    }
+    return {
+      rail: 'nevermined' as const,
+      network: PREPRODUCTION_NETWORK,
+      asset: 'nevermined:credits',
+      payTo: 'siteborne:nevermined-publisher-not-registered',
+      path: NEVERMINED_ROUTES[serviceId],
+      nevermined: {
+        agentId: declaration.agent.registered_agent_id,
+        planId: declaration.plan.registered_plan_id,
+      },
+      neverminedReconciliationClient: config.neverminedReconciliationClient,
     };
   }
 
@@ -463,6 +514,46 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
     },
   });
 
+  // ---- company_evidence_graph.v2 (Nevermined rail, checkpoint 1O-B2, additive) ----
+  if (config.neverminedV2Enabled) {
+    createX402ServiceRoute(app, {
+      serviceId: 'company_evidence_graph.v2',
+      scheme: 'exact',
+      pricingKey: 'company_evidence_graph',
+      ...v2NeverminedRoute('company_evidence_graph.v2'),
+      inputSchema: BUNDLED_SERVICE_INPUT_SCHEMAS['company_evidence_graph.v2'] as Record<
+        string,
+        unknown
+      >,
+      contractRelease: '2.0.0',
+      inputSchemaHash: 'sha256:8d9a6c432b019e24a2df4d48dd93424a8782febb49c0c88f7cf9208cf0204dd7',
+      outputSchemaHash: 'sha256:5593736dfc60089aa3f01de664eb67ccba3a58e03449a66e91f477324e24861b',
+      pccDependency: '1.1.0',
+      db: config.db,
+      clock,
+      evidenceMode: config.evidenceMode,
+      evidenceProvider: config.evidenceProvider,
+      executor: async (input): Promise<ExecutorOutcome> => {
+        const context = freshContext('company_evidence_graph.v2');
+        const httpClient = jsonHttpClient(SEC_EDGAR_FIXTURE);
+        const registry = buildFixtureRegistry({
+          httpClient,
+          context,
+          worker: new FixtureDocumentWorkerBridge(new Map()),
+          signer,
+          keyRegistry,
+        });
+        const result = await executeLocalService(
+          registry,
+          'company_evidence_graph.v2',
+          input,
+          context
+        );
+        return { result };
+      },
+    });
+  }
+
   // ---- web_context_verified.v2 (exact) ----
   createX402ServiceRoute(app, {
     serviceId: 'web_context_verified.v2',
@@ -502,6 +593,53 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
       return { result };
     },
   });
+
+  // ---- web_context_verified.v2 (Nevermined rail, checkpoint 1O-B2, additive) ----
+  if (config.neverminedV2Enabled) {
+    createX402ServiceRoute(app, {
+      serviceId: 'web_context_verified.v2',
+      scheme: 'exact',
+      pricingKey: 'web_context_verified_direct',
+      ...v2NeverminedRoute('web_context_verified.v2'),
+      inputSchema: BUNDLED_SERVICE_INPUT_SCHEMAS['web_context_verified.v2'] as Record<
+        string,
+        unknown
+      >,
+      contractRelease: '2.0.0',
+      inputSchemaHash: 'sha256:d3b0762020d4cc1d1e846960ed978cf1237b1741f90213adabe8ed931c2845ea',
+      outputSchemaHash: 'sha256:7d4882e997ec3a3bd97b746de36ed99dfe430d59b4d1c8adc7d9fa83a274b4e0',
+      pccDependency: '1.1.0',
+      db: config.db,
+      clock,
+      evidenceMode: config.evidenceMode,
+      evidenceProvider: config.evidenceProvider,
+      executor: async (input): Promise<ExecutorOutcome> => {
+        const context = freshContext('web_context_verified.v2');
+        const httpClient: InjectedHttpClient = {
+          async fetch() {
+            return new Response(
+              '<html><head><title>Fixture Page</title></head><body>hello</body></html>',
+              { status: 200, headers: { 'content-type': 'text/html' } }
+            );
+          },
+        };
+        const registry = buildFixtureRegistry({
+          httpClient,
+          context,
+          worker: new FixtureDocumentWorkerBridge(new Map()),
+          signer,
+          keyRegistry,
+        });
+        const result = await executeLocalService(
+          registry,
+          'web_context_verified.v2',
+          input,
+          context
+        );
+        return { result };
+      },
+    });
+  }
 
   // ---- document_evidence_json.v2 (upto) ----
   createX402ServiceRoute(app, {
@@ -579,6 +717,84 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
     },
   });
 
+  // ---- document_evidence_json.v2 (Nevermined rail, checkpoint 1O-B2, additive) ----
+  if (config.neverminedV2Enabled) {
+    createX402ServiceRoute(app, {
+      serviceId: 'document_evidence_json.v2',
+      scheme: 'upto',
+      pricingKey: 'document_evidence_json_max_job',
+      ...v2NeverminedRoute('document_evidence_json.v2'),
+      inputSchema: BUNDLED_SERVICE_INPUT_SCHEMAS['document_evidence_json.v2'] as Record<
+        string,
+        unknown
+      >,
+      contractRelease: '2.0.0',
+      inputSchemaHash: 'sha256:19e64c92f088ed8b7a45eef561c5426bb59ce5cc3576b85482aded4f620e57ba',
+      outputSchemaHash: 'sha256:df91ed115ae0e29d8f4c211d95462ddd96e9714bc5f5e0ce0b820b370e0d5dde',
+      pccDependency: '1.1.0',
+      db: config.db,
+      clock,
+      evidenceMode: config.evidenceMode,
+      evidenceProvider: config.evidenceProvider,
+      executor: async (input): Promise<ExecutorOutcome> => {
+        const context = freshContext('document_evidence_json.v2');
+        await context.artifact_store.put(
+          {
+            id: DOCUMENT_FIXTURE_ARTIFACT_ID,
+            contentHash: DOCUMENT_FIXTURE_WORKER_RESULT.document!.sha256,
+            media_type: 'application/pdf',
+            byte_length: DOCUMENT_FIXTURE_BYTES.length,
+          },
+          DOCUMENT_FIXTURE_BYTES
+        );
+        const worker = new FixtureDocumentWorkerBridge(
+          new Map([['x402-http-native', DOCUMENT_FIXTURE_WORKER_RESULT]])
+        );
+        const registry = buildFixtureRegistry({
+          httpClient: jsonHttpClient({}),
+          context,
+          worker,
+          signer,
+          keyRegistry,
+        });
+        const result = await executeLocalService(
+          registry,
+          'document_evidence_json.v2',
+          input,
+          context
+        );
+        if (result.result_class !== 'success') {
+          return { result };
+        }
+        const usage = calculateDocumentUsage(
+          DOCUMENT_FIXTURE_WORKER_RESULT.pages.map((p) => ({
+            page_number: p.page_number,
+            ocr_used: p.ocr_used,
+            table_count: p.tables.length,
+          }))
+        );
+        const actualAmountAtomic = documentUsageToAtomicUnits(usage, 6);
+        return {
+          result,
+          actualAmountAtomic,
+          resourceMetrics: {
+            page_count: DOCUMENT_FIXTURE_WORKER_RESULT.pages.length,
+            pages: DOCUMENT_FIXTURE_WORKER_RESULT.pages.map((page) => ({
+              page_number: page.page_number,
+              ocr_used: page.ocr_used,
+              table_count: page.tables.length,
+            })),
+            page_costs: usage.page_costs,
+            subtotal_usd_micro: usage.subtotal_usd_micro,
+            max_job_usd_micro: usage.max_job_usd_micro,
+            total_usd_micro: usage.total_usd_micro,
+            capped: usage.capped,
+          },
+        };
+      },
+    });
+  }
+
   // ---- verify_agent_output.v2 (exact) ----
   createX402ServiceRoute(app, {
     serviceId: 'verify_agent_output.v2',
@@ -608,6 +824,45 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
     },
   });
 
+  // ---- verify_agent_output.v2 (Nevermined rail, checkpoint 1O-B2, additive) ----
+  if (config.neverminedV2Enabled) {
+    createX402ServiceRoute(app, {
+      serviceId: 'verify_agent_output.v2',
+      scheme: 'exact',
+      pricingKey: 'verify_agent_output_standard',
+      ...v2NeverminedRoute('verify_agent_output.v2'),
+      inputSchema: BUNDLED_SERVICE_INPUT_SCHEMAS['verify_agent_output.v2'] as Record<
+        string,
+        unknown
+      >,
+      contractRelease: '2.0.0',
+      inputSchemaHash: 'sha256:66d459905cd1a18b57ccb3fc40043a4e4c1a77bc7dba40676fcaf674cacb0f34',
+      outputSchemaHash: 'sha256:a9a462b89b290ecba1aa62ec6d2fd030572f326ed79f498a43690244b38ad679',
+      pccDependency: '1.1.0',
+      db: config.db,
+      clock,
+      evidenceMode: config.evidenceMode,
+      evidenceProvider: config.evidenceProvider,
+      executor: async (input): Promise<ExecutorOutcome> => {
+        const context = freshContext('verify_agent_output.v2');
+        const registry = buildFixtureRegistry({
+          httpClient: jsonHttpClient({}),
+          context,
+          worker: new FixtureDocumentWorkerBridge(new Map()),
+          signer,
+          keyRegistry,
+        });
+        const result = await executeLocalService(
+          registry,
+          'verify_agent_output.v2',
+          input,
+          context
+        );
+        return { result };
+      },
+    });
+  }
+
   return app;
 }
 
@@ -621,6 +876,23 @@ export function buildNeverminedPaidServicesApp(
   config: NeverminedPaidServicesConfig
 ): Promise<Hono> {
   return buildPaidServicesApp({ ...config, rail: 'nevermined' });
+}
+
+/** SUN-1000 checkpoint 1O-B2: the genuine v2 Nevermined-rail app --
+ * mounts the four real, registered v2 Nevermined routes
+ * (`/v2/nevermined/...`) alongside the (always-present, harmless if
+ * unreached) v1 CDP and v2 CDP routes. `rail` is left at its CDP
+ * default deliberately -- `neverminedV2Enabled` is what actually adds
+ * the new routes, independent of `rail`, which only ever affected v1's
+ * single route choice. The caller (`index.ts`) is responsible for
+ * ensuring this app instance's `.fetch()` is only ever invoked for
+ * `/v2/nevermined/*` paths -- the shared `evidenceProvider` on this
+ * instance is real/authenticated, and would misroute if CDP paths on
+ * this same instance were ever reached through a different mount. */
+export function buildNeverminedV2PaidServicesApp(
+  config: NeverminedPaidServicesConfig
+): Promise<Hono> {
+  return buildPaidServicesApp({ ...config, neverminedV2Enabled: true });
 }
 
 export { DOCUMENT_FIXTURE_ARTIFACT_ID };

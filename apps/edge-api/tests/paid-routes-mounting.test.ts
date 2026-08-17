@@ -50,3 +50,76 @@ describe('paid-service route mounting gate (directive §6, §32)', () => {
     expect(await enabled.json()).toMatchObject({ error: 'nevermined_provider_not_configured' });
   });
 });
+
+describe('SUN-1000 checkpoint 1O-B2 — v2 CDP/Nevermined route mounting gates', () => {
+  it('PAID_ROUTES_ENABLED unset -> /v2/* is a plain 404 (matches /v1/* default behavior)', async () => {
+    const res = await app.request('/v2/company/evidence-graph', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it('PAID_ROUTES_ENABLED=true with no D1 binding -> 500 configuration_error, never silently mounted', async () => {
+    const res = await app.request(
+      '/v2/company/evidence-graph',
+      { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({}) },
+      { PAID_ROUTES_ENABLED: 'true' } as never
+    );
+    expect(res.status).toBe(500);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.error).toBe('configuration_error');
+  });
+
+  it('/v2/nevermined/* is absent by default (NEVERMINED_ROUTES_ENABLED unset) -> 404', async () => {
+    const res = await app.request('/v2/nevermined/company/evidence-graph', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it('/v2/nevermined/* with NEVERMINED_ROUTES_ENABLED=true but no NVM credential -> 503, never a fixture fallback', async () => {
+    const res = await app.request(
+      '/v2/nevermined/company/evidence-graph',
+      { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({}) },
+      { NEVERMINED_ROUTES_ENABLED: 'true', DB: {} as never } as never
+    );
+    expect(res.status).toBe(503);
+    expect(await res.json()).toMatchObject({ error: 'nevermined_provider_not_configured' });
+  });
+
+  it('/v2/nevermined/* with credentials present but RUN_LIVE_NEVERMINED unset -> 503 (the future-live guard denies construction, never silently proceeds)', async () => {
+    const res = await app.request(
+      '/v2/nevermined/company/evidence-graph',
+      { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({}) },
+      {
+        NEVERMINED_ROUTES_ENABLED: 'true',
+        DB: {} as never,
+        NVM_API_KEY: 'sandbox:not-a-real-key',
+        NVM_ENVIRONMENT: 'sandbox',
+        // RUN_LIVE_NEVERMINED deliberately absent
+      } as never
+    );
+    expect(res.status).toBe(503);
+    expect(await res.json()).toMatchObject({ error: 'nevermined_provider_not_configured' });
+  });
+
+  it('/v2/nevermined/* with NVM_ENVIRONMENT=live -> 503 (live environment hard-rejected, even with RUN_LIVE_NEVERMINED=1)', async () => {
+    const res = await app.request(
+      '/v2/nevermined/company/evidence-graph',
+      { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({}) },
+      {
+        NEVERMINED_ROUTES_ENABLED: 'true',
+        DB: {} as never,
+        NVM_API_KEY: 'sandbox:not-a-real-key',
+        NVM_ENVIRONMENT: 'live',
+        RUN_LIVE_NEVERMINED: '1',
+      } as never
+    );
+    expect(res.status).toBe(503);
+    expect(await res.json()).toMatchObject({ error: 'nevermined_provider_not_configured' });
+  });
+});

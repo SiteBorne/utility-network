@@ -21,7 +21,13 @@ import { InMemoryArtifactStore } from './control-plane/artifacts/store';
 import { InMemoryQueueProducer } from './control-plane/queue/dispatch';
 import { QueueDispatchHandler } from './control-plane/queue/dispatch';
 import { AuditLogger } from './control-plane/audit/events';
-import { buildPaidServicesApp } from './control-plane/routes/paid-services';
+import {
+  buildPaidServicesApp,
+  buildNeverminedV2PaidServicesApp,
+} from './control-plane/routes/paid-services';
+import { NeverminedPaymentEvidenceProvider } from './control-plane/evidence/nevermined-provider';
+import { resolveNeverminedConfig } from '@siteborne/protocol-nevermined';
+import { getEnvironmentFromApiKey } from '@nevermined-io/payments';
 import type { Env } from './control-plane/config/env';
 
 export type { ControlPlaneConfig };
@@ -122,6 +128,143 @@ app.all('/v1/*', async (c) => {
     cachedPaidServicesDb = c.env.DB;
   }
   return cachedPaidServicesApp.fetch(c.req.raw, c.env);
+});
+
+/**
+ * SUN-1000 checkpoint 1O-B2: the real, authenticated v2 Nevermined
+ * routes — the first live payment-capable Nevermined surface this
+ * project has ever mounted (v1's `/v1/nevermined/*` above has always
+ * been a hardcoded 503, no exception). Gated by THREE independent,
+ * fail-closed conditions, all required simultaneously:
+ *   1. `NEVERMINED_ROUTES_ENABLED === 'true'` (existing route-family gate)
+ *   2. `resolveNeverminedConfig` resolves a usable `NVM_API_KEY`/
+ *      `NEVERMINED_API_KEY` + `NVM_ENVIRONMENT` — absent/misconfigured
+ *      fails the same 503 v1 has always returned, never a fixture
+ *      fallback.
+ *   3. `evaluateNeverminedLiveGuard` (invoked inside
+ *      `NeverminedPaymentEvidenceProvider.authenticated()`) requires
+ *      `RUN_LIVE_NEVERMINED === '1'` AND `NVM_ENVIRONMENT === 'sandbox'`
+ *      AND the API key's own prefix-derived environment is `'sandbox'`
+ *      — `'live'` is hard-rejected at every one of these three checks.
+ * `production_enabled`/`production_ready` are untouched by this gate —
+ * both remain `false` regardless, exactly as every other route family.
+ * This app instance's `evidenceProvider` is real/authenticated — it must
+ * never be reused for a CDP mount (see `buildNeverminedV2PaidServicesApp`'s
+ * own doc comment).
+ */
+let cachedNeverminedV2App: Awaited<ReturnType<typeof buildNeverminedV2PaidServicesApp>> | undefined;
+let cachedNeverminedV2Db: Env['DB'] | undefined;
+let cachedNeverminedV2ApiKey: string | undefined;
+
+app.all('/v2/nevermined/*', async (c) => {
+  if (c.env?.NEVERMINED_ROUTES_ENABLED !== 'true') return c.notFound();
+  if (!c.env.DB) {
+    return c.json(
+      {
+        error: 'configuration_error',
+        message: 'NEVERMINED_ROUTES_ENABLED is set but no D1 database binding is configured',
+      },
+      500
+    );
+  }
+  const resolved = resolveNeverminedConfig({
+    NVM_API_KEY: c.env.NVM_API_KEY,
+    NEVERMINED_API_KEY: c.env.NEVERMINED_API_KEY,
+    NVM_ENVIRONMENT: c.env.NVM_ENVIRONMENT,
+  });
+  if (!resolved.ok) {
+    return c.json(
+      {
+        error: 'nevermined_provider_not_configured',
+        message:
+          'Nevermined routes require an authenticated sandbox provider; no fixture fallback is allowed',
+      },
+      503
+    );
+  }
+  // Narrows the SDK's broader EnvironmentName ('staging_sandbox' /
+  // 'staging_live' / 'custom' included) down to the strict 'sandbox' |
+  // 'live' | 'unknown' the live guard accepts -- anything not exactly
+  // 'sandbox' or 'live' fails closed as 'unknown', never silently
+  // widened to pass the guard.
+  const rawKeyEnvironment = getEnvironmentFromApiKey(resolved.apiKey);
+  const apiKeyEnvironment: 'sandbox' | 'live' | 'unknown' =
+    rawKeyEnvironment === 'sandbox' || rawKeyEnvironment === 'live' ? rawKeyEnvironment : 'unknown';
+  let evidenceProvider: NeverminedPaymentEvidenceProvider;
+  try {
+    evidenceProvider = NeverminedPaymentEvidenceProvider.authenticated({
+      apiKey: resolved.apiKey,
+      environment: 'sandbox',
+      liveGuard: {
+        runLiveNevermined: c.env.RUN_LIVE_NEVERMINED,
+        apiKeyEnvironment,
+      },
+    });
+  } catch {
+    return c.json(
+      {
+        error: 'nevermined_provider_not_configured',
+        message:
+          'Nevermined routes require an authenticated sandbox provider; no fixture fallback is allowed',
+      },
+      503
+    );
+  }
+  if (
+    !cachedNeverminedV2App ||
+    cachedNeverminedV2Db !== c.env.DB ||
+    cachedNeverminedV2ApiKey !== resolved.apiKey
+  ) {
+    cachedNeverminedV2App = await buildNeverminedV2PaidServicesApp({
+      db: c.env.DB,
+      evidenceMode: 'fixture',
+      evidenceProvider,
+      payTo: c.env.SELLER_WALLET_ADDRESS || undefined,
+    });
+    cachedNeverminedV2Db = c.env.DB;
+    cachedNeverminedV2ApiKey = resolved.apiKey;
+  }
+  return cachedNeverminedV2App.fetch(c.req.raw, c.env);
+});
+
+/**
+ * SUN-1000 checkpoint 1O-B2: the direct v2 CDP routes. Discovered during
+ * this checkpoint that no `/v2/*` forward existed at all before now —
+ * every prior "live v2" test called `buildPaidServicesApp`'s returned
+ * Hono instance directly, bypassing this file's routing entirely. Uses
+ * its own separate cached app instance (never the Nevermined one above)
+ * so a real Nevermined-authenticated `evidenceProvider` can never leak
+ * into a CDP route's settlement call. Same `PAID_ROUTES_ENABLED` gate as
+ * `/v1/*`; `evidenceProvider` left unset here (defaults to
+ * `FixturePaymentEvidenceProvider` — a real CDP proof, if performed, is a
+ * separate, explicitly authorized action, not a side effect of mounting
+ * this route family).
+ */
+let cachedV2CdpApp: Awaited<ReturnType<typeof buildPaidServicesApp>> | undefined;
+let cachedV2CdpDb: Env['DB'] | undefined;
+
+app.all('/v2/*', async (c) => {
+  if (c.env?.PAID_ROUTES_ENABLED !== 'true') {
+    return c.notFound();
+  }
+  if (!c.env.DB) {
+    return c.json(
+      {
+        error: 'configuration_error',
+        message: 'PAID_ROUTES_ENABLED is set but no D1 database binding is configured',
+      },
+      500
+    );
+  }
+  if (!cachedV2CdpApp || cachedV2CdpDb !== c.env.DB) {
+    cachedV2CdpApp = await buildPaidServicesApp({
+      db: c.env.DB,
+      evidenceMode: 'fixture',
+      payTo: c.env.SELLER_WALLET_ADDRESS || undefined,
+    });
+    cachedV2CdpDb = c.env.DB;
+  }
+  return cachedV2CdpApp.fetch(c.req.raw, c.env);
 });
 
 app.get('/', (c) => {

@@ -22,6 +22,15 @@ export interface NeverminedAgentDeclaration {
    * because Nevermined agent names must be unique across majors sharing
    * one account, which `title` alone is not. */
   nevermined_display_name: string;
+  /** SUN-1000 checkpoint 1O-B2: the real, provider-issued agent ID from
+   * the checkpoint 1O-B registration (public, non-secret) — set only for
+   * the 4 v2 services that have actually been registered on the real
+   * Nevermined sandbox backend; `undefined` for v1 (and any future
+   * unregistered major), which keeps using `local_agent_id` exactly as
+   * before. Never fabricated -- copied verbatim from the accepted
+   * checkpoint 1O-B/1O-B1 registration evidence
+   * (`docs/operations/NEVERMINED_PROTOCOL.md`). */
+  registered_agent_id?: string;
   description: string;
   endpoint: string;
   input_schema_uri: string;
@@ -36,6 +45,9 @@ export interface NeverminedAgentDeclaration {
 
 export interface NeverminedPlanDeclaration {
   local_plan_id: string;
+  /** SUN-1000 checkpoint 1O-B2: the real, provider-issued plan ID —
+   * same rules as `registered_agent_id` above. */
+  registered_plan_id?: string;
   plan_classification: 'payg';
   trial_kind: 'none';
   siteborne_payment_semantics: 'exact' | 'upto';
@@ -110,6 +122,35 @@ export function deriveNeverminedPlanDisplayName(
     : `${agentDisplayName} — Plan`;
 }
 
+/** SUN-1000 checkpoint 1O-B2: the four real, provider-issued agent/plan
+ * IDs from the checkpoint 1O-B registration, copied verbatim from the
+ * accepted evidence in `docs/operations/NEVERMINED_PROTOCOL.md` (public,
+ * non-secret provider identifiers -- never a credential). Deliberately a
+ * closed, hand-verified table rather than derived, so any future edit to
+ * this repository's own generation logic can never silently change a
+ * value that must match real external state exactly. v1 is deliberately
+ * absent -- its declarations keep using `local_agent_id`/`local_plan_id`
+ * exactly as before this checkpoint. */
+const V2_REGISTERED_IDS: Partial<Record<SiteborneServiceId, { agentId: string; planId: string }>> =
+  {
+    'company_evidence_graph.v2': {
+      agentId: '8945215415179810337511916177281451484220450532075244586308753062965582716389',
+      planId: '10268032069987826322514735824876788768903142706079143267509577311063526800318',
+    },
+    'web_context_verified.v2': {
+      agentId: '9613264351721376847099143451964490409753221634691266039731516778743818115758',
+      planId: '24941537770422129588835488161631149735480385285064676886916949896840067329220',
+    },
+    'document_evidence_json.v2': {
+      agentId: '23983377566340233303092237571868603328491815288742632945599286374009053451142',
+      planId: '47055935846533104006091411392563929683665104827998139102920975407519466945495',
+    },
+    'verify_agent_output.v2': {
+      agentId: '27131786432933344978515576530029108070322716902860955144259896627611005129186',
+      planId: '91900896406434535132462316750130087602675645111856542980525216829631168048994',
+    },
+  };
+
 function buildDeclaration(serviceId: SiteborneServiceId): NeverminedServiceDeclaration {
   const service = REGISTRY_SERVICES[serviceId];
   const base = serviceId.replace(/\.v\d+$/, '');
@@ -119,6 +160,7 @@ function buildDeclaration(serviceId: SiteborneServiceId): NeverminedServiceDecla
     : FIXED_PRICING_KEYS[base as keyof typeof FIXED_PRICING_KEYS];
   const amount = document ? atomic('document_evidence_json_max_job') : atomic(fixedKey!);
   const serviceVersion = serviceId.endsWith('.v2') ? 'v2' : 'v1';
+  const registered = V2_REGISTERED_IDS[serviceId];
   return {
     agent: {
       // Deliberately a local, unregistered identifier only (SUN-1000
@@ -126,8 +168,10 @@ function buildDeclaration(serviceId: SiteborneServiceId): NeverminedServiceDecla
       // IDs" — this describes what a future registration would declare,
       // it is not itself a live Nevermined-issued ID; no v1 agent/plan ID
       // is reused for v2, and no real registration is performed by
-      // constructing this object).
+      // constructing this object). registered_agent_id below is the real
+      // ID once a service has actually been registered (checkpoint 1O-B).
       local_agent_id: `siteborne:${serviceId}:agent`,
+      registered_agent_id: registered?.agentId,
       service_id: serviceId,
       service_version: serviceVersion,
       title: service.title,
@@ -145,6 +189,7 @@ function buildDeclaration(serviceId: SiteborneServiceId): NeverminedServiceDecla
     },
     plan: {
       local_plan_id: `siteborne:${serviceId}:payg`,
+      registered_plan_id: registered?.planId,
       plan_classification: 'payg',
       trial_kind: 'none',
       siteborne_payment_semantics: document ? 'upto' : 'exact',
