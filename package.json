@@ -88,7 +88,8 @@
     "security:osv": "tsx scripts/security/run-osv.ts",
     "security:trivy": "tsx scripts/security/run-trivy.ts",
     "security:schemathesis": "tsx scripts/security/run-schemathesis.ts",
-    "security:release": "pnpm security:semgrep && pnpm security:osv && pnpm security:trivy && pnpm security:schemathesis",
+    "security:chaos": "tsx scripts/security/run-chaos.ts",
+    "security:release": "pnpm security:semgrep && pnpm security:osv && pnpm security:trivy && pnpm security:schemathesis && pnpm security:chaos",
     "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm pcc:generate:check && pnpm services:generate:check && pnpm openapi:generate:check && pnpm python:test:pcc && pnpm python:test:modal && pnpm governance:validate && pnpm state:validate && pnpm tasks:validate && pnpm contracts:baseline:verify && pnpm contracts:compat:check && pnpm contracts:release:verify && pnpm migrations:verify && pnpm d1:test && pnpm control-plane:test && pnpm control-plane:check && pnpm adapters:check && pnpm document-worker:check && pnpm document-worker:fixtures:verify && pnpm verification:check && pnpm services-runtime:check && pnpm x402:check && pnpm mcp:check && pnpm a2a:check && pnpm nevermined:check && pnpm secrets:scan"
   },
   "devDependencies": {
