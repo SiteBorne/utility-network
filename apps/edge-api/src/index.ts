@@ -26,8 +26,8 @@ import {
   buildNeverminedV2PaidServicesApp,
 } from './control-plane/routes/paid-services';
 import { NeverminedPaymentEvidenceProvider } from './control-plane/evidence/nevermined-provider';
+import { resolveNeverminedEnvironmentFromApiKey } from './control-plane/evidence/nevermined-http-client';
 import { resolveNeverminedConfig } from '@siteborne/protocol-nevermined';
-import { getEnvironmentFromApiKey } from '@nevermined-io/payments';
 import type { Env } from './control-plane/config/env';
 
 export type { ControlPlaneConfig };
@@ -187,7 +187,7 @@ app.all('/v2/nevermined/*', async (c) => {
   // 'live' | 'unknown' the live guard accepts -- anything not exactly
   // 'sandbox' or 'live' fails closed as 'unknown', never silently
   // widened to pass the guard.
-  const rawKeyEnvironment = getEnvironmentFromApiKey(resolved.apiKey);
+  const rawKeyEnvironment = resolveNeverminedEnvironmentFromApiKey(resolved.apiKey);
   const apiKeyEnvironment: 'sandbox' | 'live' | 'unknown' =
     rawKeyEnvironment === 'sandbox' || rawKeyEnvironment === 'live' ? rawKeyEnvironment : 'unknown';
   let evidenceProvider: NeverminedPaymentEvidenceProvider;

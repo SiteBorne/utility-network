@@ -2,17 +2,14 @@
  *
  * The public constructor is deliberately closed. Deterministic callers may
  * create only a fixture provider; the external provider can be created only
- * through the official SDK path after the explicit sandbox live guard passes.
- * Neither access tokens nor API keys enter evidence, persistence, or errors.
+ * through the direct HTTP facilitator client (SUN-1000 checkpoint 1P --
+ * `nevermined-http-client.ts`, replacing `@nevermined-io/payments`'s
+ * `Payments.getInstance().facilitator`, same request/response fidelity,
+ * see that file's own doc comment) after the explicit sandbox live guard
+ * passes. Neither access tokens nor API keys enter evidence, persistence,
+ * or errors.
  */
-import {
-  Payments,
-  type SettlePermissionsParams,
-  type SettlePermissionsResult,
-  type VerifyPermissionsParams,
-  type VerifyPermissionsResult,
-  type X402PaymentRequired,
-} from '@nevermined-io/payments';
+import { NeverminedHttpFacilitatorClient } from './nevermined-http-client';
 import {
   NEVERMINED_PAYMENT_PROVIDER,
   evaluateNeverminedLiveGuard,
@@ -23,11 +20,9 @@ import {
   validateNeverminedSettlementResult,
   validateNeverminedVerificationResult,
   type NeverminedFacilitatorClient,
-  type NeverminedSettlePermissionsInput,
   type NeverminedSettlementResult,
   type NeverminedSettlementEvidenceCarrier,
   type NeverminedVerificationResult,
-  type NeverminedVerifyPermissionsInput,
 } from '@siteborne/protocol-nevermined';
 import {
   hashPaymentObject,
@@ -48,52 +43,6 @@ export interface AuthenticatedNeverminedProviderOptions {
     runLiveNevermined: string | undefined;
     apiKeyEnvironment: 'sandbox' | 'live' | 'unknown';
   };
-}
-
-class OfficialNeverminedSdkAdapter implements NeverminedFacilitatorClient {
-  constructor(
-    private readonly facilitator: {
-      verifyPermissions(input: VerifyPermissionsParams): Promise<VerifyPermissionsResult>;
-      settlePermissions(input: SettlePermissionsParams): Promise<SettlePermissionsResult>;
-    }
-  ) {}
-
-  async verifyPermissions(
-    input: NeverminedVerifyPermissionsInput
-  ): Promise<NeverminedVerificationResult> {
-    const result = await this.facilitator.verifyPermissions({
-      paymentRequired: input.paymentRequired as X402PaymentRequired,
-      x402AccessToken: input.accessToken,
-      maxAmount: BigInt(input.authorizedMaximum),
-    });
-    return {
-      isValid: result.isValid,
-      invalidReason: result.invalidReason,
-      payer: result.payer,
-      network: result.network,
-      agentRequestId: result.agentRequestId,
-    };
-  }
-
-  async settlePermissions(
-    input: NeverminedSettlePermissionsInput
-  ): Promise<NeverminedSettlementResult> {
-    const result = await this.facilitator.settlePermissions({
-      paymentRequired: input.paymentRequired as X402PaymentRequired,
-      x402AccessToken: input.accessToken,
-      maxAmount: BigInt(input.actualAmount),
-      ...(input.agentRequestId ? { agentRequestId: input.agentRequestId } : {}),
-    });
-    return {
-      success: result.success,
-      errorReason: result.errorReason,
-      payer: result.payer,
-      transaction: result.transaction,
-      network: result.network,
-      creditsRedeemed: result.creditsRedeemed,
-      remainingBalance: result.remainingBalance,
-    };
-  }
 }
 
 function trustClass(source: TrustSource, providerAnswered: boolean) {
@@ -139,12 +88,11 @@ export class NeverminedPaymentEvidenceProvider implements PaymentEvidenceProvide
       apiKeyEnvironment: options.liveGuard.apiKeyEnvironment,
     });
     if (!guard.allowed) throw new Error('nevermined_live_guard_denied');
-    const payments = Payments.getInstance({
-      nvmApiKey: options.apiKey,
-      environment: options.environment,
-    });
     return new NeverminedPaymentEvidenceProvider(
-      new OfficialNeverminedSdkAdapter(payments.facilitator),
+      new NeverminedHttpFacilitatorClient({
+        apiKey: options.apiKey,
+        environment: options.environment,
+      }),
       'authenticated_sdk'
     );
   }

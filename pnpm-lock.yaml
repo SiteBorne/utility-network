@@ -72,9 +72,6 @@ importers:
       '@coinbase/cdp-sdk':
         specifier: ^1.55.0
         version: 1.55.0(@x402/core@2.21.0)(@x402/evm@2.21.0(typescript@5.7.3))(@x402/extensions@2.21.0(typescript@5.7.3))(@x402/svm@2.21.0(@solana/kit@5.5.1(typescript@5.7.3))(@solana/sysvars@5.5.1(typescript@5.7.3)))(typescript@5.7.3)
-      '@nevermined-io/payments':
-        specifier: 1.10.0
-        version: 1.10.0(@grpc/grpc-js@1.14.4)(@langchain/core@1.2.5(@opentelemetry/api@1.9.1)(@opentelemetry/exporter-trace-otlp-proto@0.203.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.10.0(@opentelemetry/api@1.9.1))(openai@5.23.2(ws@8.21.0)(zod@3.25.76))(ws@8.21.0))(@opentelemetry/exporter-trace-otlp-proto@0.203.0(@opentelemetry/api@1.9.1))(@opentelemetry/resources@2.10.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.10.0(@opentelemetry/api@1.9.1))(express@4.21.2)(langsmith@0.8.9(@opentelemetry/api@1.9.1)(@opentelemetry/exporter-trace-otlp-proto@0.203.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.10.0(@opentelemetry/api@1.9.1))(openai@5.23.2(ws@8.21.0)(zod@3.25.76))(ws@8.21.0))(openai@5.23.2(ws@8.21.0)(zod@3.25.76))
       '@siteborne/pricing':
         specifier: workspace:*
         version: link:../../packages/pricing
@@ -136,6 +133,9 @@ importers:
       '@modelcontextprotocol/client':
         specifier: 2.0.0
         version: 2.0.0
+      '@nevermined-io/payments':
+        specifier: 1.10.0
+        version: 1.10.0(@grpc/grpc-js@1.14.4)(@langchain/core@1.2.5(@opentelemetry/api@1.9.1)(@opentelemetry/exporter-trace-otlp-proto@0.203.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.10.0(@opentelemetry/api@1.9.1))(openai@5.23.2(ws@8.21.0)(zod@3.25.76))(ws@8.21.0))(@opentelemetry/exporter-trace-otlp-proto@0.203.0(@opentelemetry/api@1.9.1))(@opentelemetry/resources@2.10.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.10.0(@opentelemetry/api@1.9.1))(express@4.21.2)(langsmith@0.8.9(@opentelemetry/api@1.9.1)(@opentelemetry/exporter-trace-otlp-proto@0.203.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.10.0(@opentelemetry/api@1.9.1))(openai@5.23.2(ws@8.21.0)(zod@3.25.76))(ws@8.21.0))(openai@5.23.2(ws@8.21.0)(zod@3.25.76))
       eslint:
         specifier: ^9.0.0
         version: 9.18.0

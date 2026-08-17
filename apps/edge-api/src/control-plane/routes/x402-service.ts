@@ -22,7 +22,7 @@
  */
 import type { Context, Hono } from 'hono';
 import Ajv2020 from 'ajv/dist/2020';
-import { buildPaymentRequired as buildNeverminedSdkPaymentRequired } from '@nevermined-io/payments';
+import { buildNeverminedPaymentRequiredLocal } from '../evidence/nevermined-http-client';
 import {
   NEVERMINED_DECLARATIONS,
   NEVERMINED_PAYMENT_PROVIDER,
@@ -360,14 +360,14 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
       let requirementId: string;
       if (rail === 'nevermined') {
         const declaration = NEVERMINED_DECLARATIONS[config.serviceId];
-        const official = buildNeverminedSdkPaymentRequired(config.nevermined!.planId, {
+        const official = buildNeverminedPaymentRequiredLocal(config.nevermined!.planId, {
           endpoint: resourceUrl,
           agentId: config.nevermined!.agentId,
           httpVerb: 'POST',
           network: config.network,
           description: declaration.agent.description,
           mimeType: 'application/json',
-        }) as NeverminedPaymentRequired;
+        });
         const built = await bindNeverminedPaymentRequired(official, {
           serviceId: config.serviceId,
           route: resourceUrl,

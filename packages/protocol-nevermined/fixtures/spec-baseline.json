@@ -1,10 +1,12 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "package": {
     "name": "@nevermined-io/payments",
     "version": "1.10.0"
   },
-  "runtime_dependency_owner": "apps/edge-api",
+  "tooling_dependency_owner": "apps/edge-api",
+  "edge_api_dependency_section": "devDependencies",
+  "runtime_http_replacement": "apps/edge-api/src/control-plane/evidence/nevermined-http-client.ts",
   "protocol_runtime_sdk_dependency": false,
   "public_environment_model": ["sandbox", "live"],
   "checkpoint_environment": "sandbox",

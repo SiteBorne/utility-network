@@ -11,7 +11,9 @@ interface PackageDocument {
 
 interface SpecBaseline {
   package: { name: string; version: string };
-  runtime_dependency_owner: 'apps/edge-api';
+  tooling_dependency_owner: 'apps/edge-api';
+  edge_api_dependency_section: 'devDependencies';
+  runtime_http_replacement: string;
   protocol_runtime_sdk_dependency: false;
   facilitator_types: string[];
   facilitator_methods: string[];
@@ -41,7 +43,13 @@ const planApi = readFileSync(`${sdkRoot}dist/api/plans-api.d.ts`, 'utf8');
 
 assert.equal(sdkPackage.name, baseline.package.name);
 assert.equal(sdkPackage.version, baseline.package.version);
-assert.equal(edgePackage.dependencies?.[baseline.package.name], baseline.package.version);
+// SUN-1000 checkpoint 1P: the SDK is tooling-only now (live-proof/
+// registration test files), never a production runtime dependency --
+// verify both halves of that claim: absent from `dependencies`
+// (would re-enter the Trivy-scanned surface), present in
+// `devDependencies` (still installed for the tooling that needs it).
+assert.equal(edgePackage.dependencies?.[baseline.package.name], undefined);
+assert.equal(edgePackage.devDependencies?.[baseline.package.name], baseline.package.version);
 assert.equal(protocolPackage.dependencies?.[baseline.package.name], undefined);
 assert.equal(protocolPackage.devDependencies?.[baseline.package.name], undefined);
 assert.equal(sdkPackage.dependencies?.['@a2a-js/sdk'], baseline.sdk_declared_a2a_range);

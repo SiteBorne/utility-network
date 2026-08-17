@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import type {
   ExternalVerificationEvidence,
   PaymentSettlementContext,
@@ -9,15 +9,12 @@ import {
   type NeverminedFacilitatorClient,
 } from '@siteborne/protocol-nevermined';
 
-const sdk = vi.hoisted(() => ({
-  getInstance: vi.fn(),
-  verifyPermissions: vi.fn(),
-  settlePermissions: vi.fn(),
-}));
-
-vi.mock('@nevermined-io/payments', () => ({
-  Payments: { getInstance: sdk.getInstance },
-}));
+// SUN-1000 checkpoint 1P: `nevermined-provider.ts`'s authenticated path now
+// talks to `NeverminedHttpFacilitatorClient` (real `fetch`, no
+// `@nevermined-io/payments` dependency) instead of the SDK's
+// `Payments.getInstance().facilitator` -- mock `fetch` itself rather than
+// the (now entirely unused) SDK module.
+const fetchMock = vi.fn();
 
 import { NeverminedPaymentEvidenceProvider } from '../src/control-plane/evidence/nevermined-provider';
 
@@ -141,33 +138,48 @@ function acceptedVerification(): ExternalVerificationEvidence {
   };
 }
 
+/** Builds a fetch-shaped Response for a given JSON body + status. */
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  });
+}
+
 describe('NeverminedPaymentEvidenceProvider trust boundary', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
-    sdk.verifyPermissions.mockResolvedValue({
-      isValid: true,
-      payer: BUYER,
-      network: BASE_CONTEXT.network,
-      agentRequestId: 'agent-request-1',
-    });
-    sdk.settlePermissions.mockResolvedValue({
-      success: true,
-      payer: BUYER,
-      transaction: '0x' + 'c'.repeat(64),
-      network: BASE_CONTEXT.network,
-      creditsRedeemed: '12000',
-      remainingBalance: '988000',
-    });
-    sdk.getInstance.mockReturnValue({
-      facilitator: {
-        verifyPermissions: sdk.verifyPermissions,
-        settlePermissions: sdk.settlePermissions,
-      },
+    fetchMock.mockReset();
+    vi.stubGlobal('fetch', fetchMock);
+    fetchMock.mockImplementation(async (url: string | URL) => {
+      const path = new URL(url).pathname;
+      if (path === '/api/v1/x402/verify') {
+        return jsonResponse({
+          isValid: true,
+          payer: BUYER,
+          network: BASE_CONTEXT.network,
+          agentRequestId: 'agent-request-1',
+        });
+      }
+      if (path === '/api/v1/x402/settle') {
+        return jsonResponse({
+          success: true,
+          payer: BUYER,
+          transaction: '0x' + 'c'.repeat(64),
+          network: BASE_CONTEXT.network,
+          creditsRedeemed: '12000',
+          remainingBalance: '988000',
+        });
+      }
+      throw new Error(`unexpected fetch to ${path}`);
     });
   });
 
-  it('does not initialize the SDK merely by importing the provider module', () => {
-    expect(sdk.getInstance).not.toHaveBeenCalled();
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('does not perform a network call merely by importing the provider module', () => {
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('keeps an injected fixture client synthetic even when the client accepts payment', async () => {
@@ -186,10 +198,10 @@ describe('NeverminedPaymentEvidenceProvider trust boundary', () => {
         liveGuard: { runLiveNevermined: '0', apiKeyEnvironment: 'sandbox' },
       })
     ).toThrow('nevermined_live_guard_denied');
-    expect(sdk.getInstance).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('maps the authenticated official SDK client to external verified evidence', async () => {
+  it('maps the authenticated direct-HTTP client to external verified evidence, with the exact real wire shape', async () => {
     const provider = NeverminedPaymentEvidenceProvider.authenticated({
       apiKey: 'secret-never-serialized',
       environment: 'sandbox',
@@ -198,11 +210,20 @@ describe('NeverminedPaymentEvidenceProvider trust boundary', () => {
     const evidence = await provider.verify(VERIFY_CONTEXT);
 
     expect(provider.providerKind).toBe('external');
-    expect(sdk.getInstance).toHaveBeenCalledTimes(1);
-    expect(sdk.verifyPermissions).toHaveBeenCalledWith({
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, options] = fetchMock.mock.calls[0]!;
+    expect(new URL(url).toString()).toBe('https://api.sandbox.nevermined.app/api/v1/x402/verify');
+    expect(options.method).toBe('POST');
+    expect(options.headers).toMatchObject({
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      Authorization: 'Bearer secret-never-serialized',
+      'Nevermined-Version': '1.1',
+    });
+    expect(JSON.parse(options.body)).toEqual({
       paymentRequired: PAYMENT_REQUIRED,
       x402AccessToken: BASE_CONTEXT.authorizationContext.accessToken,
-      maxAmount: 190000n,
+      maxAmount: '190000',
     });
     expect(evidence).toMatchObject({
       verified: true,
@@ -213,7 +234,7 @@ describe('NeverminedPaymentEvidenceProvider trust boundary', () => {
     expect(JSON.stringify(evidence)).not.toContain('secret-never-serialized');
   });
 
-  it('settles the measured actual amount and forwards the verified agent request identity', async () => {
+  it('settles the measured actual amount and forwards the verified agent request identity, with the exact real wire shape', async () => {
     const provider = NeverminedPaymentEvidenceProvider.authenticated({
       apiKey: 'secret-never-serialized',
       environment: 'sandbox',
@@ -222,10 +243,13 @@ describe('NeverminedPaymentEvidenceProvider trust boundary', () => {
     const verification = await provider.verify(VERIFY_CONTEXT);
     const evidence = await provider.settle(SETTLE_CONTEXT, verification, '12000');
 
-    expect(sdk.settlePermissions).toHaveBeenCalledWith({
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const [url, options] = fetchMock.mock.calls[1]!;
+    expect(new URL(url).toString()).toBe('https://api.sandbox.nevermined.app/api/v1/x402/settle');
+    expect(JSON.parse(options.body)).toEqual({
       paymentRequired: PAYMENT_REQUIRED,
       x402AccessToken: BASE_CONTEXT.authorizationContext.accessToken,
-      maxAmount: 12000n,
+      maxAmount: '12000',
       agentRequestId: 'agent-request-1',
     });
     expect(evidence).toMatchObject({
