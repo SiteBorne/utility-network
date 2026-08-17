@@ -45,6 +45,7 @@ import {
   syntheticVerificationEvidenceRejected,
   syntheticSettlementEvidenceSuccess,
   syntheticSettlementEvidenceFailed,
+  PREPRODUCTION_NETWORK,
 } from '@siteborne/protocol-x402';
 import {
   buildPaidServicesApp,
@@ -505,10 +506,13 @@ describe('SUN-1000 checkpoint 1N-A — v2 deterministic chaos', () => {
       clock: () => clockValue,
     });
     const challenge = await get402(app, '/v2/company/evidence-graph', COMPANY_INPUT_V2);
-    // The 402 challenge for v2 must declare the real CDP network, never
-    // the Nevermined-specific sandbox network this app was otherwise
-    // configured for.
-    expect(challenge.accepts[0].network).toBe('eip155:8453');
+    // The 402 challenge for v2 must declare CDP's actual configured
+    // network (checkpoint 1O-A: PREPRODUCTION_NETWORK, Base Sepolia --
+    // was mainnet before that correction). Network alone no longer
+    // distinguishes the CDP and Nevermined branches (both correctly use
+    // the same preproduction network) -- the real, unambiguous rail
+    // proof is `payment_rail` read back from D1 below.
+    expect(challenge.accepts[0].network).toBe(PREPRODUCTION_NETWORK);
     const id = generateSiteborneePaymentId();
     const res = await payAndRetry(
       app,

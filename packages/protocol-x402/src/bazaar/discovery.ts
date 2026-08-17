@@ -22,6 +22,7 @@ import {
   sanitizeTags,
 } from '@x402/extensions/bazaar';
 import type { Network, PaymentRequirements } from '@x402/core/types';
+import { PREPRODUCTION_NETWORK } from '../network/preproduction';
 import { buildQuote } from '../quote/quote';
 import { buildExactPaymentRequirement } from '../requirements/exact';
 import { buildUptoPaymentRequirement } from '../requirements/upto';
@@ -62,25 +63,25 @@ const BAZAAR_PAYMENT_POLICY: Readonly<
   'company_evidence_graph.v1': {
     scheme: 'exact',
     pricing_key: 'company_evidence_graph',
-    network: 'eip155:8453',
+    network: PREPRODUCTION_NETWORK,
     asset: '0xUSDC',
   },
   'web_context_verified.v1': {
     scheme: 'exact',
     pricing_key: 'web_context_verified_direct',
-    network: 'eip155:8453',
+    network: PREPRODUCTION_NETWORK,
     asset: '0xUSDC',
   },
   'document_evidence_json.v1': {
     scheme: 'upto',
     pricing_key: 'document_evidence_json_max_job',
-    network: 'eip155:8453',
+    network: PREPRODUCTION_NETWORK,
     asset: '0xUSDC',
   },
   'verify_agent_output.v1': {
     scheme: 'exact',
     pricing_key: 'verify_agent_output_standard',
-    network: 'eip155:8453',
+    network: PREPRODUCTION_NETWORK,
     asset: '0xUSDC',
   },
   // SUN-1000 checkpoint 1M: v2 policy entries are byte-identical to their
@@ -89,25 +90,25 @@ const BAZAAR_PAYMENT_POLICY: Readonly<
   'company_evidence_graph.v2': {
     scheme: 'exact',
     pricing_key: 'company_evidence_graph',
-    network: 'eip155:8453',
+    network: PREPRODUCTION_NETWORK,
     asset: '0xUSDC',
   },
   'web_context_verified.v2': {
     scheme: 'exact',
     pricing_key: 'web_context_verified_direct',
-    network: 'eip155:8453',
+    network: PREPRODUCTION_NETWORK,
     asset: '0xUSDC',
   },
   'document_evidence_json.v2': {
     scheme: 'upto',
     pricing_key: 'document_evidence_json_max_job',
-    network: 'eip155:8453',
+    network: PREPRODUCTION_NETWORK,
     asset: '0xUSDC',
   },
   'verify_agent_output.v2': {
     scheme: 'exact',
     pricing_key: 'verify_agent_output_standard',
-    network: 'eip155:8453',
+    network: PREPRODUCTION_NETWORK,
     asset: '0xUSDC',
   },
 };

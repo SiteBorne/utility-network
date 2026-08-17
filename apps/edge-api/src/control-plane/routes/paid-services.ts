@@ -24,8 +24,11 @@ import {
   ALL_BAZAAR_SERVICE_IDS,
   BUNDLED_SERVICE_INPUT_SCHEMAS,
   PAYTO_NOT_CONFIGURED,
+  PREPRODUCTION_NETWORK,
   REGISTRY_SERVICES,
+  assertPreproductionNetwork,
 } from '@siteborne/protocol-x402';
+import { getDefaultAsset } from '@x402/evm';
 import {
   NEVERMINED_DECLARATIONS,
   NEVERMINED_ROUTES,
@@ -73,6 +76,15 @@ function jsonHttpClient(body: unknown): InjectedHttpClient {
     },
   };
 }
+
+/** SUN-1000 checkpoint 1O-A: the real, official-SDK-sourced Base Sepolia
+ * USDC contract address (`@x402/evm`'s own `getDefaultAsset`, the exact
+ * value the accepted live-proof harness at `apps/edge-api/tests/live/
+ * x402-live-exact.test.ts` already independently hardcodes) — never a
+ * hand-typed literal, so this can never silently drift from the network
+ * it is paired with. Replaces the prior non-address placeholder
+ * `'0xUSDC'`. */
+const CDP_PREPRODUCTION_ASSET = getDefaultAsset(PREPRODUCTION_NETWORK).address;
 
 const DOCUMENT_FIXTURE_ARTIFACT_ID = 'doc/native-fixture.pdf';
 const DOCUMENT_FIXTURE_BYTES = registerFixtureScenario(new Uint8Array([9]), 'x402-http-native');
@@ -145,7 +157,10 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
       const declaration = NEVERMINED_DECLARATIONS[serviceId];
       return {
         rail,
-        network: 'eip155:84532' as const,
+        // Already Base Sepolia -- now sourced from the same canonical
+        // constant the CDP branch below uses (checkpoint 1O-A), rather
+        // than an independent literal that happened to agree.
+        network: PREPRODUCTION_NETWORK,
         asset: 'nevermined:credits',
         payTo: 'siteborne:nevermined-publisher-not-registered',
         path: NEVERMINED_ROUTES[serviceId],
@@ -156,10 +171,23 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
         neverminedReconciliationClient: config.neverminedReconciliationClient,
       };
     }
+    // SUN-1000 checkpoint 1O-A: was 'eip155:8453' (Base mainnet) since
+    // the original v1 wiring -- PREEXISTING_V1_MAINNET_DEFAULT, a real
+    // MAINNET_RISK never caught because the only real CDP facilitator
+    // call this repository has ever made (apps/edge-api/tests/live/
+    // x402-live-exact.test.ts) deliberately bypasses this exact field.
+    // Corrected to the single canonical preproduction network -- see
+    // packages/protocol-x402/src/network/preproduction.ts. The guard
+    // call is the actual §8 fail-closed protection: any future edit that
+    // reintroduces PRODUCTION_NETWORK here without the explicit
+    // authorization flag throws immediately, at construction time,
+    // rather than silently shipping.
+    const network = PREPRODUCTION_NETWORK;
+    assertPreproductionNetwork(network);
     return {
       rail,
-      network: 'eip155:8453' as const,
-      asset: '0xUSDC',
+      network,
+      asset: CDP_PREPRODUCTION_ASSET,
       payTo: config.payTo ?? PAYTO_NOT_CONFIGURED,
       path: cdpPath,
     };
@@ -174,10 +202,14 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
    * the local-only, unregistered declarations checkpoint 1M's
    * declarations.ts builds for descriptive purposes only. */
   function v2CdpRoute(path: string) {
+    // SUN-1000 checkpoint 1O-A: same correction as paymentRoute()'s CDP
+    // branch above -- see that comment and preproduction.ts.
+    const network = PREPRODUCTION_NETWORK;
+    assertPreproductionNetwork(network);
     return {
       rail: 'cdp' as const,
-      network: 'eip155:8453' as const,
-      asset: '0xUSDC',
+      network,
+      asset: CDP_PREPRODUCTION_ASSET,
       payTo: config.payTo ?? PAYTO_NOT_CONFIGURED,
       path,
     };

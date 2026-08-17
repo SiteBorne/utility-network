@@ -1,4 +1,6 @@
 import { createSiteborneMcpHonoApp, type CreateSiteborneMcpOptions } from '@siteborne/protocol-mcp';
+import { PREPRODUCTION_NETWORK } from '@siteborne/protocol-x402';
+import { getDefaultAsset } from '@x402/evm';
 import type { Context } from 'hono';
 import type { Env } from '../control-plane/config/env';
 
@@ -25,9 +27,17 @@ export async function mcpRoute(context: Context<{ Bindings: Env }>): Promise<Res
   };
 
   if (context.env?.SELLER_WALLET_ADDRESS) {
+    // SUN-1000 checkpoint 1O-A: now sourced from the same canonical
+    // network constant and the official @x402/evm asset table as every
+    // other first-party payment declaration (paid-services.ts,
+    // discovery.ts) -- this file previously hand-typed both values
+    // independently, and its asset address had drifted by one hex
+    // character from the real, accepted Base Sepolia USDC contract
+    // address every live-proof test uses
+    // (...dCF7c here vs the correct ...dCF7e).
     options.quote = {
-      network: 'eip155:84532',
-      asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7c',
+      network: PREPRODUCTION_NETWORK,
+      asset: getDefaultAsset(PREPRODUCTION_NETWORK).address,
       payee: context.env.SELLER_WALLET_ADDRESS,
     };
   }

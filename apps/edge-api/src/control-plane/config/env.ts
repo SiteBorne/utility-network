@@ -15,7 +15,27 @@ export interface Env {
   CDP_API_KEY_ID: string;
   CDP_API_KEY_SECRET: string;
   CDP_WALLET_SECRET: string;
-  NEVERMINED_API_KEY: string;
+  /** SUN-1000 checkpoint 1O-A: canonical Nevermined credential name,
+   * matching `packages/protocol-nevermined/src/config.ts`'s own already-
+   * correct `resolveNeverminedConfig` boundary (`canonical`/
+   * `deprecated_alias` source tracking, `NVM_ENVIRONMENT` required,
+   * `'live'` hard-disabled) -- that pure boundary function existed but
+   * was never wired to this Env surface before this checkpoint, which is
+   * itself the regression this correction closes. Optional here (as
+   * `NEVERMINED_API_KEY` below) because `resolveNeverminedConfig`, not
+   * this interface, is the actual presence/conflict validator; either
+   * name alone is accepted, both set to different values is rejected at
+   * that boundary. */
+  NVM_API_KEY?: string;
+  /** Required alongside `NVM_API_KEY`/`NEVERMINED_API_KEY` — must be
+   * exactly `'sandbox'`; `'live'` is explicitly rejected by
+   * `resolveNeverminedConfig`, and any other value is invalid. */
+  NVM_ENVIRONMENT?: string;
+  /** Deprecated alias for `NVM_API_KEY` — still accepted (never silently
+   * ignored), per `resolveNeverminedConfig`'s `deprecated_alias` source
+   * tracking. Do not require a new credential to be provisioned under
+   * this name; prefer `NVM_API_KEY` for anything newly configured. */
+  NEVERMINED_API_KEY?: string;
   VOYAGE_API_KEY: string;
   MODAL_TOKEN_ID: string;
   MODAL_TOKEN_SECRET: string;
@@ -87,9 +107,17 @@ function validateProductionBindings(env: Env): void {
     'CDP_API_KEY_ID',
     'CDP_API_KEY_SECRET',
     'CDP_WALLET_SECRET',
-    'NEVERMINED_API_KEY',
   ];
   const missingSecrets = requiredSecrets.filter((s) => !env[s]);
+  // SUN-1000 checkpoint 1O-A: the Nevermined credential is accepted under
+  // either its canonical name (NVM_API_KEY) or the deprecated alias
+  // (NEVERMINED_API_KEY) -- mirroring resolveNeverminedConfig's own
+  // either-name-accepted semantics, never requiring a new credential to
+  // be provisioned under a name this codebase no longer treats as
+  // canonical.
+  if (!env.NVM_API_KEY && !env.NEVERMINED_API_KEY) {
+    missingSecrets.push('NVM_API_KEY');
+  }
   if (missingSecrets.length > 0) {
     throw new Error(`Missing required production secrets: ${missingSecrets.join(', ')}`);
   }
