@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { NEVERMINED_DECLARATIONS, validateNeverminedDeclaration } from './index';
+import {
+  NEVERMINED_DECLARATIONS,
+  validateNeverminedDeclaration,
+  deriveNeverminedAgentDisplayName,
+  deriveNeverminedPlanDisplayName,
+} from './index';
 
 describe('four canonical Nevermined declarations', () => {
   it('defines exactly one local agent and one PAYG plan for each SITEBORNE service', () => {
@@ -126,5 +131,65 @@ describe('four canonical Nevermined declarations', () => {
         valid: false,
       });
     }
+  });
+});
+
+describe('SUN-1000 checkpoint 1O-B — Nevermined agent/plan display-name derivation', () => {
+  it('preserves v1 agent names exactly, unchanged, with no service-major suffix', () => {
+    for (const id of [
+      'company_evidence_graph.v1',
+      'web_context_verified.v1',
+      'document_evidence_json.v1',
+      'verify_agent_output.v1',
+    ] as const) {
+      const decl = NEVERMINED_DECLARATIONS[id];
+      expect(decl.agent.nevermined_display_name).toBe(decl.agent.title);
+    }
+  });
+
+  it('disambiguates v2 agent names by appending the canonical service-major identity', () => {
+    expect(NEVERMINED_DECLARATIONS['company_evidence_graph.v2'].agent.nevermined_display_name).toBe(
+      'Company Evidence Graph — company_evidence_graph.v2'
+    );
+    expect(NEVERMINED_DECLARATIONS['web_context_verified.v2'].agent.nevermined_display_name).toBe(
+      'Verified Web Context — web_context_verified.v2'
+    );
+    expect(NEVERMINED_DECLARATIONS['document_evidence_json.v2'].agent.nevermined_display_name).toBe(
+      'Document Evidence JSON — document_evidence_json.v2'
+    );
+    expect(NEVERMINED_DECLARATIONS['verify_agent_output.v2'].agent.nevermined_display_name).toBe(
+      'Agent Output Verification — verify_agent_output.v2'
+    );
+  });
+
+  it('v1 and v2 agent display names never collide for the same base service', () => {
+    for (const base of [
+      'company_evidence_graph',
+      'web_context_verified',
+      'document_evidence_json',
+      'verify_agent_output',
+    ] as const) {
+      const v1 = NEVERMINED_DECLARATIONS[`${base}.v1`].agent.nevermined_display_name;
+      const v2 = NEVERMINED_DECLARATIONS[`${base}.v2`].agent.nevermined_display_name;
+      expect(v1).not.toBe(v2);
+    }
+  });
+
+  it('derives plan names deterministically from the agent display name, with no embedded price/ID/environment/endpoint', () => {
+    expect(
+      deriveNeverminedPlanDisplayName('company_evidence_graph.v1', 'Company Evidence Graph')
+    ).toBe('Company Evidence Graph — PAYG plan');
+    expect(
+      deriveNeverminedPlanDisplayName(
+        'company_evidence_graph.v2',
+        'Company Evidence Graph — company_evidence_graph.v2'
+      )
+    ).toBe('Company Evidence Graph — company_evidence_graph.v2 — Plan');
+  });
+
+  it('deriveNeverminedAgentDisplayName is a pure function of (serviceId, title) -- deterministic, no hidden state', () => {
+    expect(
+      deriveNeverminedAgentDisplayName('verify_agent_output.v2', 'Agent Output Verification')
+    ).toBe(deriveNeverminedAgentDisplayName('verify_agent_output.v2', 'Agent Output Verification'));
   });
 });

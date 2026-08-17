@@ -64,6 +64,58 @@ each service and one clearly segregated dynamic-capability probe. All four
 frozen pairs passed the accepted authoritative read-back validators and
 reconciled `EXACT_EXISTING`; there are no duplicate canonical registrations.
 
+## Four v2 registrations (SUN-1000 checkpoint 1O-B)
+
+Real Nevermined sandbox registrations, same economics as v1
+(`SAME_ECONOMICS_NEW_SERVICE_MAJOR`, checkpoint 1L section 9), created after
+checkpoint 1O-B discovered and fixed a real agent-name collision: v1 and v2
+declarations previously derived the identical plain registry title (e.g. both
+"Company Evidence Graph"), so the registration harness's name-based lookup
+always matched the _existing_ v1 agent — correctly refused by the endpoint-aware
+validator (`WRONG_SERVICE_ENDPOINT`) rather than silently registering, but this
+meant v2 could never reach a clean `NO_MATCH` through that same lookup. Fixed by
+`deriveNeverminedAgentDisplayName`/ `deriveNeverminedPlanDisplayName`
+(`packages/protocol-nevermined/src/ declarations.ts`): v1 names are preserved
+byte-for-byte; v2 (and any future major) disambiguates by appending the
+canonical service-major identity itself.
+
+Each of the four was independently confirmed `NO_MATCH` after the naming fix,
+registered one at a time, and confirmed `EXACT_EXISTING` via authoritative GET
+read-back before proceeding to the next. Zero economic side effects:
+`delegation_creations=0 token_creations=0 verify_calls=0 service_executions=0 settle_calls=0 payment_identifiers=0 jobs=0 payment_transactions=0`
+across all four registrations.
+
+| Service                     | Semantics               | Gross buyer amount (USDC atomic) | Agent ID                                                                        | Plan ID                                                                         |
+| --------------------------- | ----------------------- | -------------------------------: | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `company_evidence_graph.v2` | fixed PAYG              |                            39000 | `8945215415179810337511916177281451484220450532075244586308753062965582716389`  | `10268032069987826322514735824876788768903142706079143267509577311063526800318` |
+| `web_context_verified.v2`   | fixed PAYG              |                             9000 | `9613264351721376847099143451964490409753221634691266039731516778743818115758`  | `24941537770422129588835488161631149735480385285064676886916949896840067329220` |
+| `document_evidence_json.v2` | prepaid dynamic credits |                      190000 pool | `23983377566340233303092237571868603328491815288742632945599286374009053451142` | `47055935846533104006091411392563929683665104827998139102920975407519466945495` |
+| `verify_agent_output.v2`    | fixed PAYG              |                            19000 | `27131786432933344978515576530029108070322716902860955144259896627611005129186` | `91900896406434535132462316750130087602675645111856542980525216829631168048994` |
+
+The post-registration account census found exactly nine agents: the five
+historical v1/probe pairs (confirmed byte-for-byte unchanged — same IDs, names,
+endpoints, linked plan IDs) plus these four new v2 pairs. No duplicate canonical
+resources exist for any service.
+
+**These v2 registrations exist as real external state, but are not yet bound to
+any executable route.** `NEVERMINED_ROUTES['*.v2']` remains an unmounted
+route-string declaration only (`paid-services.ts`'s `v2CdpRoute()` is the only
+live v2 wiring); no code path can reach a Nevermined-rail v2 settlement today.
+Route binding is separately authorized future work.
+
+**Process-gate deviation, recorded honestly:** these four registrations were
+created while
+`ROTATE_EXPOSED_CDP_SANDBOX_CREDENTIALS_BEFORE_NEXT_PROVIDER_ MUTATION=true`
+remained open (the CDP credential exposure from checkpoint 1D was not yet
+rotated). The exposed CDP credentials were never used for these Nevermined
+mutations — Nevermined authenticates via its own, separate `NVM_API_KEY` sandbox
+credential, confirmed present and sandbox-scoped by the SDK's own key-prefix
+detection — so the registrations' validity is unaffected. But the frozen "rotate
+before next provider mutation" sequencing rule was not followed procedurally,
+and this is disclosed as a genuine deviation, not silently treated as satisfied.
+**No further provider or payment mutation (Nevermined or CDP) is authorized
+until the CDP credential rotation is actually completed.**
+
 The document declaration binds usage-value modes of 12000/native page, 19000/OCR
 page, and 29000/table page. The accepted plan acquires 190000 reusable credits
 for 190000 atomic USDC and permits variable 12000..190000 redemption. Checkpoint

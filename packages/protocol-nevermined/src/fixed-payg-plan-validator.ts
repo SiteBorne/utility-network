@@ -11,7 +11,7 @@
  */
 
 import type { SiteborneServiceId } from '@siteborne/protocol-x402';
-import { NEVERMINED_DECLARATIONS } from './declarations';
+import { NEVERMINED_DECLARATIONS, deriveNeverminedPlanDisplayName } from './declarations';
 import type {
   NeverminedAgentReadback,
   NeverminedPlanReadback,
@@ -83,10 +83,15 @@ export function resolveNeverminedFixedPaygPlanRequirements(
     throw new Error(`fixed PAYG gross price for ${fixedServiceId} cannot be represented exactly`);
   }
   const platformFeeAtomic = feeNumerator / model.basis_points_denominator;
+  // SUN-1000 checkpoint 1O-B: agent_name/plan_name now use the
+  // registration-specific display name (unique per service-major),
+  // never the plain, major-agnostic `title` -- see
+  // deriveNeverminedAgentDisplayName's own module doc for why.
+  const agentName = declaration.agent.nevermined_display_name;
   return {
     service_id: fixedServiceId,
-    agent_name: declaration.agent.title,
-    plan_name: `${declaration.agent.title} — PAYG plan`,
+    agent_name: agentName,
+    plan_name: deriveNeverminedPlanDisplayName(fixedServiceId, agentName),
     endpoint: `https://utility.siteborne.net${declaration.agent.endpoint}`,
     gross_price_atomic: grossPriceAtomic,
     seller_net_atomic: grossPriceAtomic - platformFeeAtomic,

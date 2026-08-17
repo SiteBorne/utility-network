@@ -15,6 +15,13 @@ export interface NeverminedAgentDeclaration {
   service_id: SiteborneServiceId;
   service_version: 'v1' | 'v2';
   title: string;
+  /** SUN-1000 checkpoint 1O-B: the real, on-provider Nevermined agent
+   * display name — see `deriveNeverminedAgentDisplayName` below. `title`
+   * above stays the plain, major-agnostic registry title used everywhere
+   * else (Bazaar/MCP/A2A metadata); this field exists specifically
+   * because Nevermined agent names must be unique across majors sharing
+   * one account, which `title` alone is not. */
+  nevermined_display_name: string;
   description: string;
   endpoint: string;
   input_schema_uri: string;
@@ -64,6 +71,45 @@ function atomic(key: Parameters<typeof resolveServiceMaxPriceUsd>[0]): string {
   return usdToAtomicUnits(resolveServiceMaxPriceUsd(key), 6);
 }
 
+/**
+ * SUN-1000 checkpoint 1O-B: the single, shared Nevermined agent-display-
+ * name derivation. Discovered via a real reconciliation attempt against
+ * `company_evidence_graph.v2`: v1 and v2 declarations previously shared
+ * the exact same `title` ("Company Evidence Graph"), so the registration
+ * harness's name-based lookup always matched the *existing* v1 agent,
+ * correctly refused by the endpoint-aware validator
+ * (`WRONG_SERVICE_ENDPOINT`) rather than silently registering — but this
+ * meant v2 could never reach a clean `NO_MATCH` state through that same
+ * name-based lookup while v1 exists under an identical name.
+ *
+ * v1 names are preserved byte-for-byte (already registered on the real
+ * Nevermined sandbox backend; changing the expected string would break
+ * v1's own future reconciliation, not just v2's). Every other major
+ * (v2 and beyond) disambiguates by appending the canonical service-major
+ * identity itself — never a mutable price, agent/plan ID, environment
+ * name, or endpoint, none of which are stable/appropriate name material.
+ */
+export function deriveNeverminedAgentDisplayName(
+  serviceId: SiteborneServiceId,
+  title: string
+): string {
+  return serviceId.endsWith('.v1') ? title : `${title} — ${serviceId}`;
+}
+
+/** Companion plan-name derivation, deterministic from the same agent
+ * display name. v1's already-registered plan-name formula
+ * (`"<title> — PAYG plan"`) is preserved unchanged; v2+ uses a plain,
+ * generic `"<agent display name> — Plan"` — no economics/IDs/environment
+ * embedded, matching `deriveNeverminedAgentDisplayName`'s own rule. */
+export function deriveNeverminedPlanDisplayName(
+  serviceId: SiteborneServiceId,
+  agentDisplayName: string
+): string {
+  return serviceId.endsWith('.v1')
+    ? `${agentDisplayName} — PAYG plan`
+    : `${agentDisplayName} — Plan`;
+}
+
 function buildDeclaration(serviceId: SiteborneServiceId): NeverminedServiceDeclaration {
   const service = REGISTRY_SERVICES[serviceId];
   const base = serviceId.replace(/\.v\d+$/, '');
@@ -85,6 +131,7 @@ function buildDeclaration(serviceId: SiteborneServiceId): NeverminedServiceDecla
       service_id: serviceId,
       service_version: serviceVersion,
       title: service.title,
+      nevermined_display_name: deriveNeverminedAgentDisplayName(serviceId, service.title),
       description: service.description,
       endpoint: NEVERMINED_ROUTES[serviceId],
       input_schema_uri: service.input_schema_uri,

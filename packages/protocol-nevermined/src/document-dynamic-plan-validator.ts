@@ -26,6 +26,7 @@
  */
 
 import type { NeverminedRegistrationReconciliation } from './registry-reconciliation';
+import { deriveNeverminedAgentDisplayName, deriveNeverminedPlanDisplayName } from './declarations';
 
 export interface NeverminedPlanPriceReadback {
   amounts?: readonly (string | number | bigint)[];
@@ -69,6 +70,31 @@ export interface NeverminedAgentReadback {
   registry?: { plans?: readonly string[] };
 }
 
+/** SUN-1000 checkpoint 1O-B: the widened (non-literal) shape shared by
+ * `DOCUMENT_DYNAMIC_PLAN_REQUIREMENTS` and `..._V2` -- used as the
+ * parameter type wherever a caller may pass either constant, since the
+ * `as const` literal types below are otherwise too narrow for one to
+ * substitute for the other. */
+export interface DocumentDynamicPlanRequirements {
+  agent_name: string;
+  plan_name: string;
+  endpoint: string;
+  gross_price_atomic: bigint;
+  credits_granted: bigint;
+  min_redemption: bigint;
+  max_redemption: bigint;
+  is_redemption_amount_fixed: boolean;
+  token_address: string;
+  receiver: string;
+  seller_net_atomic: bigint;
+  platform_fee_receiver: string;
+  platform_fee_atomic: bigint;
+  access_limit: string;
+  redemption_type: number;
+  onchain_mirror: boolean;
+  duration_secs: bigint;
+}
+
 /** Frozen requirement constants for the document dynamic-credit plan
  * (checkpoint 2E's accepted candidate). Every value here is either a
  * `bigint` (economic amounts, compared exactly, no rounding) or an
@@ -92,6 +118,27 @@ export const DOCUMENT_DYNAMIC_PLAN_REQUIREMENTS = {
   onchain_mirror: false,
   duration_secs: 0n,
 } as const;
+
+/** SUN-1000 checkpoint 1O-B: the v2 counterpart of
+ * `DOCUMENT_DYNAMIC_PLAN_REQUIREMENTS`. Every economic value is byte-
+ * identical to v1 (`SAME_ECONOMICS_NEW_SERVICE_MAJOR`, checkpoint 1L
+ * section 9) -- only `agent_name`/`plan_name` (via the shared
+ * `deriveNeverminedAgentDisplayName`/`deriveNeverminedPlanDisplayName`,
+ * the same disambiguation used by the fixed-PAYG services) and
+ * `endpoint` (the real `/v2/nevermined/...` route) differ. v1's own
+ * constant above is untouched. */
+export const DOCUMENT_DYNAMIC_PLAN_REQUIREMENTS_V2 = (() => {
+  const agentName = deriveNeverminedAgentDisplayName(
+    'document_evidence_json.v2',
+    'Document Evidence JSON'
+  );
+  return {
+    ...DOCUMENT_DYNAMIC_PLAN_REQUIREMENTS,
+    agent_name: agentName,
+    plan_name: deriveNeverminedPlanDisplayName('document_evidence_json.v2', agentName),
+    endpoint: 'https://utility.siteborne.net/v2/nevermined/document/evidence-json',
+  } as const;
+})();
 
 /** Frozen usage-tier valuations (checkpoint 2E: usage-value atomic
  * equivalent, never a claim about fresh per-request USDC movement). */
@@ -144,9 +191,12 @@ export function computeCreditAcquisitionValueAtomic(
  */
 export function validateNeverminedDocumentDynamicPlan(
   agent: NeverminedAgentReadback,
-  plan: NeverminedPlanReadback
+  plan: NeverminedPlanReadback,
+  // SUN-1000 checkpoint 1O-B: optional, defaults to the original v1
+  // requirements -- every existing caller's behavior is unchanged.
+  requirements: DocumentDynamicPlanRequirements = DOCUMENT_DYNAMIC_PLAN_REQUIREMENTS
 ): DocumentDynamicPlanValidation {
-  const req = DOCUMENT_DYNAMIC_PLAN_REQUIREMENTS;
+  const req = requirements;
 
   // ---- identity ----
   if (typeof agent.id !== 'string' || agent.id.length === 0) {
@@ -299,7 +349,10 @@ export function validateNeverminedDocumentDynamicPlan(
 export function reconcileNeverminedDocumentDynamicRegistration(
   reconciliation: NeverminedRegistrationReconciliation,
   agent?: NeverminedAgentReadback,
-  plan?: NeverminedPlanReadback
+  plan?: NeverminedPlanReadback,
+  // SUN-1000 checkpoint 1O-B: optional, defaults to v1 -- unchanged
+  // behavior for every existing caller.
+  requirements: DocumentDynamicPlanRequirements = DOCUMENT_DYNAMIC_PLAN_REQUIREMENTS
 ): NeverminedDocumentDynamicRegistrationReconciliation {
   if (reconciliation.state === 'absent') return { state: 'NO_MATCH' };
   if (reconciliation.state === 'partial') {
@@ -317,7 +370,7 @@ export function reconcileNeverminedDocumentDynamicRegistration(
   if (agent.id !== reconciliation.agentId || plan.id !== reconciliation.planId) {
     return { state: 'CONFLICT', reason: 'RECONCILIATION_READBACK_ID_MISMATCH' };
   }
-  const validation = validateNeverminedDocumentDynamicPlan(agent, plan);
+  const validation = validateNeverminedDocumentDynamicPlan(agent, plan, requirements);
   if (!validation.valid) return { state: 'CONFLICT', reason: validation.reason };
   return {
     state: 'EXACT_EXISTING',
