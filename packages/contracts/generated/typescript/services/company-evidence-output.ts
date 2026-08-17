@@ -8,7 +8,13 @@
  * Normative schema for Proof-Carrying Context 1.0.0. Frozen after compatibility validation
  * passes. Schema patch 1.0.1 (SUN-0100 correction): extension_container now structurally
  * permits qualified extension keys via patternProperties, matching documented semantics;
- * pcc_version (document content compatibility) is unchanged at 1.0.0.
+ * pcc_version (document content compatibility) is unchanged at 1.0.0. Schema minor 1.1.0
+ * (SUN-1000 checkpoint 1M): service_id enum gains 4 new .v2 members (additive-only per
+ * packages/pcc-schema/policy/COMPATIBILITY.md section 1/section 4, which explicitly
+ * classifies new enum values as minor-compatible -- not the
+ * docs/contracts/COMPATIBILITY_POLICY.md service-contract-release taxonomy, which does not
+ * govern this file); the 4 existing .v1 members are unchanged and remain valid; pcc_version
+ * is unchanged at 1.0.0.
  */
 export interface CompanyEvidenceOutput {
   claims: Claim[];
@@ -97,12 +103,12 @@ export type Network = 'base' | 'base-testnet';
 /**
  * Service identifier
  */
-export type ServiceID = 'company_evidence_graph.v1';
+export type ServiceID = 'company_evidence_graph.v1' | 'company_evidence_graph.v2';
 
 /**
  * Service version
  */
-export type ServiceVersion = 'v1';
+export type ServiceVersion = 'v1' | 'v2';
 
 export interface EvidenceItem {
   accessibility_status: AccessibilityStatus;

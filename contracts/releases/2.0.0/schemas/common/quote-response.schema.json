@@ -1,0 +1,188 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://siteborne.net/schemas/common/quote-response.schema.json",
+  "title": "Quote Response",
+  "description": "Price quote for a service execution. Includes pricing details, validity, and execution metadata.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "quote_id",
+    "request_id",
+    "service_id",
+    "service_version",
+    "pricing_scheme",
+    "currency",
+    "payment_network",
+    "payment_asset",
+    "estimated_execution_class",
+    "execution_mode",
+    "issued_at",
+    "expires_at",
+    "input_hash",
+    "input_schema_hash",
+    "output_schema_hash",
+    "pricing_policy_version",
+    "expected_completeness",
+    "declared_limitations",
+    "production_enabled",
+    "payment_required"
+  ],
+  "properties": {
+    "quote_id": {
+      "type": "string",
+      "description": "Unique quote identifier.",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$|^[0-9A-HJKMNP-TV-Z]{26}$",
+      "maxLength": 36
+    },
+    "request_id": {
+      "type": "string",
+      "description": "Original quote request identifier.",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$|^[0-9A-HJKMNP-TV-Z]{26}$",
+      "maxLength": 36
+    },
+    "service_id": {
+      "type": "string",
+      "description": "Canonical service identifier.",
+      "pattern": "^[a-z0-9_]+\\.v[0-9]+$"
+    },
+    "service_version": {
+      "type": "string",
+      "description": "Service version.",
+      "pattern": "^v[0-9]+(\\.[0-9]+)*$"
+    },
+    "pricing_scheme": {
+      "type": "string",
+      "description": "Pricing scheme for this quote.",
+      "enum": ["exact", "upto"]
+    },
+    "price": {
+      "$ref": "https://siteborne.net/schemas/common/money.schema.json",
+      "description": "Exact price for 'exact' scheme. Must not be present for 'upto' scheme."
+    },
+    "maximum_authorized_price": {
+      "$ref": "https://siteborne.net/schemas/common/money.schema.json",
+      "description": "Maximum authorized price for 'upto' scheme. Must not be present for 'exact' scheme."
+    },
+    "currency": {
+      "type": "string",
+      "description": "ISO 4217 currency code.",
+      "pattern": "^[A-Z]{3}$",
+      "enum": ["USD"]
+    },
+    "payment_network": {
+      "type": "string",
+      "description": "Payment network for settlement.",
+      "pattern": "^[a-z0-9-]+$",
+      "maxLength": 64
+    },
+    "payment_asset": {
+      "type": "string",
+      "description": "Payment asset for settlement.",
+      "pattern": "^[A-Z0-9]{3,10}$"
+    },
+    "estimated_execution_class": {
+      "type": "string",
+      "description": "Estimated resource class for execution.",
+      "enum": ["light", "standard", "heavy", "intensive"]
+    },
+    "execution_mode": {
+      "type": "string",
+      "description": "Execution mode.",
+      "enum": ["sync", "async"]
+    },
+    "issued_at": {
+      "type": "string",
+      "description": "Quote issuance timestamp (RFC 3339 UTC).",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,6})?Z$"
+    },
+    "expires_at": {
+      "type": "string",
+      "description": "Quote expiration timestamp (RFC 3339 UTC). Must be after issued_at.",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,6})?Z$"
+    },
+    "input_hash": {
+      "type": "string",
+      "description": "SHA-256 hash of the input payload.",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "input_schema_hash": {
+      "type": "string",
+      "description": "SHA-256 hash of the input schema.",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "output_schema_hash": {
+      "type": "string",
+      "description": "SHA-256 hash of the output schema.",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "pricing_policy_version": {
+      "type": "string",
+      "description": "Pricing policy version used for this quote.",
+      "pattern": "^v[0-9]+(\\.[0-9]+)*$"
+    },
+    "expected_completeness": {
+      "type": "number",
+      "description": "Expected completeness score for the result.",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "declared_limitations": {
+      "type": "array",
+      "items": { "type": "string", "maxLength": 256 },
+      "maxItems": 20,
+      "description": "Declared limitations of the quoted service."
+    },
+    "production_enabled": {
+      "type": "boolean",
+      "description": "Whether the service is production-enabled. Must be false for SUN-0101.",
+      "const": false
+    },
+    "payment_required": {
+      "type": "boolean",
+      "description": "Whether payment is required for execution."
+    }
+  },
+  "if": {
+    "properties": {
+      "pricing_scheme": { "const": "exact" }
+    }
+  },
+  "then": {
+    "required": ["price"],
+    "not": { "required": ["maximum_authorized_price"] }
+  },
+  "if": {
+    "properties": {
+      "pricing_scheme": { "const": "upto" }
+    }
+  },
+  "then": {
+    "required": ["maximum_authorized_price"],
+    "not": { "required": ["price"] }
+  },
+  "examples": [
+    {
+      "quote_id": "0fa9c307-4b2c-4d8e-9f1a-2b3c4d5e6f7b",
+      "request_id": "0fa9c307-4b2c-4d8e-9f1a-2b3c4d5e6f7a",
+      "service_id": "company_evidence_graph.v1",
+      "service_version": "v1",
+      "pricing_scheme": "exact",
+      "price": { "amount": "0.039", "currency": "USD" },
+      "currency": "USD",
+      "payment_network": "base-mainnet",
+      "payment_asset": "USDC",
+      "estimated_execution_class": "standard",
+      "execution_mode": "sync",
+      "issued_at": "2026-08-05T10:00:00Z",
+      "expires_at": "2026-08-05T11:00:00Z",
+      "input_hash": "sha256:abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+      "input_schema_hash": "sha256:fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321",
+      "output_schema_hash": "sha256:1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+      "pricing_policy_version": "v1",
+      "expected_completeness": 0.85,
+      "declared_limitations": ["cache-only", "no-realtime"],
+      "production_enabled": false,
+      "payment_required": true
+    }
+  ]
+}

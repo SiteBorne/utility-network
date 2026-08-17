@@ -3,18 +3,26 @@ import { NEVERMINED_DECLARATIONS, validateNeverminedDeclaration } from './index'
 
 describe('four canonical Nevermined declarations', () => {
   it('defines exactly one local agent and one PAYG plan for each SITEBORNE service', () => {
+    // SUN-1000 checkpoint 1M: 4 v2 declarations added alongside v1
+    // (checkpoint 1L PREPRODUCTION_V2_REPLACEMENT — additive, not a
+    // replacement; each is a local, unregistered description only, see
+    // declarations.ts's own doc comment).
     expect(Object.keys(NEVERMINED_DECLARATIONS)).toEqual([
       'company_evidence_graph.v1',
       'web_context_verified.v1',
       'document_evidence_json.v1',
       'verify_agent_output.v1',
+      'company_evidence_graph.v2',
+      'web_context_verified.v2',
+      'document_evidence_json.v2',
+      'verify_agent_output.v2',
     ]);
     expect(
       new Set(Object.values(NEVERMINED_DECLARATIONS).map((d) => d.agent.local_agent_id)).size
-    ).toBe(4);
+    ).toBe(8);
     expect(
       new Set(Object.values(NEVERMINED_DECLARATIONS).map((d) => d.plan.local_plan_id)).size
-    ).toBe(4);
+    ).toBe(8);
   });
 
   it.each([
@@ -39,11 +47,14 @@ describe('four canonical Nevermined declarations', () => {
   });
 
   it('binds declarations to canonical schema hashes, PCC, protocol references, and dedicated routes', () => {
-    for (const declaration of Object.values(NEVERMINED_DECLARATIONS)) {
+    for (const [serviceId, declaration] of Object.entries(NEVERMINED_DECLARATIONS)) {
       expect(declaration.agent.input_schema_hash).toMatch(/^sha256:[a-f0-9]{64}$/);
       expect(declaration.agent.output_schema_hash).toMatch(/^sha256:[a-f0-9]{64}$/);
       expect(declaration.agent.pcc_version).toBe('1.0.0');
-      expect(declaration.agent.endpoint).toMatch(/^\/v1\/nevermined\//);
+      // SUN-1000 checkpoint 1M: each declaration's endpoint matches its
+      // own major (.v1 -> /v1/nevermined/, .v2 -> /v2/nevermined/).
+      const expectedPrefix = serviceId.endsWith('.v2') ? '/v2/nevermined/' : '/v1/nevermined/';
+      expect(declaration.agent.endpoint.startsWith(expectedPrefix)).toBe(true);
       expect(declaration.agent.protocol_references).toEqual({ mcp: '/mcp', a2a: '/a2a' });
       expect(declaration.agent.production_enabled).toBe(false);
     }

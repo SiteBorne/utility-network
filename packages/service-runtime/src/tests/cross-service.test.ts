@@ -48,7 +48,10 @@ describe('Cross-service invariants', () => {
     for (const entry of registry.list()) {
       expect(entry.productionEnabled).toBe(false);
     }
-    expect(registry.list()).toHaveLength(4);
+    // SUN-1000 checkpoint 1M: 4 v1 + 4 v2 registrations (each pair
+    // sharing the same underlying service instance, checkpoint 1L's
+    // frozen PREPRODUCTION_V2_REPLACEMENT decision).
+    expect(registry.list()).toHaveLength(8);
   });
 
   it('an unknown service_id fails closed through the shared dispatcher regardless of which registry built it', async () => {

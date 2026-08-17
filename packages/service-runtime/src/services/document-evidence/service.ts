@@ -201,9 +201,10 @@ export class DocumentEvidenceJsonService
 
     const nowIso = new Date(context.clock.nowMs()).toISOString();
     const draft = buildDraftDocument({
-      seed: `document_evidence_json.v1:${inputHash}:${context.job_id}`,
-      serviceId: 'document_evidence_json.v1',
-      serviceVersion: 'v1',
+      // SUN-1000 checkpoint 1M: derived from context.service_id.
+      seed: `${context.service_id}:${inputHash}:${context.job_id}`,
+      serviceId: context.service_id,
+      serviceVersion: context.service_id.endsWith('.v2') ? 'v2' : 'v1',
       inputHash,
       inputSchemaHash: 'sha256:' + '1'.repeat(64),
       outputSchemaHash: 'sha256:' + '2'.repeat(64),
@@ -259,8 +260,8 @@ export class DocumentEvidenceJsonService
 
     return {
       result_class: resultClass,
-      service_id: 'document_evidence_json.v1',
-      service_version: 'v1',
+      service_id: context.service_id,
+      service_version: context.service_id.endsWith('.v2') ? 'v2' : 'v1',
       contract_release: context.contract_release,
       request_id: context.request_id,
       job_id: draft.job_id,
@@ -314,8 +315,8 @@ function baseFailureResult(
 ): ServiceExecutionResult<DocumentEvidenceExtension> {
   return {
     result_class: resultClass,
-    service_id: 'document_evidence_json.v1',
-    service_version: 'v1',
+    service_id: context.service_id,
+    service_version: context.service_id.endsWith('.v2') ? 'v2' : 'v1',
     contract_release: context.contract_release,
     request_id: context.request_id,
     job_id: context.job_id,

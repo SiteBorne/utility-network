@@ -152,9 +152,10 @@ export class VerifyAgentOutputService
     const supportedFields = supportedClaims + requirementResults.filter((r) => r.passed).length;
 
     const draft = buildDraftDocument({
-      seed: `verify_agent_output.v1:${inputHash}:${context.job_id}`,
-      serviceId: 'verify_agent_output.v1',
-      serviceVersion: 'v1',
+      // SUN-1000 checkpoint 1M: derived from context.service_id.
+      seed: `${context.service_id}:${inputHash}:${context.job_id}`,
+      serviceId: context.service_id,
+      serviceVersion: context.service_id.endsWith('.v2') ? 'v2' : 'v1',
       inputHash,
       inputSchemaHash: 'sha256:' + '1'.repeat(64),
       outputSchemaHash: 'sha256:' + '2'.repeat(64),
@@ -220,8 +221,8 @@ export class VerifyAgentOutputService
           : meshPassed
             ? 'partial'
             : 'internal_verification_failed',
-      service_id: 'verify_agent_output.v1',
-      service_version: 'v1',
+      service_id: context.service_id,
+      service_version: context.service_id.endsWith('.v2') ? 'v2' : 'v1',
       contract_release: context.contract_release,
       request_id: context.request_id,
       job_id: draft.job_id,
@@ -316,8 +317,8 @@ function rejected(
 ): ServiceExecutionResult<AgentVerificationExtension> {
   return {
     result_class: 'rejected',
-    service_id: 'verify_agent_output.v1',
-    service_version: 'v1',
+    service_id: context.service_id,
+    service_version: context.service_id.endsWith('.v2') ? 'v2' : 'v1',
     contract_release: context.contract_release,
     request_id: context.request_id,
     job_id: context.job_id,

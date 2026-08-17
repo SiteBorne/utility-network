@@ -7,7 +7,7 @@
   "input_schema_uri": "https://siteborne.net/schemas/services/agent-verification-input.schema.json",
   "input_schema_hash": "sha256:66d459905cd1a18b57ccb3fc40043a4e4c1a77bc7dba40676fcaf674cacb0f34",
   "output_schema_uri": "https://siteborne.net/schemas/services/agent-verification-output.schema.json",
-  "output_schema_hash": "sha256:f78bb719bc6ee9adb57d76c0181dfb9f466ec9220e9c98766204dbba97f99475",
+  "output_schema_hash": "sha256:a9a462b89b290ecba1aa62ec6d2fd030572f326ed79f498a43690244b38ad679",
   "pcc_version": "1.0.0",
   "pricing_schemes": ["exact", "upto"],
   "base_price": { "amount": "0.019", "currency": "USD" },

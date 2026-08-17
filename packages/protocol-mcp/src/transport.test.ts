@@ -16,10 +16,10 @@ import {
 } from './index';
 
 const SERVICE_TOOL_MATRIX = [
-  ['siteborne_company_evidence_graph', 'company_evidence_graph.v1'],
-  ['siteborne_web_context_verified', 'web_context_verified.v1'],
-  ['siteborne_document_evidence_json', 'document_evidence_json.v1'],
-  ['siteborne_verify_agent_output', 'verify_agent_output.v1'],
+  ['siteborne_company_evidence_graph', 'company_evidence_graph.v2'],
+  ['siteborne_web_context_verified', 'web_context_verified.v2'],
+  ['siteborne_document_evidence_json', 'document_evidence_json.v2'],
+  ['siteborne_verify_agent_output', 'verify_agent_output.v2'],
 ] as const;
 
 function createBoundary(): McpServiceExecutionBoundary {
@@ -120,15 +120,15 @@ describe('SITEBORNE MCP 2026-07-28 Hono transport', () => {
     const { app } = createFixtureApp();
     const client = await connectClient(app);
     clients.push(client);
-    const input = frozenInputExample('document_evidence_json.v1');
+    const input = frozenInputExample('document_evidence_json.v2');
 
     const exact = await client.callTool({
       name: 'siteborne_get_quote',
-      arguments: { service_id: 'document_evidence_json.v1', scheme: 'exact', input },
+      arguments: { service_id: 'document_evidence_json.v2', scheme: 'exact', input },
     });
     const upto = await client.callTool({
       name: 'siteborne_get_quote',
-      arguments: { service_id: 'document_evidence_json.v1', scheme: 'upto', input },
+      arguments: { service_id: 'document_evidence_json.v2', scheme: 'upto', input },
     });
 
     expect(exact.isError).not.toBe(true);
@@ -167,7 +167,7 @@ describe('SITEBORNE MCP 2026-07-28 Hono transport', () => {
         production_ready: false,
         production_enabled: false,
         services: expect.objectContaining({
-          'company_evidence_graph.v1': expect.objectContaining({
+          'company_evidence_graph.v2': expect.objectContaining({
             implementation: 'local_fixture_verified',
             production: 'production_disabled',
             external: 'not_live',
@@ -213,7 +213,7 @@ describe('SITEBORNE MCP 2026-07-28 Hono transport', () => {
       clients.push(client);
       const result = await client.callTool({
         name: 'siteborne_company_evidence_graph',
-        arguments: frozenInputExample('company_evidence_graph.v1') as Record<string, unknown>,
+        arguments: frozenInputExample('company_evidence_graph.v2') as Record<string, unknown>,
       });
 
       expect(result.isError).toBe(true);
@@ -234,7 +234,7 @@ describe('SITEBORNE MCP 2026-07-28 Hono transport', () => {
 
     const result = await client.callTool({
       name: 'siteborne_company_evidence_graph',
-      arguments: frozenInputExample('company_evidence_graph.v1') as Record<string, unknown>,
+      arguments: frozenInputExample('company_evidence_graph.v2') as Record<string, unknown>,
     });
 
     expect(result.isError).toBe(true);
@@ -252,10 +252,10 @@ describe('SITEBORNE MCP 2026-07-28 Hono transport', () => {
     const unsupportedMode = await client.callTool({
       name: 'siteborne_get_quote',
       arguments: {
-        service_id: 'company_evidence_graph.v1',
+        service_id: 'company_evidence_graph.v2',
         scheme: 'exact',
         mode: 'unbounded-live',
-        input: frozenInputExample('company_evidence_graph.v1'),
+        input: frozenInputExample('company_evidence_graph.v2'),
       },
     });
     await expect(
@@ -289,14 +289,14 @@ describe('SITEBORNE MCP 2026-07-28 Hono transport', () => {
       await client.callTool({
         name: 'siteborne_get_quote',
         arguments: {
-          service_id: 'web_context_verified.v1',
+          service_id: 'web_context_verified.v2',
           scheme: 'exact',
-          input: frozenInputExample('web_context_verified.v1'),
+          input: frozenInputExample('web_context_verified.v2'),
         },
       });
       await client.callTool({
         name: 'siteborne_web_context_verified',
-        arguments: frozenInputExample('web_context_verified.v1') as Record<string, unknown>,
+        arguments: frozenInputExample('web_context_verified.v2') as Record<string, unknown>,
       });
       expect(ambientFetch).not.toHaveBeenCalled();
     } finally {
@@ -499,11 +499,11 @@ describe('SITEBORNE MCP 2026-07-28 Hono transport', () => {
     await Promise.all([
       first.callTool({
         name: 'siteborne_company_evidence_graph',
-        arguments: frozenInputExample('company_evidence_graph.v1') as Record<string, unknown>,
+        arguments: frozenInputExample('company_evidence_graph.v2') as Record<string, unknown>,
       }),
       second.callTool({
         name: 'siteborne_web_context_verified',
-        arguments: frozenInputExample('web_context_verified.v1') as Record<string, unknown>,
+        arguments: frozenInputExample('web_context_verified.v2') as Record<string, unknown>,
       }),
     ]);
     const healthA = await first.callTool({

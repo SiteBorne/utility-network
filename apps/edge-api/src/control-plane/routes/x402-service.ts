@@ -303,7 +303,29 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
       );
     }
 
-    const inputHash = await hashPaymentObject(body as Record<string, unknown>);
+    // SUN-1000 checkpoint 1M: a real, previously-undiscovered 500 defect
+    // Schemathesis's fuzzing phase found (not a v2-specific issue — this
+    // shared route boundary is used by both v1 and v2, and the bug was
+    // latent for v1 too, simply never exercised by fuzzing before now).
+    // JSON Schema validation above accepts any in-range `number`/
+    // `integer`, but JCS canonicalization (hashPaymentObject ->
+    // canonicalize) enforces the stricter safe-integer bound the PCC
+    // signing spec requires and throws on an out-of-range value —
+    // previously an uncaught exception escaping as an unhandled 500.
+    // Caught here the same way malformed JSON is, immediately above:
+    // a real, honest 400, not a crash.
+    let inputHash: string;
+    try {
+      inputHash = await hashPaymentObject(body as Record<string, unknown>);
+    } catch (err) {
+      return jsonError(
+        c,
+        400,
+        'invalid_request',
+        'input failed canonical-hash validation (a numeric value is outside the safe canonicalization range)',
+        { error: String(err) }
+      );
+    }
     const resourceUrl = `${new URL(c.req.url).origin}${config.path}`;
 
     const sigHeader = c.req.header('PAYMENT-SIGNATURE');
@@ -321,7 +343,7 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
       const quote: Quote = await buildQuote({
         x402_version: SUPPORTED_X402_VERSION,
         service_id: config.serviceId,
-        service_version: 'v1',
+        service_version: config.serviceId.endsWith('.v2') ? 'v2' : 'v1',
         contract_release: config.contractRelease,
         input_hash: inputHash,
         pricing_key: config.pricingKey,
@@ -524,7 +546,7 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
       quote_id: stored.quote.quote_id,
       requirement_id: stored.requirement_id,
       service_id: config.serviceId,
-      service_version: 'v1',
+      service_version: config.serviceId.endsWith('.v2') ? 'v2' : 'v1',
       contract_release: config.contractRelease,
       request_input_hash: inputHash,
       resource_id: resourceUrl,
@@ -693,7 +715,7 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
         quote_id: draft.quote_id,
         requirement_id: draft.requirement_id,
         service_id: config.serviceId,
-        service_version: 'v1',
+        service_version: config.serviceId.endsWith('.v2') ? 'v2' : 'v1',
         request_input_hash: draft.request_input_hash,
         job_id: job.id,
         service_output_hash: draft.output_hash,
@@ -836,7 +858,7 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
       id: jobId,
       request_id: requestId,
       service_id: config.serviceId,
-      service_version: 'v1',
+      service_version: config.serviceId.endsWith('.v2') ? 'v2' : 'v1',
       input_hash: inputHash,
       input_schema_hash: config.inputSchemaHash,
       output_schema_hash: config.outputSchemaHash,
@@ -867,7 +889,7 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
 
     const evidenceContext: PaymentEvidenceContext = {
       service_id: config.serviceId,
-      service_version: 'v1',
+      service_version: config.serviceId.endsWith('.v2') ? 'v2' : 'v1',
       scheme: config.scheme,
       network: config.network,
       asset: config.asset,
@@ -1025,7 +1047,7 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
           requirement_id: stored.requirement_id,
           payment_identifier: paymentIdentifier,
           service_id: config.serviceId,
-          service_version: 'v1',
+          service_version: config.serviceId.endsWith('.v2') ? 'v2' : 'v1',
           request_input_hash: inputHash,
           service_output_hash: outcome.result.output_hash,
           verification_receipt_id: outcome.result.receipt_id,
@@ -1215,7 +1237,7 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
       quote_id: stored.quote.quote_id,
       requirement_id: stored.requirement_id,
       service_id: config.serviceId,
-      service_version: 'v1',
+      service_version: config.serviceId.endsWith('.v2') ? 'v2' : 'v1',
       request_input_hash: inputHash,
       job_id: jobId,
       service_output_hash: outcome.result.output_hash,

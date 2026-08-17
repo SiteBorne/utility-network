@@ -230,16 +230,17 @@ describe('PCC 1.0.1 extension_container patch', () => {
     expect(extensionValue.type).toBe('object');
   });
 
-  it('records the current PCC 1.0.1 schema hash for drift visibility', () => {
+  it('records the current PCC 1.1.0 schema hash for drift visibility', () => {
     const schemaPath = resolve(
       import.meta.dirname,
       '../../../schemas/proof-carrying-context.schema.json'
     );
     const content = readFileSync(schemaPath, 'utf-8');
     const hash = createHash('sha256').update(content).digest('hex');
-    // Recorded at time of the 1.0.1 patch (see docs/reports/SUN-0100-pcc-schema-report.md).
+    // Recorded at time of the 1.1.0 minor release (SUN-1000 checkpoint 1M: service_id
+    // enum gains 4 .v2 members, additive-only per packages/pcc-schema/policy/COMPATIBILITY.md).
     // If this fails, the PCC schema changed again — update the report/manifest and this
     // constant together, deliberately, rather than silently.
-    expect(hash).toBe('f664208e387b161ab7897d8544d9c7d987501eba5764e2dde0ea69586e33dbb5');
+    expect(hash).toBe('d32a8e25eba7a7ae4d7d7f7a14c565c1b92c8d8e10810ff885698ed102fdbcc0');
   });
 });

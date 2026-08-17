@@ -10,6 +10,13 @@ import companyEvidenceGraph from '../../../../registry/services/company_evidence
 import webContextVerified from '../../../../registry/services/web_context_verified.v1.json' with { type: 'json' };
 import documentEvidenceJson from '../../../../registry/services/document_evidence_json.v1.json' with { type: 'json' };
 import verifyAgentOutput from '../../../../registry/services/verify_agent_output.v1.json' with { type: 'json' };
+// SUN-1000 checkpoint 1M: parallel v2 registry entries — same economics,
+// same schemas, only service_id/service_version differ (checkpoint 1L
+// section 9's SAME_ECONOMICS_NEW_SERVICE_MAJOR).
+import companyEvidenceGraphV2 from '../../../../registry/services/company_evidence_graph.v2.json' with { type: 'json' };
+import webContextVerifiedV2 from '../../../../registry/services/web_context_verified.v2.json' with { type: 'json' };
+import documentEvidenceJsonV2 from '../../../../registry/services/document_evidence_json.v2.json' with { type: 'json' };
+import verifyAgentOutputV2 from '../../../../registry/services/verify_agent_output.v2.json' with { type: 'json' };
 import type { SiteborneServiceId } from '../types';
 
 export interface RegistryServiceEntry {
@@ -42,6 +49,11 @@ export const REGISTRY_SERVICES: Readonly<Record<SiteborneServiceId, RegistryServ
   'web_context_verified.v1': webContextVerified as RegistryServiceEntry,
   'document_evidence_json.v1': documentEvidenceJson as RegistryServiceEntry,
   'verify_agent_output.v1': verifyAgentOutput as RegistryServiceEntry,
+  // SUN-1000 checkpoint 1M.
+  'company_evidence_graph.v2': companyEvidenceGraphV2 as RegistryServiceEntry,
+  'web_context_verified.v2': webContextVerifiedV2 as RegistryServiceEntry,
+  'document_evidence_json.v2': documentEvidenceJsonV2 as RegistryServiceEntry,
+  'verify_agent_output.v2': verifyAgentOutputV2 as RegistryServiceEntry,
 };
 
 export const ALL_BAZAAR_SERVICE_IDS: readonly SiteborneServiceId[] = [
@@ -49,4 +61,8 @@ export const ALL_BAZAAR_SERVICE_IDS: readonly SiteborneServiceId[] = [
   'web_context_verified.v1',
   'document_evidence_json.v1',
   'verify_agent_output.v1',
+  'company_evidence_graph.v2',
+  'web_context_verified.v2',
+  'document_evidence_json.v2',
+  'verify_agent_output.v2',
 ];

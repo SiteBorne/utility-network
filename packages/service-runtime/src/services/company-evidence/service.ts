@@ -396,10 +396,14 @@ export class CompanyEvidenceGraphService
     const nowIso = new Date(context.clock.nowMs()).toISOString();
     const inputHash = 'sha256:' + hashOf(JSON.stringify(input));
 
+    // SUN-1000 checkpoint 1M: derived from context.service_id rather than
+    // hardcoded literals — the receipt's own contract.service_id/
+    // serviceVersion must match whichever major actually invoked this
+    // (both .v1 and .v2 now register the same service instance).
     const draft = buildDraftDocument({
-      seed: `company_evidence_graph.v1:${inputHash}:${context.job_id}`,
-      serviceId: 'company_evidence_graph.v1',
-      serviceVersion: 'v1',
+      seed: `${context.service_id}:${inputHash}:${context.job_id}`,
+      serviceId: context.service_id,
+      serviceVersion: context.service_id.endsWith('.v2') ? 'v2' : 'v1',
       inputHash,
       inputSchemaHash: 'sha256:' + '1'.repeat(64),
       outputSchemaHash: 'sha256:' + '2'.repeat(64),
@@ -457,8 +461,14 @@ export class CompanyEvidenceGraphService
     return {
       result_class:
         signed.verdict.decision === 'pass' ? resultClass : 'internal_verification_failed',
-      service_id: 'company_evidence_graph.v1',
-      service_version: 'v1',
+      // SUN-1000 checkpoint 1M: derived from the invocation context's own
+      // service_id rather than a hardcoded v1 literal — the same class is
+      // now registered under both the .v1 and .v2 registry keys (identical
+      // business logic, per checkpoint 1L's frozen decision), so the
+      // result must faithfully report whichever identity actually invoked
+      // it.
+      service_id: context.service_id,
+      service_version: context.service_id.endsWith('.v2') ? 'v2' : 'v1',
       contract_release: context.contract_release,
       request_id: context.request_id,
       job_id: draft.job_id,
@@ -508,8 +518,8 @@ function rejected(
 ): ServiceExecutionResult<CompanyEvidenceExtension> {
   return {
     result_class: 'rejected',
-    service_id: 'company_evidence_graph.v1',
-    service_version: 'v1',
+    service_id: context.service_id,
+    service_version: context.service_id.endsWith('.v2') ? 'v2' : 'v1',
     contract_release: context.contract_release,
     request_id: context.request_id,
     job_id: context.job_id,

@@ -336,17 +336,26 @@ async function releaseVerify(
     errors.push(`Frozen release descriptor not found: ${frozenDescriptorPath}`);
   }
 
-  if (release.pcc_dependency.schema_release !== '1.0.1') {
-    errors.push(
-      `PCC schema release mismatch: expected 1.0.1, got ${release.pcc_dependency.schema_release}`
-    );
-  }
-
-  if (
-    release.pcc_dependency.schema_sha256 !==
-    'f664208e387b161ab7897d8544d9c7d987501eba5764e2dde0ea69586e33dbb5'
-  ) {
-    errors.push(`PCC schema SHA256 mismatch`);
+  // SUN-1000 checkpoint 1M: previously hard-coded the PCC dependency's
+  // expected schema_release ('1.0.1') and schema_sha256 as permanent
+  // literals — the same landmine class already fixed for the release
+  // version above at checkpoint 1K-A, but overlooked for this adjacent
+  // check (discovered while implementing the checkpoint 1M PCC 1.0.1 ->
+  // 1.1.0 minor release). Replaced with a genuine self-consistency check,
+  // matching the pattern the per-service schema-hash checks below already
+  // use: the descriptor's declared PCC dependency must match the real,
+  // live `schemas/proof-carrying-context.schema.json` file's actual
+  // current hash — not a specific historical value pinned forever.
+  const pccSchemaPath = join(repoRoot, 'schemas', 'proof-carrying-context.schema.json');
+  if (!existsSync(pccSchemaPath)) {
+    errors.push(`PCC schema not found: ${pccSchemaPath}`);
+  } else {
+    const actualPccHash = sha256File(pccSchemaPath);
+    if (release.pcc_dependency.schema_sha256 !== actualPccHash) {
+      errors.push(
+        `PCC schema SHA256 mismatch: descriptor declares ${release.pcc_dependency.schema_sha256}, actual schema hash is ${actualPccHash}`
+      );
+    }
   }
 
   for (const service of release.services) {

@@ -18,11 +18,20 @@ const INVOCATION_KEYS = new Set(['skillId', 'serviceVersion', 'input', 'payment'
 const HOSTILE_OBJECT_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
 const ajv = new Ajv2020({ allErrors: false, strict: false, validateFormats: false });
+// SUN-1000 checkpoint 1M: v1 and v2 share the identical (byte-for-byte)
+// frozen input schema, but `bundleLocalRefs` (frozen-inputs.ts) returns a
+// fresh object per call, so the two bundled objects are equal in content
+// but not identical by reference — compiling both under the same Ajv
+// instance throws (duplicate `$id`). Reuse the already-compiled validator
+// whenever the schema's own `$id` was already registered, keyed by
+// schema identity via Ajv's own registry rather than object identity.
 const inputValidators = Object.fromEntries(
-  SITEBORNE_SERVICE_IDS.map((serviceId) => [
-    serviceId,
-    ajv.compile(BUNDLED_SERVICE_INPUT_SCHEMAS[serviceId] as object),
-  ])
+  SITEBORNE_SERVICE_IDS.map((serviceId) => {
+    const schema = BUNDLED_SERVICE_INPUT_SCHEMAS[serviceId] as { $id?: string };
+    const existing = schema.$id ? ajv.getSchema(schema.$id) : undefined;
+    const validator = existing ?? ajv.compile(schema as object);
+    return [serviceId, validator];
+  })
 ) as Record<SiteborneServiceId, ValidateFunction>;
 
 const defaultBoundary: A2aServiceExecutionBoundary = {

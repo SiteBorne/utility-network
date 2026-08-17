@@ -12,14 +12,22 @@
     "company_evidence_graph.v1",
     "web_context_verified.v1",
     "document_evidence_json.v1",
-    "verify_agent_output.v1"
+    "verify_agent_output.v1",
+    "company_evidence_graph.v2",
+    "web_context_verified.v2",
+    "document_evidence_json.v2",
+    "verify_agent_output.v2"
   ],
   "x402_extension_uri": "https://siteborne.net/extensions/a2a/x402/v1",
   "payment_modes": {
     "company_evidence_graph.v1": "exact",
     "web_context_verified.v1": "exact",
     "document_evidence_json.v1": "upto",
-    "verify_agent_output.v1": "exact"
+    "verify_agent_output.v1": "exact",
+    "company_evidence_graph.v2": "exact",
+    "web_context_verified.v2": "exact",
+    "document_evidence_json.v2": "upto",
+    "verify_agent_output.v2": "exact"
   },
   "streaming": false,
   "push_notifications": false,

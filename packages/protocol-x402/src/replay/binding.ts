@@ -21,7 +21,7 @@ interface PaymentAttemptBindingBase {
   quote_id: string;
   requirement_id: string;
   service_id: SiteborneServiceId;
-  service_version: 'v1';
+  service_version: 'v1' | 'v2';
   contract_release: string;
   /** The frozen PCC-style `sha256:<hex>` input hash of the request this
    * payment attempt is for. */

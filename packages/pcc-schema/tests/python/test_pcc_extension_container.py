@@ -212,10 +212,18 @@ def test_unknown_pcc_root_properties_still_fail(pcc_schema, schema_store):
 
 
 def test_pcc_schema_hash_recorded():
-    """Cross-language agreement anchor: TS test asserts the same hash."""
+    """Cross-language agreement anchor: TS test asserts the same hash.
+
+    SUN-1000 checkpoint 1M: updated from the 1.0.1 hash as part of this
+    checkpoint's own governed PCC schema minor release (1.0.1 -> 1.1.0,
+    service_id enum gains 4 .v2 members, classified minor-compatible per
+    packages/pcc-schema/policy/COMPATIBILITY.md) -- the same deliberate,
+    disclosed drift-pin update already established at checkpoint 1K-A for
+    its sibling TS/JS assertions.
+    """
     content = PCC_SCHEMA_PATH.read_bytes()
     digest = hashlib.sha256(content).hexdigest()
-    assert digest == "f664208e387b161ab7897d8544d9c7d987501eba5764e2dde0ea69586e33dbb5"
+    assert digest == "d32a8e25eba7a7ae4d7d7f7a14c565c1b92c8d8e10810ff885698ed102fdbcc0"
 
 
 # --- Full service-output integration: required extension enforcement ------

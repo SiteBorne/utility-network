@@ -47,11 +47,17 @@ const defaultBoundary: McpServiceExecutionBoundary = {
 
 const quoteInputSchema = z
   .object({
+    // SUN-1000 checkpoint 1M: .v2 added alongside .v1 (checkpoint 1L
+    // PREPRODUCTION_V2_REPLACEMENT — v1 remains valid, v2 is additive).
     service_id: z.enum([
       'company_evidence_graph.v1',
       'web_context_verified.v1',
       'document_evidence_json.v1',
       'verify_agent_output.v1',
+      'company_evidence_graph.v2',
+      'web_context_verified.v2',
+      'document_evidence_json.v2',
+      'verify_agent_output.v2',
     ]),
     scheme: z.enum(['exact', 'upto']),
     input: z.unknown(),
@@ -63,8 +69,11 @@ const quoteOutputSchema = z
     quote_id: z.string(),
     binding_hash: z.string(),
     service_id: z.string(),
-    service_version: z.literal('v1'),
-    contract_release: z.literal('1.0.0'),
+    // SUN-1000 checkpoint 1M: widened from the literal 'v1'/'1.0.0' — a
+    // v2 quote genuinely reports service_version 'v2' and
+    // contract_release '2.0.0'.
+    service_version: z.enum(['v1', 'v2']),
+    contract_release: z.enum(['1.0.0', '2.0.0']),
     input_hash: z.string(),
     pricing_key: z.string(),
     pricing_source_version: z.string(),
@@ -106,6 +115,8 @@ const healthOutputSchema = z
   })
   .strict();
 
+// SUN-1000 checkpoint 1M: v2 entries are byte-identical pricing keys
+// (SAME_ECONOMICS_NEW_SERVICE_MAJOR, checkpoint 1L section 9).
 const EXACT_PRICING_KEYS: Readonly<
   Record<SiteborneServiceId, Parameters<typeof resolveServiceMaxPriceUsd>[0]>
 > = {
@@ -113,6 +124,10 @@ const EXACT_PRICING_KEYS: Readonly<
   'web_context_verified.v1': 'web_context_verified_direct',
   'document_evidence_json.v1': 'document_evidence_json_native',
   'verify_agent_output.v1': 'verify_agent_output_standard',
+  'company_evidence_graph.v2': 'company_evidence_graph',
+  'web_context_verified.v2': 'web_context_verified_direct',
+  'document_evidence_json.v2': 'document_evidence_json_native',
+  'verify_agent_output.v2': 'verify_agent_output_standard',
 };
 
 const UPTO_PRICING_KEYS: Readonly<
@@ -122,6 +137,10 @@ const UPTO_PRICING_KEYS: Readonly<
   'web_context_verified.v1': 'web_context_verified_rendered',
   'document_evidence_json.v1': 'document_evidence_json_max_job',
   'verify_agent_output.v1': 'verify_agent_output_reproduction',
+  'company_evidence_graph.v2': 'company_evidence_graph',
+  'web_context_verified.v2': 'web_context_verified_rendered',
+  'document_evidence_json.v2': 'document_evidence_json_max_job',
+  'verify_agent_output.v2': 'verify_agent_output_reproduction',
 };
 
 const SERVICE_RESOURCES: Readonly<Record<SiteborneServiceId, string>> = {
@@ -129,6 +148,10 @@ const SERVICE_RESOURCES: Readonly<Record<SiteborneServiceId, string>> = {
   'web_context_verified.v1': 'https://utility.siteborne.net/v1/web_context_verified',
   'document_evidence_json.v1': 'https://utility.siteborne.net/v1/document_evidence_json',
   'verify_agent_output.v1': 'https://utility.siteborne.net/v1/verify_agent_output',
+  'company_evidence_graph.v2': 'https://utility.siteborne.net/v2/company_evidence_graph',
+  'web_context_verified.v2': 'https://utility.siteborne.net/v2/web_context_verified',
+  'document_evidence_json.v2': 'https://utility.siteborne.net/v2/document_evidence_json',
+  'verify_agent_output.v2': 'https://utility.siteborne.net/v2/verify_agent_output',
 };
 
 const HOSTILE_OBJECT_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
@@ -180,10 +203,13 @@ async function buildCanonicalQuote(
   const now = (config.now ?? (() => new Date()))();
   const issuedAt = now.toISOString();
   const expiresAt = new Date(now.getTime() + (config.ttlSeconds ?? 300) * 1000).toISOString();
+  // SUN-1000 checkpoint 1M: derived from the requested service_id's own
+  // major suffix rather than hardcoded literals.
+  const isV2 = input.service_id.endsWith('.v2');
   const quote = await buildQuote({
     service_id: input.service_id,
-    service_version: 'v1',
-    contract_release: '1.0.0',
+    service_version: isV2 ? 'v2' : 'v1',
+    contract_release: isV2 ? '2.0.0' : '1.0.0',
     input_hash: await hashPaymentObject(input.input),
     pricing_key: pricingKey,
     pricing_source_version: resolvePricingSourceVersion(),

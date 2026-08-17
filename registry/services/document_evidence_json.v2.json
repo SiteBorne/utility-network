@@ -1,0 +1,43 @@
+{
+  "service_id": "document_evidence_json.v2",
+  "service_version": "v2",
+  "title": "Document Evidence JSON",
+  "description": "Processes documents (PDF, images, native text) through OCR, table extraction, and structured data extraction, producing verified JSON evidence with page-level provenance.",
+  "capabilities": ["native_text_extraction", "ocr", "table_extraction", "page_level_provenance"],
+  "input_schema_uri": "https://siteborne.net/schemas/services/document-evidence-input.schema.json",
+  "input_schema_hash": "sha256:19e64c92f088ed8b7a45eef561c5426bb59ce5cc3576b85482aded4f620e57ba",
+  "output_schema_uri": "https://siteborne.net/schemas/services/document-evidence-output.schema.json",
+  "output_schema_hash": "sha256:df91ed115ae0e29d8f4c211d95462ddd96e9714bc5f5e0ce0b820b370e0d5dde",
+  "pcc_version": "1.0.0",
+  "pricing_schemes": ["exact", "upto"],
+  "base_price": {
+    "amount": "0.012",
+    "currency": "USD"
+  },
+  "maximum_price": {
+    "amount": "0.19",
+    "currency": "USD"
+  },
+  "execution_mode": "async",
+  "maximum_input_bytes": 10485760,
+  "expected_latency_class": "slow",
+  "authorization_classification": "buyer_authorized",
+  "promotion_state": "executable_candidate",
+  "production_enabled": false,
+  "declared_limitations": [
+    "OCR accuracy varies with document quality",
+    "Table extraction limited to structured tables",
+    "Handwritten text not supported",
+    "Maximum 100 pages per job"
+  ],
+  "protocols": {
+    "x402": "planned",
+    "mcp": "planned",
+    "a2a": "planned",
+    "nevermined": "planned",
+    "agentverse": "planned",
+    "coinbase_bazaar": "planned",
+    "mcp_registry": "planned"
+  },
+  "updated_at": "2026-08-05T22:00:00Z"
+}

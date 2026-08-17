@@ -14,7 +14,7 @@ export interface UsageResultInput {
   requirement_id: string;
   payment_identifier: string;
   service_id: SiteborneServiceId;
-  service_version: 'v1';
+  service_version: 'v1' | 'v2';
   request_input_hash: string;
   service_output_hash: string;
   /** The SITEBORNE PCC verification receipt's own `receipt_id` (from

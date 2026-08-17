@@ -159,6 +159,44 @@ const SCENARIOS: Scenario[] = [
     },
   },
   {
+    // SUN-1000 checkpoint 1M: v2 mirror of the v1 scenario above —
+    // identical business logic (checkpoint 1L's frozen decision), only
+    // the service_id differs, proving cryptographic receipt verification
+    // for the v2 identity too.
+    id: 'company-identity-exact-cik-sec-submissions-v2',
+    serviceId: 'company_evidence_graph.v2',
+    expectedResultClass: 'success',
+    run: async (signer, keyRegistry) => {
+      const context = buildContext('company_evidence_graph.v2');
+      const httpClient = jsonHttpClient(loadAdapterFixture('sec-edgar/submissions-success.json'));
+      const service = new CompanyEvidenceGraphService({
+        httpClient,
+        secSubmissions: new SecSubmissionsAdapter(
+          httpClient,
+          context.clock,
+          context.artifact_store,
+          noopAdapterAudit
+        ),
+        publicHttp: new PublicHttpAdapter(
+          httpClient,
+          context.clock,
+          context.artifact_store,
+          noopAdapterAudit
+        ),
+        signer,
+        keyRegistry,
+      });
+      const result = await service.execute(
+        {
+          identifiers: { cik: '0000320193' },
+          requested_field_groups: ['identity', 'sec_submissions'],
+        },
+        context
+      );
+      return { resultClass: result.result_class, receipt: result.receipt };
+    },
+  },
+  {
     id: 'company-no-identity-signal-rejected',
     serviceId: 'company_evidence_graph.v1',
     expectedResultClass: 'rejected',
@@ -389,6 +427,34 @@ const SCENARIOS: Scenario[] = [
     },
   },
   {
+    // SUN-1000 checkpoint 1M: v2 mirror.
+    id: 'web-direct-mode-success-v2',
+    serviceId: 'web_context_verified.v2',
+    expectedResultClass: 'success',
+    run: async (signer, keyRegistry) => {
+      const context = buildContext('web_context_verified.v2');
+      const httpClient = textHttpClient(
+        '<html><head><title>Fixture Page</title></head><body>hello</body></html>'
+      );
+      const service = new WebContextVerifiedService({
+        httpClient,
+        publicHttp: new PublicHttpAdapter(
+          httpClient,
+          context.clock,
+          context.artifact_store,
+          noopAdapterAudit
+        ),
+        signer,
+        keyRegistry,
+      });
+      const result = await service.execute(
+        { target_url: 'https://acme.example/', retrieval_mode: 'direct' },
+        context
+      );
+      return { resultClass: result.result_class, receipt: result.receipt };
+    },
+  },
+  {
     id: 'web-rendered-mode-dependency-unavailable',
     serviceId: 'web_context_verified.v1',
     expectedResultClass: 'dependency_unavailable',
@@ -446,6 +512,46 @@ const SCENARIOS: Scenario[] = [
     expectedResultClass: 'success',
     run: async (signer, keyRegistry) => {
       const context = buildContext('document_evidence_json.v1');
+      const worker = loadWorkerResult('native-text-success');
+      const bytes = registerFixtureScenario(new Uint8Array([1]), 'native-text');
+      await context.artifact_store.put(
+        {
+          id: 'doc/native.pdf',
+          contentHash: worker.document!.sha256,
+          media_type: 'application/pdf',
+          byte_length: bytes.length,
+        },
+        bytes
+      );
+      const service = new DocumentEvidenceJsonService({
+        worker: new FixtureDocumentWorkerBridge(new Map([['native-text', worker]])),
+        signer,
+        keyRegistry,
+      });
+      const result = await service.execute(
+        {
+          artifact_reference: {
+            artifact_id: 'doc/native.pdf',
+            media_type: 'application/pdf',
+            size_bytes: bytes.length,
+          },
+        },
+        context
+      );
+      return { resultClass: result.result_class, receipt: result.receipt };
+    },
+  },
+  {
+    // SUN-1000 checkpoint 1M: v2 mirror. `registerFixtureScenario` keys
+    // by object identity (WeakMap), and `buildContext` gives each
+    // scenario its own fresh artifact store, so reusing the same
+    // artifact_id/scenario name with a fresh Uint8Array here is safe —
+    // no collision with the v1 scenario above.
+    id: 'document-native-text-success-v2',
+    serviceId: 'document_evidence_json.v2',
+    expectedResultClass: 'success',
+    run: async (signer, keyRegistry) => {
+      const context = buildContext('document_evidence_json.v2');
       const worker = loadWorkerResult('native-text-success');
       const bytes = registerFixtureScenario(new Uint8Array([1]), 'native-text');
       await context.artifact_store.put(
@@ -551,6 +657,29 @@ const SCENARIOS: Scenario[] = [
     expectedResultClass: 'success',
     run: async (signer, keyRegistry) => {
       const context = buildContext('verify_agent_output.v1');
+      const service = new VerifyAgentOutputService({ signer, keyRegistry });
+      const result = await service.execute(
+        {
+          verification_contract: {
+            claims: [{ claim_id: 'total', predicate: 'equals', expected_value: 42 }],
+            deterministic_requirements: [],
+          },
+          candidate_output: { total: 42 },
+          required_schema: {},
+          verification_mode: 'standard',
+        },
+        context
+      );
+      return { resultClass: result.result_class, receipt: result.receipt };
+    },
+  },
+  {
+    // SUN-1000 checkpoint 1M: v2 mirror.
+    id: 'agent-standard-pass-v2',
+    serviceId: 'verify_agent_output.v2',
+    expectedResultClass: 'success',
+    run: async (signer, keyRegistry) => {
+      const context = buildContext('verify_agent_output.v2');
       const service = new VerifyAgentOutputService({ signer, keyRegistry });
       const result = await service.execute(
         {

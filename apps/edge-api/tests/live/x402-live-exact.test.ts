@@ -267,7 +267,7 @@ describe.skipIf(!RUN_LIVE)(
         >,
         contractRelease: '1.0.0',
         inputSchemaHash: 'sha256:d3b0762020d4cc1d1e846960ed978cf1237b1741f90213adabe8ed931c2845ea',
-        outputSchemaHash: 'sha256:138bccc34ad8c320daec36890b8867fca9f709040b80c689710fd4bde49042de',
+        outputSchemaHash: 'sha256:7d4882e997ec3a3bd97b746de36ed99dfe430d59b4d1c8adc7d9fa83a274b4e0',
         pccDependency: '1.0.0',
         db,
         clock: clockValue,

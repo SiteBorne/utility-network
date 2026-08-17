@@ -56,6 +56,12 @@ const SERVICE_ID_TO_SCHEMA_FILE: Record<string, string> = {
   'web_context_verified.v1': 'web-context-output.schema.json',
   'document_evidence_json.v1': 'document-evidence-output.schema.json',
   'verify_agent_output.v1': 'agent-verification-output.schema.json',
+  // SUN-1000 checkpoint 1M: v2 shares the identical output schema file —
+  // output semantics are unchanged (checkpoint 1L section 7).
+  'company_evidence_graph.v2': 'company-evidence-output.schema.json',
+  'web_context_verified.v2': 'web-context-output.schema.json',
+  'document_evidence_json.v2': 'document-evidence-output.schema.json',
+  'verify_agent_output.v2': 'agent-verification-output.schema.json',
 };
 
 export function getOutputSchemaId(serviceId: string): string | null {

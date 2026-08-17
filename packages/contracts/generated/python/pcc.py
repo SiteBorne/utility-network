@@ -66,6 +66,10 @@ class ServiceId(Enum):
     web_context_verified_v1 = 'web_context_verified.v1'
     document_evidence_json_v1 = 'document_evidence_json.v1'
     verify_agent_output_v1 = 'verify_agent_output.v1'
+    company_evidence_graph_v2 = 'company_evidence_graph.v2'
+    web_context_verified_v2 = 'web_context_verified.v2'
+    document_evidence_json_v2 = 'document_evidence_json.v2'
+    verify_agent_output_v2 = 'verify_agent_output.v2'
 
 
 class ServiceVersion(RootModel[str]):
@@ -500,7 +504,7 @@ class ExtensionContainer(
 
 class ProofCarryingContextPCCV100(BaseModel):
     """
-    Normative schema for Proof-Carrying Context 1.0.0. Frozen after compatibility validation passes. Schema patch 1.0.1 (SUN-0100 correction): extension_container now structurally permits qualified extension keys via patternProperties, matching documented semantics; pcc_version (document content compatibility) is unchanged at 1.0.0.
+    Normative schema for Proof-Carrying Context 1.0.0. Frozen after compatibility validation passes. Schema patch 1.0.1 (SUN-0100 correction): extension_container now structurally permits qualified extension keys via patternProperties, matching documented semantics; pcc_version (document content compatibility) is unchanged at 1.0.0. Schema minor 1.1.0 (SUN-1000 checkpoint 1M): service_id enum gains 4 new .v2 members (additive-only per packages/pcc-schema/policy/COMPATIBILITY.md section 1/section 4, which explicitly classifies new enum values as minor-compatible -- not the docs/contracts/COMPATIBILITY_POLICY.md service-contract-release taxonomy, which does not govern this file); the 4 existing .v1 members are unchanged and remain valid; pcc_version is unchanged at 1.0.0.
     """
 
     model_config = ConfigDict(

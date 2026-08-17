@@ -14,9 +14,11 @@ service_major_compatibility_rules:
     breaking_if_changed: true
 
   pcc_dependency:
-    schema_release: '1.0.1'
+    # SUN-1000 checkpoint 1M: updated from 1.0.1 -- see
+    # packages/pcc-schema/CHANGELOG.md and contracts/CONTRACT_RELEASE.yaml.
+    schema_release: '1.1.0'
     document_version: '1.0.0'
-    schema_sha256: 'f664208e387b161ab7897d8544d9c7d987501eba5764e2dde0ea69586e33dbb5'
+    schema_sha256: 'd32a8e25eba7a7ae4d7d7f7a14c565c1b92c8d8e10810ff885698ed102fdbcc0'
     breaking_if_changed: true
 
 release_semantic_versioning:

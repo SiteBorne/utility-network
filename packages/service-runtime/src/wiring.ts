@@ -15,6 +15,7 @@ import type {
 } from '@siteborne/provider-adapters';
 import type { KeyRegistry, ReproductionInput, Signer } from '@siteborne/verification';
 import { ServiceRegistry } from './registry';
+import type { RegisteredService } from './registry';
 import { CompanyEvidenceGraphService } from './services/company-evidence/service';
 import { WebContextVerifiedService } from './services/web-context/service';
 import { DocumentEvidenceJsonService } from './services/document-evidence/service';
@@ -43,18 +44,45 @@ const NOOP_ADAPTER_AUDIT: AdapterAuditEventSink = {
 const SCHEMA_HASH_PLACEHOLDER_A = 'sha256:' + '1'.repeat(64);
 const SCHEMA_HASH_PLACEHOLDER_B = 'sha256:' + '2'.repeat(64);
 
+/** Registers one service instance under both its `.v1` and `.v2` registry
+ * keys (SUN-1000 checkpoint 1M) — identical business logic per checkpoint
+ * 1L's frozen `PREPRODUCTION_V2_REPLACEMENT` decision, so v2 reuses the
+ * same instance rather than constructing a second, semantically-duplicate
+ * one. `contractRelease` differs per major (v1 stays pinned to its frozen
+ * `1.0.0`; v2 declares the new `2.0.0` release) since that field records
+ * which contract release governs the request, not the implementation. */
+function registerBothMajors(
+  registry: ServiceRegistry,
+  base: string,
+  service: RegisteredService['service'],
+  overrides: Pick<
+    RegisteredService,
+    'implementationVersion' | 'inputSchemaHash' | 'outputSchemaHash' | 'implementationStatus'
+  >
+): void {
+  registry.register({
+    serviceId: `${base}.v1` as RegisteredService['serviceId'],
+    contractRelease: '1.0.0',
+    productionEnabled: false,
+    service,
+    ...overrides,
+  });
+  registry.register({
+    serviceId: `${base}.v2` as RegisteredService['serviceId'],
+    contractRelease: '2.0.0',
+    productionEnabled: false,
+    service,
+    ...overrides,
+  });
+}
+
 export function buildFixtureRegistry(deps: FixtureWiringDeps): ServiceRegistry {
   const registry = new ServiceRegistry();
 
-  registry.register({
-    serviceId: 'company_evidence_graph.v1',
-    implementationVersion: '0.1.0',
-    contractRelease: '1.0.0',
-    inputSchemaHash: SCHEMA_HASH_PLACEHOLDER_A,
-    outputSchemaHash: SCHEMA_HASH_PLACEHOLDER_B,
-    implementationStatus: 'local_fixture_verified',
-    productionEnabled: false,
-    service: new CompanyEvidenceGraphService({
+  registerBothMajors(
+    registry,
+    'company_evidence_graph',
+    new CompanyEvidenceGraphService({
       httpClient: deps.httpClient,
       secSubmissions: new SecSubmissionsAdapter(
         deps.httpClient,
@@ -77,17 +105,18 @@ export function buildFixtureRegistry(deps: FixtureWiringDeps): ServiceRegistry {
       signer: deps.signer,
       keyRegistry: deps.keyRegistry,
     }),
-  });
+    {
+      implementationVersion: '0.1.0',
+      inputSchemaHash: SCHEMA_HASH_PLACEHOLDER_A,
+      outputSchemaHash: SCHEMA_HASH_PLACEHOLDER_B,
+      implementationStatus: 'local_fixture_verified',
+    }
+  );
 
-  registry.register({
-    serviceId: 'web_context_verified.v1',
-    implementationVersion: '0.1.0',
-    contractRelease: '1.0.0',
-    inputSchemaHash: SCHEMA_HASH_PLACEHOLDER_A,
-    outputSchemaHash: SCHEMA_HASH_PLACEHOLDER_B,
-    implementationStatus: 'local_fixture_verified',
-    productionEnabled: false,
-    service: new WebContextVerifiedService({
+  registerBothMajors(
+    registry,
+    'web_context_verified',
+    new WebContextVerifiedService({
       httpClient: deps.httpClient,
       publicHttp: new PublicHttpAdapter(
         deps.httpClient,
@@ -98,37 +127,45 @@ export function buildFixtureRegistry(deps: FixtureWiringDeps): ServiceRegistry {
       signer: deps.signer,
       keyRegistry: deps.keyRegistry,
     }),
-  });
+    {
+      implementationVersion: '0.1.0',
+      inputSchemaHash: SCHEMA_HASH_PLACEHOLDER_A,
+      outputSchemaHash: SCHEMA_HASH_PLACEHOLDER_B,
+      implementationStatus: 'local_fixture_verified',
+    }
+  );
 
-  registry.register({
-    serviceId: 'document_evidence_json.v1',
-    implementationVersion: '0.1.0',
-    contractRelease: '1.0.0',
-    inputSchemaHash: SCHEMA_HASH_PLACEHOLDER_A,
-    outputSchemaHash: SCHEMA_HASH_PLACEHOLDER_B,
-    implementationStatus: 'local_fixture_verified',
-    productionEnabled: false,
-    service: new DocumentEvidenceJsonService({
+  registerBothMajors(
+    registry,
+    'document_evidence_json',
+    new DocumentEvidenceJsonService({
       worker: deps.worker,
       signer: deps.signer,
       keyRegistry: deps.keyRegistry,
     }),
-  });
+    {
+      implementationVersion: '0.1.0',
+      inputSchemaHash: SCHEMA_HASH_PLACEHOLDER_A,
+      outputSchemaHash: SCHEMA_HASH_PLACEHOLDER_B,
+      implementationStatus: 'local_fixture_verified',
+    }
+  );
 
-  registry.register({
-    serviceId: 'verify_agent_output.v1',
-    implementationVersion: '0.1.0',
-    contractRelease: '1.0.0',
-    inputSchemaHash: SCHEMA_HASH_PLACEHOLDER_A,
-    outputSchemaHash: SCHEMA_HASH_PLACEHOLDER_B,
-    implementationStatus: 'local_fixture_verified',
-    productionEnabled: false,
-    service: new VerifyAgentOutputService({
+  registerBothMajors(
+    registry,
+    'verify_agent_output',
+    new VerifyAgentOutputService({
       signer: deps.signer,
       keyRegistry: deps.keyRegistry,
       reproduction: deps.reproduction,
     }),
-  });
+    {
+      implementationVersion: '0.1.0',
+      inputSchemaHash: SCHEMA_HASH_PLACEHOLDER_A,
+      outputSchemaHash: SCHEMA_HASH_PLACEHOLDER_B,
+      implementationStatus: 'local_fixture_verified',
+    }
+  );
 
   return registry;
 }

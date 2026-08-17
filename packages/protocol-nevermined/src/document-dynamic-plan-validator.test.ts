@@ -307,10 +307,14 @@ describe('validateNeverminedDocumentDynamicPlan', () => {
   });
 
   it('U: fixed Nevermined service declarations remain unchanged', () => {
+    // SUN-1000 checkpoint 1M: excludes both document_evidence_json majors
+    // (its dynamic plan is this suite's own subject, tested separately
+    // below); v2's fixed-price declarations are byte-identical economics
+    // to v1 (SAME_ECONOMICS_NEW_SERVICE_MAJOR, checkpoint 1L section 9).
     expect(
       Object.fromEntries(
         Object.entries(NEVERMINED_DECLARATIONS)
-          .filter(([id]) => id !== 'document_evidence_json.v1')
+          .filter(([id]) => !id.startsWith('document_evidence_json.'))
           .map(([id, declaration]) => [
             id,
             {
@@ -332,6 +336,21 @@ describe('validateNeverminedDocumentDynamicPlan', () => {
         registration_allowed: true,
       },
       'verify_agent_output.v1': {
+        semantics: 'exact',
+        amount: '19000',
+        registration_allowed: true,
+      },
+      'company_evidence_graph.v2': {
+        semantics: 'exact',
+        amount: '39000',
+        registration_allowed: true,
+      },
+      'web_context_verified.v2': {
+        semantics: 'exact',
+        amount: '9000',
+        registration_allowed: true,
+      },
+      'verify_agent_output.v2': {
         semantics: 'exact',
         amount: '19000',
         registration_allowed: true,

@@ -54,11 +54,17 @@ function selfContainedOutputSchema(schema: unknown): unknown {
 
 export const MCP_SERVICE_INPUT_SCHEMAS = BUNDLED_SERVICE_INPUT_SCHEMAS;
 
+// SUN-1000 checkpoint 1M: v2 entries reuse the identical frozen output
+// schema — output semantics are unchanged (checkpoint 1L section 7).
 export const MCP_SERVICE_OUTPUT_SCHEMAS: Readonly<Record<SiteborneServiceId, unknown>> = {
   'company_evidence_graph.v1': selfContainedOutputSchema(companyOutput),
   'web_context_verified.v1': selfContainedOutputSchema(webOutput),
   'document_evidence_json.v1': selfContainedOutputSchema(documentOutput),
   'verify_agent_output.v1': selfContainedOutputSchema(agentOutput),
+  'company_evidence_graph.v2': selfContainedOutputSchema(companyOutput),
+  'web_context_verified.v2': selfContainedOutputSchema(webOutput),
+  'document_evidence_json.v2': selfContainedOutputSchema(documentOutput),
+  'verify_agent_output.v2': selfContainedOutputSchema(agentOutput),
 };
 
 export const MCP_SERVICE_SCHEMA_METADATA: Readonly<
@@ -77,6 +83,22 @@ export const MCP_SERVICE_SCHEMA_METADATA: Readonly<
     output_uri: 'https://siteborne.net/schemas/services/document-evidence-output.schema.json',
   },
   'verify_agent_output.v1': {
+    input_uri: 'https://siteborne.net/schemas/services/agent-verification-input.schema.json',
+    output_uri: 'https://siteborne.net/schemas/services/agent-verification-output.schema.json',
+  },
+  'company_evidence_graph.v2': {
+    input_uri: 'https://siteborne.net/schemas/services/company-evidence-input.schema.json',
+    output_uri: 'https://siteborne.net/schemas/services/company-evidence-output.schema.json',
+  },
+  'web_context_verified.v2': {
+    input_uri: 'https://siteborne.net/schemas/services/web-context-input.schema.json',
+    output_uri: 'https://siteborne.net/schemas/services/web-context-output.schema.json',
+  },
+  'document_evidence_json.v2': {
+    input_uri: 'https://siteborne.net/schemas/services/document-evidence-input.schema.json',
+    output_uri: 'https://siteborne.net/schemas/services/document-evidence-output.schema.json',
+  },
+  'verify_agent_output.v2': {
     input_uri: 'https://siteborne.net/schemas/services/agent-verification-input.schema.json',
     output_uri: 'https://siteborne.net/schemas/services/agent-verification-output.schema.json',
   },

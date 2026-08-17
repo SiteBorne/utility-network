@@ -13,7 +13,7 @@ import { NEVERMINED_ROUTES } from './routes';
 export interface NeverminedAgentDeclaration {
   local_agent_id: string;
   service_id: SiteborneServiceId;
-  service_version: 'v1';
+  service_version: 'v1' | 'v2';
   title: string;
   description: string;
   endpoint: string;
@@ -50,10 +50,14 @@ export interface NeverminedServiceDeclaration {
   plan: NeverminedPlanDeclaration;
 }
 
+// SUN-1000 checkpoint 1M: keyed by base service name (major suffix
+// stripped) rather than the full .v1-literal string, so v2 declarations
+// (SAME_ECONOMICS_NEW_SERVICE_MAJOR, checkpoint 1L section 9) reuse the
+// identical pricing keys without a second hardcoded table.
 const FIXED_PRICING_KEYS = {
-  'company_evidence_graph.v1': 'company_evidence_graph',
-  'web_context_verified.v1': 'web_context_verified_direct',
-  'verify_agent_output.v1': 'verify_agent_output_standard',
+  company_evidence_graph: 'company_evidence_graph',
+  web_context_verified: 'web_context_verified_direct',
+  verify_agent_output: 'verify_agent_output_standard',
 } as const;
 
 function atomic(key: Parameters<typeof resolveServiceMaxPriceUsd>[0]): string {
@@ -62,16 +66,24 @@ function atomic(key: Parameters<typeof resolveServiceMaxPriceUsd>[0]): string {
 
 function buildDeclaration(serviceId: SiteborneServiceId): NeverminedServiceDeclaration {
   const service = REGISTRY_SERVICES[serviceId];
-  const document = serviceId === 'document_evidence_json.v1';
+  const base = serviceId.replace(/\.v\d+$/, '');
+  const document = base === 'document_evidence_json';
   const fixedKey = document
     ? undefined
-    : FIXED_PRICING_KEYS[serviceId as keyof typeof FIXED_PRICING_KEYS];
+    : FIXED_PRICING_KEYS[base as keyof typeof FIXED_PRICING_KEYS];
   const amount = document ? atomic('document_evidence_json_max_job') : atomic(fixedKey!);
+  const serviceVersion = serviceId.endsWith('.v2') ? 'v2' : 'v1';
   return {
     agent: {
+      // Deliberately a local, unregistered identifier only (SUN-1000
+      // checkpoint 1M section 22: "do not fabricate actual agent/plan
+      // IDs" — this describes what a future registration would declare,
+      // it is not itself a live Nevermined-issued ID; no v1 agent/plan ID
+      // is reused for v2, and no real registration is performed by
+      // constructing this object).
       local_agent_id: `siteborne:${serviceId}:agent`,
       service_id: serviceId,
-      service_version: 'v1',
+      service_version: serviceVersion,
       title: service.title,
       description: service.description,
       endpoint: NEVERMINED_ROUTES[serviceId],

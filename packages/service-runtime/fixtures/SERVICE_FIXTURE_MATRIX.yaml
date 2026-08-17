@@ -26,6 +26,18 @@ fixtures:
     receipt_crypto_verified: true
     test_reference: src/services/company-evidence/service.test.ts
 
+  # SUN-1000 checkpoint 1M: v2 mirror -- identical business logic
+  # (checkpoint 1L's frozen PREPRODUCTION_V2_REPLACEMENT decision),
+  # cryptographic receipt proof for the v2 identity, executed directly by
+  # scripts/verify-fixtures.ts (no separate vitest file for the v2 case).
+  - scenario_id: company-identity-exact-cik-sec-submissions-v2
+    service_id: company_evidence_graph.v2
+    category: identity_and_source_composition
+    expected_result_class: success
+    executed_by_script: true
+    receipt_crypto_verified: true
+    test_reference: scripts/verify-fixtures.ts
+
   - scenario_id: company-no-identity-signal-rejected
     service_id: company_evidence_graph.v1
     category: input_validation
@@ -179,6 +191,15 @@ fixtures:
     receipt_crypto_verified: true
     test_reference: src/services/web-context/service.test.ts
 
+  # SUN-1000 checkpoint 1M: v2 mirror.
+  - scenario_id: web-direct-mode-success-v2
+    service_id: web_context_verified.v2
+    category: direct_http_composition
+    expected_result_class: success
+    executed_by_script: true
+    receipt_crypto_verified: true
+    test_reference: scripts/verify-fixtures.ts
+
   - scenario_id: web-rendered-mode-dependency-unavailable
     service_id: web_context_verified.v1
     category: deferred_capability
@@ -215,6 +236,15 @@ fixtures:
     executed_by_script: true
     receipt_crypto_verified: true
     test_reference: src/services/document-evidence/service.test.ts
+
+  # SUN-1000 checkpoint 1M: v2 mirror.
+  - scenario_id: document-native-text-success-v2
+    service_id: document_evidence_json.v2
+    category: sun0400a_composition
+    expected_result_class: success
+    executed_by_script: true
+    receipt_crypto_verified: true
+    test_reference: scripts/verify-fixtures.ts
 
   - scenario_id: document-table-heavy-success
     service_id: document_evidence_json.v1
@@ -266,6 +296,15 @@ fixtures:
     executed_by_script: true
     receipt_crypto_verified: true
     test_reference: src/services/agent-verification/service.test.ts
+
+  # SUN-1000 checkpoint 1M: v2 mirror.
+  - scenario_id: agent-standard-pass-v2
+    service_id: verify_agent_output.v2
+    category: sun0500_composition
+    expected_result_class: success
+    executed_by_script: true
+    receipt_crypto_verified: true
+    test_reference: scripts/verify-fixtures.ts
 
   - scenario_id: agent-claim-fails-conditional-partial
     service_id: verify_agent_output.v1

@@ -19,7 +19,7 @@ export interface QuoteInput {
    * new quote's identity rather than silently reusing the old binding. */
   x402_version?: number;
   service_id: SiteborneServiceId;
-  service_version: 'v1';
+  service_version: 'v1' | 'v2';
   contract_release: string;
   /** The frozen PCC-style `sha256:<hex>` input hash of the request this
    * quote prices — binds the quote to a specific request, not just a

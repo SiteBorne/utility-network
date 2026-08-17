@@ -98,7 +98,10 @@ function closedFailure(
   return {
     result_class: failure.code === 'unknown_service' ? 'rejected' : 'internal_verification_failed',
     service_id: serviceId,
-    service_version: 'v1',
+    // SUN-1000 checkpoint 1M: derived from the service ID's own major suffix
+    // rather than a hardcoded 'v1' literal — a v2 service's closed failure
+    // must report service_version 'v2', not silently mislabel it 'v1'.
+    service_version: serviceId.endsWith('.v2') ? 'v2' : 'v1',
     contract_release: context.contract_release,
     request_id: context.request_id,
     job_id: context.job_id,

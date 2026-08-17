@@ -516,7 +516,10 @@ describe('protocol-x402 properties', () => {
             expiresInSeconds: 300,
             maxTimeoutSeconds: 120,
           });
-          const expectedScheme = serviceId === 'document_evidence_json.v1' ? 'upto' : 'exact';
+          // SUN-1000 checkpoint 1M: base-name check, not a .v1-literal
+          // comparison — document_evidence_json.v2 is 'upto' too
+          // (SAME_ECONOMICS_NEW_SERVICE_MAJOR, checkpoint 1L section 9).
+          const expectedScheme = serviceId.startsWith('document_evidence_json.') ? 'upto' : 'exact';
           expect(resource.accepts[0].scheme).toBe(expectedScheme);
         }
       ),

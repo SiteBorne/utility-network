@@ -74,4 +74,50 @@ export const SERVICE_CAPABILITY_STATUS: Readonly<
       },
     ],
   },
+  // SUN-1000 checkpoint 1M: v2 entries mirror their v1 counterparts
+  // exactly — identical business logic and capability status per
+  // checkpoint 1L/1K-B's frozen decision (v2 changes only the public
+  // major identity and its declared 400/402 error contract, never
+  // runtime capability semantics).
+  'company_evidence_graph.v2': {
+    implementation_status: 'local_fixture_verified',
+    production_capability: 'not_verified',
+    advertised_mode: 'standard',
+    excluded_modes: [],
+  },
+  'web_context_verified.v2': {
+    implementation_status: 'local_fixture_verified',
+    production_capability: 'not_verified',
+    advertised_mode: 'direct',
+    excluded_modes: [
+      {
+        mode: 'rendered',
+        reason:
+          'browser-rendered retrieval exists locally but is not advertised as a production-live discovery mode (directive §10)',
+      },
+    ],
+  },
+  'document_evidence_json.v2': {
+    implementation_status: 'local_fixture_verified',
+    production_capability: 'not_verified',
+    advertised_mode: 'local_document_worker',
+    excluded_modes: [
+      {
+        mode: 'modal_live',
+        reason: 'live Modal deployment remains blocked_external (SUN-0400B)',
+      },
+    ],
+  },
+  'verify_agent_output.v2': {
+    implementation_status: 'local_fixture_verified',
+    production_capability: 'not_verified',
+    advertised_mode: 'standard',
+    excluded_modes: [
+      {
+        mode: 'independent_reproduction',
+        reason:
+          'independent_reproduction is a local fixture mode only — live external reproduction is not verified (directive §10)',
+      },
+    ],
+  },
 };

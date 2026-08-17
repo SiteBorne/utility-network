@@ -15,12 +15,21 @@ import type {
 } from '@siteborne/provider-adapters';
 import type { VerificationMode, VerificationReceipt } from '@siteborne/verification';
 
-/** The four frozen v1 service IDs this package implements. */
+/** The four frozen v1 service IDs, plus (SUN-1000 checkpoint 1M) the four
+ * parallel v2 service IDs this package implements with the identical
+ * underlying business logic — v2 changes only the public major identity
+ * and its declared 400/402 error contract (checkpoint 1K-B/1L), never
+ * request/success semantics, so both majors share the same service
+ * classes registered under distinct registry keys. */
 export type ServiceId =
   | 'company_evidence_graph.v1'
   | 'web_context_verified.v1'
   | 'document_evidence_json.v1'
-  | 'verify_agent_output.v1';
+  | 'verify_agent_output.v1'
+  | 'company_evidence_graph.v2'
+  | 'web_context_verified.v2'
+  | 'document_evidence_json.v2'
+  | 'verify_agent_output.v2';
 
 /** The single canonical inventory of implemented service IDs — every place
  * that needs "all implemented services" (the fixture-matrix verifier, the
@@ -32,6 +41,10 @@ export const ALL_SERVICE_IDS: readonly ServiceId[] = [
   'web_context_verified.v1',
   'document_evidence_json.v1',
   'verify_agent_output.v1',
+  'company_evidence_graph.v2',
+  'web_context_verified.v2',
+  'document_evidence_json.v2',
+  'verify_agent_output.v2',
 ];
 
 /** Closed service-level result classes (directive §6). Distinct from, but
@@ -81,7 +94,7 @@ export interface ServiceFailure {
 export interface ServiceExecutionResult<TOutput = unknown> {
   result_class: ServiceResultClass;
   service_id: ServiceId;
-  service_version: 'v1';
+  service_version: 'v1' | 'v2';
   contract_release: string;
   request_id: string;
   job_id: string;

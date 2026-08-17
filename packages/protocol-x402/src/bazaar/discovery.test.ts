@@ -21,7 +21,12 @@ describe('buildSiteborneDiscoveryDeclaration', () => {
       });
 
       expect(resource.method).toBe('POST');
-      expect(resource.resourceUrl).toMatch(/^https:\/\/utility\.siteborne\.net\/v1\//);
+      // SUN-1000 checkpoint 1M: each service's resourceUrl matches its
+      // own major.
+      const expectedPrefix = serviceId.endsWith('.v2')
+        ? 'https://utility.siteborne.net/v2/'
+        : 'https://utility.siteborne.net/v1/';
+      expect(resource.resourceUrl.startsWith(expectedPrefix)).toBe(true);
       expect(resource.x402Version).toBe(2);
       expect(resource.status).toBe('not_live');
       expect(resource.production_enabled).toBe(false);

@@ -43,6 +43,14 @@ export const FROZEN_SERVICE_INPUT_SCHEMAS: Readonly<Record<SiteborneServiceId, u
   'web_context_verified.v1': webContextInputSchema,
   'document_evidence_json.v1': documentEvidenceInputSchema,
   'verify_agent_output.v1': agentVerificationInputSchema,
+  // SUN-1000 checkpoint 1M: v2 reuses the identical frozen input schema
+  // objects — request semantics are unchanged by the v2 migration
+  // (checkpoint 1L section 7); only the wrapping service-major identity
+  // and the 400/402 error contract differ.
+  'company_evidence_graph.v2': companyEvidenceInputSchema,
+  'web_context_verified.v2': webContextInputSchema,
+  'document_evidence_json.v2': documentEvidenceInputSchema,
+  'verify_agent_output.v2': agentVerificationInputSchema,
 };
 
 /** Self-contained (`$ref`-free) input schemas ready to hand to the
@@ -70,6 +78,13 @@ const FROZEN_SERVICE_OUTPUT_SCHEMAS: Readonly<Record<SiteborneServiceId, unknown
   'web_context_verified.v1': webContextOutputSchema,
   'document_evidence_json.v1': documentEvidenceOutputSchema,
   'verify_agent_output.v1': agentVerificationOutputSchema,
+  // SUN-1000 checkpoint 1M: v2 reuses the identical frozen output schema
+  // objects — success-response semantics are unchanged (checkpoint 1L
+  // section 7).
+  'company_evidence_graph.v2': companyEvidenceOutputSchema,
+  'web_context_verified.v2': webContextOutputSchema,
+  'document_evidence_json.v2': documentEvidenceOutputSchema,
+  'verify_agent_output.v2': agentVerificationOutputSchema,
 };
 
 /** Each frozen input schema's own first `examples[]` entry — a

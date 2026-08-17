@@ -21,7 +21,9 @@ import type {
 export interface BuildDraftDocumentParams<TExtensionKey extends string, TExtension> {
   seed: string; // deterministic seed for job_id, e.g. `${service_id}:${input_hash}`
   serviceId: string;
-  serviceVersion: 'v1';
+  // SUN-1000 checkpoint 1M: widened from the literal 'v1' — a v2 service
+  // genuinely builds a 'v2' contract.
+  serviceVersion: 'v1' | 'v2';
   inputHash: string;
   inputSchemaHash: string;
   outputSchemaHash: string;

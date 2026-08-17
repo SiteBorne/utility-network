@@ -1,0 +1,1632 @@
+{
+  "baseline_version": "1.0.1",
+  "candidate_version": "1.0.1",
+  "compatible": false,
+  "required_version_bump": "major",
+  "changes": [
+    {
+      "affected_file": "manifests/MANIFEST.json",
+      "affected_schema_path": "pcc.sha256",
+      "json_pointer": "/pcc/sha256",
+      "old_value": "f664208e387b161ab7897d8544d9c7d987501eba5764e2dde0ea69586e33dbb5",
+      "new_value": "d32a8e25eba7a7ae4d7d7f7a14c565c1b92c8d8e10810ff885698ed102fdbcc0",
+      "classified_change_type": "property_type_changed",
+      "compatibility_direction": "incompatible",
+      "required_version_bump": "major",
+      "policy_rule": "property_type_changed classified as major",
+      "severity": "error",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "manifests/MANIFEST.json",
+      "affected_schema_path": "services.1.sha256",
+      "json_pointer": "/services/1/sha256",
+      "old_value": "a82474212615119aa510db7c3bb04e0d9fbf1a32eb740bc8821e10443818d112",
+      "new_value": "5593736dfc60089aa3f01de664eb67ccba3a58e03449a66e91f477324e24861b",
+      "classified_change_type": "property_type_changed",
+      "compatibility_direction": "incompatible",
+      "required_version_bump": "major",
+      "policy_rule": "property_type_changed classified as major",
+      "severity": "error",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "manifests/MANIFEST.json",
+      "affected_schema_path": "services.3.sha256",
+      "json_pointer": "/services/3/sha256",
+      "old_value": "138bccc34ad8c320daec36890b8867fca9f709040b80c689710fd4bde49042de",
+      "new_value": "7d4882e997ec3a3bd97b746de36ed99dfe430d59b4d1c8adc7d9fa83a274b4e0",
+      "classified_change_type": "property_type_changed",
+      "compatibility_direction": "incompatible",
+      "required_version_bump": "major",
+      "policy_rule": "property_type_changed classified as major",
+      "severity": "error",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "manifests/MANIFEST.json",
+      "affected_schema_path": "services.5.sha256",
+      "json_pointer": "/services/5/sha256",
+      "old_value": "dfe39d56227803c9e743e7b67da4853a16f76a1a4f3de66b2eb43213b92377ed",
+      "new_value": "df91ed115ae0e29d8f4c211d95462ddd96e9714bc5f5e0ce0b820b370e0d5dde",
+      "classified_change_type": "property_type_changed",
+      "compatibility_direction": "incompatible",
+      "required_version_bump": "major",
+      "policy_rule": "property_type_changed classified as major",
+      "severity": "error",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "manifests/MANIFEST.json",
+      "affected_schema_path": "services.7.sha256",
+      "json_pointer": "/services/7/sha256",
+      "old_value": "f78bb719bc6ee9adb57d76c0181dfb9f466ec9220e9c98766204dbba97f99475",
+      "new_value": "a9a462b89b290ecba1aa62ec6d2fd030572f326ed79f498a43690244b38ad679",
+      "classified_change_type": "property_type_changed",
+      "compatibility_direction": "incompatible",
+      "required_version_bump": "major",
+      "policy_rule": "property_type_changed classified as major",
+      "severity": "error",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "metadata/company_evidence_graph.v1.json",
+      "affected_schema_path": "output_schema_hash",
+      "json_pointer": "/output_schema_hash",
+      "old_value": "sha256:a82474212615119aa510db7c3bb04e0d9fbf1a32eb740bc8821e10443818d112",
+      "new_value": "sha256:5593736dfc60089aa3f01de664eb67ccba3a58e03449a66e91f477324e24861b",
+      "classified_change_type": "property_type_changed",
+      "compatibility_direction": "incompatible",
+      "required_version_bump": "major",
+      "policy_rule": "property_type_changed classified as major",
+      "severity": "error",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "metadata/document_evidence_json.v1.json",
+      "affected_schema_path": "output_schema_hash",
+      "json_pointer": "/output_schema_hash",
+      "old_value": "sha256:dfe39d56227803c9e743e7b67da4853a16f76a1a4f3de66b2eb43213b92377ed",
+      "new_value": "sha256:df91ed115ae0e29d8f4c211d95462ddd96e9714bc5f5e0ce0b820b370e0d5dde",
+      "classified_change_type": "property_type_changed",
+      "compatibility_direction": "incompatible",
+      "required_version_bump": "major",
+      "policy_rule": "property_type_changed classified as major",
+      "severity": "error",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "metadata/verify_agent_output.v1.json",
+      "affected_schema_path": "output_schema_hash",
+      "json_pointer": "/output_schema_hash",
+      "old_value": "sha256:f78bb719bc6ee9adb57d76c0181dfb9f466ec9220e9c98766204dbba97f99475",
+      "new_value": "sha256:a9a462b89b290ecba1aa62ec6d2fd030572f326ed79f498a43690244b38ad679",
+      "classified_change_type": "property_type_changed",
+      "compatibility_direction": "incompatible",
+      "required_version_bump": "major",
+      "policy_rule": "property_type_changed classified as major",
+      "severity": "error",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "metadata/web_context_verified.v1.json",
+      "affected_schema_path": "output_schema_hash",
+      "json_pointer": "/output_schema_hash",
+      "old_value": "sha256:138bccc34ad8c320daec36890b8867fca9f709040b80c689710fd4bde49042de",
+      "new_value": "sha256:7d4882e997ec3a3bd97b746de36ed99dfe430d59b4d1c8adc7d9fa83a274b4e0",
+      "classified_change_type": "property_type_changed",
+      "compatibility_direction": "incompatible",
+      "required_version_bump": "major",
+      "policy_rule": "property_type_changed classified as major",
+      "severity": "error",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "openapi/common-components.json",
+      "affected_schema_path": "schemas.PCCDocument.description",
+      "json_pointer": "/schemas/PCCDocument/description",
+      "old_value": "Normative schema for Proof-Carrying Context 1.0.0. Frozen after compatibility validation passes. Schema patch 1.0.1 (SUN-0100 correction): extension_container now structurally permits qualified extension keys via patternProperties, matching documented semantics; pcc_version (document content compatibility) is unchanged at 1.0.0.",
+      "new_value": "Normative schema for Proof-Carrying Context 1.0.0. Frozen after compatibility validation passes. Schema patch 1.0.1 (SUN-0100 correction): extension_container now structurally permits qualified extension keys via patternProperties, matching documented semantics; pcc_version (document content compatibility) is unchanged at 1.0.0. Schema minor 1.1.0 (SUN-1000 checkpoint 1M): service_id enum gains 4 new .v2 members (additive-only per packages/pcc-schema/policy/COMPATIBILITY.md section 1/section 4, which explicitly classifies new enum values as minor-compatible -- not the docs/contracts/COMPATIBILITY_POLICY.md service-contract-release taxonomy, which does not govern this file); the 4 existing .v1 members are unchanged and remain valid; pcc_version is unchanged at 1.0.0.",
+      "classified_change_type": "property_type_changed",
+      "compatibility_direction": "incompatible",
+      "required_version_bump": "major",
+      "policy_rule": "property_type_changed classified as major",
+      "severity": "error",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "openapi/common-components.json",
+      "affected_schema_path": "schemas.PCCDocument.definitions.service_id.enum.4",
+      "json_pointer": "/schemas/PCCDocument/definitions/service_id/enum/4",
+      "new_value": "company_evidence_graph.v2",
+      "classified_change_type": "optional_property_added",
+      "compatibility_direction": "bidirectionally-compatible",
+      "required_version_bump": "minor",
+      "policy_rule": "optional_property_added requires minor version bump under strict-consumer evaluation",
+      "severity": "warning",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "openapi/common-components.json",
+      "affected_schema_path": "schemas.PCCDocument.definitions.service_id.enum.5",
+      "json_pointer": "/schemas/PCCDocument/definitions/service_id/enum/5",
+      "new_value": "web_context_verified.v2",
+      "classified_change_type": "optional_property_added",
+      "compatibility_direction": "bidirectionally-compatible",
+      "required_version_bump": "minor",
+      "policy_rule": "optional_property_added requires minor version bump under strict-consumer evaluation",
+      "severity": "warning",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "openapi/common-components.json",
+      "affected_schema_path": "schemas.PCCDocument.definitions.service_id.enum.6",
+      "json_pointer": "/schemas/PCCDocument/definitions/service_id/enum/6",
+      "new_value": "document_evidence_json.v2",
+      "classified_change_type": "optional_property_added",
+      "compatibility_direction": "bidirectionally-compatible",
+      "required_version_bump": "minor",
+      "policy_rule": "optional_property_added requires minor version bump under strict-consumer evaluation",
+      "severity": "warning",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "openapi/common-components.json",
+      "affected_schema_path": "schemas.PCCDocument.definitions.service_id.enum.7",
+      "json_pointer": "/schemas/PCCDocument/definitions/service_id/enum/7",
+      "new_value": "verify_agent_output.v2",
+      "classified_change_type": "optional_property_added",
+      "compatibility_direction": "bidirectionally-compatible",
+      "required_version_bump": "minor",
+      "policy_rule": "optional_property_added requires minor version bump under strict-consumer evaluation",
+      "severity": "warning",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "openapi/service-components.json",
+      "affected_schema_path": "schemas.CompanyEvidenceGraphOutput.allOf.1.properties.contract.properties.service_id.const",
+      "json_pointer": "/schemas/CompanyEvidenceGraphOutput/allOf/1/properties/contract/properties/service_id/const",
+      "old_value": "company_evidence_graph.v1",
+      "classified_change_type": "property_removed",
+      "compatibility_direction": "incompatible",
+      "required_version_bump": "major",
+      "policy_rule": "property_removed requires major version bump",
+      "severity": "error",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "openapi/service-components.json",
+      "affected_schema_path": "schemas.CompanyEvidenceGraphOutput.allOf.1.properties.contract.properties.service_id.enum",
+      "json_pointer": "/schemas/CompanyEvidenceGraphOutput/allOf/1/properties/contract/properties/service_id/enum",
+      "new_value": ["company_evidence_graph.v1", "company_evidence_graph.v2"],
+      "classified_change_type": "optional_property_added",
+      "compatibility_direction": "bidirectionally-compatible",
+      "required_version_bump": "minor",
+      "policy_rule": "optional_property_added requires minor version bump under strict-consumer evaluation",
+      "severity": "warning",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "openapi/service-components.json",
+      "affected_schema_path": "schemas.CompanyEvidenceGraphOutput.allOf.1.properties.contract.properties.service_version.const",
+      "json_pointer": "/schemas/CompanyEvidenceGraphOutput/allOf/1/properties/contract/properties/service_version/const",
+      "old_value": "v1",
+      "classified_change_type": "property_removed",
+      "compatibility_direction": "incompatible",
+      "required_version_bump": "major",
+      "policy_rule": "property_removed requires major version bump",
+      "severity": "error",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "openapi/service-components.json",
+      "affected_schema_path": "schemas.CompanyEvidenceGraphOutput.allOf.1.properties.contract.properties.service_version.enum",
+      "json_pointer": "/schemas/CompanyEvidenceGraphOutput/allOf/1/properties/contract/properties/service_version/enum",
+      "new_value": ["v1", "v2"],
+      "classified_change_type": "optional_property_added",
+      "compatibility_direction": "bidirectionally-compatible",
+      "required_version_bump": "minor",
+      "policy_rule": "optional_property_added requires minor version bump under strict-consumer evaluation",
+      "severity": "warning",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "openapi/service-components.json",
+      "affected_schema_path": "schemas.VerifiedWebContextOutput.allOf.1.properties.contract.properties.service_id.const",
+      "json_pointer": "/schemas/VerifiedWebContextOutput/allOf/1/properties/contract/properties/service_id/const",
+      "old_value": "web_context_verified.v1",
+      "classified_change_type": "property_removed",
+      "compatibility_direction": "incompatible",
+      "required_version_bump": "major",
+      "policy_rule": "property_removed requires major version bump",
+      "severity": "error",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "openapi/service-components.json",
+      "affected_schema_path": "schemas.VerifiedWebContextOutput.allOf.1.properties.contract.properties.service_id.enum",
+      "json_pointer": "/schemas/VerifiedWebContextOutput/allOf/1/properties/contract/properties/service_id/enum",
+      "new_value": ["web_context_verified.v1", "web_context_verified.v2"],
+      "classified_change_type": "optional_property_added",
+      "compatibility_direction": "bidirectionally-compatible",
+      "required_version_bump": "minor",
+      "policy_rule": "optional_property_added requires minor version bump under strict-consumer evaluation",
+      "severity": "warning",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "openapi/service-components.json",
+      "affected_schema_path": "schemas.VerifiedWebContextOutput.allOf.1.properties.contract.properties.service_version.const",
+      "json_pointer": "/schemas/VerifiedWebContextOutput/allOf/1/properties/contract/properties/service_version/const",
+      "old_value": "v1",
+      "classified_change_type": "property_removed",
+      "compatibility_direction": "incompatible",
+      "required_version_bump": "major",
+      "policy_rule": "property_removed requires major version bump",
+      "severity": "error",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "openapi/service-components.json",
+      "affected_schema_path": "schemas.VerifiedWebContextOutput.allOf.1.properties.contract.properties.service_version.enum",
+      "json_pointer": "/schemas/VerifiedWebContextOutput/allOf/1/properties/contract/properties/service_version/enum",
+      "new_value": ["v1", "v2"],
+      "classified_change_type": "optional_property_added",
+      "compatibility_direction": "bidirectionally-compatible",
+      "required_version_bump": "minor",
+      "policy_rule": "optional_property_added requires minor version bump under strict-consumer evaluation",
+      "severity": "warning",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "openapi/service-components.json",
+      "affected_schema_path": "schemas.DocumentEvidenceJSONOutput.allOf.1.properties.contract.properties.service_id.const",
+      "json_pointer": "/schemas/DocumentEvidenceJSONOutput/allOf/1/properties/contract/properties/service_id/const",
+      "old_value": "document_evidence_json.v1",
+      "classified_change_type": "property_removed",
+      "compatibility_direction": "incompatible",
+      "required_version_bump": "major",
+      "policy_rule": "property_removed requires major version bump",
+      "severity": "error",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "openapi/service-components.json",
+      "affected_schema_path": "schemas.DocumentEvidenceJSONOutput.allOf.1.properties.contract.properties.service_id.enum",
+      "json_pointer": "/schemas/DocumentEvidenceJSONOutput/allOf/1/properties/contract/properties/service_id/enum",
+      "new_value": ["document_evidence_json.v1", "document_evidence_json.v2"],
+      "classified_change_type": "optional_property_added",
+      "compatibility_direction": "bidirectionally-compatible",
+      "required_version_bump": "minor",
+      "policy_rule": "optional_property_added requires minor version bump under strict-consumer evaluation",
+      "severity": "warning",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "openapi/service-components.json",
+      "affected_schema_path": "schemas.DocumentEvidenceJSONOutput.allOf.1.properties.contract.properties.service_version.const",
+      "json_pointer": "/schemas/DocumentEvidenceJSONOutput/allOf/1/properties/contract/properties/service_version/const",
+      "old_value": "v1",
+      "classified_change_type": "property_removed",
+      "compatibility_direction": "incompatible",
+      "required_version_bump": "major",
+      "policy_rule": "property_removed requires major version bump",
+      "severity": "error",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "openapi/service-components.json",
+      "affected_schema_path": "schemas.DocumentEvidenceJSONOutput.allOf.1.properties.contract.properties.service_version.enum",
+      "json_pointer": "/schemas/DocumentEvidenceJSONOutput/allOf/1/properties/contract/properties/service_version/enum",
+      "new_value": ["v1", "v2"],
+      "classified_change_type": "optional_property_added",
+      "compatibility_direction": "bidirectionally-compatible",
+      "required_version_bump": "minor",
+      "policy_rule": "optional_property_added requires minor version bump under strict-consumer evaluation",
+      "severity": "warning",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "openapi/service-components.json",
+      "affected_schema_path": "schemas.AgentOutputVerificationOutput.allOf.1.properties.contract.properties.service_id.const",
+      "json_pointer": "/schemas/AgentOutputVerificationOutput/allOf/1/properties/contract/properties/service_id/const",
+      "old_value": "verify_agent_output.v1",
+      "classified_change_type": "property_removed",
+      "compatibility_direction": "incompatible",
+      "required_version_bump": "major",
+      "policy_rule": "property_removed requires major version bump",
+      "severity": "error",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "openapi/service-components.json",
+      "affected_schema_path": "schemas.AgentOutputVerificationOutput.allOf.1.properties.contract.properties.service_id.enum",
+      "json_pointer": "/schemas/AgentOutputVerificationOutput/allOf/1/properties/contract/properties/service_id/enum",
+      "new_value": ["verify_agent_output.v1", "verify_agent_output.v2"],
+      "classified_change_type": "optional_property_added",
+      "compatibility_direction": "bidirectionally-compatible",
+      "required_version_bump": "minor",
+      "policy_rule": "optional_property_added requires minor version bump under strict-consumer evaluation",
+      "severity": "warning",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "openapi/service-components.json",
+      "affected_schema_path": "schemas.AgentOutputVerificationOutput.allOf.1.properties.contract.properties.service_version.const",
+      "json_pointer": "/schemas/AgentOutputVerificationOutput/allOf/1/properties/contract/properties/service_version/const",
+      "old_value": "v1",
+      "classified_change_type": "property_removed",
+      "compatibility_direction": "incompatible",
+      "required_version_bump": "major",
+      "policy_rule": "property_removed requires major version bump",
+      "severity": "error",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "openapi/service-components.json",
+      "affected_schema_path": "schemas.AgentOutputVerificationOutput.allOf.1.properties.contract.properties.service_version.enum",
+      "json_pointer": "/schemas/AgentOutputVerificationOutput/allOf/1/properties/contract/properties/service_version/enum",
+      "new_value": ["v1", "v2"],
+      "classified_change_type": "optional_property_added",
+      "compatibility_direction": "bidirectionally-compatible",
+      "required_version_bump": "minor",
+      "policy_rule": "optional_property_added requires minor version bump under strict-consumer evaluation",
+      "severity": "warning",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "openapi/service-contracts.openapi.json",
+      "affected_schema_path": "info.version",
+      "json_pointer": "/info/version",
+      "old_value": "1.0.0-preproduction",
+      "new_value": "2.0.0-preproduction",
+      "classified_change_type": "property_type_changed",
+      "compatibility_direction": "incompatible",
+      "required_version_bump": "major",
+      "policy_rule": "property_type_changed classified as major",
+      "severity": "error",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "openapi/service-contracts.openapi.json",
+      "affected_schema_path": "info.description",
+      "json_pointer": "/info/description",
+      "old_value": "Preproduction OpenAPI document for SITEBORNE Utility Network service contracts. No routes are currently enabled. All operations marked as not implemented.",
+      "new_value": "Preproduction OpenAPI document for SITEBORNE Utility Network service contracts. SUN-1000 checkpoint 1M: the active/forward document now describes the v2 service-major identities (checkpoint 1L PREPRODUCTION_V2_REPLACEMENT decision; the frozen v1 contract remains permanently available at contracts/releases/1.0.0 and 1.0.1). No routes are production-enabled; the four per-service operations are locally fixture-verified (real HTTP behavior in fixture/sandbox mode only), while the quote endpoint remains not implemented.",
+      "classified_change_type": "property_type_changed",
+      "compatibility_direction": "incompatible",
+      "required_version_bump": "major",
+      "policy_rule": "property_type_changed classified as major",
+      "severity": "error",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "openapi/service-contracts.openapi.json",
+      "affected_schema_path": "paths./v1/company/evidence-graph",
+      "json_pointer": "/paths/%2Fv1%2Fcompany%2Fevidence-graph",
+      "old_value": {
+        "post": {
+          "operationId": "postcompanyEvidenceGraph",
+          "summary": "Execute Company Evidence Graph service",
+          "description": "Service contract for company_evidence_graph.v1. Not currently implemented - preproduction contract only.",
+          "x-service-id": "company_evidence_graph.v1",
+          "x-production-enabled": false,
+          "x-implementation-status": "not_implemented",
+          "requestBody": {
+            "required": true,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyEvidenceGraphInput"
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "Successful response",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/CompanyEvidenceGraphOutput"
+                  }
+                }
+              }
+            },
+            "400": {
+              "description": "Invalid input",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/StructuredError"
+                  }
+                }
+              }
+            },
+            "402": {
+              "description": "Payment required",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/StructuredError"
+                  }
+                }
+              }
+            },
+            "500": {
+              "description": "Internal server error",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/StructuredError"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "classified_change_type": "property_removed",
+      "compatibility_direction": "incompatible",
+      "required_version_bump": "major",
+      "policy_rule": "property_removed requires major version bump",
+      "severity": "error",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "openapi/service-contracts.openapi.json",
+      "affected_schema_path": "paths./v1/web/context",
+      "json_pointer": "/paths/%2Fv1%2Fweb%2Fcontext",
+      "old_value": {
+        "post": {
+          "operationId": "postwebContextVerified",
+          "summary": "Execute Verified Web Context service",
+          "description": "Service contract for web_context_verified.v1. Not currently implemented - preproduction contract only.",
+          "x-service-id": "web_context_verified.v1",
+          "x-production-enabled": false,
+          "x-implementation-status": "not_implemented",
+          "requestBody": {
+            "required": true,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerifiedWebContextInput"
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "Successful response",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/VerifiedWebContextOutput"
+                  }
+                }
+              }
+            },
+            "400": {
+              "description": "Invalid input",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/StructuredError"
+                  }
+                }
+              }
+            },
+            "402": {
+              "description": "Payment required",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/StructuredError"
+                  }
+                }
+              }
+            },
+            "500": {
+              "description": "Internal server error",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/StructuredError"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "classified_change_type": "property_removed",
+      "compatibility_direction": "incompatible",
+      "required_version_bump": "major",
+      "policy_rule": "property_removed requires major version bump",
+      "severity": "error",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "openapi/service-contracts.openapi.json",
+      "affected_schema_path": "paths./v1/document/evidence-json",
+      "json_pointer": "/paths/%2Fv1%2Fdocument%2Fevidence-json",
+      "old_value": {
+        "post": {
+          "operationId": "postdocumentEvidenceJson",
+          "summary": "Execute Document Evidence JSON service",
+          "description": "Service contract for document_evidence_json.v1. Not currently implemented - preproduction contract only.",
+          "x-service-id": "document_evidence_json.v1",
+          "x-production-enabled": false,
+          "x-implementation-status": "not_implemented",
+          "requestBody": {
+            "required": true,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentEvidenceJSONInput"
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "Successful response",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/DocumentEvidenceJSONOutput"
+                  }
+                }
+              }
+            },
+            "400": {
+              "description": "Invalid input",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/StructuredError"
+                  }
+                }
+              }
+            },
+            "402": {
+              "description": "Payment required",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/StructuredError"
+                  }
+                }
+              }
+            },
+            "500": {
+              "description": "Internal server error",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/StructuredError"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "classified_change_type": "property_removed",
+      "compatibility_direction": "incompatible",
+      "required_version_bump": "major",
+      "policy_rule": "property_removed requires major version bump",
+      "severity": "error",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "openapi/service-contracts.openapi.json",
+      "affected_schema_path": "paths./v1/verify/agent-output",
+      "json_pointer": "/paths/%2Fv1%2Fverify%2Fagent-output",
+      "old_value": {
+        "post": {
+          "operationId": "postverifyAgentOutput",
+          "summary": "Execute Agent Output Verification service",
+          "description": "Service contract for verify_agent_output.v1. Not currently implemented - preproduction contract only.",
+          "x-service-id": "verify_agent_output.v1",
+          "x-production-enabled": false,
+          "x-implementation-status": "not_implemented",
+          "requestBody": {
+            "required": true,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentOutputVerificationInput"
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "Successful response",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/AgentOutputVerificationOutput"
+                  }
+                }
+              }
+            },
+            "400": {
+              "description": "Invalid input",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/StructuredError"
+                  }
+                }
+              }
+            },
+            "402": {
+              "description": "Payment required",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/StructuredError"
+                  }
+                }
+              }
+            },
+            "500": {
+              "description": "Internal server error",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/StructuredError"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "classified_change_type": "property_removed",
+      "compatibility_direction": "incompatible",
+      "required_version_bump": "major",
+      "policy_rule": "property_removed requires major version bump",
+      "severity": "error",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "openapi/service-contracts.openapi.json",
+      "affected_schema_path": "paths./quotes/{service_id}.post.parameters.0.schema.enum.0",
+      "json_pointer": "/paths/%2Fquotes%2F%7Bservice_id%7D/post/parameters/0/schema/enum/0",
+      "old_value": "company_evidence_graph.v1",
+      "new_value": "company_evidence_graph.v2",
+      "classified_change_type": "property_type_changed",
+      "compatibility_direction": "incompatible",
+      "required_version_bump": "major",
+      "policy_rule": "property_type_changed classified as major",
+      "severity": "error",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "openapi/service-contracts.openapi.json",
+      "affected_schema_path": "paths./quotes/{service_id}.post.parameters.0.schema.enum.1",
+      "json_pointer": "/paths/%2Fquotes%2F%7Bservice_id%7D/post/parameters/0/schema/enum/1",
+      "old_value": "web_context_verified.v1",
+      "new_value": "web_context_verified.v2",
+      "classified_change_type": "property_type_changed",
+      "compatibility_direction": "incompatible",
+      "required_version_bump": "major",
+      "policy_rule": "property_type_changed classified as major",
+      "severity": "error",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "openapi/service-contracts.openapi.json",
+      "affected_schema_path": "paths./quotes/{service_id}.post.parameters.0.schema.enum.2",
+      "json_pointer": "/paths/%2Fquotes%2F%7Bservice_id%7D/post/parameters/0/schema/enum/2",
+      "old_value": "document_evidence_json.v1",
+      "new_value": "document_evidence_json.v2",
+      "classified_change_type": "property_type_changed",
+      "compatibility_direction": "incompatible",
+      "required_version_bump": "major",
+      "policy_rule": "property_type_changed classified as major",
+      "severity": "error",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "openapi/service-contracts.openapi.json",
+      "affected_schema_path": "paths./quotes/{service_id}.post.parameters.0.schema.enum.3",
+      "json_pointer": "/paths/%2Fquotes%2F%7Bservice_id%7D/post/parameters/0/schema/enum/3",
+      "old_value": "verify_agent_output.v1",
+      "new_value": "verify_agent_output.v2",
+      "classified_change_type": "property_type_changed",
+      "compatibility_direction": "incompatible",
+      "required_version_bump": "major",
+      "policy_rule": "property_type_changed classified as major",
+      "severity": "error",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "openapi/service-contracts.openapi.json",
+      "affected_schema_path": "paths./v2/company/evidence-graph",
+      "json_pointer": "/paths/%2Fv2%2Fcompany%2Fevidence-graph",
+      "new_value": {
+        "post": {
+          "operationId": "postcompanyEvidenceGraph",
+          "summary": "Execute Company Evidence Graph service",
+          "description": "Service contract for company_evidence_graph.v2. Locally fixture-verified (SUN-1000 checkpoint 1M) - not production-enabled.",
+          "x-service-id": "company_evidence_graph.v2",
+          "x-production-enabled": false,
+          "x-implementation-status": "local_fixture_verified",
+          "requestBody": {
+            "required": true,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompanyEvidenceGraphInput"
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "Successful response",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/CompanyEvidenceGraphOutput"
+                  }
+                }
+              }
+            },
+            "400": {
+              "description": "Invalid input",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ValidationError"
+                  }
+                }
+              }
+            },
+            "402": {
+              "description": "Payment required",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/PaymentRequiredChallenge"
+                  }
+                }
+              }
+            },
+            "500": {
+              "description": "Internal server error",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/StructuredError"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "classified_change_type": "optional_property_added",
+      "compatibility_direction": "bidirectionally-compatible",
+      "required_version_bump": "minor",
+      "policy_rule": "optional_property_added requires minor version bump under strict-consumer evaluation",
+      "severity": "warning",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "openapi/service-contracts.openapi.json",
+      "affected_schema_path": "paths./v2/web/context",
+      "json_pointer": "/paths/%2Fv2%2Fweb%2Fcontext",
+      "new_value": {
+        "post": {
+          "operationId": "postwebContextVerified",
+          "summary": "Execute Verified Web Context service",
+          "description": "Service contract for web_context_verified.v2. Locally fixture-verified (SUN-1000 checkpoint 1M) - not production-enabled.",
+          "x-service-id": "web_context_verified.v2",
+          "x-production-enabled": false,
+          "x-implementation-status": "local_fixture_verified",
+          "requestBody": {
+            "required": true,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VerifiedWebContextInput"
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "Successful response",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/VerifiedWebContextOutput"
+                  }
+                }
+              }
+            },
+            "400": {
+              "description": "Invalid input",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ValidationError"
+                  }
+                }
+              }
+            },
+            "402": {
+              "description": "Payment required",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/PaymentRequiredChallenge"
+                  }
+                }
+              }
+            },
+            "500": {
+              "description": "Internal server error",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/StructuredError"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "classified_change_type": "optional_property_added",
+      "compatibility_direction": "bidirectionally-compatible",
+      "required_version_bump": "minor",
+      "policy_rule": "optional_property_added requires minor version bump under strict-consumer evaluation",
+      "severity": "warning",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "openapi/service-contracts.openapi.json",
+      "affected_schema_path": "paths./v2/document/evidence-json",
+      "json_pointer": "/paths/%2Fv2%2Fdocument%2Fevidence-json",
+      "new_value": {
+        "post": {
+          "operationId": "postdocumentEvidenceJson",
+          "summary": "Execute Document Evidence JSON service",
+          "description": "Service contract for document_evidence_json.v2. Locally fixture-verified (SUN-1000 checkpoint 1M) - not production-enabled.",
+          "x-service-id": "document_evidence_json.v2",
+          "x-production-enabled": false,
+          "x-implementation-status": "local_fixture_verified",
+          "requestBody": {
+            "required": true,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentEvidenceJSONInput"
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "Successful response",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/DocumentEvidenceJSONOutput"
+                  }
+                }
+              }
+            },
+            "400": {
+              "description": "Invalid input",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ValidationError"
+                  }
+                }
+              }
+            },
+            "402": {
+              "description": "Payment required",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/PaymentRequiredChallenge"
+                  }
+                }
+              }
+            },
+            "500": {
+              "description": "Internal server error",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/StructuredError"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "classified_change_type": "optional_property_added",
+      "compatibility_direction": "bidirectionally-compatible",
+      "required_version_bump": "minor",
+      "policy_rule": "optional_property_added requires minor version bump under strict-consumer evaluation",
+      "severity": "warning",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "openapi/service-contracts.openapi.json",
+      "affected_schema_path": "paths./v2/verify/agent-output",
+      "json_pointer": "/paths/%2Fv2%2Fverify%2Fagent-output",
+      "new_value": {
+        "post": {
+          "operationId": "postverifyAgentOutput",
+          "summary": "Execute Agent Output Verification service",
+          "description": "Service contract for verify_agent_output.v2. Locally fixture-verified (SUN-1000 checkpoint 1M) - not production-enabled.",
+          "x-service-id": "verify_agent_output.v2",
+          "x-production-enabled": false,
+          "x-implementation-status": "local_fixture_verified",
+          "requestBody": {
+            "required": true,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentOutputVerificationInput"
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "Successful response",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/AgentOutputVerificationOutput"
+                  }
+                }
+              }
+            },
+            "400": {
+              "description": "Invalid input",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/ValidationError"
+                  }
+                }
+              }
+            },
+            "402": {
+              "description": "Payment required",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/PaymentRequiredChallenge"
+                  }
+                }
+              }
+            },
+            "500": {
+              "description": "Internal server error",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/StructuredError"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "classified_change_type": "optional_property_added",
+      "compatibility_direction": "bidirectionally-compatible",
+      "required_version_bump": "minor",
+      "policy_rule": "optional_property_added requires minor version bump under strict-consumer evaluation",
+      "severity": "warning",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "openapi/service-contracts.openapi.json",
+      "affected_schema_path": "components.schemas.PCCDocument.description",
+      "json_pointer": "/components/schemas/PCCDocument/description",
+      "old_value": "Normative schema for Proof-Carrying Context 1.0.0. Frozen after compatibility validation passes. Schema patch 1.0.1 (SUN-0100 correction): extension_container now structurally permits qualified extension keys via patternProperties, matching documented semantics; pcc_version (document content compatibility) is unchanged at 1.0.0.",
+      "new_value": "Normative schema for Proof-Carrying Context 1.0.0. Frozen after compatibility validation passes. Schema patch 1.0.1 (SUN-0100 correction): extension_container now structurally permits qualified extension keys via patternProperties, matching documented semantics; pcc_version (document content compatibility) is unchanged at 1.0.0. Schema minor 1.1.0 (SUN-1000 checkpoint 1M): service_id enum gains 4 new .v2 members (additive-only per packages/pcc-schema/policy/COMPATIBILITY.md section 1/section 4, which explicitly classifies new enum values as minor-compatible -- not the docs/contracts/COMPATIBILITY_POLICY.md service-contract-release taxonomy, which does not govern this file); the 4 existing .v1 members are unchanged and remain valid; pcc_version is unchanged at 1.0.0.",
+      "classified_change_type": "property_type_changed",
+      "compatibility_direction": "incompatible",
+      "required_version_bump": "major",
+      "policy_rule": "property_type_changed classified as major",
+      "severity": "error",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "openapi/service-contracts.openapi.json",
+      "affected_schema_path": "components.schemas.PCCDocument.definitions.service_id.enum.4",
+      "json_pointer": "/components/schemas/PCCDocument/definitions/service_id/enum/4",
+      "new_value": "company_evidence_graph.v2",
+      "classified_change_type": "optional_property_added",
+      "compatibility_direction": "bidirectionally-compatible",
+      "required_version_bump": "minor",
+      "policy_rule": "optional_property_added requires minor version bump under strict-consumer evaluation",
+      "severity": "warning",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "openapi/service-contracts.openapi.json",
+      "affected_schema_path": "components.schemas.PCCDocument.definitions.service_id.enum.5",
+      "json_pointer": "/components/schemas/PCCDocument/definitions/service_id/enum/5",
+      "new_value": "web_context_verified.v2",
+      "classified_change_type": "optional_property_added",
+      "compatibility_direction": "bidirectionally-compatible",
+      "required_version_bump": "minor",
+      "policy_rule": "optional_property_added requires minor version bump under strict-consumer evaluation",
+      "severity": "warning",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "openapi/service-contracts.openapi.json",
+      "affected_schema_path": "components.schemas.PCCDocument.definitions.service_id.enum.6",
+      "json_pointer": "/components/schemas/PCCDocument/definitions/service_id/enum/6",
+      "new_value": "document_evidence_json.v2",
+      "classified_change_type": "optional_property_added",
+      "compatibility_direction": "bidirectionally-compatible",
+      "required_version_bump": "minor",
+      "policy_rule": "optional_property_added requires minor version bump under strict-consumer evaluation",
+      "severity": "warning",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "openapi/service-contracts.openapi.json",
+      "affected_schema_path": "components.schemas.PCCDocument.definitions.service_id.enum.7",
+      "json_pointer": "/components/schemas/PCCDocument/definitions/service_id/enum/7",
+      "new_value": "verify_agent_output.v2",
+      "classified_change_type": "optional_property_added",
+      "compatibility_direction": "bidirectionally-compatible",
+      "required_version_bump": "minor",
+      "policy_rule": "optional_property_added requires minor version bump under strict-consumer evaluation",
+      "severity": "warning",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "openapi/service-contracts.openapi.json",
+      "affected_schema_path": "components.schemas.CompanyEvidenceGraphOutput.allOf.1.properties.contract.properties.service_id.const",
+      "json_pointer": "/components/schemas/CompanyEvidenceGraphOutput/allOf/1/properties/contract/properties/service_id/const",
+      "old_value": "company_evidence_graph.v1",
+      "classified_change_type": "property_removed",
+      "compatibility_direction": "incompatible",
+      "required_version_bump": "major",
+      "policy_rule": "property_removed requires major version bump",
+      "severity": "error",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "openapi/service-contracts.openapi.json",
+      "affected_schema_path": "components.schemas.CompanyEvidenceGraphOutput.allOf.1.properties.contract.properties.service_id.enum",
+      "json_pointer": "/components/schemas/CompanyEvidenceGraphOutput/allOf/1/properties/contract/properties/service_id/enum",
+      "new_value": ["company_evidence_graph.v1", "company_evidence_graph.v2"],
+      "classified_change_type": "optional_property_added",
+      "compatibility_direction": "bidirectionally-compatible",
+      "required_version_bump": "minor",
+      "policy_rule": "optional_property_added requires minor version bump under strict-consumer evaluation",
+      "severity": "warning",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "openapi/service-contracts.openapi.json",
+      "affected_schema_path": "components.schemas.CompanyEvidenceGraphOutput.allOf.1.properties.contract.properties.service_version.const",
+      "json_pointer": "/components/schemas/CompanyEvidenceGraphOutput/allOf/1/properties/contract/properties/service_version/const",
+      "old_value": "v1",
+      "classified_change_type": "property_removed",
+      "compatibility_direction": "incompatible",
+      "required_version_bump": "major",
+      "policy_rule": "property_removed requires major version bump",
+      "severity": "error",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "openapi/service-contracts.openapi.json",
+      "affected_schema_path": "components.schemas.CompanyEvidenceGraphOutput.allOf.1.properties.contract.properties.service_version.enum",
+      "json_pointer": "/components/schemas/CompanyEvidenceGraphOutput/allOf/1/properties/contract/properties/service_version/enum",
+      "new_value": ["v1", "v2"],
+      "classified_change_type": "optional_property_added",
+      "compatibility_direction": "bidirectionally-compatible",
+      "required_version_bump": "minor",
+      "policy_rule": "optional_property_added requires minor version bump under strict-consumer evaluation",
+      "severity": "warning",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "openapi/service-contracts.openapi.json",
+      "affected_schema_path": "components.schemas.VerifiedWebContextOutput.allOf.1.properties.contract.properties.service_id.const",
+      "json_pointer": "/components/schemas/VerifiedWebContextOutput/allOf/1/properties/contract/properties/service_id/const",
+      "old_value": "web_context_verified.v1",
+      "classified_change_type": "property_removed",
+      "compatibility_direction": "incompatible",
+      "required_version_bump": "major",
+      "policy_rule": "property_removed requires major version bump",
+      "severity": "error",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "openapi/service-contracts.openapi.json",
+      "affected_schema_path": "components.schemas.VerifiedWebContextOutput.allOf.1.properties.contract.properties.service_id.enum",
+      "json_pointer": "/components/schemas/VerifiedWebContextOutput/allOf/1/properties/contract/properties/service_id/enum",
+      "new_value": ["web_context_verified.v1", "web_context_verified.v2"],
+      "classified_change_type": "optional_property_added",
+      "compatibility_direction": "bidirectionally-compatible",
+      "required_version_bump": "minor",
+      "policy_rule": "optional_property_added requires minor version bump under strict-consumer evaluation",
+      "severity": "warning",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "openapi/service-contracts.openapi.json",
+      "affected_schema_path": "components.schemas.VerifiedWebContextOutput.allOf.1.properties.contract.properties.service_version.const",
+      "json_pointer": "/components/schemas/VerifiedWebContextOutput/allOf/1/properties/contract/properties/service_version/const",
+      "old_value": "v1",
+      "classified_change_type": "property_removed",
+      "compatibility_direction": "incompatible",
+      "required_version_bump": "major",
+      "policy_rule": "property_removed requires major version bump",
+      "severity": "error",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "openapi/service-contracts.openapi.json",
+      "affected_schema_path": "components.schemas.VerifiedWebContextOutput.allOf.1.properties.contract.properties.service_version.enum",
+      "json_pointer": "/components/schemas/VerifiedWebContextOutput/allOf/1/properties/contract/properties/service_version/enum",
+      "new_value": ["v1", "v2"],
+      "classified_change_type": "optional_property_added",
+      "compatibility_direction": "bidirectionally-compatible",
+      "required_version_bump": "minor",
+      "policy_rule": "optional_property_added requires minor version bump under strict-consumer evaluation",
+      "severity": "warning",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "openapi/service-contracts.openapi.json",
+      "affected_schema_path": "components.schemas.DocumentEvidenceJSONOutput.allOf.1.properties.contract.properties.service_id.const",
+      "json_pointer": "/components/schemas/DocumentEvidenceJSONOutput/allOf/1/properties/contract/properties/service_id/const",
+      "old_value": "document_evidence_json.v1",
+      "classified_change_type": "property_removed",
+      "compatibility_direction": "incompatible",
+      "required_version_bump": "major",
+      "policy_rule": "property_removed requires major version bump",
+      "severity": "error",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "openapi/service-contracts.openapi.json",
+      "affected_schema_path": "components.schemas.DocumentEvidenceJSONOutput.allOf.1.properties.contract.properties.service_id.enum",
+      "json_pointer": "/components/schemas/DocumentEvidenceJSONOutput/allOf/1/properties/contract/properties/service_id/enum",
+      "new_value": ["document_evidence_json.v1", "document_evidence_json.v2"],
+      "classified_change_type": "optional_property_added",
+      "compatibility_direction": "bidirectionally-compatible",
+      "required_version_bump": "minor",
+      "policy_rule": "optional_property_added requires minor version bump under strict-consumer evaluation",
+      "severity": "warning",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "openapi/service-contracts.openapi.json",
+      "affected_schema_path": "components.schemas.DocumentEvidenceJSONOutput.allOf.1.properties.contract.properties.service_version.const",
+      "json_pointer": "/components/schemas/DocumentEvidenceJSONOutput/allOf/1/properties/contract/properties/service_version/const",
+      "old_value": "v1",
+      "classified_change_type": "property_removed",
+      "compatibility_direction": "incompatible",
+      "required_version_bump": "major",
+      "policy_rule": "property_removed requires major version bump",
+      "severity": "error",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "openapi/service-contracts.openapi.json",
+      "affected_schema_path": "components.schemas.DocumentEvidenceJSONOutput.allOf.1.properties.contract.properties.service_version.enum",
+      "json_pointer": "/components/schemas/DocumentEvidenceJSONOutput/allOf/1/properties/contract/properties/service_version/enum",
+      "new_value": ["v1", "v2"],
+      "classified_change_type": "optional_property_added",
+      "compatibility_direction": "bidirectionally-compatible",
+      "required_version_bump": "minor",
+      "policy_rule": "optional_property_added requires minor version bump under strict-consumer evaluation",
+      "severity": "warning",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "openapi/service-contracts.openapi.json",
+      "affected_schema_path": "components.schemas.AgentOutputVerificationOutput.allOf.1.properties.contract.properties.service_id.const",
+      "json_pointer": "/components/schemas/AgentOutputVerificationOutput/allOf/1/properties/contract/properties/service_id/const",
+      "old_value": "verify_agent_output.v1",
+      "classified_change_type": "property_removed",
+      "compatibility_direction": "incompatible",
+      "required_version_bump": "major",
+      "policy_rule": "property_removed requires major version bump",
+      "severity": "error",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "openapi/service-contracts.openapi.json",
+      "affected_schema_path": "components.schemas.AgentOutputVerificationOutput.allOf.1.properties.contract.properties.service_id.enum",
+      "json_pointer": "/components/schemas/AgentOutputVerificationOutput/allOf/1/properties/contract/properties/service_id/enum",
+      "new_value": ["verify_agent_output.v1", "verify_agent_output.v2"],
+      "classified_change_type": "optional_property_added",
+      "compatibility_direction": "bidirectionally-compatible",
+      "required_version_bump": "minor",
+      "policy_rule": "optional_property_added requires minor version bump under strict-consumer evaluation",
+      "severity": "warning",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "openapi/service-contracts.openapi.json",
+      "affected_schema_path": "components.schemas.AgentOutputVerificationOutput.allOf.1.properties.contract.properties.service_version.const",
+      "json_pointer": "/components/schemas/AgentOutputVerificationOutput/allOf/1/properties/contract/properties/service_version/const",
+      "old_value": "v1",
+      "classified_change_type": "property_removed",
+      "compatibility_direction": "incompatible",
+      "required_version_bump": "major",
+      "policy_rule": "property_removed requires major version bump",
+      "severity": "error",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "openapi/service-contracts.openapi.json",
+      "affected_schema_path": "components.schemas.AgentOutputVerificationOutput.allOf.1.properties.contract.properties.service_version.enum",
+      "json_pointer": "/components/schemas/AgentOutputVerificationOutput/allOf/1/properties/contract/properties/service_version/enum",
+      "new_value": ["v1", "v2"],
+      "classified_change_type": "optional_property_added",
+      "compatibility_direction": "bidirectionally-compatible",
+      "required_version_bump": "minor",
+      "policy_rule": "optional_property_added requires minor version bump under strict-consumer evaluation",
+      "severity": "warning",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "openapi/service-contracts.openapi.json",
+      "affected_schema_path": "components.schemas.ValidationError",
+      "json_pointer": "/components/schemas/ValidationError",
+      "new_value": {
+        "title": "Validation Error",
+        "description": "Canonical 400 response shape actually returned by the paid-service route boundary (jsonError()) \u2014 not StructuredError, which was never emitted for this status code (SUN-1000 checkpoint 1K-B/1L defect-B correction).",
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["error", "message"],
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Stable machine-actionable error code."
+          },
+          "message": {
+            "type": "string",
+            "description": "Human-readable descriptive message."
+          },
+          "details": {
+            "description": "Optional machine-actionable detail (e.g. schema validation errors)."
+          }
+        }
+      },
+      "classified_change_type": "optional_property_added",
+      "compatibility_direction": "bidirectionally-compatible",
+      "required_version_bump": "minor",
+      "policy_rule": "optional_property_added requires minor version bump under strict-consumer evaluation",
+      "severity": "warning",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "openapi/service-contracts.openapi.json",
+      "affected_schema_path": "components.schemas.PaymentRequiredChallenge",
+      "json_pointer": "/components/schemas/PaymentRequiredChallenge",
+      "new_value": {
+        "title": "Payment Required Challenge",
+        "description": "Canonical 402 response shape actually returned by the paid-service route boundary's CDP-rail x402 PAYMENT-REQUIRED challenge \u2014 not StructuredError, which was never emitted for this status code (SUN-1000 checkpoint 1K-B/1L defect-B correction).",
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["error", "x402_version", "quote_id", "requirement_id"],
+        "properties": {
+          "error": {
+            "type": "string",
+            "const": "payment_required"
+          },
+          "x402_version": {
+            "type": "integer",
+            "description": "The x402 protocol version this challenge is issued under."
+          },
+          "quote_id": {
+            "type": "string",
+            "description": "The quote this challenge was minted against."
+          },
+          "requirement_id": {
+            "type": "string",
+            "description": "The payment requirement identifier to satisfy."
+          }
+        }
+      },
+      "classified_change_type": "optional_property_added",
+      "compatibility_direction": "bidirectionally-compatible",
+      "required_version_bump": "minor",
+      "policy_rule": "optional_property_added requires minor version bump under strict-consumer evaluation",
+      "severity": "warning",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "schemas/proof-carrying-context.schema.json",
+      "affected_schema_path": "description",
+      "json_pointer": "/description",
+      "old_value": "Normative schema for Proof-Carrying Context 1.0.0. Frozen after compatibility validation passes. Schema patch 1.0.1 (SUN-0100 correction): extension_container now structurally permits qualified extension keys via patternProperties, matching documented semantics; pcc_version (document content compatibility) is unchanged at 1.0.0.",
+      "new_value": "Normative schema for Proof-Carrying Context 1.0.0. Frozen after compatibility validation passes. Schema patch 1.0.1 (SUN-0100 correction): extension_container now structurally permits qualified extension keys via patternProperties, matching documented semantics; pcc_version (document content compatibility) is unchanged at 1.0.0. Schema minor 1.1.0 (SUN-1000 checkpoint 1M): service_id enum gains 4 new .v2 members (additive-only per packages/pcc-schema/policy/COMPATIBILITY.md section 1/section 4, which explicitly classifies new enum values as minor-compatible -- not the docs/contracts/COMPATIBILITY_POLICY.md service-contract-release taxonomy, which does not govern this file); the 4 existing .v1 members are unchanged and remain valid; pcc_version is unchanged at 1.0.0.",
+      "classified_change_type": "property_type_changed",
+      "compatibility_direction": "incompatible",
+      "required_version_bump": "major",
+      "policy_rule": "property_type_changed classified as major",
+      "severity": "error",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "schemas/proof-carrying-context.schema.json",
+      "affected_schema_path": "definitions.service_id.enum.4",
+      "json_pointer": "/definitions/service_id/enum/4",
+      "new_value": "company_evidence_graph.v2",
+      "classified_change_type": "optional_property_added",
+      "compatibility_direction": "bidirectionally-compatible",
+      "required_version_bump": "minor",
+      "policy_rule": "optional_property_added requires minor version bump under strict-consumer evaluation",
+      "severity": "warning",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "schemas/proof-carrying-context.schema.json",
+      "affected_schema_path": "definitions.service_id.enum.5",
+      "json_pointer": "/definitions/service_id/enum/5",
+      "new_value": "web_context_verified.v2",
+      "classified_change_type": "optional_property_added",
+      "compatibility_direction": "bidirectionally-compatible",
+      "required_version_bump": "minor",
+      "policy_rule": "optional_property_added requires minor version bump under strict-consumer evaluation",
+      "severity": "warning",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "schemas/proof-carrying-context.schema.json",
+      "affected_schema_path": "definitions.service_id.enum.6",
+      "json_pointer": "/definitions/service_id/enum/6",
+      "new_value": "document_evidence_json.v2",
+      "classified_change_type": "optional_property_added",
+      "compatibility_direction": "bidirectionally-compatible",
+      "required_version_bump": "minor",
+      "policy_rule": "optional_property_added requires minor version bump under strict-consumer evaluation",
+      "severity": "warning",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "schemas/proof-carrying-context.schema.json",
+      "affected_schema_path": "definitions.service_id.enum.7",
+      "json_pointer": "/definitions/service_id/enum/7",
+      "new_value": "verify_agent_output.v2",
+      "classified_change_type": "optional_property_added",
+      "compatibility_direction": "bidirectionally-compatible",
+      "required_version_bump": "minor",
+      "policy_rule": "optional_property_added requires minor version bump under strict-consumer evaluation",
+      "severity": "warning",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "schemas/services/agent-verification-output.schema.json",
+      "affected_schema_path": "allOf.1.properties.contract.properties.service_id.const",
+      "json_pointer": "/allOf/1/properties/contract/properties/service_id/const",
+      "old_value": "verify_agent_output.v1",
+      "classified_change_type": "property_removed",
+      "compatibility_direction": "incompatible",
+      "required_version_bump": "major",
+      "policy_rule": "property_removed requires major version bump",
+      "severity": "error",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "schemas/services/agent-verification-output.schema.json",
+      "affected_schema_path": "allOf.1.properties.contract.properties.service_id.enum",
+      "json_pointer": "/allOf/1/properties/contract/properties/service_id/enum",
+      "new_value": ["verify_agent_output.v1", "verify_agent_output.v2"],
+      "classified_change_type": "optional_property_added",
+      "compatibility_direction": "bidirectionally-compatible",
+      "required_version_bump": "minor",
+      "policy_rule": "optional_property_added requires minor version bump under strict-consumer evaluation",
+      "severity": "warning",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "schemas/services/agent-verification-output.schema.json",
+      "affected_schema_path": "allOf.1.properties.contract.properties.service_version.const",
+      "json_pointer": "/allOf/1/properties/contract/properties/service_version/const",
+      "old_value": "v1",
+      "classified_change_type": "property_removed",
+      "compatibility_direction": "incompatible",
+      "required_version_bump": "major",
+      "policy_rule": "property_removed requires major version bump",
+      "severity": "error",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "schemas/services/agent-verification-output.schema.json",
+      "affected_schema_path": "allOf.1.properties.contract.properties.service_version.enum",
+      "json_pointer": "/allOf/1/properties/contract/properties/service_version/enum",
+      "new_value": ["v1", "v2"],
+      "classified_change_type": "optional_property_added",
+      "compatibility_direction": "bidirectionally-compatible",
+      "required_version_bump": "minor",
+      "policy_rule": "optional_property_added requires minor version bump under strict-consumer evaluation",
+      "severity": "warning",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "schemas/services/company-evidence-output.schema.json",
+      "affected_schema_path": "allOf.1.properties.contract.properties.service_id.const",
+      "json_pointer": "/allOf/1/properties/contract/properties/service_id/const",
+      "old_value": "company_evidence_graph.v1",
+      "classified_change_type": "property_removed",
+      "compatibility_direction": "incompatible",
+      "required_version_bump": "major",
+      "policy_rule": "property_removed requires major version bump",
+      "severity": "error",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "schemas/services/company-evidence-output.schema.json",
+      "affected_schema_path": "allOf.1.properties.contract.properties.service_id.enum",
+      "json_pointer": "/allOf/1/properties/contract/properties/service_id/enum",
+      "new_value": ["company_evidence_graph.v1", "company_evidence_graph.v2"],
+      "classified_change_type": "optional_property_added",
+      "compatibility_direction": "bidirectionally-compatible",
+      "required_version_bump": "minor",
+      "policy_rule": "optional_property_added requires minor version bump under strict-consumer evaluation",
+      "severity": "warning",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "schemas/services/company-evidence-output.schema.json",
+      "affected_schema_path": "allOf.1.properties.contract.properties.service_version.const",
+      "json_pointer": "/allOf/1/properties/contract/properties/service_version/const",
+      "old_value": "v1",
+      "classified_change_type": "property_removed",
+      "compatibility_direction": "incompatible",
+      "required_version_bump": "major",
+      "policy_rule": "property_removed requires major version bump",
+      "severity": "error",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "schemas/services/company-evidence-output.schema.json",
+      "affected_schema_path": "allOf.1.properties.contract.properties.service_version.enum",
+      "json_pointer": "/allOf/1/properties/contract/properties/service_version/enum",
+      "new_value": ["v1", "v2"],
+      "classified_change_type": "optional_property_added",
+      "compatibility_direction": "bidirectionally-compatible",
+      "required_version_bump": "minor",
+      "policy_rule": "optional_property_added requires minor version bump under strict-consumer evaluation",
+      "severity": "warning",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "schemas/services/document-evidence-output.schema.json",
+      "affected_schema_path": "allOf.1.properties.contract.properties.service_id.const",
+      "json_pointer": "/allOf/1/properties/contract/properties/service_id/const",
+      "old_value": "document_evidence_json.v1",
+      "classified_change_type": "property_removed",
+      "compatibility_direction": "incompatible",
+      "required_version_bump": "major",
+      "policy_rule": "property_removed requires major version bump",
+      "severity": "error",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "schemas/services/document-evidence-output.schema.json",
+      "affected_schema_path": "allOf.1.properties.contract.properties.service_id.enum",
+      "json_pointer": "/allOf/1/properties/contract/properties/service_id/enum",
+      "new_value": ["document_evidence_json.v1", "document_evidence_json.v2"],
+      "classified_change_type": "optional_property_added",
+      "compatibility_direction": "bidirectionally-compatible",
+      "required_version_bump": "minor",
+      "policy_rule": "optional_property_added requires minor version bump under strict-consumer evaluation",
+      "severity": "warning",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "schemas/services/document-evidence-output.schema.json",
+      "affected_schema_path": "allOf.1.properties.contract.properties.service_version.const",
+      "json_pointer": "/allOf/1/properties/contract/properties/service_version/const",
+      "old_value": "v1",
+      "classified_change_type": "property_removed",
+      "compatibility_direction": "incompatible",
+      "required_version_bump": "major",
+      "policy_rule": "property_removed requires major version bump",
+      "severity": "error",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "schemas/services/document-evidence-output.schema.json",
+      "affected_schema_path": "allOf.1.properties.contract.properties.service_version.enum",
+      "json_pointer": "/allOf/1/properties/contract/properties/service_version/enum",
+      "new_value": ["v1", "v2"],
+      "classified_change_type": "optional_property_added",
+      "compatibility_direction": "bidirectionally-compatible",
+      "required_version_bump": "minor",
+      "policy_rule": "optional_property_added requires minor version bump under strict-consumer evaluation",
+      "severity": "warning",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "schemas/services/web-context-output.schema.json",
+      "affected_schema_path": "allOf.1.properties.contract.properties.service_id.const",
+      "json_pointer": "/allOf/1/properties/contract/properties/service_id/const",
+      "old_value": "web_context_verified.v1",
+      "classified_change_type": "property_removed",
+      "compatibility_direction": "incompatible",
+      "required_version_bump": "major",
+      "policy_rule": "property_removed requires major version bump",
+      "severity": "error",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "schemas/services/web-context-output.schema.json",
+      "affected_schema_path": "allOf.1.properties.contract.properties.service_id.enum",
+      "json_pointer": "/allOf/1/properties/contract/properties/service_id/enum",
+      "new_value": ["web_context_verified.v1", "web_context_verified.v2"],
+      "classified_change_type": "optional_property_added",
+      "compatibility_direction": "bidirectionally-compatible",
+      "required_version_bump": "minor",
+      "policy_rule": "optional_property_added requires minor version bump under strict-consumer evaluation",
+      "severity": "warning",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "schemas/services/web-context-output.schema.json",
+      "affected_schema_path": "allOf.1.properties.contract.properties.service_version.const",
+      "json_pointer": "/allOf/1/properties/contract/properties/service_version/const",
+      "old_value": "v1",
+      "classified_change_type": "property_removed",
+      "compatibility_direction": "incompatible",
+      "required_version_bump": "major",
+      "policy_rule": "property_removed requires major version bump",
+      "severity": "error",
+      "human_review_required": true
+    },
+    {
+      "affected_file": "schemas/services/web-context-output.schema.json",
+      "affected_schema_path": "allOf.1.properties.contract.properties.service_version.enum",
+      "json_pointer": "/allOf/1/properties/contract/properties/service_version/enum",
+      "new_value": ["v1", "v2"],
+      "classified_change_type": "optional_property_added",
+      "compatibility_direction": "bidirectionally-compatible",
+      "required_version_bump": "minor",
+      "policy_rule": "optional_property_added requires minor version bump under strict-consumer evaluation",
+      "severity": "warning",
+      "human_review_required": true
+    }
+  ],
+  "policy_version": "contract-compatibility-v1",
+  "verdict": "fail",
+  "comparison_timestamp": "2026-08-17T06:45:57.891Z",
+  "pcc_dependency": {
+    "schema_release": "1.0.1",
+    "schema_sha256": "f664208e387b161ab7897d8544d9c7d987501eba5764e2dde0ea69586e33dbb5"
+  },
+  "files_compared": 27,
+  "tool_versions": {
+    "node": "v24.18.1",
+    "pnpm": "9.x"
+  },
+  "human_review": {
+    "decision": "MAJOR_CONTRACT_RELEASE",
+    "governing_policy": "docs/contracts/COMPATIBILITY_POLICY.md sections 3.3, 4 (error_contract_changed row: default_compatibility=major, min_bump=major, human_review=Yes, parallel_major=Yes), and 12 (approval table: major classifications pair with 'new service major identity')",
+    "rationale": "Checkpoint 1J established that the StructuredError 400/402 mismatch does not qualify for the same never-validly-resolvable carve-out that justified defect A's PATCH_REPAIR (checkpoint 1K-A, 1.0.1): StructuredError is a real, resolvable schema. Checkpoint 1K-B confirmed the frozen policy text requires both a new Service Contract Release major (2.0.0) and new Service API major identities (.v2) for all four affected services. Checkpoint 1L selected the PREPRODUCTION_V2_REPLACEMENT coexistence model. This checkpoint (1M) is that implementation: the 400/402 responses now $ref ValidationError/PaymentRequiredChallenge (the real runtime shapes) instead of StructuredError, for the four new .v2 service operations only. Request/success-response schemas and pricing are unchanged in shape (byte-identical fields), consistent with checkpoint 1L's frozen scope. Two genuine, disclosed discoveries during implementation, neither anticipated by checkpoint 1L: (1) the four output schemas (schemas/services/*-output.schema.json) embed a `service_id` `const` inside their PCC-contract validation block, restricting a valid document to exactly the .v1 identity; (2) the same block also embeds a `service_version` `const: 'v1'`. Both had to widen to an `enum` (['X.v1','X.v2'] and ['v1','v2'] respectively -- additive only) for a v2-generated document to validate at all against the shared schema file. Neither widening changes the structural SHAPE of a valid v1 document (all previously-valid v1 instances remain valid) -- both are purely closed-enum widenings, the exact additive-evolution pattern this project's own frozen taxonomy classifies as minor-compatible in isolation; they only contribute to this release's overall MAJOR classification because they are bundled into the same 2.0.0 release as the genuinely major error-contract fix, not because either widening is itself a breaking change.",
+    "scope_confirmation": "v1 (contracts/releases/1.0.0, 1.0.1) is untouched and remains permanently frozen and independently verifiable -- both retain their own frozen copies of the pre-widening output schemas with the original consts, byte-identical to how they were accepted; baseline:verify continues to pass against 1.0.0 unmodified throughout. The PCC schema also advances 1.0.1 -> 1.1.0 as a separately-classified minor release (packages/pcc-schema/policy/COMPATIBILITY.md sections 1/4 explicitly classify new enum values as minor-compatible -- a distinct, PCC-specific governing policy from this document's own service-contract-release taxonomy).",
+    "raw_checker_classification_preserved": true
+  }
+}

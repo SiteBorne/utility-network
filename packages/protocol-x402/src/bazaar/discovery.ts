@@ -83,6 +83,33 @@ const BAZAAR_PAYMENT_POLICY: Readonly<
     network: 'eip155:8453',
     asset: '0xUSDC',
   },
+  // SUN-1000 checkpoint 1M: v2 policy entries are byte-identical to their
+  // v1 counterparts — SAME_ECONOMICS_NEW_SERVICE_MAJOR per checkpoint 1L
+  // section 9; defect B/checkpoint 1K-B never authorized a pricing change.
+  'company_evidence_graph.v2': {
+    scheme: 'exact',
+    pricing_key: 'company_evidence_graph',
+    network: 'eip155:8453',
+    asset: '0xUSDC',
+  },
+  'web_context_verified.v2': {
+    scheme: 'exact',
+    pricing_key: 'web_context_verified_direct',
+    network: 'eip155:8453',
+    asset: '0xUSDC',
+  },
+  'document_evidence_json.v2': {
+    scheme: 'upto',
+    pricing_key: 'document_evidence_json_max_job',
+    network: 'eip155:8453',
+    asset: '0xUSDC',
+  },
+  'verify_agent_output.v2': {
+    scheme: 'exact',
+    pricing_key: 'verify_agent_output_standard',
+    network: 'eip155:8453',
+    asset: '0xUSDC',
+  },
 };
 
 /** SUN-0700A has no production wallet (directive §12) — this sentinel is
@@ -156,7 +183,9 @@ export async function buildSiteborneDiscoveryDeclaration(
   const quote = await buildQuote({
     x402_version: SUPPORTED_X402_VERSION,
     service_id: serviceId,
-    service_version: 'v1',
+    // SUN-1000 checkpoint 1M: derived from the registry entry's own
+    // declared service_version rather than a hardcoded v1 literal.
+    service_version: registryEntry.service_version as 'v1' | 'v2',
     contract_release: registryEntry.pcc_version,
     input_hash: inputHash,
     pricing_key: policy.pricing_key,

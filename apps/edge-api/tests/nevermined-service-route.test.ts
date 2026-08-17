@@ -174,13 +174,29 @@ describe('Nevermined alternative rail HTTP lifecycle', () => {
     rmSync(tempDir, { recursive: true, force: true });
   });
 
-  it('mounts exactly the four declared Nevermined-only routes', () => {
-    expect(
-      app.routes
-        .filter((route) => route.method === 'POST')
-        .map((route) => route.path)
-        .sort()
-    ).toEqual(Object.values(NEVERMINED_ROUTES).sort());
+  it('mounts the four declared v1 Nevermined routes, plus the four v2 routes always CDP-only (SUN-1000 checkpoint 1M: Nevermined-rail v2 fails closed until Phase 2 real provider registration, so v2CdpRoute() never routes through NEVERMINED_ROUTES regardless of this app-level rail configuration)', () => {
+    const mountedPaths = app.routes
+      .filter((route) => route.method === 'POST')
+      .map((route) => route.path)
+      .sort();
+    const v1NeverminedPaths = [
+      NEVERMINED_ROUTES['company_evidence_graph.v1'],
+      NEVERMINED_ROUTES['web_context_verified.v1'],
+      NEVERMINED_ROUTES['document_evidence_json.v1'],
+      NEVERMINED_ROUTES['verify_agent_output.v1'],
+    ];
+    const v2CdpPaths = [
+      '/v2/company/evidence-graph',
+      '/v2/web/context',
+      '/v2/document/evidence-json',
+      '/v2/verify/agent-output',
+    ];
+    expect(mountedPaths).toEqual([...v1NeverminedPaths, ...v2CdpPaths].sort());
+    // The v2 paths are never the Nevermined-prefixed ones, even though
+    // this app was built with rail: 'nevermined'.
+    for (const path of v2CdpPaths) {
+      expect(path.startsWith('/v2/nevermined/')).toBe(false);
+    }
   });
 
   it('fails closed when no Nevermined provider is supplied or a fixture is selected for production', async () => {

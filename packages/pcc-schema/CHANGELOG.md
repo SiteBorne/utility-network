@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.1.0 — 2026-08-17
+
+### Added
+
+- SUN-1000 checkpoint 1M: `service_id` enum gains 4 new `.v2` members
+  (`company_evidence_graph.v2`, `web_context_verified.v2`,
+  `document_evidence_json.v2`, `verify_agent_output.v2`), additive only —
+  classified minor-compatible per `policy/COMPATIBILITY.md` section 1 ("new enum
+  values may be added") and section 4 ("Minor (1.1.0): Additive changes... new
+  enum values"), not the separate service-contract-release compatibility
+  taxonomy (`docs/contracts/COMPATIBILITY_POLICY.md`), which does not govern
+  this schema.
+- The 4 existing `.v1` members are unchanged; all historical PCC documents
+  carrying `.v1` service IDs remain valid under this schema.
+- `pcc_version` (document content-compatibility version) is unchanged at
+  `1.0.0`.
+
 ## 1.0.0 — 2026-08-05
 
 ### Added

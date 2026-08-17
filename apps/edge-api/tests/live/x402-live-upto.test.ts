@@ -296,7 +296,7 @@ describe.skipIf(!RUN_LIVE)(
         >,
         contractRelease: '1.0.0',
         inputSchemaHash: 'sha256:19e64c92f088ed8b7a45eef561c5426bb59ce5cc3576b85482aded4f620e57ba',
-        outputSchemaHash: 'sha256:dfe39d56227803c9e743e7b67da4853a16f76a1a4f3de66b2eb43213b92377ed',
+        outputSchemaHash: 'sha256:df91ed115ae0e29d8f4c211d95462ddd96e9714bc5f5e0ce0b820b370e0d5dde',
         pccDependency: '1.0.0',
         db,
         clock: () => new Date().toISOString(),
