@@ -29,8 +29,15 @@ export interface SemgrepManifestEntry {
   install_method: 'pip';
 }
 
+/** Same shape as `SemgrepManifestEntry` — both are plain `pip install
+ * <name>==<version>` tools. Kept as a distinct named type (rather than
+ * reusing `SemgrepManifestEntry` directly) so a future divergence in
+ * one tool's manifest shape doesn't silently affect the other. */
+export type PipToolManifestEntry = SemgrepManifestEntry;
+
 export interface ToolVersionsManifest {
   semgrep: SemgrepManifestEntry;
+  schemathesis: PipToolManifestEntry;
   'osv-scanner': BinaryToolManifestEntry;
   trivy: BinaryToolManifestEntry;
 }
@@ -102,9 +109,11 @@ export function verifyChecksum(tool: string, data: Uint8Array, expectedSha256: s
 export function validateManifestShape(raw: unknown): raw is ToolVersionsManifest {
   if (!raw || typeof raw !== 'object') return false;
   const m = raw as Record<string, unknown>;
-  const semgrep = m.semgrep as SemgrepManifestEntry | undefined;
-  if (!semgrep || semgrep.install_method !== 'pip' || typeof semgrep.version !== 'string') {
-    return false;
+  for (const key of ['semgrep', 'schemathesis'] as const) {
+    const entry = m[key] as PipToolManifestEntry | undefined;
+    if (!entry || entry.install_method !== 'pip' || typeof entry.version !== 'string') {
+      return false;
+    }
   }
   for (const key of ['osv-scanner', 'trivy'] as const) {
     const entry = m[key] as BinaryToolManifestEntry | undefined;

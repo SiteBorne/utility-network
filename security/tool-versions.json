@@ -5,6 +5,11 @@
     "provenance": "PyPI (https://pypi.org/project/semgrep/1.173.0/), installed into a dedicated, version-pinned virtualenv (.security-tools/semgrep-venv). PyPI's package index is served over TLS with per-file digests in its simple-index metadata (verified by pip itself); this is a real, exact version pin and integrity-verified-at-transport-and-index-level install, though not a full `pip --require-hashes` pin of Semgrep's entire transitive dependency tree (a scope simplification, recorded honestly in the checkpoint 1B report rather than silently claimed as strict).",
     "install_method": "pip"
   },
+  "schemathesis": {
+    "version": "4.24.3",
+    "provenance": "PyPI (https://pypi.org/project/schemathesis/4.24.3/), installed into a dedicated, version-pinned virtualenv (.security-tools/schemathesis-venv), same install/verification model as semgrep above (exact version pin, TLS + per-file digest via pip/PyPI, not a full --require-hashes transitive pin).",
+    "install_method": "pip"
+  },
   "osv-scanner": {
     "version": "2.5.0",
     "provenance": "https://github.com/google/osv-scanner/releases/tag/v2.5.0 (official Google OSV-Scanner GitHub release)",

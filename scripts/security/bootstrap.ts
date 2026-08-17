@@ -100,44 +100,58 @@ async function bootstrapBinaryTool(
   return binaryPath;
 }
 
-async function bootstrapSemgrep(manifest: ToolVersionsManifest): Promise<string> {
-  const entry = manifest.semgrep;
-  const venvDir = join(TOOLS_DIR, 'semgrep-venv');
+/** Generic `pip install <name>==<version>` provisioning into a dedicated,
+ * per-tool venv under `.security-tools/`. Used identically by Semgrep
+ * and Schemathesis — the only per-tool difference is the venv directory
+ * name and the pip package name, both passed in explicitly rather than
+ * inferred, so a future third pip tool is a one-line addition. */
+async function bootstrapPipTool(
+  pipPackageName: string,
+  venvDirName: string,
+  entry: { version: string }
+): Promise<string> {
+  const venvDir = join(TOOLS_DIR, venvDirName);
   const versionStampPath = join(venvDir, '.pinned-version');
-  const semgrepBin = join(venvDir, 'bin', 'semgrep');
+  const bin = join(venvDir, 'bin', pipPackageName);
 
   if (
-    existsSync(semgrepBin) &&
+    existsSync(bin) &&
     existsSync(versionStampPath) &&
     readFileSync(versionStampPath, 'utf-8').trim() === entry.version
   ) {
-    return semgrepBin;
+    return bin;
   }
 
   rmSync(venvDir, { recursive: true, force: true });
   mkdirSync(TOOLS_DIR, { recursive: true });
   execFileSync('python3', ['-m', 'venv', venvDir]);
-  execFileSync(join(venvDir, 'bin', 'pip'), ['install', '--quiet', `semgrep==${entry.version}`]);
+  execFileSync(join(venvDir, 'bin', 'pip'), [
+    'install',
+    '--quiet',
+    `${pipPackageName}==${entry.version}`,
+  ]);
   writeFileSync(versionStampPath, entry.version);
-  if (!existsSync(semgrepBin)) {
-    throw new Error(`semgrep_install_missing_binary: expected ${semgrepBin}`);
+  if (!existsSync(bin)) {
+    throw new Error(`${pipPackageName}_install_missing_binary: expected ${bin}`);
   }
-  return semgrepBin;
+  return bin;
 }
 
 export async function bootstrapAll(): Promise<{
   semgrep: string;
+  schemathesis: string;
   osvScanner: string;
   trivy: string;
 }> {
   const manifest = loadManifest();
   mkdirSync(TOOLS_DIR, { recursive: true });
-  const [semgrep, osvScanner, trivy] = await Promise.all([
-    bootstrapSemgrep(manifest),
+  const [semgrep, schemathesis, osvScanner, trivy] = await Promise.all([
+    bootstrapPipTool('semgrep', 'semgrep-venv', manifest.semgrep),
+    bootstrapPipTool('schemathesis', 'schemathesis-venv', manifest.schemathesis),
     bootstrapBinaryTool('osv-scanner', manifest),
     bootstrapBinaryTool('trivy', manifest),
   ]);
-  return { semgrep, osvScanner, trivy };
+  return { semgrep, schemathesis, osvScanner, trivy };
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {

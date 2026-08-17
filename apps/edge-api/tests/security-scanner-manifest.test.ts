@@ -38,7 +38,23 @@ describe('security scanner manifest — pure logic', () => {
     expect(
       validateManifestShape({
         semgrep: { version: '1.0.0', install_method: 'pip', provenance: 'x' },
+        schemathesis: { version: '1.0.0', install_method: 'pip', provenance: 'x' },
         'osv-scanner': { version: '1.0.0', install_method: 'binary', checksums_source: 'x' }, // missing assets
+        trivy: { version: '1.0.0', install_method: 'tarball', checksums_source: 'x', assets: {} },
+      })
+    ).toBe(false);
+  });
+
+  it('rejects a manifest missing the schemathesis entry — fails closed', () => {
+    expect(
+      validateManifestShape({
+        semgrep: { version: '1.0.0', install_method: 'pip', provenance: 'x' },
+        'osv-scanner': {
+          version: '1.0.0',
+          install_method: 'binary',
+          checksums_source: 'x',
+          assets: {},
+        },
         trivy: { version: '1.0.0', install_method: 'tarball', checksums_source: 'x', assets: {} },
       })
     ).toBe(false);
@@ -48,6 +64,7 @@ describe('security scanner manifest — pure logic', () => {
     expect(
       validateManifestShape({
         semgrep: { version: '1.0.0', install_method: 'pip', provenance: 'x' },
+        schemathesis: { version: '1.0.0', install_method: 'pip', provenance: 'x' },
         'osv-scanner': {
           version: '1.0.0',
           install_method: 'binary',

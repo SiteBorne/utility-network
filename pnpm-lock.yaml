@@ -130,6 +130,9 @@ importers:
       '@cloudflare/workers-types':
         specifier: ^4.20240800.0
         version: 4.20260702.1
+      '@hono/node-server':
+        specifier: 2.1.1
+        version: 2.1.1(hono@4.13.0)
       '@modelcontextprotocol/client':
         specifier: 2.0.0
         version: 2.0.0
@@ -1050,6 +1053,12 @@ packages:
     resolution: {integrity: sha512-CITqMUOxveQYvr+692mfKMQljQi2m5TZ9W52dISEgenzgBAFW48a1oVv/kxCHMrPu/mqAXPxB4uSNpigfv9Myg==}
     peerDependencies:
       openai: ^5.10.2
+
+  '@hono/node-server@2.1.1':
+    resolution: {integrity: sha512-ELuehkj5VCBdgEw9zs+ivkKwyzzUCSQuE96YmiPvn1ECBoZCczbFXJLeEGMTYjphP6gydh4pHMqEYPVMYUVgQg==}
+    engines: {node: '>=20'}
+    peerDependencies:
+      hono: ^4
 
   '@humanfs/core@0.19.1':
     resolution: {integrity: sha512-5DyQ4+1JEUzejeK1JGICcideyfUbGixgS9jNgex5nqkW+cY7WZhxBigmieN5Qnw9ZosSNVC9KQKyb+GUaGyKUA==}
@@ -4280,6 +4289,10 @@ snapshots:
   '@helicone/helpers@1.8.3(openai@5.23.2(ws@8.21.0)(zod@3.25.76))':
     dependencies:
       openai: 5.23.2(ws@8.21.0)(zod@3.25.76)
+
+  '@hono/node-server@2.1.1(hono@4.13.0)':
+    dependencies:
+      hono: 4.13.0
 
   '@humanfs/core@0.19.1': {}
 

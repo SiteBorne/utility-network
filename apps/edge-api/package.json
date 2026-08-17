@@ -44,6 +44,7 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20240800.0",
+    "@hono/node-server": "2.1.1",
     "@modelcontextprotocol/client": "2.0.0",
     "eslint": "^9.0.0",
     "fast-check": "^3.17.0",
