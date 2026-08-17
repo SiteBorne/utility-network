@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
   classifySchemathesisExit,
   parseServerReadyInfo,
-  patchKnownRefMismatches,
 } from '../../../scripts/security/run-schemathesis';
 
 /**
@@ -58,47 +57,5 @@ describe('parseServerReadyInfo', () => {
     expect(() =>
       parseServerReadyInfo(JSON.stringify({ url: 'http://evil.example.com', pid: 1 }))
     ).toThrow(/malformed_ready_info/);
-  });
-});
-
-describe('patchKnownRefMismatches', () => {
-  it('rewrites every known mismatched $ref name to the real registered component name', () => {
-    const input = JSON.stringify({
-      a: { $ref: '#/components/schemas/CompanyEvidenceGraphInput' },
-      b: { $ref: '#/components/schemas/WebContextVerifiedOutput' },
-    });
-    const patched = patchKnownRefMismatches(input);
-    const parsed = JSON.parse(patched);
-    expect(parsed.a.$ref).toBe('#/components/schemas/CompanyEvidenceInput');
-    expect(parsed.b.$ref).toBe('#/components/schemas/WebContextOutput');
-  });
-
-  it('leaves unrelated $refs and content completely untouched', () => {
-    const input = JSON.stringify({
-      c: { $ref: '#/components/schemas/StructuredError' },
-      note: 'CompanyEvidenceGraphInput mentioned in prose, not a $ref, should not match',
-    });
-    expect(patchKnownRefMismatches(input)).toBe(input);
-  });
-
-  it('produces output that remains valid JSON with all 8 known services patched', () => {
-    const refs = [
-      'CompanyEvidenceGraphInput',
-      'CompanyEvidenceGraphOutput',
-      'WebContextVerifiedInput',
-      'WebContextVerifiedOutput',
-      'DocumentEvidenceJsonInput',
-      'DocumentEvidenceJsonOutput',
-      'VerifyAgentOutputInput',
-      'VerifyAgentOutputOutput',
-    ];
-    const input = JSON.stringify(
-      Object.fromEntries(refs.map((r, i) => [`k${i}`, { $ref: `#/components/schemas/${r}` }]))
-    );
-    const patched = patchKnownRefMismatches(input);
-    expect(() => JSON.parse(patched)).not.toThrow();
-    for (const r of refs) {
-      expect(patched).not.toContain(`#/components/schemas/${r}"`);
-    }
   });
 });

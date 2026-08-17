@@ -21,58 +21,21 @@
  * would only ever observe a 404 for a route everyone already knows
  * doesn't exist yet; excluding it is disclosed here, not silent.
  *
- * Known, disclosed `$ref`-name mismatch (checkpoint 1I discovery, NOT
- * fixed in the committed generator this checkpoint): the 4 paid-service
- * operations' request/response schemas reference component names
- * (`CompanyEvidenceGraphInput`, etc.) derived from each service ID's own
- * slug, but the actually-registered component names
- * (`CompanyEvidenceInput`, etc.) are derived from each schema file's
- * base name — the two derivations disagree whenever a service ID's slug
- * doesn't literally match its schema file's base name. A corrected
- * generator fix was written, verified to resolve the mismatch cleanly,
- * and then deliberately reverted: the repository's `contracts:
- * compat:check` gate classifies any change to these already-frozen
- * `contracts/releases/1.0.0` fields as `required_version_bump: major`
- * — bumping a frozen contract release is a separate governance decision
- * this checkpoint has no authority to make unilaterally. Rather than
- * either silently leaving Schemathesis unable to load the schema at all,
- * or bundling a contract-release version bump into a testing-gate
- * checkpoint, this orchestrator patches only its own ephemeral,
- * never-committed copy of the schema before handing it to Schemathesis
- * — the committed artifact and the frozen baseline are both left
- * completely untouched.
+ * SUN-1000 checkpoint 1K-A note: the $ref-name mismatch discovered in
+ * checkpoint 1I (and the ephemeral in-memory schema patch this file
+ * used to apply to work around it) is resolved at the source —
+ * `packages/pcc-schema/scripts/generate-openapi.ts` now derives every
+ * component name from a single, consistent, title-derived identity, and
+ * the committed OpenAPI artifact was corrected as a governed `1.0.1`
+ * patch release (see `docs/reports/
+ * SUN-1000-checkpoint-1k-a-openapi-ref-patch.md`). This script now
+ * consumes the committed schema directly, unpatched.
  */
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn, spawnSync } from 'node:child_process';
 import { bootstrapAll } from './bootstrap';
-
-const KNOWN_REF_NAME_MISMATCHES: Record<string, string> = {
-  CompanyEvidenceGraphInput: 'CompanyEvidenceInput',
-  CompanyEvidenceGraphOutput: 'CompanyEvidenceOutput',
-  WebContextVerifiedInput: 'WebContextInput',
-  WebContextVerifiedOutput: 'WebContextOutput',
-  DocumentEvidenceJsonInput: 'DocumentEvidenceInput',
-  DocumentEvidenceJsonOutput: 'DocumentEvidenceOutput',
-  VerifyAgentOutputInput: 'AgentVerificationInput',
-  VerifyAgentOutputOutput: 'AgentVerificationOutput',
-};
-
-/** Rewrites every `#/components/schemas/<oldName>` `$ref` in the schema
- * text to point at the real, registered component name — a pure
- * string-level patch (the mismatched names never collide with any real
- * substring elsewhere in this schema) applied only to an in-memory/
- * temp-file copy, never to the committed artifact. */
-export function patchKnownRefMismatches(schemaJsonText: string): string {
-  let patched = schemaJsonText;
-  for (const [badName, goodName] of Object.entries(KNOWN_REF_NAME_MISMATCHES)) {
-    patched = patched
-      .split(`#/components/schemas/${badName}"`)
-      .join(`#/components/schemas/${goodName}"`);
-  }
-  return patched;
-}
 
 const REPO_ROOT = fileURLToPath(new URL('../..', import.meta.url));
 const OUTPUT_DIR = join(REPO_ROOT, 'security', 'output');
@@ -175,12 +138,6 @@ async function main(): Promise<void> {
   rmSync(STOP_SENTINEL_PATH, { force: true });
   rmSync(REPORT_DIR, { recursive: true, force: true });
 
-  // Patch known $ref-name mismatches (see the top-of-file comment) into
-  // an ephemeral, gitignored copy only — the committed artifact and the
-  // frozen contracts baseline are never touched by this script.
-  const patchedSchemaPath = join(SECURITY_TOOLS_DIR, 'schemathesis-patched-schema.json');
-  writeFileSync(patchedSchemaPath, patchKnownRefMismatches(readFileSync(SCHEMA_PATH, 'utf-8')));
-
   const serverProc = spawn('npx', ['vitest', 'run', SERVER_TEST_FILE, '--reporter=basic'], {
     cwd: REPO_ROOT,
     env: { ...process.env, SCHEMATHESIS_SERVER_HOST: 'true' },
@@ -198,7 +155,7 @@ async function main(): Promise<void> {
       schemathesis,
       [
         'run',
-        patchedSchemaPath,
+        SCHEMA_PATH,
         '-u',
         serverInfo.url,
         '--exclude-path-regex',
@@ -258,8 +215,6 @@ async function main(): Promise<void> {
   const junitPath = join(REPORT_DIR, 'junit.xml');
   const summary = {
     schema_path: SCHEMA_PATH,
-    patched_schema_path: patchedSchemaPath,
-    ref_name_patches_applied: KNOWN_REF_NAME_MISMATCHES,
     target_url: serverInfo.url,
     excluded_operations: ['/quotes/{service_id} (x-implementation-status: not_implemented)'],
     max_examples_per_operation: MAX_EXAMPLES_PER_OPERATION,

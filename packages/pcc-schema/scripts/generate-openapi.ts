@@ -52,6 +52,44 @@ const SERVICE_IDS = {
   'agent-verification-output': 'verify_agent_output.v1',
 };
 
+/**
+ * SUN-1000 checkpoint 1K-A root fix (defect A — invalid/unresolvable
+ * component references, PATCH_REPAIR per checkpoint 1J).
+ *
+ * Prior to this fix, THREE independent naming derivations existed for
+ * the same 8 service input/output schemas, and none of them was used
+ * as the actual single source of truth for the others:
+ *
+ *   - `generateServiceComponents()`'s own registered component keys
+ *     were derived from each schema *filename*
+ *     (`company-evidence-input.schema.json` -> `CompanyEvidenceInput`).
+ *   - The OpenAPI path `$ref`s in `generateServiceContractsOpenAPI()`
+ *     were derived from each *service ID's own slug*
+ *     (`company_evidence_graph.v1` -> `CompanyEvidenceGraphInput`).
+ *   - The independently-generated Python models (`datamodel-codegen`,
+ *     a separate tool, unmodified by this fix) derive class names from
+ *     each schema's own `title` field
+ *     (`"Company Evidence Graph Input"` -> `CompanyEvidenceGraphInput`).
+ *
+ * These three derivations do not agree in general — checkpoint 1J
+ * verified this true for `company-evidence` (filename disagreed,
+ * service-ID and title happened to agree) but checkpoint 1K-A's own
+ * fuller check found `web-context` and `agent-verification` disagree
+ * on all three. The only actually-authoritative, already-used-
+ * elsewhere identity is each schema's own `title` field (Python's
+ * generator already treats it as such). This function is now the
+ * *single* place either the OpenAPI component keys or the OpenAPI
+ * path `$ref`s derive a name from — eliminating the possibility of
+ * the two ever disagreeing again by construction, rather than
+ * special-casing the four services' current (broken) names.
+ */
+function titleToPascalCase(title: string): string {
+  return title
+    .split(/\s+/)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join('');
+}
+
 const SERVICE_TITLES = {
   'company-evidence-output': 'Company Evidence Graph',
   'web-context-output': 'Verified Web Context',
@@ -95,7 +133,25 @@ function writeJson(filePath: string, content: any): void {
   writeFileSync(filePath, JSON.stringify(content, null, 2));
 }
 
-function sanitizeSchemaForOpenAPI(schema: any): any {
+/** Reads each of the 8 service schema files' own `title` field once,
+ * producing the single schema-base -> title-derived-PascalCase-name map
+ * used consistently everywhere a service schema is referenced —
+ * `generateServiceComponents()`'s own registered keys AND every
+ * `https://siteborne.net/schemas/services/...` `$ref` conversion
+ * (`convertRefs`, below), including references nested inside *other*
+ * schemas (e.g. `RequestEnvelope`'s per-service conditional `input`
+ * reference) — not just the top-level OpenAPI path `$ref`s. */
+function loadServiceSchemaNameByBase(): Record<string, string> {
+  const nameByBase: Record<string, string> = {};
+  for (const schemaFile of SERVICE_SCHEMAS) {
+    const schemaBase = schemaFile.replace('.schema.json', '');
+    const schema = readJson(resolve(SCHEMAS_DIR, 'services', schemaFile));
+    nameByBase[schemaBase] = titleToPascalCase(schema.title);
+  }
+  return nameByBase;
+}
+
+function sanitizeSchemaForOpenAPI(schema: any, serviceNameByBase: Record<string, string>): any {
   const sanitized = JSON.parse(JSON.stringify(schema));
 
   // Remove $schema and $id as they're not valid in OpenAPI
@@ -106,26 +162,34 @@ function sanitizeSchemaForOpenAPI(schema: any): any {
   // Recursively process definitions
   if (sanitized.definitions) {
     for (const key of Object.keys(sanitized.definitions)) {
-      sanitized.definitions[key] = sanitizeSchemaForOpenAPI(sanitized.definitions[key]);
+      sanitized.definitions[key] = sanitizeSchemaForOpenAPI(
+        sanitized.definitions[key],
+        serviceNameByBase
+      );
     }
   }
 
   // Process properties
   if (sanitized.properties) {
     for (const key of Object.keys(sanitized.properties)) {
-      sanitized.properties[key] = sanitizeSchemaForOpenAPI(sanitized.properties[key]);
+      sanitized.properties[key] = sanitizeSchemaForOpenAPI(
+        sanitized.properties[key],
+        serviceNameByBase
+      );
     }
   }
 
   // Process items
   if (sanitized.items) {
-    sanitized.items = sanitizeSchemaForOpenAPI(sanitized.items);
+    sanitized.items = sanitizeSchemaForOpenAPI(sanitized.items, serviceNameByBase);
   }
 
   // Process allOf, anyOf, oneOf
   for (const combinator of ['allOf', 'anyOf', 'oneOf']) {
     if (sanitized[combinator]) {
-      sanitized[combinator] = sanitized[combinator].map(sanitizeSchemaForOpenAPI);
+      sanitized[combinator] = sanitized[combinator].map((s: any) =>
+        sanitizeSchemaForOpenAPI(s, serviceNameByBase)
+      );
     }
   }
 
@@ -147,10 +211,16 @@ function sanitizeSchemaForOpenAPI(schema: any): any {
         return { $ref: `#/components/schemas/${toPascalCase(name)}` };
       }
       if (ref.startsWith('https://siteborne.net/schemas/services/')) {
-        const name = ref
+        const base = ref
           .replace('https://siteborne.net/schemas/services/', '')
           .replace('.schema.json', '');
-        return { $ref: `#/components/schemas/${toPascalCase(name)}` };
+        const name = serviceNameByBase[base];
+        if (!name) {
+          throw new Error(
+            `openapi_generation_unknown_service_ref: no title-derived name registered for "${base}" (referenced via ${ref})`
+          );
+        }
+        return { $ref: `#/components/schemas/${name}` };
       }
       if (ref.startsWith('https://utility.siteborne.net/schemas/')) {
         const name = ref
@@ -181,7 +251,7 @@ function toCamelCase(str: string): string {
   return pascal.charAt(0).toLowerCase() + pascal.slice(1);
 }
 
-function generateCommonComponents(): any {
+function generateCommonComponents(serviceNameByBase: Record<string, string>): any {
   const components: any = { schemas: {} };
 
   // Load and sanitize each common schema
@@ -189,25 +259,33 @@ function generateCommonComponents(): any {
     const schemaPath = resolve(SCHEMAS_DIR, 'common', schemaFile);
     const schema = readJson(schemaPath);
     const name = toPascalCase(schemaFile.replace('.schema.json', ''));
-    components.schemas[name] = sanitizeSchemaForOpenAPI(schema);
+    components.schemas[name] = sanitizeSchemaForOpenAPI(schema, serviceNameByBase);
   }
 
   // Add PCC schema
   const pccPath = resolve(SCHEMAS_DIR, 'proof-carrying-context.schema.json');
   const pccSchema = readJson(pccPath);
-  components.schemas.PCCDocument = sanitizeSchemaForOpenAPI(pccSchema);
+  components.schemas.PCCDocument = sanitizeSchemaForOpenAPI(pccSchema, serviceNameByBase);
 
   return components;
 }
 
-function generateServiceComponents(): any {
+/**
+ * Builds components keyed by the single, already-computed
+ * schema-base -> title-derived-name map (`loadServiceSchemaNameByBase`)
+ * — the same map every `$ref` conversion (top-level path refs and
+ * refs nested inside other schemas alike) also consumes, so they can
+ * never disagree again by construction.
+ */
+function generateServiceComponents(serviceNameByBase: Record<string, string>): any {
   const components: any = { schemas: {} };
 
   for (const schemaFile of SERVICE_SCHEMAS) {
+    const schemaBase = schemaFile.replace('.schema.json', '');
     const schemaPath = resolve(SCHEMAS_DIR, 'services', schemaFile);
     const schema = readJson(schemaPath);
-    const name = toPascalCase(schemaFile.replace('.schema.json', ''));
-    components.schemas[name] = sanitizeSchemaForOpenAPI(schema);
+    const name = serviceNameByBase[schemaBase];
+    components.schemas[name] = sanitizeSchemaForOpenAPI(schema, serviceNameByBase);
   }
 
   return components;
@@ -234,9 +312,14 @@ function generateServiceContractsOpenAPI(): any {
     },
   };
 
+  // Single source of truth for every service schema's name, computed
+  // once and threaded through both component generators and every
+  // $ref conversion (see `loadServiceSchemaNameByBase`).
+  const nameByBase = loadServiceSchemaNameByBase();
+
   // Add common and service schemas to components
-  const commonComponents = generateCommonComponents();
-  const serviceComponents = generateServiceComponents();
+  const commonComponents = generateCommonComponents(nameByBase);
+  const serviceComponents = generateServiceComponents(nameByBase);
 
   openapi.components.schemas = {
     ...commonComponents.schemas,
@@ -248,16 +331,24 @@ function generateServiceContractsOpenAPI(): any {
   openapi.components.schemas.QuoteResponse = openapi.components.schemas.QuoteResponse;
   openapi.components.schemas.StructuredError = openapi.components.schemas.StructuredError;
 
+  // Inverse of SERVICE_IDS, stripping the '-output' suffix, so each
+  // service ID resolves to its own schema-base (e.g. 'company-evidence')
+  // — the single key `generateServiceComponents()` already used above.
+  const serviceIdToSchemaBase: Record<string, string> = Object.fromEntries(
+    Object.entries(SERVICE_IDS).map(([outputBase, id]) => [id, outputBase.replace(/-output$/, '')])
+  );
+
   // Generate paths for each service
   for (const [serviceId, path] of Object.entries(SERVICE_PATHS)) {
     const operationId = SERVICE_OPERATIONS[serviceId];
-    const outputSchemaName = toPascalCase(serviceId.replace('.v1', '-output'));
-    const inputSchemaName = toPascalCase(serviceId.replace('.v1', '-input'));
+    const schemaBase = serviceIdToSchemaBase[serviceId];
+    const outputSchemaName = nameByBase[`${schemaBase}-output`];
+    const inputSchemaName = nameByBase[`${schemaBase}-input`];
 
     openapi.paths[path] = {
       post: {
         operationId: `post${operationId}`,
-        summary: `Execute ${SERVICE_TITLES[outputSchemaName.toLowerCase()]} service`,
+        summary: `Execute ${SERVICE_TITLES[`${schemaBase}-output`]} service`,
         description: `Service contract for ${serviceId}. Not currently implemented - preproduction contract only.`,
         'x-service-id': serviceId,
         'x-production-enabled': false,
@@ -381,15 +472,17 @@ function main() {
   }
   mkdirSync(OPENAPI_OUTPUT_DIR, { recursive: true });
 
+  const nameByBase = loadServiceSchemaNameByBase();
+
   // Generate common components
   console.log('Generating common components...');
-  const commonComponents = generateCommonComponents();
+  const commonComponents = generateCommonComponents(nameByBase);
   writeJson(resolve(OPENAPI_OUTPUT_DIR, 'common-components.json'), commonComponents);
   console.log(`  Generated: ${OPENAPI_OUTPUT_DIR}/common-components.json`);
 
   // Generate service components
   console.log('Generating service components...');
-  const serviceComponents = generateServiceComponents();
+  const serviceComponents = generateServiceComponents(nameByBase);
   writeJson(resolve(OPENAPI_OUTPUT_DIR, 'service-components.json'), serviceComponents);
   console.log(`  Generated: ${OPENAPI_OUTPUT_DIR}/service-components.json`);
 

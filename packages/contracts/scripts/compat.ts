@@ -302,8 +302,38 @@ async function releaseVerify(
   const release = loadReleaseDescriptor(releasePath);
   const repoRoot = resolve(baselinePath, '..', '..', '..');
 
-  if (release.release.version !== '1.0.0') {
-    errors.push(`Release version mismatch: expected 1.0.0, got ${release.release.version}`);
+  // SUN-1000 checkpoint 1K-A: this literal previously hard-coded '1.0.0'
+  // — the only release this repository had ever cut — which made
+  // `releaseVerify` unable to verify any subsequent release by
+  // construction, not just unable to verify an incorrect one. Rather
+  // than replace one hard-coded version literal with another (which
+  // would break again on the next release), this now verifies the
+  // active descriptor's declared version against reality two ways: (1)
+  // it must match the basename of the frozen release directory it was
+  // actually compared against (`main()` derives `baselinePath` from
+  // this same field, so a mismatch here means the descriptor and the
+  // directory it points at disagree — a real inconsistency, not a
+  // moving-target false positive), and (2) that frozen directory's own
+  // copy of this descriptor must declare the identical version — an
+  // accidentally-stale top-level descriptor (edited without updating
+  // the frozen snapshot to match, or vice versa) is exactly the failure
+  // mode this check exists to catch.
+  const baselineDirVersion = baselinePath.split('/').pop();
+  if (release.release.version !== baselineDirVersion) {
+    errors.push(
+      `Release version mismatch: descriptor declares ${release.release.version}, but was verified against releases/${baselineDirVersion}`
+    );
+  }
+  const frozenDescriptorPath = join(baselinePath, 'CONTRACT_RELEASE.yaml');
+  if (existsSync(frozenDescriptorPath)) {
+    const frozenRelease = loadReleaseDescriptor(frozenDescriptorPath);
+    if (frozenRelease.release.version !== release.release.version) {
+      errors.push(
+        `Release version mismatch: active descriptor declares ${release.release.version}, frozen releases/${baselineDirVersion}/CONTRACT_RELEASE.yaml declares ${frozenRelease.release.version}`
+      );
+    }
+  } else {
+    errors.push(`Frozen release descriptor not found: ${frozenDescriptorPath}`);
   }
 
   if (release.pcc_dependency.schema_release !== '1.0.1') {
@@ -405,6 +435,37 @@ async function compatCheck(
     const currentHash = sha256File(currentPath);
     if (currentHash !== expectedHash) {
       filesCompared++;
+
+      // SUN-1000 checkpoint 1K-A: `CONTRACT_RELEASE.yaml` is YAML, not
+      // JSON — every other baseline-manifest entry is a JSON schema/
+      // OpenAPI/metadata artifact, so this loop always assumed
+      // `JSON.parse` was safe. That assumption was never actually
+      // exercised for this file before now, because the top-level
+      // active descriptor had never legitimately diverged from its
+      // frozen baseline copy prior to this checkpoint's first real
+      // patch release. A genuine descriptor-version change (bumping
+      // `release.version`/`frozen_at`/etc., exactly what a real release
+      // does) is not a schema-shape change and does not belong in
+      // `compareSchemas`'s JSON-Schema-diff machinery — record it as a
+      // single, explicit, human-reviewable annotation-class change
+      // instead of crashing on a JSON.parse of YAML content.
+      if (relPath.endsWith('.yaml') || relPath.endsWith('.yml')) {
+        changes.push({
+          affected_file: relPath,
+          affected_schema_path: relPath,
+          json_pointer: '',
+          old_value: 'see contracts/releases/<baseline>/CONTRACT_RELEASE.yaml',
+          new_value: 'see contracts/CONTRACT_RELEASE.yaml',
+          classified_change_type: 'annotation_change',
+          compatibility_direction: 'bidirectionally-compatible',
+          required_version_bump: 'patch',
+          policy_rule: 'release-descriptor version/metadata change (not a schema-shape change)',
+          severity: 'info',
+          human_review_required: false,
+        });
+        continue;
+      }
+
       const oldContent = JSON.parse(readFileSync(join(baselinePath, relPath), 'utf-8'));
       const newContent = JSON.parse(readFileSync(currentPath, 'utf-8'));
 
@@ -455,13 +516,30 @@ async function main() {
   const command = args[0];
 
   const repoRoot = resolve(process.cwd(), '..', '..');
-  const baselinePath = join(repoRoot, 'contracts', 'releases', '1.0.0');
+  // `baseline:verify` always verifies the ORIGINAL, permanently frozen
+  // 1.0.0 snapshot — this is a distinct, permanent historical-integrity
+  // check, not "the release we're currently comparing against," and
+  // must never move.
+  const originalBaselinePath = join(repoRoot, 'contracts', 'releases', '1.0.0');
   const releaseDescriptorPath = join(repoRoot, 'contracts', 'CONTRACT_RELEASE.yaml');
+
+  // SUN-1000 checkpoint 1K-A: `compat`/`compat:check` previously also
+  // hard-coded the 1.0.0 directory as their comparison target — correct
+  // only by accident, because 1.0.0 was the only release that had ever
+  // existed. Left as-is, that would make every future `pnpm check` run
+  // permanently re-report this checkpoint's own now-accepted changes as
+  // "drift," forever, even once a new release is genuinely current. An
+  // ongoing regression gate must compare against whichever release the
+  // active descriptor itself currently declares — derived here, not
+  // hard-coded — so it protects the *current* accepted contract, the
+  // same way it protected 1.0.0 while 1.0.0 was current.
+  const activeVersion = loadReleaseDescriptor(releaseDescriptorPath).release.version;
+  const currentBaselinePath = join(repoRoot, 'contracts', 'releases', activeVersion);
 
   switch (command) {
     case 'baseline:verify': {
       console.log('Verifying frozen baseline...');
-      const result = await baselineVerify(baselinePath);
+      const result = await baselineVerify(originalBaselinePath);
       if (result.valid) {
         console.log('✓ Baseline verification passed');
         process.exit(0);
@@ -476,7 +554,7 @@ async function main() {
 
     case 'release:verify': {
       console.log('Verifying release descriptor...');
-      const result = await releaseVerify(releaseDescriptorPath, baselinePath);
+      const result = await releaseVerify(releaseDescriptorPath, currentBaselinePath);
       if (result.valid) {
         console.log('✓ Release verification passed');
         process.exit(0);
@@ -493,7 +571,7 @@ async function main() {
       console.log('Comparing current contracts to baseline...');
       const report = await compatCheck(
         join(repoRoot, 'schemas'),
-        baselinePath,
+        currentBaselinePath,
         releaseDescriptorPath
       );
       console.log(JSON.stringify(report, null, 2));
@@ -504,7 +582,7 @@ async function main() {
       console.log('Running strict compatibility check...');
       const report = await compatCheck(
         join(repoRoot, 'schemas'),
-        baselinePath,
+        currentBaselinePath,
         releaseDescriptorPath
       );
       if (report.verdict === 'pass') {

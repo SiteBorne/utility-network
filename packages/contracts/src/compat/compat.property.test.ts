@@ -2,9 +2,23 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, existsSync } from 'fs';
 import { join, relative } from 'path';
 import { createHash } from 'crypto';
+import { parse as parseYaml } from 'yaml';
 
 const repoRoot = join(__dirname, '..', '..', '..', '..');
-const baselinePath = join(repoRoot, 'contracts', 'releases', '1.0.0');
+// SUN-1000 checkpoint 1K-A: previously hard-coded to '1.0.0' — the only
+// release that had ever existed. That made this suite (an independent
+// mirror of `packages/contracts/scripts/compat.ts`'s own logic, run as
+// part of the ordinary `pnpm test`) permanently compare the current
+// active state against 1.0.0 specifically, rather than whichever
+// release is actually current — the same class of landmine already
+// fixed in `compat.ts` itself. Derived from the active descriptor's own
+// declared version instead, so this suite tracks whatever the currently
+// accepted release genuinely is.
+const activeReleaseDescriptorPath = join(repoRoot, 'contracts', 'CONTRACT_RELEASE.yaml');
+const activeVersion = (
+  parseYaml(readFileSync(activeReleaseDescriptorPath, 'utf-8')) as { release: { version: string } }
+).release.version;
+const baselinePath = join(repoRoot, 'contracts', 'releases', activeVersion);
 
 function sha256File(filePath: string): string {
   const content = readFileSync(filePath);
@@ -146,10 +160,17 @@ describe('Contract Compatibility Property Tests', () => {
     }
   });
 
-  it('service contract release version is 1.0.0', () => {
+  it('service contract release version is 1.0.1', () => {
+    // SUN-1000 checkpoint 1K-A: updated from 1.0.0 as part of this
+    // checkpoint's own governed patch release — exactly the routine
+    // maintenance any real, intentional version bump requires (not a
+    // hard-coded landmine like the ones fixed elsewhere in this
+    // checkpoint: those broke ordinary, version-unrelated `pnpm check`
+    // runs; this assertion is meant to change precisely when, and only
+    // when, a human deliberately changes the active release version).
     const releasePath = join(repoRoot, 'contracts', 'CONTRACT_RELEASE.yaml');
     const content = readFileSync(releasePath, 'utf-8');
-    expect(content).toContain("version: '1.0.0'");
+    expect(content).toContain("version: '1.0.1'");
     expect(content).toContain("status: 'normative'");
   });
 

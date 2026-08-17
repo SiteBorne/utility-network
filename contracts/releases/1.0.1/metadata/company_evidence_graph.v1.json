@@ -1,0 +1,45 @@
+{
+  "service_id": "company_evidence_graph.v1",
+  "service_version": "v1",
+  "title": "Company Evidence Graph",
+  "description": "Resolves and verifies canonical company identity, SEC submissions, XBRL facts, website evidence, regulatory mentions, and public repository signals into a structured evidence graph.",
+  "capabilities": [
+    "identity_resolution",
+    "sec_submissions",
+    "xbrl_facts",
+    "recent_filings",
+    "website_evidence",
+    "regulatory_mentions",
+    "public_repository_signals"
+  ],
+  "input_schema_uri": "https://siteborne.net/schemas/services/company-evidence-input.schema.json",
+  "input_schema_hash": "sha256:8d9a6c432b019e24a2df4d48dd93424a8782febb49c0c88f7cf9208cf0204dd7",
+  "output_schema_uri": "https://siteborne.net/schemas/services/company-evidence-output.schema.json",
+  "output_schema_hash": "sha256:a82474212615119aa510db7c3bb04e0d9fbf1a32eb740bc8821e10443818d112",
+  "pcc_version": "1.0.0",
+  "pricing_schemes": ["exact", "upto"],
+  "base_price": { "amount": "0.039", "currency": "USD" },
+  "maximum_price": { "amount": "0.19", "currency": "USD" },
+  "execution_mode": "async",
+  "maximum_input_bytes": 1048576,
+  "expected_latency_class": "variable",
+  "authorization_classification": "public",
+  "promotion_state": "executable_candidate",
+  "production_enabled": false,
+  "declared_limitations": [
+    "SEC data is cache-only, not real-time",
+    "No real-time price or trading data",
+    "Website evidence limited to publicly accessible pages",
+    "Repository signals limited to public repositories"
+  ],
+  "protocols": {
+    "x402": "planned",
+    "mcp": "planned",
+    "a2a": "planned",
+    "nevermined": "planned",
+    "agentverse": "planned",
+    "coinbase_bazaar": "planned",
+    "mcp_registry": "planned"
+  },
+  "updated_at": "2026-08-05T22:00:00Z"
+}

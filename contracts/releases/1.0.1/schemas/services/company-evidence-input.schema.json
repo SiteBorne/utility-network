@@ -1,0 +1,135 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://siteborne.net/schemas/services/company-evidence-input.schema.json",
+  "title": "Company Evidence Graph Input",
+  "description": "Input schema for company_evidence_graph.v1 service. At least one identity signal is required.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [],
+  "properties": {
+    "company_name": {
+      "type": "string",
+      "description": "Company legal or common name.",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "ticker": {
+      "type": "string",
+      "description": "Stock ticker symbol.",
+      "pattern": "^[A-Z]{1,5}$",
+      "maxLength": 5
+    },
+    "domain": {
+      "type": "string",
+      "description": "Primary website domain.",
+      "format": "hostname",
+      "maxLength": 253
+    },
+    "identifiers": {
+      "type": "object",
+      "description": "Authoritative identifiers when known.",
+      "additionalProperties": false,
+      "maxProperties": 10,
+      "properties": {
+        "cik": { "type": "string", "pattern": "^[0-9]{10}$", "description": "SEC CIK" },
+        "lei": {
+          "type": "string",
+          "pattern": "^[A-Z0-9]{20}$",
+          "description": "Legal Entity Identifier"
+        },
+        "isin": {
+          "type": "string",
+          "pattern": "^[A-Z]{2}[A-Z0-9]{9}[0-9]$",
+          "description": "ISIN"
+        },
+        "cusip": { "type": "string", "pattern": "^[A-Z0-9]{9}$", "description": "CUSIP" },
+        "ticker_symbol": {
+          "type": "string",
+          "pattern": "^[A-Z]{1,5}$",
+          "description": "Primary ticker"
+        },
+        "exchange": { "type": "string", "maxLength": 16, "description": "Primary exchange" },
+        "figi": { "type": "string", "pattern": "^BBG[0-9A-Z]{9}$", "description": "OpenFIGI" }
+      }
+    },
+    "requested_field_groups": {
+      "type": "array",
+      "description": "Field groups to include in the result.",
+      "items": {
+        "type": "string",
+        "enum": [
+          "identity",
+          "sec_submissions",
+          "xbrl_facts",
+          "recent_filings",
+          "website_evidence",
+          "regulatory_mentions",
+          "public_repository_signals"
+        ]
+      },
+      "maxItems": 7,
+      "uniqueItems": true,
+      "default": ["identity", "sec_submissions", "recent_filings", "website_evidence"]
+    },
+    "buyer_urls": {
+      "type": "array",
+      "description": "Buyer-provided public URLs for supplemental evidence.",
+      "items": {
+        "type": "string",
+        "format": "uri",
+        "maxLength": 2048
+      },
+      "maxItems": 20
+    },
+    "freshness_seconds": {
+      "type": "integer",
+      "description": "Maximum acceptable age of data in seconds.",
+      "minimum": 0,
+      "maximum": 2592000,
+      "default": 86400
+    },
+    "minimum_completeness": {
+      "type": "number",
+      "description": "Minimum completeness score required [0, 1].",
+      "minimum": 0,
+      "maximum": 1,
+      "default": 0.5
+    },
+    "minimum_verification_score": {
+      "type": "number",
+      "description": "Minimum PCC verification score [0, 1].",
+      "minimum": 0,
+      "maximum": 1,
+      "default": 0.7
+    },
+    "maximum_authorized_price": {
+      "$ref": "https://siteborne.net/schemas/common/money.schema.json",
+      "description": "Maximum price authorized for this request."
+    },
+    "jurisdiction_hints": {
+      "type": "array",
+      "description": "Optional jurisdiction hints for regulatory context.",
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Z]{2}$",
+        "maxLength": 2
+      },
+      "maxItems": 5
+    }
+  },
+  "anyOf": [
+    { "required": ["company_name"] },
+    { "required": ["ticker"] },
+    { "required": ["domain"] },
+    { "required": ["identifiers"] }
+  ],
+  "examples": [
+    {
+      "company_name": "Acme Corporation",
+      "domain": "acme.example.com",
+      "requested_field_groups": ["identity", "sec_submissions", "website_evidence"],
+      "freshness_seconds": 86400,
+      "minimum_verification_score": 0.7
+    }
+  ]
+}
