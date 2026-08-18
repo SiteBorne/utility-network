@@ -1,4 +1,5 @@
 import type { SiteborneServiceId } from '@siteborne/protocol-x402';
+import type { SiteborneA2aSigningIdentity } from './signing';
 
 export interface SiteborneA2aInvocation {
   skillId: SiteborneServiceId;
@@ -42,4 +43,11 @@ export interface CreateSiteborneA2aOptions {
   serviceBoundary?: A2aServiceExecutionBoundary;
   allowedHosts?: readonly string[];
   allowedOrigins?: readonly string[];
+  /** Injected signing identity (SUN-1000 checkpoint SUN-0800B-2). Defaults to
+   * an ephemeral, non-production `createLocalA2aSigningIdentity()` when
+   * omitted -- the same behavior as before this option existed. A real
+   * caller (edge-api) constructs a production identity from configured key
+   * material and injects it here; this package itself never reads secrets
+   * or environment variables. */
+  signingIdentity?: SiteborneA2aSigningIdentity;
 }

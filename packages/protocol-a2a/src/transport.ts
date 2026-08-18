@@ -122,7 +122,7 @@ function originAllowed(request: Request, allowedOrigins: readonly string[]): boo
  * fresh executor, task store, request handler, and transport handler.
  */
 export async function createSiteborneA2aHonoApp(options: CreateSiteborneA2aOptions = {}) {
-  const identity = await createLocalA2aSigningIdentity();
+  const identity = options.signingIdentity ?? (await createLocalA2aSigningIdentity());
   const signedCard = await identity.sign(buildUnsignedSiteborneAgentCard());
   await identity.verify(signedCard);
   const app = new Hono();

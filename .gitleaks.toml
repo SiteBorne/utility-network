@@ -32,4 +32,11 @@ regexes = [
   # the same literal elsewhere in the repo as a bare const isn't flagged,
   # confirming this is a match-context false positive, not a real secret.
   '''0x036CbD53842c5426634e7929541eC2318f3dCF7e''',
+  # `PrivateEs256Jwk` is a TypeScript TYPE NAME (SUN-0800B checkpoint 2,
+  # packages/protocol-a2a/src/signing.ts — the production Agent Card
+  # signing key structural-validation boundary), never a value. The
+  # generic-api-key rule matches it purely because it appears immediately
+  # after `privateKeyJwk:` in a parameter type annotation — no key
+  # material, no literal secret, present at all on that line.
+  '''PrivateEs256Jwk''',
 ]

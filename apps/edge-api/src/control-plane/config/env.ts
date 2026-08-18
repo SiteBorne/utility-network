@@ -61,6 +61,20 @@ export interface Env {
   RUN_LIVE_NEVERMINED?: string;
   CF_PAGES_COMMIT_SHA?: string;
   CF_WORKER_VERSION?: string;
+  /** SUN-0800B checkpoint 2: production Agent Card signing key material, a
+   * JSON-serialized private ES256 JWK (`{"kty":"EC","crv":"P-256","d":...,
+   * "x":...,"y":...}`). Both this and `AGENT_CARD_SIGNING_KEY_ID` must be
+   * present together or both absent — see
+   * `resolveAgentCardSigningIdentity`, which fails closed on a partial
+   * configuration rather than silently falling back to the ephemeral
+   * local/dev identity. Never logged, hashed, or echoed anywhere. */
+  AGENT_CARD_SIGNING_PRIVATE_KEY?: string;
+  /** Stable, versioned key identifier paired with
+   * `AGENT_CARD_SIGNING_PRIVATE_KEY` (e.g. `siteborne-a2a-es256-2026-01`) —
+   * distinct from the ephemeral local identity's hardcoded key id, so a
+   * real deployment can rotate keys without colliding with the dev/test
+   * identity. */
+  AGENT_CARD_SIGNING_KEY_ID?: string;
 }
 
 export interface ControlPlaneConfig {

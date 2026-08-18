@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "type": "module",
   "description": "Local stdio shim for the SITEBORNE Utility Network MCP server",
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "mcpName": "net.siteborne/utility",
   "bin": {
     "siteborne-mcp": "dist/stdio.js"
@@ -11,6 +11,7 @@
   "files": [
     "dist/stdio.js",
     "README.md",
+    "LICENSE",
     "server.json"
   ],
   "scripts": {
