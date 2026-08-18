@@ -5,6 +5,7 @@ import { resolveAgentCardSigningIdentity } from '../control-plane/config/agent-c
 
 const A2A_ALLOWED_HOSTS = [
   'utility.siteborne.net',
+  'siteborne-utility-edge.siteborneutilitynetwork.workers.dev',
   'localhost',
   '127.0.0.1',
   '[::1]',

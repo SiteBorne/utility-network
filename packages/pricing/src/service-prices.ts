@@ -14,11 +14,33 @@ import { fileURLToPath } from 'node:url';
 import { parse } from 'yaml';
 import { usdToMicro } from './index';
 
+/** Embedded pricing data from governance/RISK_LIMITS.yaml (version 1.0.0).
+ * This is the source of truth for Workers and other environments without
+ * filesystem access. The YAML file is the canonical source; this constant
+ * must be kept in sync (validated by scripts/validate-governance.ts). */
+const EMBEDDED_PRICING: Readonly<Record<string, number>> = {
+  company_evidence_graph: 0.039,
+  web_context_verified_direct: 0.009,
+  web_context_verified_rendered: 0.029,
+  document_evidence_json_native: 0.012,
+  document_evidence_json_ocr: 0.019,
+  document_evidence_json_table: 0.029,
+  document_evidence_json_max_job: 0.19,
+  verify_agent_output_standard: 0.019,
+  verify_agent_output_reproduction: 0.049,
+} as const;
+
+const EMBEDDED_VERSION = '1.0.0';
+
 /** Repo-root-relative — this package lives at packages/pricing/src, so
  * governance/ is three levels up. */
-const RISK_LIMITS_PATH = fileURLToPath(
-  new URL('../../../governance/RISK_LIMITS.yaml', import.meta.url)
-);
+function getRiskLimitsPath(): string {
+  try {
+    return fileURLToPath(new URL('../../../governance/RISK_LIMITS.yaml', import.meta.url));
+  } catch {
+    return '';
+  }
+}
 
 export type PricingKey =
   | 'company_evidence_graph'
@@ -42,7 +64,16 @@ let cachedLimits: RiskLimitsDocument | undefined;
 
 function loadRiskLimits(): RiskLimitsDocument {
   if (!cachedLimits) {
-    cachedLimits = parse(readFileSync(RISK_LIMITS_PATH, 'utf-8')) as RiskLimitsDocument;
+    const path = getRiskLimitsPath();
+    if (!path) {
+      // Worker environment: use embedded data
+      cachedLimits = {
+        version: EMBEDDED_VERSION,
+        financial_limits: { max_price_usd_per_service: { ...EMBEDDED_PRICING } },
+      };
+    } else {
+      cachedLimits = parse(readFileSync(path, 'utf-8')) as RiskLimitsDocument;
+    }
   }
   return cachedLimits;
 }

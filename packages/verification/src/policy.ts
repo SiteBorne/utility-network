@@ -5,9 +5,16 @@ import { parse } from 'yaml';
 import { z } from 'zod';
 import { canonicalize, contentHash } from './canonical';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = join(__dirname, '..', '..', '..');
-const DEFAULT_POLICY_PATH = join(REPO_ROOT, 'governance', 'VERIFICATION_POLICY.yaml');
+function getRepoRoot(): string {
+  try {
+    const __dirname = dirname(fileURLToPath(import.meta.url));
+    return join(__dirname, '..', '..', '..');
+  } catch {
+    return '';
+  }
+}
+
+const DEFAULT_POLICY_PATH = join(getRepoRoot(), 'governance', 'VERIFICATION_POLICY.yaml');
 
 export const VerificationPolicySchema = z.object({
   policy_version: z.string(),

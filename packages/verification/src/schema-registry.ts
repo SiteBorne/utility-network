@@ -16,11 +16,19 @@ import addFormats from 'ajv-formats';
 // adding the PCC schema throws "no schema with key or ref ...draft-07...".
 import draft07MetaSchema from 'ajv/dist/refs/json-schema-draft-07.json' with { type: 'json' };
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
+let schemasDir: string | null = null;
 
-// packages/verification/src -> repo root
-const REPO_ROOT = join(__dirname, '..', '..', '..');
-const SCHEMAS_DIR = join(REPO_ROOT, 'schemas');
+function getSchemasDir(): string {
+  if (schemasDir) return schemasDir;
+  try {
+    const __dirname = dirname(fileURLToPath(import.meta.url));
+    const REPO_ROOT = join(__dirname, '..', '..', '..');
+    schemasDir = join(REPO_ROOT, 'schemas');
+  } catch {
+    schemasDir = '';
+  }
+  return schemasDir;
+}
 
 let ajvSingleton: InstanceType<typeof Ajv2020> | null = null;
 
@@ -30,6 +38,11 @@ export function getAjv(): InstanceType<typeof Ajv2020> {
   const ajv = new Ajv2020({ strict: false, allErrors: true });
   addFormats(ajv);
   ajv.addMetaSchema(draft07MetaSchema);
+
+  const SCHEMAS_DIR = getSchemasDir();
+  if (!SCHEMAS_DIR) {
+    throw new Error('Schemas directory not available in this environment');
+  }
 
   const files: string[] = [];
   for (const dir of ['common', 'services']) {
@@ -67,6 +80,8 @@ const SERVICE_ID_TO_SCHEMA_FILE: Record<string, string> = {
 export function getOutputSchemaId(serviceId: string): string | null {
   const file = SERVICE_ID_TO_SCHEMA_FILE[serviceId];
   if (!file) return null;
+  const SCHEMAS_DIR = getSchemasDir();
+  if (!SCHEMAS_DIR) return null;
   const schema = JSON.parse(readFileSync(join(SCHEMAS_DIR, 'services', file), 'utf-8'));
   return schema.$id as string;
 }
