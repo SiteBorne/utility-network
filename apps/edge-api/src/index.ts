@@ -7,6 +7,7 @@ import { catalogRoute } from './control-plane/routes/catalog';
 import { serviceMetadataRoute } from './control-plane/routes/catalog';
 import { schemasRoute } from './control-plane/routes/catalog';
 import { openapiRoute } from './control-plane/routes/catalog';
+import { benchmarksRoute } from './control-plane/routes/benchmarks';
 import { createIdempotencyMiddleware } from './control-plane/middleware/request-context';
 import { createBodySizeMiddleware } from './control-plane/middleware/request-context';
 import { createContentTypeMiddleware } from './control-plane/middleware/request-context';
@@ -17,6 +18,7 @@ import { createAuditContextMiddleware } from './control-plane/middleware/request
 import { createDevelopmentModeMiddleware } from './control-plane/middleware/request-context';
 import type { ControlPlaneConfig } from './control-plane/config/env';
 import { createInMemoryRepositories } from './control-plane/repositories/in-memory';
+import { D1ServicesRepository } from './control-plane/repositories/d1/services';
 import { InMemoryArtifactStore } from './control-plane/artifacts/store';
 import { InMemoryQueueProducer } from './control-plane/queue/dispatch';
 import { QueueDispatchHandler } from './control-plane/queue/dispatch';
@@ -50,7 +52,15 @@ const dispatchHandler = new QueueDispatchHandler(queueProducer, repositories.que
 const auditLogger = new AuditLogger(repositories.audit, repositories.security);
 
 app.use('*', async (c, next) => {
-  c.set('servicesRepo', repositories.services);
+  // SUN-1100 checkpoint 1: `/catalog`/`/services/{id}` were unconditionally
+  // wired to the in-memory repository above -- confirmed live, the real
+  // D1 `services` table (bound as `env.DB`, seeded with 8 rows per
+  // SUN-0800B checkpoint 3) was never actually read, so the public
+  // catalog endpoint always returned 0 services despite a 200 status.
+  // Prefer the real D1-backed repository whenever the binding is present
+  // (every real deployment); fall back to the in-memory instance only
+  // when it is absent (existing unit tests that construct a bare `Env`).
+  c.set('servicesRepo', c.env?.DB ? new D1ServicesRepository(c.env.DB) : repositories.services);
   c.set('serviceVersionsRepo', repositories.serviceVersions);
   c.set('jobsRepo', repositories.jobs);
   c.set('jobAttemptsRepo', repositories.jobAttempts);
@@ -77,6 +87,7 @@ app.get('/.well-known/jwks.json', a2aRoute);
 app.route('/catalog', catalogRoute);
 app.route('/services', serviceMetadataRoute);
 app.route('/schemas', schemasRoute);
+app.route('/benchmarks', benchmarksRoute);
 app.route('/', openapiRoute);
 
 /**

@@ -4,6 +4,7 @@ import { catalogRoute } from '../src/control-plane/routes/catalog';
 import { serviceMetadataRoute } from '../src/control-plane/routes/catalog';
 import { schemasRoute } from '../src/control-plane/routes/catalog';
 import { openapiRoute } from '../src/control-plane/routes/catalog';
+import { benchmarksRoute } from '../src/control-plane/routes/benchmarks';
 import { healthRoute } from '../src/routes/health';
 import { readinessRoute } from '../src/routes/readiness';
 import { InMemoryServicesRepository } from '../src/control-plane/repositories/in-memory';
@@ -23,6 +24,7 @@ describe('Control Plane Routes', () => {
     app.route('/catalog', catalogRoute);
     app.route('/services', serviceMetadataRoute);
     app.route('/schemas', schemasRoute);
+    app.route('/benchmarks', benchmarksRoute);
     app.route('/', openapiRoute);
   });
 
@@ -92,6 +94,17 @@ describe('Control Plane Routes', () => {
     expect(body.pcc_version).toBe('1.0.0');
   });
 
+  it('GET /benchmarks returns fixed local benchmark evidence', async () => {
+    const res = await app.request('/benchmarks');
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.disclosure).toContain('production SLA');
+    expect(body.document_worker_local_benchmarks.cases.length).toBeGreaterThan(0);
+    expect(body.v2_load_capacity_baseline.profiles.length).toBe(7);
+    expect(body.v2_load_capacity_baseline.total_requests).toBe(118);
+    expect(body.generated_at).toBeDefined();
+  });
+
   it('GET /openapi.json returns OpenAPI document', async () => {
     const res = await app.request('/openapi.json');
     expect(res.status).toBe(200);
@@ -102,6 +115,7 @@ describe('Control Plane Routes', () => {
     expect(body.paths['/ready']).toBeDefined();
     expect(body.paths['/catalog']).toBeDefined();
     expect(body.paths['/schemas']).toBeDefined();
+    expect(body.paths['/benchmarks']).toBeDefined();
     expect(body.paths['/services/{service_id}']).toBeDefined();
     expect(body.paths['/jobs']).toBeUndefined();
     expect(body.paths['/quotes']).toBeUndefined();

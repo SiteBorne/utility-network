@@ -262,6 +262,22 @@ openapiRoute.get('/openapi.json', async (c) => {
           },
         },
       },
+      '/benchmarks': {
+        get: {
+          summary: 'Fixed local benchmark evidence',
+          operationId: 'benchmarks',
+          responses: {
+            '200': {
+              description: 'Disclosed local measurement evidence (not a production SLA)',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/BenchmarksResponse' },
+                },
+              },
+            },
+          },
+        },
+      },
       '/services/{service_id}': {
         get: {
           summary: 'Service metadata',
@@ -414,6 +430,21 @@ openapiRoute.get('/openapi.json', async (c) => {
             'protocol_status',
             'input_schema',
             'output_schema',
+          ],
+        },
+        BenchmarksResponse: {
+          type: 'object',
+          properties: {
+            disclosure: { type: 'string' },
+            document_worker_local_benchmarks: { type: 'object' },
+            v2_load_capacity_baseline: { type: 'object' },
+            generated_at: { type: 'string', format: 'date-time' },
+          },
+          required: [
+            'disclosure',
+            'document_worker_local_benchmarks',
+            'v2_load_capacity_baseline',
+            'generated_at',
           ],
         },
         ServiceError: {
