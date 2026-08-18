@@ -1,0 +1,25 @@
+# SUN-1200 checkpoint F remediation — a minimal, TEST-ONLY Wrangler
+# config for the real-workerd regression suite
+# (`tests/workerd/*.workerd-test.ts`, run via `@cloudflare/vitest-pool-workers`).
+# NEVER deployed -- not referenced by any `wrangler deploy`/`versions
+# upload`/`versions deploy` command anywhere in this repository. Exists
+# solely to give the vitest-pool-workers plugin a Worker entrypoint +
+# D1 binding with the exact production `compatibility_date`/
+# `compatibility_flags` (see the real `wrangler.toml` at the repo root),
+# so this suite genuinely proves behavior under the same runtime
+# restrictions (no request-time dynamic code generation) that the real
+# deployed Worker enforces -- restrictions this repository's existing
+# Node/Miniflare-database-only test suite never actually exercised
+# (every other test calls `app.request(...)` as a plain in-process Hono
+# fetch handler in Node.js/V8, never inside a real workerd isolate).
+
+name = "siteborne-workerd-test"
+main = "src/workerd-test-entrypoint.ts"
+compatibility_date = "2026-08-05"
+compatibility_flags = ["nodejs_compat"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "workerd-test-db"
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "../../migrations"

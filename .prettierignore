@@ -23,3 +23,11 @@ __pycache__
 
 # Lockfiles (auto-generated; not hand-formatted)
 pnpm-lock.yaml
+
+# SUN-1200 checkpoint F: machine-generated AJV standalone validator
+# module -- minified codegen output, never hand-edited, and its exact
+# byte content is compared verbatim against
+# generate-input-validators.mts's own output by
+# generate-input-validators:check (schemas:check). Reformatting it would
+# make that drift check meaningless.
+apps/edge-api/src/generated/input-validators.generated.js

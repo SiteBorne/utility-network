@@ -32,8 +32,16 @@ import {
   hashPaymentObject,
 } from '@siteborne/protocol-x402';
 import type { PaymentPayload } from '@siteborne/protocol-x402';
+import Ajv2020 from 'ajv/dist/2020';
 import { createX402ServiceRoute } from '../src/control-plane/routes/x402-service';
 import { buildPaidServicesApp } from '../src/control-plane/routes/paid-services';
+
+/** SUN-1200 checkpoint F: `createX402ServiceRoute` no longer compiles
+ * `inputSchema` itself at construction time -- see
+ * `x402-service-route.test.ts`'s own identical helper doc comment. */
+function compileTestInputValidator(schema: Record<string, unknown>) {
+  return new Ajv2020({ strict: false }).compile(schema);
+}
 
 const MIGRATIONS_DIR = fileURLToPath(new URL('../../../migrations', import.meta.url));
 
@@ -199,6 +207,7 @@ describe('PaymentEvidenceProvider HTTP boundary wiring (SUN-0700B checkpoint 1 p
       asset: '0xUSDC',
       path: '/v1/company/evidence-graph',
       inputSchema: { type: 'object' },
+      inputValidator: compileTestInputValidator({ type: 'object' }),
       contractRelease: '1.0.0',
       inputSchemaHash: 'sha256:' + '1'.repeat(64),
       outputSchemaHash: 'sha256:' + '2'.repeat(64),
@@ -277,6 +286,7 @@ describe('PaymentEvidenceProvider HTTP boundary wiring (SUN-0700B checkpoint 1 p
       asset: '0xUSDC',
       path: '/v1/document/evidence-json',
       inputSchema: { type: 'object' },
+      inputValidator: compileTestInputValidator({ type: 'object' }),
       contractRelease: '1.0.0',
       inputSchemaHash: 'sha256:' + '4'.repeat(64),
       outputSchemaHash: 'sha256:' + '5'.repeat(64),
@@ -343,6 +353,7 @@ describe('PaymentEvidenceProvider HTTP boundary wiring (SUN-0700B checkpoint 1 p
       asset: '0xUSDC',
       path: '/v1/company/evidence-graph-settlement-failure',
       inputSchema: { type: 'object' },
+      inputValidator: compileTestInputValidator({ type: 'object' }),
       contractRelease: '1.0.0',
       inputSchemaHash: 'sha256:' + '7'.repeat(64),
       outputSchemaHash: 'sha256:' + '8'.repeat(64),
@@ -406,6 +417,7 @@ describe('PaymentEvidenceProvider HTTP boundary wiring (SUN-0700B checkpoint 1 p
       asset: '0xUSDC',
       path: '/v1/company/evidence-graph-verification-failure',
       inputSchema: { type: 'object' },
+      inputValidator: compileTestInputValidator({ type: 'object' }),
       contractRelease: '1.0.0',
       inputSchemaHash: 'sha256:' + 'a'.repeat(64),
       outputSchemaHash: 'sha256:' + 'b'.repeat(64),

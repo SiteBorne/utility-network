@@ -13,6 +13,13 @@ export default tseslint.config(js.configs.recommended, ...tseslint.configs.recom
     'scripts/*.ts',
     'coverage/**',
     'services/modal-worker/**',
+    // SUN-1200 checkpoint F: machine-generated AJV standalone validator
+    // module, never hand-edited -- see apps/edge-api/scripts/generate-input-validators.mts.
+    // (apps/edge-api's own `lint` script also passes an explicit
+    // --ignore-pattern for this path -- flat-config `ignores` combined
+    // with other keys in the same object do not reliably act as a
+    // blanket ignore, confirmed directly.)
+    'apps/edge-api/src/generated/**',
   ],
   languageOptions: {
     ecmaVersion: 2022,

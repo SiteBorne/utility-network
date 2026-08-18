@@ -27,8 +27,22 @@ import {
   resolvePaymentEvidenceProvider,
 } from '@siteborne/protocol-x402';
 import { Hono } from 'hono';
+import Ajv2020 from 'ajv/dist/2020';
 import { buildPaidServicesApp } from '../src/control-plane/routes/paid-services';
 import { createX402ServiceRoute } from '../src/control-plane/routes/x402-service';
+
+/** SUN-1200 checkpoint F: `createX402ServiceRoute` no longer compiles
+ * `inputSchema` itself at construction time (real AJV runtime compilation
+ * is unsafe inside a deployed Cloudflare Worker request handler -- see
+ * the checkpoint F incident report). Real production callers always pass
+ * one of the four frozen, precompiled `BUNDLED_SERVICE_INPUT_SCHEMAS`;
+ * tests that construct an ad-hoc, non-frozen `inputSchema` (verifying
+ * behavior unrelated to input-schema content) must supply their own
+ * `inputValidator`, compiled here under Vitest/Node where runtime AJV
+ * compilation is safe. */
+function compileTestInputValidator(schema: Record<string, unknown>) {
+  return new Ajv2020({ strict: false }).compile(schema);
+}
 
 const MIGRATIONS_DIR = fileURLToPath(new URL('../../../migrations', import.meta.url));
 
@@ -202,6 +216,7 @@ describe('x402 HTTP vertical slice (SUN-0700A checkpoint 5)', () => {
         paymentRequirementExtra: { name: 'USDC', version: '2' },
         path: '/v1/web/context-domain-metadata',
         inputSchema: { type: 'object' },
+        inputValidator: compileTestInputValidator({ type: 'object' }),
         contractRelease: '1.0.0',
         inputSchemaHash: 'sha256:' + '1'.repeat(64),
         outputSchemaHash: 'sha256:' + '2'.repeat(64),
@@ -398,6 +413,7 @@ describe('x402 HTTP vertical slice (SUN-0700A checkpoint 5)', () => {
         asset: '0xUSDC',
         path: '/v1/document/evidence-json',
         inputSchema: { type: 'object' },
+        inputValidator: compileTestInputValidator({ type: 'object' }),
         contractRelease: '1.0.0',
         inputSchemaHash: 'sha256:' + '1'.repeat(64),
         outputSchemaHash: 'sha256:' + '2'.repeat(64),

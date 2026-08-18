@@ -21,7 +21,8 @@
  * no-network coverage in that test file's own suite.
  */
 import type { Context, Hono } from 'hono';
-import Ajv2020 from 'ajv/dist/2020';
+import type { ValidateFunction } from 'ajv';
+import { inputValidatorsById } from '../../generated/input-validators.generated.js';
 import { buildNeverminedPaymentRequiredLocal } from '../evidence/nevermined-http-client';
 import {
   NEVERMINED_DECLARATIONS,
@@ -142,6 +143,21 @@ export interface X402ServiceRouteConfig {
    * never invented (directive §5). */
   path: string;
   inputSchema: Record<string, unknown>;
+  /** SUN-1200 checkpoint F, test-only escape hatch: a caller-supplied,
+   * already-compiled validator for `inputSchema`, used instead of the
+   * generated `inputValidatorsById` lookup. Every real production caller
+   * (`paid-services.ts`) always passes one of
+   * `BUNDLED_SERVICE_INPUT_SCHEMAS`'s four frozen, precompiled schemas
+   * and never sets this field — it exists only so tests that construct
+   * `createX402ServiceRoute` directly with an ad-hoc, non-frozen
+   * `inputSchema` (verifying unrelated behavior, e.g. payment-requirement
+   * metadata pass-through) can supply their own validator (compiled
+   * locally under Vitest/Node, where runtime `Ajv.compile()` is safe)
+   * rather than needing a precompiled entry for a schema no real service
+   * ever uses. Deliberately explicit, never a silent fallback: an
+   * `inputSchema` with no precompiled entry AND no `inputValidator`
+   * still fails closed at construction time. */
+  inputValidator?: ValidateFunction;
   executor: ServiceExecutor;
   contractRelease: string;
   inputSchemaHash: string;
@@ -358,8 +374,37 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
     config.evidenceProvider
   );
 
-  const ajv = new Ajv2020({ strict: false });
-  const validateInput = ajv.compile(config.inputSchema);
+  // SUN-1200 checkpoint F: was `new Ajv2020({...}).compile(config.inputSchema)`
+  // -- AJV's `.compile()` uses `new Function(...)` internally to generate
+  // an optimized validator, which real Cloudflare Workers reject when
+  // triggered during request handling
+  // (`EvalError: Code generation from strings disallowed for this
+  // context`, confirmed live during this checkpoint's own cutover
+  // attempt -- `createX402ServiceRoute` runs lazily on the first request
+  // to reach a given paid route, via `buildPaidServicesApp`'s
+  // cache-on-first-request pattern in `index.ts`, which counts as
+  // request-time, not true Worker startup). `config.inputSchema` is
+  // always exactly one of `BUNDLED_SERVICE_INPUT_SCHEMAS`'s four unique,
+  // frozen, build-time-known schemas (never per-request data), so it is
+  // precompiled ahead of time instead — see
+  // `apps/edge-api/scripts/generate-input-validators.mts` and the
+  // checkpoint F incident report. Fails closed at construction time
+  // (same as every other construction-time check in this function) if a
+  // caller ever supplies a schema this repository has no precompiled
+  // validator for.
+  const inputSchemaId = (config.inputSchema as { $id?: string }).$id;
+  const validateInput =
+    config.inputValidator ??
+    (inputSchemaId
+      ? (inputValidatorsById as Record<string, ValidateFunction | undefined>)[inputSchemaId]
+      : undefined);
+  if (!validateInput) {
+    throw new Error(
+      `no precompiled input validator for schema $id "${String(inputSchemaId)}" -- ` +
+        'run `pnpm generate:input-validators` if this is a genuinely new frozen input schema, ' +
+        'or pass config.inputValidator explicitly for a test-only ad-hoc schema'
+    );
+  }
 
   const maxTimeoutSeconds = config.maxTimeoutSeconds ?? 60;
   const quoteTtlSeconds = config.quoteTtlSeconds ?? 300;
