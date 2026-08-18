@@ -168,7 +168,29 @@ const UNAUTHORIZED_PRODUCTION_INPUT = {
 async function resolveCdpEvidence(env: Env) {
   const rawAuthorization = resolveProductionAuthorizationInput(env);
   const cdpEvidence = await resolveProductionCdpEvidenceProvider(rawAuthorization, env, {
-    createFacilitatorClient: createCdpFacilitatorClient,
+    // SUN-1200 checkpoint F: REAL BUG found and fixed here, live, during
+    // this checkpoint's own cutover attempt -- `createCdpFacilitatorClient`
+    // was previously passed bare (zero-arg). Confirmed directly in the
+    // installed SDK's own source
+    // (`node_modules/@coinbase/cdp-sdk/.../x402/facilitator.js`): called
+    // with no args, it falls back to `process.env.CDP_API_KEY_ID`/
+    // `process.env.CDP_API_KEY_SECRET`. Cloudflare Workers do not
+    // populate `process.env` with Worker bindings -- env vars exist only
+    // on the `env` object passed to the fetch handler -- so in the real
+    // deployed Workers runtime this threw (`if (!apiKeyId) throw ...`),
+    // producing an unconditional 500 for every request once evidence-
+    // provider construction actually reached this call. Every prior test
+    // injected a mock `createFacilitatorClient` factory; this was the
+    // first time the real, non-injected factory was ever reached inside
+    // an actual deployed Worker. Fixed by passing explicit credentials
+    // from `env`, matching the same explicit-args pattern already used
+    // for `buildProductionCdpAccountLookupClientFactory` immediately
+    // below.
+    createFacilitatorClient: () =>
+      createCdpFacilitatorClient({
+        apiKeyId: env.CDP_API_KEY_ID,
+        apiKeySecret: env.CDP_API_KEY_SECRET,
+      }),
     getAuthenticatedSellerAddress: buildCdpSellerAddressLookup(
       buildProductionCdpAccountLookupClientFactory(env),
       env.SELLER_WALLET_ADDRESS
