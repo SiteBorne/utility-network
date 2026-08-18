@@ -139,14 +139,12 @@ describe('checkProductionBindingsPresent', () => {
       SELLER_WALLET_ADDRESS: '',
       CDP_API_KEY_ID: '',
       CDP_API_KEY_SECRET: '',
-      CDP_WALLET_SECRET: '',
     });
     expect(result.ok).toBe(false);
     expect(result.missing).toEqual([
       'SELLER_WALLET_ADDRESS',
       'CDP_API_KEY_ID',
       'CDP_API_KEY_SECRET',
-      'CDP_WALLET_SECRET',
     ]);
   });
 
@@ -155,18 +153,16 @@ describe('checkProductionBindingsPresent', () => {
       SELLER_WALLET_ADDRESS: '0x7f44a2dd237938F18632d4CcA40f4c690295E6E1',
       CDP_API_KEY_ID: 'present',
       CDP_API_KEY_SECRET: '',
-      CDP_WALLET_SECRET: '',
     });
     expect(result.ok).toBe(false);
-    expect(result.missing).toEqual(['CDP_API_KEY_SECRET', 'CDP_WALLET_SECRET']);
+    expect(result.missing).toEqual(['CDP_API_KEY_SECRET']);
   });
 
-  it('reports ok when every required secret is present', () => {
+  it('reports ok when every required secret is present -- CDP_WALLET_SECRET is deliberately not in the required set (checkpoint E)', () => {
     const result = checkProductionBindingsPresent({
       SELLER_WALLET_ADDRESS: '0x7f44a2dd237938F18632d4CcA40f4c690295E6E1',
       CDP_API_KEY_ID: 'present',
       CDP_API_KEY_SECRET: 'present',
-      CDP_WALLET_SECRET: 'present',
     });
     expect(result).toEqual({ ok: true, missing: [] });
   });
@@ -176,7 +172,6 @@ describe('checkProductionBindingsPresent', () => {
       SELLER_WALLET_ADDRESS: '',
       CDP_API_KEY_ID: 'super-secret-value-should-never-appear',
       CDP_API_KEY_SECRET: 'present',
-      CDP_WALLET_SECRET: 'present',
     });
     const serialized = JSON.stringify(result);
     expect(serialized).not.toContain('super-secret-value-should-never-appear');
@@ -228,7 +223,6 @@ describe('mock production positive construction (§21 — mocks only, no real pr
       SELLER_WALLET_ADDRESS: '0x7f44a2dd237938F18632d4CcA40f4c690295E6E1',
       CDP_API_KEY_ID: 'mock-key-id',
       CDP_API_KEY_SECRET: 'mock-key-secret',
-      CDP_WALLET_SECRET: 'mock-wallet-secret',
     });
     expect(bindings.ok).toBe(true);
 
@@ -291,7 +285,6 @@ describe('buildCdpSellerAddressLookup (SUN-1200 checkpoint C — seller identity
       SELLER_WALLET_ADDRESS: SELLER,
       CDP_API_KEY_ID: 'mock-key-id',
       CDP_API_KEY_SECRET: 'mock-key-secret',
-      CDP_WALLET_SECRET: 'mock-wallet-secret',
     };
     const mockClient: CdpAccountLookupClient = {
       evm: {
@@ -324,7 +317,6 @@ describe('buildCdpSellerAddressLookup (SUN-1200 checkpoint C — seller identity
       SELLER_WALLET_ADDRESS: SELLER,
       CDP_API_KEY_ID: 'mock-key-id',
       CDP_API_KEY_SECRET: 'mock-key-secret',
-      CDP_WALLET_SECRET: 'mock-wallet-secret',
     };
     const wrongAccountClient: CdpAccountLookupClient = {
       evm: {
@@ -357,7 +349,6 @@ describe('buildCdpSellerAddressLookup (SUN-1200 checkpoint C — seller identity
       SELLER_WALLET_ADDRESS: SELLER,
       CDP_API_KEY_ID: 'mock-key-id',
       CDP_API_KEY_SECRET: 'mock-key-secret',
-      CDP_WALLET_SECRET: 'mock-wallet-secret',
     };
     const throwingClient: CdpAccountLookupClient = {
       evm: {
@@ -388,7 +379,6 @@ describe('buildProductionCdpAccountLookupClientFactory (SUN-1200 checkpoint D �
     const factory = buildProductionCdpAccountLookupClientFactory({
       CDP_API_KEY_ID: 'synthetic-key-id',
       CDP_API_KEY_SECRET: 'synthetic-key-secret',
-      CDP_WALLET_SECRET: 'synthetic-wallet-secret',
     });
     expect(typeof factory).toBe('function');
   });
@@ -397,7 +387,6 @@ describe('buildProductionCdpAccountLookupClientFactory (SUN-1200 checkpoint D �
     const factory = buildProductionCdpAccountLookupClientFactory({
       CDP_API_KEY_ID: 'synthetic-key-id',
       CDP_API_KEY_SECRET: 'synthetic-key-secret',
-      CDP_WALLET_SECRET: 'synthetic-wallet-secret',
     });
     const client = factory();
     expect(client).toBeDefined();
@@ -411,7 +400,6 @@ describe('seller lookup fail-closed ordering (SUN-1200 checkpoint D — directiv
     SELLER_WALLET_ADDRESS: SELLER,
     CDP_API_KEY_ID: 'mock-key-id',
     CDP_API_KEY_SECRET: 'mock-key-secret',
-    CDP_WALLET_SECRET: 'mock-wallet-secret',
   };
   const authorization: ProductionAuthorizationInput = {
     environment: 'production',
@@ -459,7 +447,7 @@ describe('seller lookup fail-closed ordering (SUN-1200 checkpoint D — directiv
     };
     const resolved = await resolveProductionCdpEvidenceProvider(
       authorization,
-      { ...bindings, CDP_WALLET_SECRET: '' },
+      { ...bindings, CDP_API_KEY_SECRET: '' },
       {
         createFacilitatorClient: () => ({}) as never,
         getAuthenticatedSellerAddress: buildCdpSellerAddressLookup(() => mockClient, SELLER),

@@ -126,7 +126,8 @@ const BINDINGS = {
   SELLER_WALLET_ADDRESS: SELLER,
   CDP_API_KEY_ID: 'mock-key-id',
   CDP_API_KEY_SECRET: 'mock-key-secret',
-  CDP_WALLET_SECRET: 'mock-wallet-secret',
+  // CDP_WALLET_SECRET deliberately omitted (SUN-1200 checkpoint E) -- no
+  // longer part of the required production-payment binding set.
 };
 
 function mockFacilitator(

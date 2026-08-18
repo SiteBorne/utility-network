@@ -76,10 +76,12 @@ const FULL_PRODUCTION_ENV_SHAPE = {
   // real outbound network call regardless of which other gate a given
   // test flips.
   SELLER_WALLET_ADDRESS: 'not-a-well-formed-evm-address',
-  // Synthetic test values only -- never real credentials.
+  // Synthetic test values only -- never real credentials. CDP_WALLET_SECRET
+  // deliberately omitted (SUN-1200 checkpoint E): no longer part of the
+  // required production-payment binding set -- see
+  // `checkProductionBindingsPresent`'s own doc comment.
   CDP_API_KEY_ID: 'test-synthetic-cdp-key-id',
   CDP_API_KEY_SECRET: 'test-synthetic-cdp-key-secret-do-not-use',
-  CDP_WALLET_SECRET: 'test-synthetic-cdp-wallet-secret-do-not-use',
 };
 
 async function get402ViaApp(path: string, body: unknown, env: Record<string, unknown>) {
@@ -205,7 +207,10 @@ describe('production CDP gates at the real public route boundary (SUN-1200 check
       HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP: 'true',
       PRODUCTION_CDP_CREDENTIALS_APPROVED: 'true',
       SELLER_WALLET_ADDRESS: '0x7f44a2dd237938F18632d4CcA40f4c690295E6E1',
-      // CDP_API_KEY_ID/SECRET/CDP_WALLET_SECRET deliberately absent.
+      // CDP_API_KEY_ID/CDP_API_KEY_SECRET deliberately absent (the only
+      // two secrets `checkProductionBindingsPresent` still requires as of
+      // checkpoint E -- CDP_WALLET_SECRET is no longer in the required
+      // set at all).
       DB: db,
     });
     expect(res.status).toBe(402);

@@ -14,7 +14,16 @@ export interface Env {
   SELLER_WALLET_ADDRESS: string;
   CDP_API_KEY_ID: string;
   CDP_API_KEY_SECRET: string;
-  CDP_WALLET_SECRET: string;
+  /** SUN-1200 checkpoint E: no longer required by the production payment
+   * runtime -- see `production-payment.ts`'s `checkProductionBindingsPresent`
+   * doc comment for the full reconciliation against the installed
+   * `@coinbase/cdp-sdk`'s own documented semantics (Wallet Secret
+   * authenticates only POST/DELETE Account-API writes; this repository's
+   * two real CDP call sites, the x402 facilitator client and the
+   * read-only seller `getAccount` lookup, need neither). Kept optional,
+   * not removed entirely, so a genuinely future wallet-write use case can
+   * still supply it without a further `Env` change. */
+  CDP_WALLET_SECRET?: string;
   /** SUN-1000 checkpoint 1O-A: canonical Nevermined credential name,
    * matching `packages/protocol-nevermined/src/config.ts`'s own already-
    * correct `resolveNeverminedConfig` boundary (`canonical`/
@@ -164,7 +173,9 @@ function validateProductionBindings(env: Env): void {
     'SELLER_WALLET_ADDRESS',
     'CDP_API_KEY_ID',
     'CDP_API_KEY_SECRET',
-    'CDP_WALLET_SECRET',
+    // SUN-1200 checkpoint E: CDP_WALLET_SECRET deliberately no longer
+    // required -- see production-payment.ts's checkProductionBindingsPresent
+    // doc comment for the full reconciliation.
   ];
   const missingSecrets = requiredSecrets.filter((s) => !env[s]);
   // SUN-1000 checkpoint 1O-A: the Nevermined credential is accepted under

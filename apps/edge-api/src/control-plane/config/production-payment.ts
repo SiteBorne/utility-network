@@ -92,22 +92,36 @@ export interface ProductionBindingsCheck {
   missing: string[];
 }
 
-/** Presence-only check (never reads, logs, or returns secret VALUES) for
+/**
+ * Presence-only check (never reads, logs, or returns secret VALUES) for
  * the production-payment-specific secrets. Distinct from this same
  * file's neighbor `env.ts`'s existing `validateProductionBindings`
  * (defined but never wired into the live request path anywhere) — this
- * is the canonical equivalent this checkpoint wires for real. */
+ * is the canonical equivalent this checkpoint wires for real.
+ *
+ * SUN-1200 checkpoint E — `CDP_WALLET_SECRET` deliberately removed from
+ * this required set, per direct reconciliation against the installed
+ * `@coinbase/cdp-sdk`'s own type definitions and doc comments (not
+ * assumed): `createCdpFacilitatorClient`'s `CdpFacilitatorClientArgs`
+ * accepts only `apiKeyId`/`apiKeySecret` — there is no `walletSecret`
+ * parameter on the facilitator client at all, so `.verify()`/`.settle()`
+ * never need it. `CdpClient`'s own constructor doc comment states the
+ * Wallet Secret "is used specifically to authenticate requests to POST,
+ * and DELETE endpoints in the EVM and Solana Account APIs" — the
+ * seller-identity operation this repository performs,
+ * `evm.getAccount(...)`, is a read (GET), never a POST/DELETE write.
+ * Neither of this repository's two real CDP SDK call sites needs it.
+ * `CdpAccountLookupClient`/`buildProductionCdpAccountLookupClientFactory`
+ * still accept an optional wallet secret (the SDK itself still allows
+ * one to be supplied) — this checkpoint stops *requiring* it, it does
+ * not forbid a caller from ever providing one. */
 export function checkProductionBindingsPresent(
-  env: Pick<
-    Env,
-    'SELLER_WALLET_ADDRESS' | 'CDP_API_KEY_ID' | 'CDP_API_KEY_SECRET' | 'CDP_WALLET_SECRET'
-  >
+  env: Pick<Env, 'SELLER_WALLET_ADDRESS' | 'CDP_API_KEY_ID' | 'CDP_API_KEY_SECRET'>
 ): ProductionBindingsCheck {
   const required: Array<keyof typeof env> = [
     'SELLER_WALLET_ADDRESS',
     'CDP_API_KEY_ID',
     'CDP_API_KEY_SECRET',
-    'CDP_WALLET_SECRET',
   ];
   const missing = required.filter((key) => !env[key]);
   return { ok: missing.length === 0, missing };
@@ -137,7 +151,7 @@ export function assertSellerIdentityConsistent(input: SellerIdentityCheckInput):
 
 export type ProductionCdpProviderBindings = Pick<
   Env,
-  'SELLER_WALLET_ADDRESS' | 'CDP_API_KEY_ID' | 'CDP_API_KEY_SECRET' | 'CDP_WALLET_SECRET'
+  'SELLER_WALLET_ADDRESS' | 'CDP_API_KEY_ID' | 'CDP_API_KEY_SECRET'
 >;
 
 /**
@@ -237,13 +251,17 @@ export function buildCdpSellerAddressLookup(
  * `createCdpFacilitatorClient` in checkpoint A/B).
  */
 export function buildProductionCdpAccountLookupClientFactory(
-  bindings: Pick<Env, 'CDP_API_KEY_ID' | 'CDP_API_KEY_SECRET' | 'CDP_WALLET_SECRET'>
+  bindings: Pick<Env, 'CDP_API_KEY_ID' | 'CDP_API_KEY_SECRET'>
 ): () => CdpAccountLookupClient {
   return () =>
     new CdpClient({
       apiKeyId: bindings.CDP_API_KEY_ID,
       apiKeySecret: bindings.CDP_API_KEY_SECRET,
-      walletSecret: bindings.CDP_WALLET_SECRET,
+      // Deliberately no `walletSecret` -- see this file's own
+      // `checkProductionBindingsPresent` doc comment for the full
+      // reconciliation. `evm.getAccount(...)` is a read-only GET; the SDK
+      // only requires the Wallet Secret for POST/DELETE Account-API
+      // writes, which this repository never performs.
     });
 }
 
