@@ -74,4 +74,38 @@ route, registry metadata, a real stdio child process, `npm pack`, and an offline
 install of the produced tarball.
 
 Production remains `production_ready: false` and `production_enabled: false`.
-There is no public MCP endpoint claim in this checkpoint.
+
+## MCP Registry publication (SUN-1100 checkpoint 2)
+
+Published, real, public, non-secret record (no npm republish -- a remote-only
+entry, `@siteborne/mcp-server@0.1.0` on npm remains the separate stdio-shim
+distribution, criterion 4 of SUN-1100, and is unrelated to this remote HTTP
+entry):
+
+- **Registry name:** `net.siteborne/utility` (reverse-DNS of the domain used for
+  HTTP authentication, `siteborne.net` -- pre-declared in this repository's own
+  [README.md](../../README.md) "Protocols" section before this checkpoint; not
+  invented here).
+- **Auth method:** HTTP domain authentication
+  (<https://modelcontextprotocol.io/registry/authentication#http-authentication>),
+  non-interactive
+  (`mcp-publisher login http --domain siteborne.net --private-key <local-only>`).
+  The dedicated Ed25519 keypair used for this proof is unrelated to the Agent
+  Card ES256 signing key, any CDP key, any wallet secret, and any Nevermined
+  key; the private key exists only on the operator's local machine (never
+  committed, never sent to Cloudflare).
+- **Public proof route:**
+  `GET https://siteborne.net/.well-known/mcp-registry-auth`
+  (`apps/edge-api/src/routes/mcp-registry-auth.ts`), reachable via a
+  narrowly-scoped Cloudflare Worker Route on the apex zone (`wrangler.toml`
+  `routes`) -- the apex domain itself has no other origin behind it.
+- **Remote entry:**
+  `{"type": "streamable-http", "url": "https://utility.siteborne.net/mcp"}` --
+  the same production MCP endpoint this document already describes; no new
+  deployment surface.
+- **Verified:**
+  `GET https://registry.modelcontextprotocol.io/v0/servers?search=net.siteborne%2Futility`
+  returns `EXACT_EXISTING`, status `active`.
+
+There is a public MCP Registry entry and a public MCP endpoint as of this
+checkpoint.

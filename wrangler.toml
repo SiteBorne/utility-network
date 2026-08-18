@@ -20,6 +20,32 @@ main = "apps/edge-api/src/index.ts"
 compatibility_date = "2026-08-05"
 compatibility_flags = ["nodejs_compat"]
 
+# SUN-1100 checkpoint 2: adding `routes` below silently disabled the
+# `workers.dev` preview URL by default (wrangler's own documented behavior
+# once any `routes` entry exists and `workers_dev` is not explicitly set) --
+# confirmed live: https://siteborne-utility-edge.siteborneutilitynetwork.workers.dev
+# regressed from 200 (SUN-0800B checkpoint 3 evidence) to 404 immediately
+# after this checkpoint's first `routes` deploy. Restored explicitly; this
+# was never an intended change.
+workers_dev = true
+
+# SUN-1100 checkpoint 2: a narrowly-scoped Worker Route (not a full custom
+# domain) for exactly one path on the apex zone -- proves domain control to
+# the MCP Registry's HTTP domain-authentication mechanism
+# (https://modelcontextprotocol.io/registry/authentication#http-authentication)
+# without binding the whole `siteborne.net` apex to this Worker. The apex's
+# existing DNS record (Cloudflare-proxied, no valid origin behind it --
+# confirmed live, HTTP 525) is untouched; a Worker Route intercepts only this
+# exact path before it would ever reach that non-existent origin. Reversible:
+# removing this array un-registers the Route on the next deploy. Must be a
+# top-level key (before any `[section]` table header) -- placing it after
+# `[queues]` silently nested it inside that table instead (caught by
+# wrangler's own "Unexpected fields found in queues field: routes" warning
+# during this checkpoint's dry-run).
+routes = [
+  { pattern = "siteborne.net/.well-known/mcp-registry-auth", zone_name = "siteborne.net" }
+]
+
 # [vars] values are plaintext: committed to this file, visible in git
 # history, and shown unredacted in the Cloudflare dashboard. Only
 # genuinely non-secret configuration belongs here.

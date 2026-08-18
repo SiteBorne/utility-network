@@ -34,6 +34,15 @@ MODAL_TOKEN_SECRET=
 # Sentry error reporting (optional):
 SENTRY_DSN=
 
+# Agentverse A2A external-agent registration (SUN-1100 checkpoint 2,
+# blocked_external -- reserved name only, not yet read by any code). The
+# official Agentverse UI flow (Agents -> Launch an Agent -> External Agent
+# -> A2A Protocol) issues this value after a human completes the
+# registration form; no API key is required for this specific flow, only
+# an Agentverse account login. Put the real value here once obtained --
+# never paste it into chat/logs. See docs/operations/AGENTVERSE_A2A.md.
+AGENTVERSE_AGENT_URI=
+
 # Explicit, additive opt-in gate for mounting SUN-0700A's local x402 paid
 # routes at all (see apps/edge-api/src/index.ts) — unrelated to any
 # secret above; only "true" mounts /v1/*, and payment execution itself
