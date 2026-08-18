@@ -68,3 +68,76 @@ export function assertPreproductionNetwork(
     );
   }
 }
+
+/**
+ * SUN-1200 checkpoint A — the credential-independent half of the
+ * production-payment authorization gate (ADR 0055). This module never
+ * reads environment variables or secrets itself (unchanged boundary); the
+ * caller (apps/edge-api's own config layer) resolves each of these four
+ * booleans from real env/secret state and passes them in here as plain
+ * data. ADR 0055 itself authorizes only the governance MECHANISM that a
+ * bounded, human-authorized bootstrap exception can exist — it does not
+ * itself set any of these four booleans true for any specific future
+ * mutation; each must be independently, explicitly true at the call site.
+ */
+export type PaymentEnvironment = 'preproduction' | 'production';
+
+export interface ProductionAuthorizationInput {
+  /** Explicit environment selector — never inferred from hostname,
+   * `NODE_ENV`, Cloudflare `ENVIRONMENT`, deployment name, or the
+   * presence of secrets/wallet addresses. */
+  environment: PaymentEnvironment;
+  /** The standing, deliberately-set kill switch. `false` (the default
+   * everywhere today) makes production economically unreachable
+   * regardless of every other flag. */
+  productionEnabled: boolean;
+  /** ADR 0055's per-action human authorization — true only for a
+   * specific, bounded, explicitly-authorized bootstrap action, never a
+   * standing configuration value left on indefinitely. */
+  humanBootstrapAuthorized: boolean;
+  /** Separate from `productionEnabled`: whether the CDP credentials
+   * currently configured have been explicitly approved for MAINNET use.
+   * Previously-exposed sandbox/testnet credentials never automatically
+   * satisfy this — it requires its own future, explicit
+   * credential-provisioning decision. */
+  productionCredentialsApproved: boolean;
+}
+
+/** The single runtime answer to "is production economic execution
+ * permitted right now" — every one of the four inputs must be true
+ * simultaneously; none may substitute for another. */
+export function isProductionPaymentAuthorized(input: ProductionAuthorizationInput): boolean {
+  return (
+    input.environment === 'production' &&
+    input.productionEnabled === true &&
+    input.humanBootstrapAuthorized === true &&
+    input.productionCredentialsApproved === true
+  );
+}
+
+/**
+ * The single canonical network resolver. Replaces every previously
+ * unconditional `PREPRODUCTION_NETWORK` call site in this repository.
+ * Returns `PRODUCTION_NETWORK` only when `isProductionPaymentAuthorized`
+ * is true for the given input; otherwise always `PREPRODUCTION_NETWORK`,
+ * fail-closed. Still routes through `assertPreproductionNetwork` even in
+ * the unauthorized branch, for defense in depth.
+ */
+export function resolvePaymentNetwork(input: ProductionAuthorizationInput): Network {
+  if (isProductionPaymentAuthorized(input)) {
+    return PRODUCTION_NETWORK;
+  }
+  const network = PREPRODUCTION_NETWORK;
+  assertPreproductionNetwork(network);
+  return network;
+}
+
+/**
+ * Asset resolution (`resolvePaymentAsset`/`assertNetworkAssetConsistency`)
+ * deliberately lives in `apps/edge-api`'s own production-payment config
+ * layer, not here — this package depends only on `@x402/core`/
+ * `@x402/extensions`, never `@x402/evm` (the EVM-specific asset-table
+ * package), matching its existing minimal-dependency boundary. Network
+ * and authorization resolution (above) is protocol-agnostic; asset-table
+ * lookups are not.
+ */

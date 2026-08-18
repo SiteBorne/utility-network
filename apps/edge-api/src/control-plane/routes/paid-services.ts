@@ -27,8 +27,11 @@ import {
   PREPRODUCTION_NETWORK,
   REGISTRY_SERVICES,
   assertPreproductionNetwork,
+  isProductionPaymentAuthorized,
+  resolvePaymentNetwork,
+  type ProductionAuthorizationInput,
 } from '@siteborne/protocol-x402';
-import { getDefaultAsset } from '@x402/evm';
+import { resolvePaymentAsset } from '../config/production-payment';
 import {
   NEVERMINED_DECLARATIONS,
   NEVERMINED_ROUTES,
@@ -76,15 +79,6 @@ function jsonHttpClient(body: unknown): InjectedHttpClient {
     },
   };
 }
-
-/** SUN-1000 checkpoint 1O-A: the real, official-SDK-sourced Base Sepolia
- * USDC contract address (`@x402/evm`'s own `getDefaultAsset`, the exact
- * value the accepted live-proof harness at `apps/edge-api/tests/live/
- * x402-live-exact.test.ts` already independently hardcodes) — never a
- * hand-typed literal, so this can never silently drift from the network
- * it is paired with. Replaces the prior non-address placeholder
- * `'0xUSDC'`. */
-const CDP_PREPRODUCTION_ASSET = getDefaultAsset(PREPRODUCTION_NETWORK).address;
 
 const DOCUMENT_FIXTURE_ARTIFACT_ID = 'doc/native-fixture.pdf';
 const DOCUMENT_FIXTURE_BYTES = registerFixtureScenario(new Uint8Array([9]), 'x402-http-native');
@@ -146,7 +140,24 @@ export interface PaidServicesConfig {
    * regardless of this flag; this only adds the parallel Nevermined
    * family alongside them. */
   neverminedV2Enabled?: boolean;
+  /** SUN-1200 checkpoint A (ADR 0055): the resolved production-payment
+   * authorization input for the CDP branch's network/asset selection.
+   * Omitted entirely (every existing caller today), this defaults to the
+   * fully-unauthorized/preproduction input below -- byte-identical to
+   * this file's prior unconditional `PREPRODUCTION_NETWORK` behavior. */
+  productionAuthorization?: ProductionAuthorizationInput;
 }
+
+/** The exact conservative default when a caller omits
+ * `productionAuthorization` entirely -- every flag false, resolving to
+ * `PREPRODUCTION_NETWORK` via `resolvePaymentNetwork`, identical to this
+ * file's behavior before this checkpoint. */
+const DEFAULT_UNAUTHORIZED_PRODUCTION_INPUT: ProductionAuthorizationInput = {
+  environment: 'preproduction',
+  productionEnabled: false,
+  humanBootstrapAuthorized: false,
+  productionCredentialsApproved: false,
+};
 
 /**
  * Builds the four paid-service routes on a fresh Hono sub-app. Returns
@@ -193,18 +204,20 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
     // MAINNET_RISK never caught because the only real CDP facilitator
     // call this repository has ever made (apps/edge-api/tests/live/
     // x402-live-exact.test.ts) deliberately bypasses this exact field.
-    // Corrected to the single canonical preproduction network -- see
-    // packages/protocol-x402/src/network/preproduction.ts. The guard
-    // call is the actual §8 fail-closed protection: any future edit that
-    // reintroduces PRODUCTION_NETWORK here without the explicit
-    // authorization flag throws immediately, at construction time,
-    // rather than silently shipping.
-    const network = PREPRODUCTION_NETWORK;
-    assertPreproductionNetwork(network);
+    // SUN-1200 checkpoint A: replaced the unconditional
+    // `PREPRODUCTION_NETWORK` literal with the canonical resolver --
+    // resolves to PRODUCTION_NETWORK only when every ADR 0055 gate in
+    // `config.productionAuthorization` is independently true; otherwise
+    // byte-identical prior behavior (PREPRODUCTION_NETWORK, guard still
+    // called for defense in depth).
+    const productionAuthorization =
+      config.productionAuthorization ?? DEFAULT_UNAUTHORIZED_PRODUCTION_INPUT;
+    const network = resolvePaymentNetwork(productionAuthorization);
+    assertPreproductionNetwork(network, isProductionPaymentAuthorized(productionAuthorization));
     return {
       rail,
       network,
-      asset: CDP_PREPRODUCTION_ASSET,
+      asset: resolvePaymentAsset(network).address,
       payTo: config.payTo ?? PAYTO_NOT_CONFIGURED,
       path: cdpPath,
     };
@@ -220,13 +233,17 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
    * declarations.ts builds for descriptive purposes only. */
   function v2CdpRoute(path: string) {
     // SUN-1000 checkpoint 1O-A: same correction as paymentRoute()'s CDP
-    // branch above -- see that comment and preproduction.ts.
-    const network = PREPRODUCTION_NETWORK;
-    assertPreproductionNetwork(network);
+    // branch above -- see that comment and preproduction.ts. SUN-1200
+    // checkpoint A: same canonical resolver as paymentRoute()'s CDP
+    // branch, same fail-closed default.
+    const productionAuthorization =
+      config.productionAuthorization ?? DEFAULT_UNAUTHORIZED_PRODUCTION_INPUT;
+    const network = resolvePaymentNetwork(productionAuthorization);
+    assertPreproductionNetwork(network, isProductionPaymentAuthorized(productionAuthorization));
     return {
       rail: 'cdp' as const,
       network,
-      asset: CDP_PREPRODUCTION_ASSET,
+      asset: resolvePaymentAsset(network).address,
       payTo: config.payTo ?? PAYTO_NOT_CONFIGURED,
       path,
     };

@@ -75,6 +75,31 @@ export interface Env {
    * real deployment can rotate keys without colliding with the dev/test
    * identity. */
   AGENT_CARD_SIGNING_KEY_ID?: string;
+  /** SUN-1200 checkpoint A (ADR 0055): explicit payment-environment
+   * selector. Must be the exact literal `'production'` to have any
+   * effect; every other value (including unset, empty, or any other
+   * string) fails closed to `'preproduction'`. Never inferred from
+   * `ENVIRONMENT`, hostname, `NODE_ENV`, or secret presence — see
+   * `resolvePaymentEnvironment`. */
+  PAYMENT_ENVIRONMENT?: string;
+  /** The standing production kill switch for payment execution
+   * specifically (distinct from `ENVIRONMENT`/`ControlPlaneConfig`'s own
+   * unrelated, currently-unwired `productionEnabled` concept). Must be
+   * the exact literal `'true'`; absent/unset (the default everywhere
+   * today) makes production economically unreachable regardless of every
+   * other flag. */
+  PRODUCTION_ENABLED?: string;
+  /** ADR 0055's per-action human bootstrap authorization. Must be the
+   * exact literal `'true'`, and per the ADR is meant to be set for one
+   * specific, bounded, explicitly-authorized action — never left on as
+   * standing configuration. */
+  HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP?: string;
+  /** Separate from `PRODUCTION_ENABLED`: whether the CDP credentials
+   * currently configured have been explicitly approved for mainnet use.
+   * Must be the exact literal `'true'`. A previously-exposed sandbox/
+   * testnet credential set never automatically satisfies this — see ADR
+   * 0055 §8 (credential policy) and SUN-1200 checkpoint A's report. */
+  PRODUCTION_CDP_CREDENTIALS_APPROVED?: string;
 }
 
 export interface ControlPlaneConfig {
