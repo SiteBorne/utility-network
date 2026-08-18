@@ -100,6 +100,17 @@ export interface Env {
    * testnet credential set never automatically satisfies this — see ADR
    * 0055 §8 (credential policy) and SUN-1200 checkpoint A's report. */
   PRODUCTION_CDP_CREDENTIALS_APPROVED?: string;
+  /** SUN-1200 checkpoint D: non-secret Base mainnet JSON-RPC endpoint URL
+   * for the read-only chain-receipt checker (`chain-receipt-checker.ts`).
+   * A public RPC URL is not credential material -- never a secret -- but
+   * is kept configurable rather than hardcoded so a real deployment can
+   * point at a dedicated/rate-limited provider instead of viem's public
+   * default. Absent/unset falls back to viem's own built-in default Base
+   * mainnet RPC (`viem/chains`'s `base.rpcUrls.default`), unchanged
+   * behavior. */
+  BASE_RPC_URL?: string;
+  /** Same as `BASE_RPC_URL`, for Base Sepolia (preproduction). */
+  BASE_SEPOLIA_RPC_URL?: string;
 }
 
 export interface ControlPlaneConfig {

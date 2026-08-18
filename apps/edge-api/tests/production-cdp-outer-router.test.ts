@@ -3,11 +3,24 @@
  * closed at the REAL public route boundary (the actual `index.ts` app,
  * not `buildPaidServicesApp` called directly). Real Miniflare D1
  * throughout. No real CDP/Nevermined provider call anywhere in this
- * file -- every scenario here resolves to `evidenceMode: 'fixture'`
- * because no real `getAuthenticatedSellerAddress` implementation is
- * wired into `index.ts` (checkpoint B's own deliberate, disclosed
- * choice) -- proving the live production path cannot activate today
- * regardless of which production-shaped env vars are set.
+ * file.
+ *
+ * SUN-1200 checkpoint D: `index.ts` now wires the REAL (not stubbed)
+ * `getAuthenticatedSellerAddress`/`buildCdpSellerAddressLookup`, which
+ * constructs a real `@coinbase/cdp-sdk` `CdpClient` and would make a
+ * genuine network call to Coinbase's API once every other gate holds and
+ * the configured seller address is well-formed. This file's shared
+ * `FULL_PRODUCTION_ENV_SHAPE.SELLER_WALLET_ADDRESS` is therefore
+ * DELIBERATELY malformed (fails `EVM_ADDRESS_PATTERN` inside
+ * `buildCdpSellerAddressLookup` before `createClient()` is ever called) —
+ * every scenario in this file resolves to `evidenceMode: 'fixture'` via
+ * that local, network-free format check, never via network failure. A
+ * genuine full-stack POSITIVE production path (real gates true, a
+ * well-formed seller address, a real facilitator/CDP-client response) is
+ * proven separately in `production-cdp-full-stack-mock.test.ts`, which
+ * uses `buildPaidServicesApp` directly with fully injected mock doubles
+ * (matching the checkpoint D directive's own §22 instruction), never the
+ * real, non-injectable `index.ts` factories this file exercises.
  */
 import { readFileSync, readdirSync, rmSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -56,7 +69,13 @@ const FULL_PRODUCTION_ENV_SHAPE = {
   PRODUCTION_ENABLED: 'true',
   HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP: 'true',
   PRODUCTION_CDP_CREDENTIALS_APPROVED: 'true',
-  SELLER_WALLET_ADDRESS: '0x7f44a2dd237938F18632d4CcA40f4c690295E6E1',
+  // Deliberately NOT a well-formed EVM address (see this file's own
+  // header comment) -- guarantees `buildCdpSellerAddressLookup`'s local
+  // format check throws before `createClient()`/any real CDP SDK call is
+  // ever reached, so this shared constant can never accidentally cause a
+  // real outbound network call regardless of which other gate a given
+  // test flips.
+  SELLER_WALLET_ADDRESS: 'not-a-well-formed-evm-address',
   // Synthetic test values only -- never real credentials.
   CDP_API_KEY_ID: 'test-synthetic-cdp-key-id',
   CDP_API_KEY_SECRET: 'test-synthetic-cdp-key-secret-do-not-use',
@@ -99,7 +118,7 @@ describe('production CDP gates at the real public route boundary (SUN-1200 check
     rmSync(tempDir, { recursive: true, force: true });
   });
 
-  it('default-mainnet-reachability control: with EVERY production env var set to true and synthetic credentials present, the real app still resolves testnet -- no seller-identity hook is wired', async () => {
+  it('default-mainnet-reachability control: with EVERY production env var set to true and synthetic credentials present, the real app still resolves testnet -- the shared malformed SELLER_WALLET_ADDRESS fails the real seller-identity hook closed, zero network calls', async () => {
     const res = await get402ViaApp('/v2/company/evidence-graph', COMPANY_INPUT, {
       ...FULL_PRODUCTION_ENV_SHAPE,
       DB: db,

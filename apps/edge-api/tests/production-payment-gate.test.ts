@@ -16,6 +16,7 @@ import {
   assertNetworkAssetConsistency,
   assertSellerIdentityConsistent,
   buildCdpSellerAddressLookup,
+  buildProductionCdpAccountLookupClientFactory,
   checkProductionBindingsPresent,
   resolvePaymentAsset,
   resolvePaymentEnvironment,
@@ -376,5 +377,112 @@ describe('buildCdpSellerAddressLookup (SUN-1200 checkpoint C — seller identity
     });
     expect(resolved.evidenceMode).toBe('fixture');
     expect(resolved.evidenceProvider).toBeUndefined();
+  });
+});
+
+describe('buildProductionCdpAccountLookupClientFactory (SUN-1200 checkpoint D — real client factory, construction ≠ network call)', () => {
+  it('constructing the factory makes no network call and constructs nothing (no CdpClient instantiated until the returned closure is actually invoked)', () => {
+    // If merely CALLING this function attempted any network I/O or threw
+    // due to malformed synthetic credentials, this assertion would never
+    // complete synchronously -- proving construction alone is inert.
+    const factory = buildProductionCdpAccountLookupClientFactory({
+      CDP_API_KEY_ID: 'synthetic-key-id',
+      CDP_API_KEY_SECRET: 'synthetic-key-secret',
+      CDP_WALLET_SECRET: 'synthetic-wallet-secret',
+    });
+    expect(typeof factory).toBe('function');
+  });
+
+  it('invoking the factory constructs a real CdpClient object (structurally exposes .evm.getAccount) without making any network call -- construction is synchronous and local', () => {
+    const factory = buildProductionCdpAccountLookupClientFactory({
+      CDP_API_KEY_ID: 'synthetic-key-id',
+      CDP_API_KEY_SECRET: 'synthetic-key-secret',
+      CDP_WALLET_SECRET: 'synthetic-wallet-secret',
+    });
+    const client = factory();
+    expect(client).toBeDefined();
+    expect(typeof client.evm.getAccount).toBe('function');
+  });
+});
+
+describe('seller lookup fail-closed ordering (SUN-1200 checkpoint D — directive §4)', () => {
+  const SELLER = '0x7f44a2dd237938F18632d4CcA40f4c690295E6E1';
+  const bindings = {
+    SELLER_WALLET_ADDRESS: SELLER,
+    CDP_API_KEY_ID: 'mock-key-id',
+    CDP_API_KEY_SECRET: 'mock-key-secret',
+    CDP_WALLET_SECRET: 'mock-wallet-secret',
+  };
+  const authorization: ProductionAuthorizationInput = {
+    environment: 'production',
+    productionEnabled: true,
+    humanBootstrapAuthorized: true,
+    productionCredentialsApproved: true,
+  };
+
+  it('the seller lookup is invoked BEFORE the facilitator client is ever constructed, so a seller failure never reaches verify/execute/settle', async () => {
+    let sellerLookupCalled = false;
+    let facilitatorConstructed = false;
+    const mockClient: CdpAccountLookupClient = {
+      evm: {
+        async getAccount() {
+          sellerLookupCalled = true;
+          throw new Error('mock_seller_lookup_failure');
+        },
+      },
+    };
+    const resolved = await resolveProductionCdpEvidenceProvider(authorization, bindings, {
+      createFacilitatorClient: () => {
+        facilitatorConstructed = true;
+        return {
+          verify: async () => ({}),
+          settle: async () => ({}),
+          getSupported: async () => ({}),
+        } as never;
+      },
+      getAuthenticatedSellerAddress: buildCdpSellerAddressLookup(() => mockClient, SELLER),
+    });
+    expect(sellerLookupCalled).toBe(true);
+    expect(facilitatorConstructed).toBe(false);
+    expect(resolved.evidenceMode).toBe('fixture');
+  });
+
+  it('a missing binding fails closed BEFORE the seller lookup is ever attempted', async () => {
+    let sellerLookupCalled = false;
+    const mockClient: CdpAccountLookupClient = {
+      evm: {
+        async getAccount() {
+          sellerLookupCalled = true;
+          return { address: SELLER };
+        },
+      },
+    };
+    const resolved = await resolveProductionCdpEvidenceProvider(
+      authorization,
+      { ...bindings, CDP_WALLET_SECRET: '' },
+      {
+        createFacilitatorClient: () => ({}) as never,
+        getAuthenticatedSellerAddress: buildCdpSellerAddressLookup(() => mockClient, SELLER),
+      }
+    );
+    expect(sellerLookupCalled).toBe(false);
+    expect(resolved.evidenceMode).toBe('fixture');
+  });
+
+  it('a malformed configured seller address fails closed locally, before any client is even constructed', async () => {
+    let clientConstructed = false;
+    const resolved = await resolveProductionCdpEvidenceProvider(
+      authorization,
+      { ...bindings, SELLER_WALLET_ADDRESS: 'not-an-address' },
+      {
+        createFacilitatorClient: () => ({}) as never,
+        getAuthenticatedSellerAddress: buildCdpSellerAddressLookup(() => {
+          clientConstructed = true;
+          return { evm: { getAccount: async () => ({ address: SELLER }) } };
+        }, 'not-an-address'),
+      }
+    );
+    expect(clientConstructed).toBe(false);
+    expect(resolved.evidenceMode).toBe('fixture');
   });
 });

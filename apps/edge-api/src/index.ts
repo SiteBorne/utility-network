@@ -32,9 +32,12 @@ import { NeverminedPaymentEvidenceProvider } from './control-plane/evidence/neve
 import { resolveNeverminedEnvironmentFromApiKey } from './control-plane/evidence/nevermined-http-client';
 import { resolveNeverminedConfig } from '@siteborne/protocol-nevermined';
 import {
+  buildCdpSellerAddressLookup,
+  buildProductionCdpAccountLookupClientFactory,
   resolveProductionAuthorizationInput,
   resolveProductionCdpEvidenceProvider,
 } from './control-plane/config/production-payment';
+import { buildProductionCdpChainReceiptChecker } from './control-plane/evidence/chain-receipt-checker';
 import { createCdpFacilitatorClient } from '@coinbase/cdp-sdk/x402';
 import type { Env } from './control-plane/config/env';
 
@@ -123,15 +126,28 @@ const UNAUTHORIZED_PRODUCTION_INPUT = {
  * SUN-1200 checkpoint B: the single provider-construction boundary for
  * both `/v1/*` and `/v2/*` CDP routes. Delegates entirely to
  * `resolveProductionCdpEvidenceProvider` — falls back to the existing,
- * always-safe `evidenceMode: 'fixture'` unless every ADR 0055 gate,
- * every required secret, and the (deliberately unwired, see that
- * function's own comment) seller-identity hook all succeed. No real CDP
- * wallet-identity lookup is wired here, which means production
- * construction never actually succeeds via this live entry point today
- * regardless of any env var — a deliberate, disclosed, additional safety
- * margin, not an oversight (see the checkpoint B report).
+ * always-safe `evidenceMode: 'fixture'` unless every ADR 0055 gate, every
+ * required secret, AND the seller-identity hook (real as of checkpoint D
+ * — see below) all succeed.
  *
- * IMPORTANT (found and fixed during this checkpoint's own outer-router
+ * SUN-1200 checkpoint D: `getAuthenticatedSellerAddress` is now wired to
+ * the real `buildCdpSellerAddressLookup` (a real CDP account lookup — see
+ * `production-payment.ts`), replacing checkpoint B/C's deliberately
+ * omitted hook. This does NOT make production reachable by itself:
+ * `resolveProductionCdpEvidenceProvider` still requires all four ADR 0055
+ * gates AND all four required secrets to be genuinely true/present
+ * BEFORE it ever calls this hook at all (§4 ordering, proven in
+ * `production-cdp-outer-router.test.ts`) — supplying the hook only
+ * removes what was, through checkpoint C, an *additional*, undisclosed-
+ * by-any-flag safety margin beyond the four governed gates. The governed
+ * gates (env vars) are the only thing that has ever controlled whether
+ * production is reachable; this checkpoint completes the previously-
+ * unfinished implementation without changing what controls it.
+ * Constructing the lookup closure here makes no network call — only a
+ * genuine call to it (itself gated behind every other check already
+ * passing) would ever construct a real `CdpClient` or reach the network.
+ *
+ * IMPORTANT (found and fixed during checkpoint B's own outer-router
  * testing): the `productionAuthorization` passed to `buildPaidServicesApp`
  * (which drives `paid-services.ts`'s network/asset resolution) MUST NEVER
  * be more permissive than `cdpEvidence.evidenceMode`. An earlier version
@@ -153,10 +169,34 @@ async function resolveCdpEvidence(env: Env) {
   const rawAuthorization = resolveProductionAuthorizationInput(env);
   const cdpEvidence = await resolveProductionCdpEvidenceProvider(rawAuthorization, env, {
     createFacilitatorClient: createCdpFacilitatorClient,
+    getAuthenticatedSellerAddress: buildCdpSellerAddressLookup(
+      buildProductionCdpAccountLookupClientFactory(env),
+      env.SELLER_WALLET_ADDRESS
+    ),
   });
   const productionAuthorization =
     cdpEvidence.evidenceMode === 'production' ? rawAuthorization : UNAUTHORIZED_PRODUCTION_INPUT;
   return { productionAuthorization, cdpEvidence };
+}
+
+/**
+ * SUN-1200 checkpoint D: the real, read-only chain-receipt checker,
+ * wired into both CDP-rail route families below. Construction alone
+ * makes no network call — see `buildProductionCdpChainReceiptChecker`'s
+ * own doc comment. The returned function is only ever invoked from
+ * inside `attemptCdpRecovery`'s own optional chain-check branch during a
+ * genuine ambiguous CDP settlement, itself unreachable in fixture mode
+ * (`FixturePaymentEvidenceProvider` never produces an ambiguous
+ * settlement) — so wiring this unconditionally, independent of the ADR
+ * 0055 production gates, changes no reachable behavior in fixture mode
+ * and adds no new authorization surface: it is read-only by construction
+ * and never itself decides whether a payment settles.
+ */
+function resolveCdpChainReceiptChecker(env: Env) {
+  return buildProductionCdpChainReceiptChecker({
+    productionRpcUrl: env.BASE_RPC_URL,
+    preproductionRpcUrl: env.BASE_SEPOLIA_RPC_URL,
+  });
 }
 
 app.all('/v1/nevermined/*', (c) => {
@@ -192,6 +232,7 @@ app.all('/v1/*', async (c) => {
       evidenceProvider: cdpEvidence.evidenceProvider,
       payTo: c.env.SELLER_WALLET_ADDRESS || undefined,
       productionAuthorization,
+      cdpChainReceiptChecker: resolveCdpChainReceiptChecker(c.env),
     });
     cachedPaidServicesDb = c.env.DB;
   }
@@ -335,6 +376,7 @@ app.all('/v2/*', async (c) => {
       evidenceProvider: cdpEvidence.evidenceProvider,
       payTo: c.env.SELLER_WALLET_ADDRESS || undefined,
       productionAuthorization,
+      cdpChainReceiptChecker: resolveCdpChainReceiptChecker(c.env),
     });
     cachedV2CdpDb = c.env.DB;
   }

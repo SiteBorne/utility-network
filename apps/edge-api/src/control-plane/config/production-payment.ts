@@ -16,6 +16,7 @@
 import { getDefaultAsset } from '@x402/evm';
 import type { Network } from '@x402/core/types';
 import type { HTTPFacilitatorClient } from '@x402/core/server';
+import { CdpClient } from '@coinbase/cdp-sdk';
 import {
   isProductionPaymentAuthorized,
   type PaymentEvidenceMode,
@@ -174,7 +175,7 @@ export type ProductionCdpProviderBindings = Pick<
  */
 export interface CdpAccountLookupClient {
   evm: {
-    getAccount(options: { address: string }): Promise<{ address: string }>;
+    getAccount(options: { address: `0x${string}` }): Promise<{ address: string }>;
   };
 }
 
@@ -196,15 +197,54 @@ export interface CdpAccountLookupClient {
  * mode regardless of every other flag, exactly as before this
  * checkpoint).
  */
+const EVM_ADDRESS_PATTERN = /^0x[0-9a-fA-F]{40}$/;
+
 export function buildCdpSellerAddressLookup(
   createClient: () => CdpAccountLookupClient,
   sellerWalletAddress: string
 ): () => Promise<string> {
   return async () => {
+    if (!EVM_ADDRESS_PATTERN.test(sellerWalletAddress)) {
+      // Malformed configuration -- refuse to even attempt the lookup
+      // rather than passing an unvalidated string into the CDP SDK.
+      // Propagates to `resolveProductionCdpEvidenceProvider`'s existing
+      // try/catch, which fails closed to fixture mode exactly like every
+      // other lookup failure.
+      throw new Error('seller_wallet_address_malformed');
+    }
     const client = createClient();
-    const account = await client.evm.getAccount({ address: sellerWalletAddress });
+    const account = await client.evm.getAccount({
+      address: sellerWalletAddress as `0x${string}`,
+    });
     return account.address;
   };
+}
+
+/**
+ * SUN-1200 checkpoint D — the real (not stubbed) production client
+ * factory for `buildCdpSellerAddressLookup`'s `createClient` parameter.
+ * Constructs a real `@coinbase/cdp-sdk` `CdpClient` from real credential
+ * bindings — but only inside the closure this function returns, never
+ * eagerly: calling `buildProductionCdpAccountLookupClientFactory(...)`
+ * itself makes no network call and constructs nothing; only invoking the
+ * returned factory (which only happens inside
+ * `buildCdpSellerAddressLookup`'s own closure, which itself only runs
+ * once `resolveProductionCdpEvidenceProvider` has already confirmed every
+ * ADR 0055 gate and required binding) constructs the client, and even
+ * that construction makes no network call on its own — `CdpClient`'s own
+ * constructor does no I/O (matches the same "construction ≠ network
+ * call" property already confirmed and relied on for
+ * `createCdpFacilitatorClient` in checkpoint A/B).
+ */
+export function buildProductionCdpAccountLookupClientFactory(
+  bindings: Pick<Env, 'CDP_API_KEY_ID' | 'CDP_API_KEY_SECRET' | 'CDP_WALLET_SECRET'>
+): () => CdpAccountLookupClient {
+  return () =>
+    new CdpClient({
+      apiKeyId: bindings.CDP_API_KEY_ID,
+      apiKeySecret: bindings.CDP_API_KEY_SECRET,
+      walletSecret: bindings.CDP_WALLET_SECRET,
+    });
 }
 
 export interface ProductionCdpProviderDependencies {
