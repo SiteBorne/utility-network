@@ -15,4 +15,5 @@ export * from './services/document-evidence/worker-result-types';
 export * from './services/agent-verification/service';
 export * from './services/agent-verification/types';
 export * from './services/agent-verification/claim-evaluation';
+export * from './services/agent-verification/schema-profile-1';
 export * from './wiring';

@@ -48,6 +48,7 @@ import {
   FixtureDocumentWorkerBridge,
   buildFixtureRegistry,
   buildServiceContext,
+  checkSchemaProfile1,
   createFixtureSigner,
   createTestArtifactStore,
   createTestClock,
@@ -88,6 +89,25 @@ import SEC_EDGAR_FIXTURE from '../../../../../packages/provider-adapters/fixture
 import DOCUMENT_FIXTURE_WORKER_RESULT_JSON from '../../../../../packages/service-runtime/fixtures/document-worker-results/native-text-success.json' with { type: 'json' };
 import { createX402ServiceRoute } from './x402-service';
 import type { ExecutorOutcome } from './x402-service';
+
+/** SUN-1200 checkpoint F, VALIDATION RUNTIME CLOSURE (§6): the
+ * pre-economic gate for `verify_agent_output.v1`/`.v2` -- rejects an
+ * unsupported or oversized buyer-supplied `required_schema`
+ * (`checkSchemaProfile1`, SITEBORNE JSON Schema Profile 1) BEFORE any
+ * quote/402 challenge is minted, so a buyer never pays for a request
+ * SITEBORNE already knows it cannot execute. `body` is the same
+ * already-`inputSchema`-validated request body `createX402ServiceRoute`
+ * passes to every `preEconomicBodyValidator`; `required_schema` is a
+ * required field of the frozen `AgentVerificationInput` contract, so its
+ * presence and object-ness is already guaranteed by the time this runs. */
+function verifyAgentOutputPreEconomicCheck(
+  body: unknown
+): { ok: true } | { ok: false; code: string; message: string } {
+  const requiredSchema = (body as { required_schema?: unknown } | null)?.required_schema;
+  const check = checkSchemaProfile1(requiredSchema);
+  if (check.supported) return { ok: true };
+  return { ok: false, code: check.code, message: check.reason };
+}
 
 function jsonHttpClient(body: unknown): InjectedHttpClient {
   return {
@@ -505,6 +525,7 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
     clock,
     evidenceMode: config.evidenceMode,
     evidenceProvider: config.evidenceProvider,
+    preEconomicBodyValidator: verifyAgentOutputPreEconomicCheck,
 
     cdpChainReceiptChecker: config.cdpChainReceiptChecker,
     executor: async (input): Promise<ExecutorOutcome> => {
@@ -878,6 +899,7 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
     clock,
     evidenceMode: config.evidenceMode,
     evidenceProvider: config.evidenceProvider,
+    preEconomicBodyValidator: verifyAgentOutputPreEconomicCheck,
 
     cdpChainReceiptChecker: config.cdpChainReceiptChecker,
     executor: async (input): Promise<ExecutorOutcome> => {
@@ -913,6 +935,7 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
       clock,
       evidenceMode: config.evidenceMode,
       evidenceProvider: config.evidenceProvider,
+      preEconomicBodyValidator: verifyAgentOutputPreEconomicCheck,
 
       cdpChainReceiptChecker: config.cdpChainReceiptChecker,
       executor: async (input): Promise<ExecutorOutcome> => {

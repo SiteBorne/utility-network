@@ -19,6 +19,7 @@
     "openapi:generate:check": "pnpm --filter @siteborne/pcc-schema run generate:openapi:check",
     "schemas:generate": "pnpm --filter @siteborne/edge-api run generate:input-validators",
     "schemas:check": "pnpm --filter @siteborne/edge-api run generate:input-validators:check",
+    "test:worker-runtime": "tsx scripts/test-worker-runtime.mts",
     "contracts:baseline:verify": "pnpm --filter @siteborne/contracts contracts:baseline:verify",
     "contracts:compat": "pnpm --filter @siteborne/contracts contracts:compat",
     "contracts:compat:check": "pnpm --filter @siteborne/contracts contracts:compat:check",
@@ -92,7 +93,7 @@
     "security:schemathesis": "tsx scripts/security/run-schemathesis.ts",
     "security:chaos": "tsx scripts/security/run-chaos.ts",
     "security:load": "tsx scripts/security/run-load.ts",
-    "security:release": "pnpm security:semgrep && pnpm security:osv && pnpm security:trivy && pnpm security:schemathesis && pnpm security:chaos && pnpm security:load",
+    "security:release": "pnpm security:semgrep && pnpm security:osv && pnpm security:trivy && pnpm security:schemathesis && pnpm security:chaos && pnpm security:load && pnpm test:worker-runtime",
     "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm pcc:generate:check && pnpm services:generate:check && pnpm openapi:generate:check && pnpm schemas:check && pnpm python:test:pcc && pnpm python:test:modal && pnpm governance:validate && pnpm state:validate && pnpm tasks:validate && pnpm contracts:baseline:verify && pnpm contracts:compat:check && pnpm contracts:release:verify && pnpm migrations:verify && pnpm d1:test && pnpm control-plane:test && pnpm control-plane:check && pnpm adapters:check && pnpm document-worker:check && pnpm document-worker:fixtures:verify && pnpm verification:check && pnpm services-runtime:check && pnpm x402:check && pnpm mcp:check && pnpm a2a:check && pnpm nevermined:check && pnpm secrets:scan"
   },
   "devDependencies": {

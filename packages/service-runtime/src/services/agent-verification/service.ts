@@ -3,15 +3,24 @@
  * directly (never a second verification engine). Two distinct schema
  * validations happen here and must not be confused: (1) the buyer-supplied
  * `required_schema` against `candidate_output` — a per-request, dynamic
- * check this service performs itself via a scoped ajv instance, reported
- * as the `schema_valid` deterministic requirement; and (2) this service's
- * own frozen PCC output against `agent-verification-output.schema.json` —
- * always performed by SUN-0500's SchemaVerifier inside verifyAndSign,
- * exactly like every other service in this package.
+ * check this service performs itself, reported as the `schema_valid`
+ * deterministic requirement; and (2) this service's own frozen PCC
+ * output against `agent-verification-output.schema.json` — always
+ * performed by SUN-0500's SchemaVerifier inside verifyAndSign, exactly
+ * like every other service in this package.
+ *
+ * SUN-1200 checkpoint F — VALIDATION RUNTIME CLOSURE: check (1) used to
+ * run a real, request-time `Ajv.compile()` against the buyer-supplied
+ * schema (the same request-time-eval risk class as checkpoint F's second
+ * mainnet cutover 500). Per the human governance decision resolving that
+ * checkpoint's CONTRACT_AMBIGUOUS finding, (1) now validates only
+ * against the bounded, eval-free SITEBORNE JSON Schema Profile 1
+ * (`schema-profile-1.ts`, backed by `@cfworker/json-schema`'s pure
+ * interpreter). The pre-economic Profile 1 structural/resource gate
+ * (`checkSchemaProfile1`) runs even earlier, before any payment
+ * challenge — see `apps/edge-api/src/control-plane/routes/paid-services.ts`.
  */
 import { createHash } from 'node:crypto';
-import Ajv2020 from 'ajv/dist/2020.js';
-import addFormats from 'ajv-formats';
 import type { KeyRegistry, ReproductionInput, Signer } from '@siteborne/verification';
 import { buildClaim } from '../../claims/builder';
 import { buildEvidence } from '../../evidence/builder';
@@ -24,6 +33,7 @@ import {
 import type { PccClaim, PccEvidenceItem } from '../../pcc/document-types';
 import type { LocalService, ServiceExecutionContext, ServiceExecutionResult } from '../../types';
 import { evaluateClaim } from './claim-evaluation';
+import { SCHEMA_PROFILE_ID, checkSchemaProfile1, validateAgainstProfile1 } from './schema-profile-1';
 import type {
   AgentVerificationExtension,
   AgentVerificationInput,
@@ -269,20 +279,30 @@ function evaluateDeterministicRequirement(
   parameters?: Record<string, unknown>
 ): { passed: boolean; details: string; unverifiable?: boolean } {
   if (check === 'schema_valid') {
-    const ajv = new Ajv2020({ strict: false, allErrors: true });
-    addFormats(ajv);
-    try {
-      const validate = ajv.compile(input.required_schema);
-      const valid = Boolean(validate(input.candidate_output));
+    // SUN-1200 checkpoint F: the pre-economic route-level gate
+    // (`checkSchemaProfile1`, run before any 402 challenge is minted)
+    // already rejected an unsupported/oversized `required_schema` long
+    // before service execution could ever reach here. This second call
+    // is intentionally redundant defense-in-depth, not a substitute for
+    // that gate: it protects every other caller of this service
+    // (workerd tests, future non-HTTP integrations) that might not route
+    // through the HTTP pre-check, and it keeps this eval-free by
+    // construction regardless of what any future caller does or forgets
+    // to do upstream.
+    const profileCheck = checkSchemaProfile1(input.required_schema);
+    if (!profileCheck.supported) {
       return {
-        passed: valid,
-        details: valid
-          ? 'candidate_output matches required_schema'
-          : `candidate_output violates required_schema: ${JSON.stringify(validate.errors ?? []).slice(0, 300)}`,
+        passed: false,
+        details: `required_schema is not supported by ${SCHEMA_PROFILE_ID}: ${profileCheck.reason}`,
       };
-    } catch (err) {
-      return { passed: false, details: `required_schema failed to compile: ${String(err)}` };
     }
+    const { valid, errors } = validateAgainstProfile1(input.required_schema, input.candidate_output);
+    return {
+      passed: valid,
+      details: valid
+        ? 'candidate_output matches required_schema'
+        : `candidate_output violates required_schema: ${JSON.stringify(errors).slice(0, 300)}`,
+    };
   }
   if (check === 'hash_match') {
     const expectedHash = parameters?.expected_hash;

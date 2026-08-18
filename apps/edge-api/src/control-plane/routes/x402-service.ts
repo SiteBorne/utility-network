@@ -205,6 +205,17 @@ export interface X402ServiceRouteConfig {
     transactionReference: string,
     network: Network
   ) => Promise<'SETTLED' | 'FAILED' | 'STILL_UNKNOWN'>;
+  /** SUN-1200 checkpoint F, VALIDATION RUNTIME CLOSURE (§6): an optional,
+   * pre-economic body check run AFTER `inputSchema` validation but
+   * BEFORE any 402 challenge is constructed. A buyer must not discover
+   * only after paying that SITEBORNE cannot support what they submitted
+   * -- `verify_agent_output.v1`/`.v2` use this to reject an unsupported
+   * or oversized buyer-supplied `required_schema`
+   * (`checkSchemaProfile1`) with a deterministic non-payment error
+   * before any quote is minted. Returning `{ ok: true }` continues the
+   * normal flow; `{ ok: false, ... }` short-circuits with a 400 and
+   * never mints a quote or emits a 402. */
+  preEconomicBodyValidator?: (body: unknown) => { ok: true } | { ok: false; code: string; message: string };
 }
 
 export const PAYTO_NOT_CONFIGURED = 'siteborne-fixture:payto-not-configured';
@@ -456,6 +467,19 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
           errors: validateInput.errors,
         }
       );
+    }
+
+    // SUN-1200 checkpoint F (§6): pre-economic body validation, run
+    // before any quote/402 is constructed. Kept deliberately separate
+    // from `inputSchema` validation above -- this is a per-service,
+    // semantic check (today, only `verify_agent_output`'s
+    // `checkSchemaProfile1`) that the frozen input JSON Schema alone
+    // cannot express.
+    if (config.preEconomicBodyValidator) {
+      const preEconomic = config.preEconomicBodyValidator(body);
+      if (!preEconomic.ok) {
+        return jsonError(c, 400, preEconomic.code, preEconomic.message);
+      }
     }
 
     // SUN-1000 checkpoint 1M: a real, previously-undiscovered 500 defect

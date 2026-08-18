@@ -459,6 +459,9 @@ importers:
 
   packages/service-runtime:
     dependencies:
+      '@cfworker/json-schema':
+        specifier: ^4.1.1
+        version: 4.1.1
       '@siteborne/pcc-schema':
         specifier: workspace:*
         version: link:../pcc-schema

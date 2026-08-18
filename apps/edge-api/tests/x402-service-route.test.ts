@@ -552,6 +552,48 @@ describe('x402 HTTP vertical slice (SUN-0700A checkpoint 5)', () => {
     });
   });
 
+  describe('verify_agent_output pre-economic Profile 1 gate (SUN-1200 checkpoint F, §6)', () => {
+    it('an unsupported required_schema keyword is rejected with 400 before any 402/quote is minted', async () => {
+      const res = await app.request('/v1/verify/agent-output', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          ...AGENT_INPUT,
+          required_schema: { type: 'string', pattern: '^[a-z]+$' },
+        }),
+      });
+      expect(res.status).toBe(400);
+      expect(res.headers.get('PAYMENT-REQUIRED')).toBeNull();
+      const body = (await res.json()) as Record<string, unknown>;
+      expect(body.error).toBe('unsupported_required_schema');
+    });
+
+    it('an over-limit required_schema is rejected with required_schema_limit_exceeded before any 402/quote is minted', async () => {
+      const properties: Record<string, unknown> = {};
+      for (let i = 0; i < 300; i++) properties[`p${i}`] = { type: 'string' };
+      const res = await app.request('/v1/verify/agent-output', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          ...AGENT_INPUT,
+          required_schema: { type: 'object', properties },
+        }),
+      });
+      expect(res.status).toBe(400);
+      expect(res.headers.get('PAYMENT-REQUIRED')).toBeNull();
+      const body = (await res.json()) as Record<string, unknown>;
+      expect(body.error).toBe('required_schema_limit_exceeded');
+    });
+
+    it('a Profile-1-supported required_schema still gets a normal 402 challenge (no false-positive rejection)', async () => {
+      const challenge = await get402(app, '/v1/verify/agent-output', {
+        ...AGENT_INPUT,
+        required_schema: { type: 'object', properties: { total: { type: 'number' } }, required: ['total'] },
+      });
+      expect(challenge.x402Version).toBe(2);
+    });
+  });
+
   describe('production-disabled gate (directive §32)', () => {
     it('constructing a route with evidenceMode "production" always throws — no production evidence provider exists', async () => {
       await expect(buildPaidServicesApp({ db, evidenceMode: 'production' })).rejects.toThrow(
