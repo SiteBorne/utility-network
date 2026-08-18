@@ -4,6 +4,15 @@
   "type": "module",
   "description": "Local stdio shim for the SITEBORNE Utility Network MCP server",
   "license": "Apache-2.0",
+  "author": {
+    "name": "SiteBorne",
+    "url": "https://github.com/SiteBorne"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SiteBorne/utility-network.git",
+    "directory": "packages/mcp-server"
+  },
   "mcpName": "net.siteborne/utility",
   "bin": {
     "siteborne-mcp": "dist/stdio.js"
