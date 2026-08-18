@@ -15,7 +15,14 @@
  */
 import { getDefaultAsset } from '@x402/evm';
 import type { Network } from '@x402/core/types';
-import type { ProductionAuthorizationInput } from '@siteborne/protocol-x402';
+import type { HTTPFacilitatorClient } from '@x402/core/server';
+import {
+  isProductionPaymentAuthorized,
+  type PaymentEvidenceMode,
+  type PaymentEvidenceProvider,
+  type ProductionAuthorizationInput,
+} from '@siteborne/protocol-x402';
+import { CdpPaymentEvidenceProvider } from '../evidence/cdp-provider';
 import type { Env } from './env';
 
 /** Fails closed: any value other than the exact literal `'production'`
@@ -125,4 +132,88 @@ export function assertSellerIdentityConsistent(input: SellerIdentityCheckInput):
         'authenticated CDP wallet identity -- refusing to proceed'
     );
   }
+}
+
+export type ProductionCdpProviderBindings = Pick<
+  Env,
+  'SELLER_WALLET_ADDRESS' | 'CDP_API_KEY_ID' | 'CDP_API_KEY_SECRET' | 'CDP_WALLET_SECRET'
+>;
+
+export interface ProductionCdpProviderDependencies {
+  /** Constructs the real facilitator client. Injectable so tests supply a
+   * mock `HTTPFacilitatorClient` and the real live request path supplies
+   * the real `createCdpFacilitatorClient` from `@coinbase/cdp-sdk/x402`.
+   * Construction itself makes no network call (confirmed: the accepted
+   * SUN-0700B checkpoint 1 live-proof harness constructs it in
+   * `beforeAll`, before any credential validation step) — only
+   * `.verify()`/`.settle()` do. */
+  createFacilitatorClient: () => HTTPFacilitatorClient;
+  /** Resolves the authenticated CDP wallet's public address. SUN-1200
+   * checkpoint B deliberately wires NO real implementation of this hook
+   * into the live request path — omitting it (the default everywhere
+   * today) fails closed to fixture mode exactly like every other missing
+   * gate, regardless of every other flag. A real implementation is a
+   * separate, future credential-provisioning checkpoint's job. */
+  getAuthenticatedSellerAddress?: () => Promise<string>;
+}
+
+export interface ResolvedCdpEvidence {
+  evidenceMode: PaymentEvidenceMode;
+  evidenceProvider?: PaymentEvidenceProvider;
+}
+
+/**
+ * The single provider-construction boundary (§5 of the checkpoint B
+ * directive). Returns `{evidenceMode: 'fixture'}` — the existing,
+ * always-safe default — unless EVERY one of the following holds:
+ *   1. `isProductionPaymentAuthorized(authorization)` is true (all four
+ *      ADR 0055 gates);
+ *   2. every required production secret is present
+ *      (`checkProductionBindingsPresent`);
+ *   3. `deps.getAuthenticatedSellerAddress` is supplied and resolves
+ *      without throwing;
+ *   4. the resolved authenticated address matches the configured
+ *      `SELLER_WALLET_ADDRESS` (`assertSellerIdentityConsistent`).
+ * Only then does it construct a real `CdpPaymentEvidenceProvider` —
+ * never eagerly, never at Worker startup, only inside this function, only
+ * on this exact success path. Any failure anywhere falls back to fixture
+ * mode rather than throwing — the same fail-closed shape as every other
+ * gate in this system (an unauthorized/misconfigured request still gets a
+ * normal, safe, non-economic answer, never a 500 that could be mistaken
+ * for a provider defect).
+ */
+export async function resolveProductionCdpEvidenceProvider(
+  authorization: ProductionAuthorizationInput,
+  bindings: ProductionCdpProviderBindings,
+  deps: ProductionCdpProviderDependencies
+): Promise<ResolvedCdpEvidence> {
+  if (!isProductionPaymentAuthorized(authorization)) {
+    return { evidenceMode: 'fixture' };
+  }
+  const bindingsCheck = checkProductionBindingsPresent(bindings);
+  if (!bindingsCheck.ok) {
+    return { evidenceMode: 'fixture' };
+  }
+  if (!deps.getAuthenticatedSellerAddress) {
+    return { evidenceMode: 'fixture' };
+  }
+  let authenticatedAddress: string;
+  try {
+    authenticatedAddress = await deps.getAuthenticatedSellerAddress();
+  } catch {
+    return { evidenceMode: 'fixture' };
+  }
+  try {
+    assertSellerIdentityConsistent({
+      configuredAddress: bindings.SELLER_WALLET_ADDRESS,
+      authenticatedAddress,
+    });
+  } catch {
+    return { evidenceMode: 'fixture' };
+  }
+  const facilitator = deps.createFacilitatorClient();
+  return {
+    evidenceMode: 'production',
+    evidenceProvider: new CdpPaymentEvidenceProvider(facilitator),
+  };
 }

@@ -31,6 +31,11 @@ import {
 import { NeverminedPaymentEvidenceProvider } from './control-plane/evidence/nevermined-provider';
 import { resolveNeverminedEnvironmentFromApiKey } from './control-plane/evidence/nevermined-http-client';
 import { resolveNeverminedConfig } from '@siteborne/protocol-nevermined';
+import {
+  resolveProductionAuthorizationInput,
+  resolveProductionCdpEvidenceProvider,
+} from './control-plane/config/production-payment';
+import { createCdpFacilitatorClient } from '@coinbase/cdp-sdk/x402';
 import type { Env } from './control-plane/config/env';
 
 export type { ControlPlaneConfig };
@@ -107,6 +112,53 @@ app.route('/', openapiRoute);
 let cachedPaidServicesApp: Awaited<ReturnType<typeof buildPaidServicesApp>> | undefined;
 let cachedPaidServicesDb: Env['DB'] | undefined;
 
+const UNAUTHORIZED_PRODUCTION_INPUT = {
+  environment: 'preproduction' as const,
+  productionEnabled: false,
+  humanBootstrapAuthorized: false,
+  productionCredentialsApproved: false,
+};
+
+/**
+ * SUN-1200 checkpoint B: the single provider-construction boundary for
+ * both `/v1/*` and `/v2/*` CDP routes. Delegates entirely to
+ * `resolveProductionCdpEvidenceProvider` — falls back to the existing,
+ * always-safe `evidenceMode: 'fixture'` unless every ADR 0055 gate,
+ * every required secret, and the (deliberately unwired, see that
+ * function's own comment) seller-identity hook all succeed. No real CDP
+ * wallet-identity lookup is wired here, which means production
+ * construction never actually succeeds via this live entry point today
+ * regardless of any env var — a deliberate, disclosed, additional safety
+ * margin, not an oversight (see the checkpoint B report).
+ *
+ * IMPORTANT (found and fixed during this checkpoint's own outer-router
+ * testing): the `productionAuthorization` passed to `buildPaidServicesApp`
+ * (which drives `paid-services.ts`'s network/asset resolution) MUST NEVER
+ * be more permissive than `cdpEvidence.evidenceMode`. An earlier version
+ * of this function passed the raw, env-var-only authorization input
+ * straight through -- meaning the four `PAYMENT_ENVIRONMENT`/
+ * `PRODUCTION_ENABLED`/`HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP`/
+ * `PRODUCTION_CDP_CREDENTIALS_APPROVED` env vars alone (no real secrets
+ * needed at all) were enough to make the live app construct and serve a
+ * real Base-mainnet 402 challenge (real chain ID, real USDC contract
+ * address) while `evidenceMode` correctly stayed `'fixture'` underneath
+ * -- a truthfulness defect (advertising real mainnet payment terms with
+ * zero real settlement capability behind them), not merely cosmetic.
+ * Fixed by deriving `productionAuthorization` from the SAME success/
+ * failure outcome as evidence-provider construction: network/asset
+ * resolution and evidence-provider selection are now always in lockstep,
+ * never independently divergent.
+ */
+async function resolveCdpEvidence(env: Env) {
+  const rawAuthorization = resolveProductionAuthorizationInput(env);
+  const cdpEvidence = await resolveProductionCdpEvidenceProvider(rawAuthorization, env, {
+    createFacilitatorClient: createCdpFacilitatorClient,
+  });
+  const productionAuthorization =
+    cdpEvidence.evidenceMode === 'production' ? rawAuthorization : UNAUTHORIZED_PRODUCTION_INPUT;
+  return { productionAuthorization, cdpEvidence };
+}
+
 app.all('/v1/nevermined/*', (c) => {
   if (c.env?.NEVERMINED_ROUTES_ENABLED !== 'true') return c.notFound();
   return c.json(
@@ -133,10 +185,13 @@ app.all('/v1/*', async (c) => {
     );
   }
   if (!cachedPaidServicesApp || cachedPaidServicesDb !== c.env.DB) {
+    const { productionAuthorization, cdpEvidence } = await resolveCdpEvidence(c.env);
     cachedPaidServicesApp = await buildPaidServicesApp({
       db: c.env.DB,
-      evidenceMode: 'fixture',
+      evidenceMode: cdpEvidence.evidenceMode,
+      evidenceProvider: cdpEvidence.evidenceProvider,
       payTo: c.env.SELLER_WALLET_ADDRESS || undefined,
+      productionAuthorization,
     });
     cachedPaidServicesDb = c.env.DB;
   }
@@ -248,10 +303,13 @@ app.all('/v2/nevermined/*', async (c) => {
  * its own separate cached app instance (never the Nevermined one above)
  * so a real Nevermined-authenticated `evidenceProvider` can never leak
  * into a CDP route's settlement call. Same `PAID_ROUTES_ENABLED` gate as
- * `/v1/*`; `evidenceProvider` left unset here (defaults to
- * `FixturePaymentEvidenceProvider` — a real CDP proof, if performed, is a
- * separate, explicitly authorized action, not a side effect of mounting
- * this route family).
+ * `/v1/*`. SUN-1200 checkpoint B: `evidenceMode`/`evidenceProvider` now
+ * flow through the same `resolveCdpEvidence` boundary as `/v1/*` -- falls
+ * back to `FixturePaymentEvidenceProvider` (`evidenceMode: 'fixture'`)
+ * unless every production authorization/credential/seller-identity gate
+ * passes, which today it structurally cannot (no real seller-identity
+ * hook is wired) -- a real CDP proof remains a separate, explicitly
+ * authorized action, not a side effect of mounting this route family.
  */
 let cachedV2CdpApp: Awaited<ReturnType<typeof buildPaidServicesApp>> | undefined;
 let cachedV2CdpDb: Env['DB'] | undefined;
@@ -270,10 +328,13 @@ app.all('/v2/*', async (c) => {
     );
   }
   if (!cachedV2CdpApp || cachedV2CdpDb !== c.env.DB) {
+    const { productionAuthorization, cdpEvidence } = await resolveCdpEvidence(c.env);
     cachedV2CdpApp = await buildPaidServicesApp({
       db: c.env.DB,
-      evidenceMode: 'fixture',
+      evidenceMode: cdpEvidence.evidenceMode,
+      evidenceProvider: cdpEvidence.evidenceProvider,
       payTo: c.env.SELLER_WALLET_ADDRESS || undefined,
+      productionAuthorization,
     });
     cachedV2CdpDb = c.env.DB;
   }
