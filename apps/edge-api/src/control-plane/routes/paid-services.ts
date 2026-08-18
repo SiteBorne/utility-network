@@ -57,6 +57,22 @@ import {
 } from '@siteborne/service-runtime';
 import type { ServiceId, WorkerResult } from '@siteborne/service-runtime';
 import type { KeyRegistry, Signer } from '@siteborne/verification';
+import { setPrecompiledOutputValidators } from '@siteborne/verification';
+import { outputValidatorsById } from '../../generated/output-validators.generated.js';
+
+// SUN-1200 checkpoint F (P0-A): registers the build-time-precompiled
+// output-schema validators exactly once, at real Worker module-load
+// time (this file is imported by `index.ts`, itself evaluated once per
+// Worker isolate, before any request is ever handled) -- never
+// per-request. From this point on, every real service execution's
+// output-schema verification step (`SchemaVerifier`, reached via
+// `verify-and-sign.ts` for all four services) uses this precompiled
+// lookup instead of `getAjv()`'s runtime filesystem-based construction/
+// compilation path, which is never reached from this Worker's real
+// request-handling code again. See
+// `packages/verification/src/schema-registry.ts`'s own doc comment and
+// the SUN-1200 checkpoint F incident report (P0-A).
+setPrecompiledOutputValidators(outputValidatorsById);
 import type { InjectedHttpClient } from '@siteborne/provider-adapters';
 // The exact accepted SUN-0300/SUN-0600 fixture
 // (packages/service-runtime/scripts/verify-fixtures.ts's

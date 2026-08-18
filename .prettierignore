@@ -31,3 +31,4 @@ pnpm-lock.yaml
 # generate-input-validators:check (schemas:check). Reformatting it would
 # make that drift check meaningless.
 apps/edge-api/src/generated/input-validators.generated.js
+apps/edge-api/src/generated/output-validators.generated.js

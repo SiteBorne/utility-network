@@ -32,6 +32,36 @@ function getSchemasDir(): string {
 
 let ajvSingleton: InstanceType<typeof Ajv2020> | null = null;
 
+/**
+ * SUN-1200 checkpoint F (P0-A) — a build-time-precompiled override,
+ * checked BEFORE `getAjv()`'s runtime filesystem-based path anywhere
+ * that path is reached. `setPrecompiledOutputValidators` is called
+ * exactly once, at real Cloudflare Worker module-load time (never
+ * per-request — see `apps/edge-api/src/control-plane/routes/paid-services.ts`),
+ * registering the AJV-standalone-generated validators
+ * (`apps/edge-api/scripts/generate-input-validators.mts`'s
+ * `outputValidatorsById`). Once set, the real Worker's request-handling
+ * code never reaches `getAjv()`'s `node:fs.readFileSync`/`readdirSync`
+ * calls (classified `UNPROVEN_BUNDLE_PATH_DEPENDENCY` — the path is
+ * computed relative to this module's own bundled location via
+ * `import.meta.url`, which does not survive esbuild's single-file
+ * bundling, and `schemas/` is not declared as a Worker asset anywhere)
+ * or trigger request-time AJV compilation. Callers that never call this
+ * setter (local Node.js scripts, this package's own tests, any
+ * non-Worker tooling) are completely unaffected — `getAjv()`'s existing
+ * behavior is unchanged for them, and `node:fs` genuinely works fine in
+ * those real Node.js contexts.
+ */
+let precompiledOutputValidators: Record<string, unknown> | null = null;
+
+export function setPrecompiledOutputValidators(byId: Record<string, unknown>): void {
+  precompiledOutputValidators = byId;
+}
+
+export function getPrecompiledOutputValidator(schemaId: string): unknown | undefined {
+  return precompiledOutputValidators?.[schemaId];
+}
+
 export function getAjv(): InstanceType<typeof Ajv2020> {
   if (ajvSingleton) return ajvSingleton;
 
@@ -77,13 +107,19 @@ const SERVICE_ID_TO_SCHEMA_FILE: Record<string, string> = {
   'verify_agent_output.v2': 'agent-verification-output.schema.json',
 };
 
+/** SUN-1200 checkpoint F (P0-A): every one of this repository's schema
+ * files uses the exact, uniform `$id` convention
+ * `https://siteborne.net/schemas/<dir>/<filename>` (confirmed directly
+ * against every `schemas/services/*.schema.json` file's own `$id`) — so
+ * this derivation needs no runtime file read at all. Proven, not
+ * assumed: `schema-registry-derived-id.test.ts` asserts this derivation
+ * matches every real output schema file's actual committed `$id`, so any
+ * future schema that broke the convention would fail that test rather
+ * than silently drift. */
 export function getOutputSchemaId(serviceId: string): string | null {
   const file = SERVICE_ID_TO_SCHEMA_FILE[serviceId];
   if (!file) return null;
-  const SCHEMAS_DIR = getSchemasDir();
-  if (!SCHEMAS_DIR) return null;
-  const schema = JSON.parse(readFileSync(join(SCHEMAS_DIR, 'services', file), 'utf-8'));
-  return schema.$id as string;
+  return `https://siteborne.net/schemas/services/${file}`;
 }
 
 export function knownServiceIds(): string[] {

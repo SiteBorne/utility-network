@@ -1,4 +1,10 @@
-import { getAjv, getOutputSchemaId, knownServiceIds } from '../schema-registry';
+import {
+  getAjv,
+  getOutputSchemaId,
+  getPrecompiledOutputValidator,
+  knownServiceIds,
+} from '../schema-registry';
+import type { ValidateFunction } from 'ajv';
 import type { CandidateResult, VerificationContext, VerificationResult, Verifier } from '../types';
 import { buildResult } from './base';
 
@@ -55,8 +61,17 @@ export class SchemaVerifier implements Verifier {
       });
     }
 
-    const ajv = getAjv();
-    const validate = ajv.getSchema(schemaId);
+    // SUN-1200 checkpoint F (P0-A): prefer the build-time-precompiled
+    // validator (registered once at real Worker module-load time via
+    // `setPrecompiledOutputValidators`) over `getAjv()`'s runtime
+    // filesystem-based construction/compilation path. When the
+    // precompiled override was never set (every non-Worker caller --
+    // local scripts, this package's own tests), behavior is unchanged:
+    // falls straight through to the exact same `getAjv()` call this file
+    // always made.
+    const validate =
+      (getPrecompiledOutputValidator(schemaId) as ValidateFunction | undefined) ??
+      getAjv().getSchema(schemaId);
     if (!validate) {
       return buildResult(candidate, context, startedAt, {
         verifierId: this.verifierId,
