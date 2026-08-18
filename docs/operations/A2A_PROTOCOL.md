@@ -23,6 +23,33 @@ This is local protocol evidence only. `production_ready` and
 - v0.3 compatibility: disabled
 - Streaming/push/extended-card support: disabled
 
+### Known external interoperability limitation (SUN-1100)
+
+`v0.3 compatibility: disabled` (above) has a concrete, empirically-confirmed
+consequence: Agentverse's own "AgentChatProtocol 0.3.0" chat bridge sends the
+legacy `message/send` JSON-RPC method against a registered agent's endpoint.
+This server correctly, deliberately rejects it
+(`packages/protocol-a2a/src/transport.ts`'s `validateRawV1Request`,
+`"legacy A2A v0.3 methods are not supported"`) -- confirmed live against
+`https://utility.siteborne.net/a2a` during SUN-1100 checkpoint 4. Agentverse's
+own "Automated Test" / chat "Try it" feature will consequently fail against this
+agent.
+
+**`AGENTVERSE_LEGACY_BRIDGE_INCOMPATIBLE_WITH_A2A_1_0=true`**
+
+This is disclosed as a real, external interoperability limitation, not a defect
+in this implementation. It does not reopen the accepted SUN-0800A decision to
+implement A2A 1.0 only, and does not invalidate SUN-1100's "Agentverse
+registration visible" criterion (registration and public visibility are
+independently confirmed via Agentverse's own registry API, unrelated to whether
+its chat bridge can talk to this endpoint). A translation shim accepting legacy
+`message/send` requests and mapping them to the same 1.0 execution path would
+resolve this, but is explicitly deferred: any such change is a
+separately-governed future compatibility enhancement, only if real product
+requirements justify it, and would need its own security review (it reopens
+exactly the wire-shape surface `v0.3 compatibility: disabled` was chosen to keep
+closed).
+
 Protocol version is declared on `supportedInterfaces[]`, not as a legacy
 top-level Agent Card field. Wire `Part` objects use member presence (`data`,
 `text`, `raw`, or `url`) and never emit a legacy `kind` discriminator.
