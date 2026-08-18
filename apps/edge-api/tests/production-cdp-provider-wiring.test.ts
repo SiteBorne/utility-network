@@ -7,28 +7,22 @@
  * own established mock pattern). Real Miniflare D1 throughout — never
  * the in-memory repository.
  *
- * IMPORTANT FINDING (documented, not silently worked around): CDP-rail
- * settlement does NOT have a Nevermined-style two-phase
- * `settlement_pending` → external-reconciliation recovery path —
- * confirmed by direct inspection of `x402-service.ts` (the durable
- * pre-settle draft write and `reconcileNeverminedSettlementForRecovery`
- * call are both gated `if (rail === 'nevermined')` only). On the CDP
- * rail, ANY settle rejection (explicit `provider_rejected` or an
- * ambiguous/thrown exception) transitions straight to the terminal
- * `settlement_failed` state, and a SAME-Payment-Identifier retry after
- * that point is classified `duplicate_same` and returns 202
- * "processing" indefinitely (no second verify/settle call, but also no
- * reconstructed terminal result -- CDP has no `reconstructFromJob`
- * equivalent for this rail either). A real buyer must submit a
- * genuinely new Payment-Identifier to actually retry after a rejected
- * settlement. This is pre-existing, already-accepted SUN-0700A/B
- * behavior, not something this checkpoint introduces, changes, or
- * should paper over by inventing a parallel CDP recovery mechanism that
- * does not exist. Tests below verify the real, accurate behavior --
- * empirically, not assumed (an earlier draft of this file incorrectly
- * assumed re-processing before a test-construction bug, reusing a fresh
- * Payment-Identifier per call instead of the same one, was found and
- * fixed).
+ * ORIGINAL FINDING (checkpoint B, now resolved by checkpoint C): CDP-rail
+ * settlement had no Nevermined-style recovery path at all -- ANY settle
+ * rejection (explicit or ambiguous) went straight to the terminal
+ * `settlement_failed` state, and a same-Payment-Identifier retry
+ * returned 202 "processing" indefinitely, forever, with no way to ever
+ * resolve it. SUN-1200 checkpoint C (`attemptCdpRecovery` in
+ * `x402-service.ts`) fixed this: `settlement_failed` now durably
+ * classifies `explicit_rejection` (permanently terminal, unchanged) vs
+ * `ambiguous` (recoverable). A same-identifier retry against an
+ * `ambiguous` row now performs read-only chain reconciliation (when
+ * wired -- it isn't, in this repository, today) or a bounded, single,
+ * identical `.settle()` retry, converging to either a real success or a
+ * new, honest, distinct `503 settlement_manual_reconciliation_required`
+ * status -- never a silent permanent 202. See
+ * `apps/edge-api/tests/production-cdp-settlement-recovery.test.ts` for
+ * the full checkpoint C recovery-convergence test suite.
  */
 import { readFileSync, readdirSync, rmSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -336,17 +330,18 @@ describe('production CDP provider wiring (SUN-1200 checkpoint B)', () => {
     expect(verifyCount).toBe(1);
     expect(settleCount).toBe(1);
 
-    // FINDING (real, observed, not assumed): a same-Payment-Identifier
-    // retry after CDP-rail settlement_failed is classified `duplicate_same`
-    // and returns 202 "processing" -- NOT a fresh re-attempt (no second
-    // verify/settle call) and NOT a reconstructed terminal error either,
-    // because CDP has no `reconstructFromJob`/recovery path analogous to
-    // Nevermined's (both fall through to null for this rail, confirmed by
-    // direct inspection of x402-service.ts's `duplicate_same` branch). A
-    // real buyer whose settlement was explicitly rejected must submit a
-    // genuinely NEW Payment-Identifier to retry -- reusing the same one
-    // does not un-stick it. Disclosed as pre-existing, already-accepted
-    // behavior this checkpoint neither introduces nor changes.
+    // SUN-1200 checkpoint C (real, observed, not assumed): the mock
+    // facilitator's `settle()` returned normally with `success: false` and
+    // a real `errorReason` ('insufficient_funds') -- `CdpPaymentEvidenceProvider`
+    // surfaces this as `trust_class: 'external_verified'` with that exact
+    // reason, which `isExplicitCdpSettlementFailure` classifies as
+    // `explicit_rejection` (a definitive, structurally-clean "no" from the
+    // facilitator, not one of the provider's own structural-mismatch
+    // labels). A same-Payment-Identifier retry is therefore permanently
+    // terminal: `attemptCdpRecovery` reconstructs the same 402 without
+    // ever calling the provider again -- a real buyer whose settlement was
+    // explicitly rejected must submit a genuinely NEW Payment-Identifier
+    // to retry.
     const retry = await payAndRetry(
       app,
       '/v2/company/evidence-graph',
@@ -354,10 +349,11 @@ describe('production CDP provider wiring (SUN-1200 checkpoint B)', () => {
       challenge,
       id
     );
-    expect(retry.status).toBe(202);
+    expect(retry.status).toBe(402);
     const retryBody = (await retry.json()) as Record<string, unknown>;
-    expect(retryBody.status).toBe('processing');
-    // Zero additional real-provider calls.
+    expect(retryBody.error).toBe('settlement_rejected');
+    // Zero additional real-provider calls -- explicit rejection never
+    // re-invokes the facilitator.
     expect(verifyCount).toBe(1);
     expect(settleCount).toBe(1);
   });
@@ -392,11 +388,23 @@ describe('production CDP provider wiring (SUN-1200 checkpoint B)', () => {
     expect(verifyCount).toBe(1);
     expect(settleCount).toBe(1);
 
+    // SUN-1200 checkpoint C (real, observed, not assumed): a thrown
+    // facilitator exception with no structured HTTP failure shape
+    // produces `trust_class: 'external_unverified'` -- the facilitator
+    // never actually answered, so this is genuinely ambiguous, never
+    // explicit. `attemptCdpRecovery` performs its one bounded, identical
+    // `.settle()` retry (no chain-receipt checker wired in this test), the
+    // mock throws again, and the payment converges to a new, honest,
+    // distinct `503 settlement_manual_reconciliation_required` -- never a
+    // silent permanent 202, and never a false success.
     const retry = await payAndRetry(app, '/v2/web/context', WEB_INPUT, challenge, id);
-    expect(retry.status).toBe(202);
+    expect(retry.status).toBe(503);
     const retryBody = (await retry.json()) as Record<string, unknown>;
-    expect(retryBody.status).toBe('processing');
+    expect(retryBody.status).toBe('settlement_manual_reconciliation_required');
+    // The bounded retry made exactly one additional real settle() call
+    // (never a second verify -- recovery never re-verifies) and it, too,
+    // failed to produce decisive evidence.
     expect(verifyCount).toBe(1);
-    expect(settleCount).toBe(1);
+    expect(settleCount).toBe(2);
   });
 });

@@ -139,6 +139,74 @@ export type ProductionCdpProviderBindings = Pick<
   'SELLER_WALLET_ADDRESS' | 'CDP_API_KEY_ID' | 'CDP_API_KEY_SECRET' | 'CDP_WALLET_SECRET'
 >;
 
+/**
+ * SUN-1200 checkpoint C — seller-identity architecture decision.
+ *
+ * Three options were on the table: (A) require the seller to be a
+ * CDP-managed wallet, authenticated via the CDP SDK itself, checked
+ * against `SELLER_WALLET_ADDRESS`; (B) allow an arbitrary external EVM
+ * seller address with no CDP-side authentication at all; (C) leave the
+ * question ambiguous/deferred.
+ *
+ * This repository already, unambiguously chose (A) in checkpoint A/B:
+ * `ProductionCdpProviderDependencies.getAuthenticatedSellerAddress`
+ * exists specifically to be resolved from an authenticated CDP identity
+ * (its own doc comment: "what a real CDP client resolves once given
+ * real credentials"), and `resolveProductionCdpEvidenceProvider` already
+ * fails closed to fixture mode unless that hook is both supplied AND its
+ * result matches `SELLER_WALLET_ADDRESS`
+ * (`assertSellerIdentityConsistent`). There is no code path anywhere in
+ * this repository that accepts an external, CDP-unauthenticated EVM
+ * seller — (B) was never built and is not being introduced now. This
+ * checkpoint completes (A) by providing the real implementation of that
+ * already-decided hook, rather than re-opening the architecture
+ * question.
+ *
+ * `CdpAccountLookupClient` is the minimal read-only surface this
+ * repository needs from `@coinbase/cdp-sdk`'s `CdpClient.evm.getAccount`
+ * — narrowed to exactly the one call this boundary makes, so a test can
+ * supply a mock without depending on the real SDK's full client shape.
+ * Real construction (`new CdpClient({...})` with real credentials) is
+ * the caller's job (a future credential-provisioning checkpoint's
+ * `index.ts` wiring) — this file never imports `@coinbase/cdp-sdk`
+ * itself, preserving the credential-independent package boundary this
+ * file already documents at its own top.
+ */
+export interface CdpAccountLookupClient {
+  evm: {
+    getAccount(options: { address: string }): Promise<{ address: string }>;
+  };
+}
+
+/**
+ * The real (not fixture, not a stub) implementation of
+ * `getAuthenticatedSellerAddress`: asks a CDP client to resolve the
+ * account at the configured `SELLER_WALLET_ADDRESS` and returns the
+ * address the CDP API itself confirms for that account. Read-only — a
+ * wallet lookup, never a transaction, never a signature. `createClient`
+ * is injected (never constructed here) so this function makes no
+ * decision about credentials or network access itself; a caller that
+ * never invokes it (every caller in this repository today) never
+ * triggers a CDP API call at all — this checkpoint proves the function
+ * against `CdpAccountLookupClientMock`-shaped test doubles only, and it
+ * is not wired into `index.ts`'s live request path, matching the
+ * seller-identity hook's existing disclosed-unwired pattern (`index.ts`
+ * still passes no `getAuthenticatedSellerAddress` at all, so production
+ * evidence-provider construction continues to fail closed to fixture
+ * mode regardless of every other flag, exactly as before this
+ * checkpoint).
+ */
+export function buildCdpSellerAddressLookup(
+  createClient: () => CdpAccountLookupClient,
+  sellerWalletAddress: string
+): () => Promise<string> {
+  return async () => {
+    const client = createClient();
+    const account = await client.evm.getAccount({ address: sellerWalletAddress });
+    return account.address;
+  };
+}
+
 export interface ProductionCdpProviderDependencies {
   /** Constructs the real facilitator client. Injectable so tests supply a
    * mock `HTTPFacilitatorClient` and the real live request path supplies

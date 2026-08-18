@@ -39,7 +39,11 @@ import {
 } from '@siteborne/protocol-nevermined';
 import { calculateDocumentUsage, documentUsageToAtomicUnits } from '@siteborne/pricing';
 import { D1ServicesRepository } from '../repositories/d1/services';
-import type { PaymentEvidenceMode, PaymentEvidenceProvider } from '@siteborne/protocol-x402';
+import type {
+  Network,
+  PaymentEvidenceMode,
+  PaymentEvidenceProvider,
+} from '@siteborne/protocol-x402';
 import {
   FixtureDocumentWorkerBridge,
   buildFixtureRegistry,
@@ -146,6 +150,17 @@ export interface PaidServicesConfig {
    * fully-unauthorized/preproduction input below -- byte-identical to
    * this file's prior unconditional `PREPRODUCTION_NETWORK` behavior. */
   productionAuthorization?: ProductionAuthorizationInput;
+  /** SUN-1200 checkpoint C: optional, CDP-rail-only, read-only on-chain
+   * transaction-receipt checker, threaded unchanged into every mounted
+   * route's `X402ServiceRouteConfig.cdpChainReceiptChecker`. No real
+   * implementation is wired anywhere in this repository (see that field's
+   * own doc comment in `x402-service.ts`) -- omitted entirely (every
+   * existing caller today), `attemptCdpRecovery` skips straight to its
+   * bounded settle-retry step, its exact prior behavior. */
+  cdpChainReceiptChecker?: (
+    transactionReference: string,
+    network: Network
+  ) => Promise<'SETTLED' | 'FAILED' | 'STILL_UNKNOWN'>;
 }
 
 /** The exact conservative default when a caller omits
@@ -310,6 +325,8 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
     clock,
     evidenceMode: config.evidenceMode,
     evidenceProvider: config.evidenceProvider,
+
+    cdpChainReceiptChecker: config.cdpChainReceiptChecker,
     executor: async (input): Promise<ExecutorOutcome> => {
       const context = freshContext('company_evidence_graph.v1');
       const httpClient = jsonHttpClient(SEC_EDGAR_FIXTURE);
@@ -348,6 +365,8 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
     clock,
     evidenceMode: config.evidenceMode,
     evidenceProvider: config.evidenceProvider,
+
+    cdpChainReceiptChecker: config.cdpChainReceiptChecker,
     executor: async (input): Promise<ExecutorOutcome> => {
       const context = freshContext('web_context_verified.v1');
       const httpClient: InjectedHttpClient = {
@@ -388,6 +407,8 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
     clock,
     evidenceMode: config.evidenceMode,
     evidenceProvider: config.evidenceProvider,
+
+    cdpChainReceiptChecker: config.cdpChainReceiptChecker,
     executor: async (input): Promise<ExecutorOutcome> => {
       const context = freshContext('document_evidence_json.v1');
       // The single fixture artifact this vertical slice's document route
@@ -468,6 +489,8 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
     clock,
     evidenceMode: config.evidenceMode,
     evidenceProvider: config.evidenceProvider,
+
+    cdpChainReceiptChecker: config.cdpChainReceiptChecker,
     executor: async (input): Promise<ExecutorOutcome> => {
       const context = freshContext('verify_agent_output.v1');
       const registry = buildFixtureRegistry({
@@ -511,6 +534,8 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
     clock,
     evidenceMode: config.evidenceMode,
     evidenceProvider: config.evidenceProvider,
+
+    cdpChainReceiptChecker: config.cdpChainReceiptChecker,
     executor: async (input): Promise<ExecutorOutcome> => {
       const context = freshContext('company_evidence_graph.v2');
       const httpClient = jsonHttpClient(SEC_EDGAR_FIXTURE);
@@ -550,6 +575,8 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
       clock,
       evidenceMode: config.evidenceMode,
       evidenceProvider: config.evidenceProvider,
+
+      cdpChainReceiptChecker: config.cdpChainReceiptChecker,
       executor: async (input): Promise<ExecutorOutcome> => {
         const context = freshContext('company_evidence_graph.v2');
         const httpClient = jsonHttpClient(SEC_EDGAR_FIXTURE);
@@ -589,6 +616,8 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
     clock,
     evidenceMode: config.evidenceMode,
     evidenceProvider: config.evidenceProvider,
+
+    cdpChainReceiptChecker: config.cdpChainReceiptChecker,
     executor: async (input): Promise<ExecutorOutcome> => {
       const context = freshContext('web_context_verified.v2');
       const httpClient: InjectedHttpClient = {
@@ -630,6 +659,8 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
       clock,
       evidenceMode: config.evidenceMode,
       evidenceProvider: config.evidenceProvider,
+
+      cdpChainReceiptChecker: config.cdpChainReceiptChecker,
       executor: async (input): Promise<ExecutorOutcome> => {
         const context = freshContext('web_context_verified.v2');
         const httpClient: InjectedHttpClient = {
@@ -676,6 +707,8 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
     clock,
     evidenceMode: config.evidenceMode,
     evidenceProvider: config.evidenceProvider,
+
+    cdpChainReceiptChecker: config.cdpChainReceiptChecker,
     executor: async (input): Promise<ExecutorOutcome> => {
       const context = freshContext('document_evidence_json.v2');
       await context.artifact_store.put(
@@ -753,6 +786,8 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
       clock,
       evidenceMode: config.evidenceMode,
       evidenceProvider: config.evidenceProvider,
+
+      cdpChainReceiptChecker: config.cdpChainReceiptChecker,
       executor: async (input): Promise<ExecutorOutcome> => {
         const context = freshContext('document_evidence_json.v2');
         await context.artifact_store.put(
@@ -827,6 +862,8 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
     clock,
     evidenceMode: config.evidenceMode,
     evidenceProvider: config.evidenceProvider,
+
+    cdpChainReceiptChecker: config.cdpChainReceiptChecker,
     executor: async (input): Promise<ExecutorOutcome> => {
       const context = freshContext('verify_agent_output.v2');
       const registry = buildFixtureRegistry({
@@ -860,6 +897,8 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
       clock,
       evidenceMode: config.evidenceMode,
       evidenceProvider: config.evidenceProvider,
+
+      cdpChainReceiptChecker: config.cdpChainReceiptChecker,
       executor: async (input): Promise<ExecutorOutcome> => {
         const context = freshContext('verify_agent_output.v2');
         const registry = buildFixtureRegistry({

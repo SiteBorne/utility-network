@@ -15,10 +15,13 @@ import {
 import {
   assertNetworkAssetConsistency,
   assertSellerIdentityConsistent,
+  buildCdpSellerAddressLookup,
   checkProductionBindingsPresent,
   resolvePaymentAsset,
   resolvePaymentEnvironment,
   resolveProductionAuthorizationInput,
+  resolveProductionCdpEvidenceProvider,
+  type CdpAccountLookupClient,
 } from '../src/control-plane/config/production-payment';
 
 describe('resolvePaymentEnvironment', () => {
@@ -241,5 +244,137 @@ describe('mock production positive construction (§21 — mocks only, no real pr
     const asset = resolvePaymentAsset(PRODUCTION_NETWORK);
     expect(asset.address).toBe('0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913');
     expect(() => assertNetworkAssetConsistency(PRODUCTION_NETWORK, asset.address)).not.toThrow();
+  });
+});
+
+describe('buildCdpSellerAddressLookup (SUN-1200 checkpoint C — seller identity architecture A: CDP-managed seller required)', () => {
+  const SELLER = '0x7f44a2dd237938F18632d4CcA40f4c690295E6E1';
+
+  it('resolves the address a mock CDP account-lookup client returns for the configured seller address, without ever constructing a real CdpClient', () => {
+    let calledWith: { address: string } | undefined;
+    const mockClient: CdpAccountLookupClient = {
+      evm: {
+        async getAccount(options) {
+          calledWith = options;
+          return { address: SELLER };
+        },
+      },
+    };
+    const resolver = buildCdpSellerAddressLookup(() => mockClient, SELLER);
+    return resolver().then((resolved) => {
+      expect(resolved).toBe(SELLER);
+      expect(calledWith).toEqual({ address: SELLER });
+    });
+  });
+
+  it('propagates a mock lookup failure (e.g. account not found) rather than swallowing it -- the caller (resolveProductionCdpEvidenceProvider) is what fails closed', async () => {
+    const mockClient: CdpAccountLookupClient = {
+      evm: {
+        async getAccount() {
+          throw new Error('mock_cdp_account_not_found');
+        },
+      },
+    };
+    const resolver = buildCdpSellerAddressLookup(() => mockClient, SELLER);
+    await expect(resolver()).rejects.toThrow('mock_cdp_account_not_found');
+  });
+
+  it('end-to-end (mocks only): resolveProductionCdpEvidenceProvider constructs a real production evidence provider only when every gate holds AND the mock CDP account lookup resolves the exact configured seller address', async () => {
+    const authorization: ProductionAuthorizationInput = {
+      environment: 'production',
+      productionEnabled: true,
+      humanBootstrapAuthorized: true,
+      productionCredentialsApproved: true,
+    };
+    const bindings = {
+      SELLER_WALLET_ADDRESS: SELLER,
+      CDP_API_KEY_ID: 'mock-key-id',
+      CDP_API_KEY_SECRET: 'mock-key-secret',
+      CDP_WALLET_SECRET: 'mock-wallet-secret',
+    };
+    const mockClient: CdpAccountLookupClient = {
+      evm: {
+        async getAccount() {
+          return { address: SELLER };
+        },
+      },
+    };
+    const resolved = await resolveProductionCdpEvidenceProvider(authorization, bindings, {
+      createFacilitatorClient: () =>
+        ({
+          verify: async () => ({}),
+          settle: async () => ({}),
+          getSupported: async () => ({}),
+        }) as never,
+      getAuthenticatedSellerAddress: buildCdpSellerAddressLookup(() => mockClient, SELLER),
+    });
+    expect(resolved.evidenceMode).toBe('production');
+    expect(resolved.evidenceProvider).toBeDefined();
+  });
+
+  it('end-to-end negative control: a mock CDP account lookup that resolves a DIFFERENT address fails closed to fixture mode, never constructs a production provider', async () => {
+    const authorization: ProductionAuthorizationInput = {
+      environment: 'production',
+      productionEnabled: true,
+      humanBootstrapAuthorized: true,
+      productionCredentialsApproved: true,
+    };
+    const bindings = {
+      SELLER_WALLET_ADDRESS: SELLER,
+      CDP_API_KEY_ID: 'mock-key-id',
+      CDP_API_KEY_SECRET: 'mock-key-secret',
+      CDP_WALLET_SECRET: 'mock-wallet-secret',
+    };
+    const wrongAccountClient: CdpAccountLookupClient = {
+      evm: {
+        async getAccount() {
+          return { address: '0x0000000000000000000000000000000000dEaD' };
+        },
+      },
+    };
+    const resolved = await resolveProductionCdpEvidenceProvider(authorization, bindings, {
+      createFacilitatorClient: () =>
+        ({
+          verify: async () => ({}),
+          settle: async () => ({}),
+          getSupported: async () => ({}),
+        }) as never,
+      getAuthenticatedSellerAddress: buildCdpSellerAddressLookup(() => wrongAccountClient, SELLER),
+    });
+    expect(resolved.evidenceMode).toBe('fixture');
+    expect(resolved.evidenceProvider).toBeUndefined();
+  });
+
+  it('end-to-end negative control: a mock CDP account lookup that throws (account not found / API error) fails closed to fixture mode', async () => {
+    const authorization: ProductionAuthorizationInput = {
+      environment: 'production',
+      productionEnabled: true,
+      humanBootstrapAuthorized: true,
+      productionCredentialsApproved: true,
+    };
+    const bindings = {
+      SELLER_WALLET_ADDRESS: SELLER,
+      CDP_API_KEY_ID: 'mock-key-id',
+      CDP_API_KEY_SECRET: 'mock-key-secret',
+      CDP_WALLET_SECRET: 'mock-wallet-secret',
+    };
+    const throwingClient: CdpAccountLookupClient = {
+      evm: {
+        async getAccount() {
+          throw new Error('mock_cdp_account_not_found');
+        },
+      },
+    };
+    const resolved = await resolveProductionCdpEvidenceProvider(authorization, bindings, {
+      createFacilitatorClient: () =>
+        ({
+          verify: async () => ({}),
+          settle: async () => ({}),
+          getSupported: async () => ({}),
+        }) as never,
+      getAuthenticatedSellerAddress: buildCdpSellerAddressLookup(() => throwingClient, SELLER),
+    });
+    expect(resolved.evidenceMode).toBe('fixture');
+    expect(resolved.evidenceProvider).toBeUndefined();
   });
 });

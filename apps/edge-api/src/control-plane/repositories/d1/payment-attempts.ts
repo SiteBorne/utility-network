@@ -397,6 +397,87 @@ export class D1PaymentAttemptRepository implements PaymentAttemptRepository {
     }
   }
 
+  /**
+   * SUN-1200 checkpoint C: records the outcome classification of a
+   * `verified`/`settlement_pending -> settlement_failed` transition
+   * (CDP rail) and increments the real facilitator settle-attempt
+   * counter atomically with it. `kind: 'explicit_rejection'` is
+   * permanently terminal (matches the frozen policy already applied
+   * identically to both rails); `kind: 'ambiguous'` is the only outcome
+   * `attemptCdpRecovery` may ever act on. `from: 'settlement_failed'` is
+   * used only by a recovery retry re-confirming/reclassifying an
+   * already-`settlement_failed` row (an idempotent stage no-op that
+   * still updates the outcome kind/attempt count/tx reference). Never
+   * accepts a secret value.
+   */
+  async recordCdpSettlementOutcome(
+    paymentIdentifier: string,
+    from: 'verified' | 'settlement_pending' | 'settlement_failed',
+    kind: 'explicit_rejection' | 'ambiguous',
+    candidateTransactionReference?: string
+  ): Promise<
+    | { status: 'transitioned' }
+    | { status: 'illegal_transition' }
+    | { status: 'error'; reason: string }
+  > {
+    try {
+      const result = await this.db
+        .prepare(
+          `UPDATE payment_attempts SET
+             lifecycle_stage = 'settlement_failed',
+             settlement_outcome_kind = ?,
+             settlement_transaction_reference = COALESCE(?, settlement_transaction_reference),
+             cdp_facilitator_settle_attempt_count = cdp_facilitator_settle_attempt_count + 1
+           WHERE payment_identifier = ? AND lifecycle_stage = ?`
+        )
+        .bind(kind, candidateTransactionReference ?? null, paymentIdentifier, from)
+        .run();
+      const failure = getD1Failure(result);
+      if (failure) return { status: 'error', reason: failure };
+      if ((result.meta?.changes ?? 0) === 0) {
+        return { status: 'illegal_transition' };
+      }
+      return { status: 'transitioned' };
+    } catch (e) {
+      return {
+        status: 'error',
+        reason: e instanceof Error ? e.message : 'unknown cdp settlement-outcome write error',
+      };
+    }
+  }
+
+  /**
+   * SUN-1200 checkpoint C: increments the real facilitator settle-attempt
+   * counter for a bounded recovery retry, without changing
+   * `lifecycle_stage` (the retry's own outcome decides the next stage
+   * transition separately). Used only inside `attemptCdpRecovery`'s
+   * bounded single retry.
+   */
+  async incrementCdpSettleAttemptCount(paymentIdentifier: string): Promise<void> {
+    await this.db
+      .prepare(
+        `UPDATE payment_attempts SET cdp_facilitator_settle_attempt_count = cdp_facilitator_settle_attempt_count + 1 WHERE payment_identifier = ?`
+      )
+      .bind(paymentIdentifier)
+      .run();
+  }
+
+  /**
+   * SUN-1200 checkpoint C: records a real, confirmed successful economic
+   * settlement discovered/produced during recovery (chain-receipt
+   * confirmation or a successful bounded retry) — separate counter from
+   * the attempt count above, so `successful_economic_settlement_count`
+   * can never exceed 1 even when `facilitator_settle_attempt_count` is 2.
+   */
+  async incrementCdpSuccessfulSettlementCount(paymentIdentifier: string): Promise<void> {
+    await this.db
+      .prepare(
+        `UPDATE payment_attempts SET cdp_successful_economic_settlement_count = cdp_successful_economic_settlement_count + 1 WHERE payment_identifier = ?`
+      )
+      .bind(paymentIdentifier)
+      .run();
+  }
+
   /** Read-only recovery lookup — the correlation data a crash-recovery
    * reconciliation pass reads back after a restart. Never returns a
    * secret (none is ever written by `recordSettlementPending`). */
@@ -408,6 +489,15 @@ export class D1PaymentAttemptRepository implements PaymentAttemptRepository {
     serviceReceiptId: string | null;
     settlementTransactionReference: string | null;
     settlementPendingAt: string | null;
+    /** SUN-1200 checkpoint C: 'explicit_rejection' | 'ambiguous' | null.
+     * Rail-neutral by column name, but only ever written by the CDP
+     * recovery path today -- Nevermined's own recovery gate
+     * (`isExplicitProviderFailure` in x402-service.ts) makes the same
+     * distinction without persisting it, since its recovery mechanism
+     * never needs to re-check this field across a restart. */
+    settlementOutcomeKind: 'explicit_rejection' | 'ambiguous' | null;
+    cdpFacilitatorSettleAttemptCount: number;
+    cdpSuccessfulEconomicSettlementCount: number;
   } | null> {
     const row = await this.getRawByIdentifier(paymentIdentifier);
     if (!row || typeof row.lifecycle_stage !== 'string') return null;
@@ -420,6 +510,12 @@ export class D1PaymentAttemptRepository implements PaymentAttemptRepository {
       settlementTransactionReference:
         (row.settlement_transaction_reference as string | null) ?? null,
       settlementPendingAt: (row.settlement_pending_at as string | null) ?? null,
+      settlementOutcomeKind:
+        (row.settlement_outcome_kind as 'explicit_rejection' | 'ambiguous' | null) ?? null,
+      cdpFacilitatorSettleAttemptCount: Number(row.cdp_facilitator_settle_attempt_count ?? 0),
+      cdpSuccessfulEconomicSettlementCount: Number(
+        row.cdp_successful_economic_settlement_count ?? 0
+      ),
     };
   }
 

@@ -42,6 +42,8 @@ import {
   type NeverminedPaymentResponse,
 } from '@siteborne/protocol-nevermined';
 import type {
+  ExternalSettlementEvidence,
+  ExternalVerificationEvidence,
   Network,
   PaymentAttemptBinding,
   PaymentEvidenceContext,
@@ -172,6 +174,21 @@ export interface X402ServiceRouteConfig {
    * pre-existing `202 processing` response — never a regression, just no
    * automatic recovery. */
   neverminedReconciliationClient?: NeverminedDelegationLookupClient;
+  /** SUN-1200 checkpoint C, CDP-rail recovery convergence: an optional,
+   * dependency-injected READ-ONLY on-chain transaction-receipt checker.
+   * No real chain RPC call is wired anywhere in this repository today
+   * (deliberately, matching this project's established pattern of
+   * leaving a genuinely unimplemented external integration point
+   * unwired rather than faked) -- when omitted, `attemptCdpRecovery`
+   * treats any candidate transaction reference as `STILL_UNKNOWN` and
+   * falls through to the bounded identical-settle-retry step. Supplying
+   * one is a future checkpoint's job. Must never mutate state; must
+   * never be the same client/credential surface as the settlement
+   * facilitator. */
+  cdpChainReceiptChecker?: (
+    transactionReference: string,
+    network: Network
+  ) => Promise<'SETTLED' | 'FAILED' | 'STILL_UNKNOWN'>;
 }
 
 export const PAYTO_NOT_CONFIGURED = 'siteborne-fixture:payto-not-configured';
@@ -216,6 +233,47 @@ interface PendingNeverminedSettlementDraft {
   authorized_maximum: string;
 }
 
+/** SUN-1200 checkpoint C: the CDP-rail equivalent of
+ * `PendingNeverminedSettlementDraft`, written BEFORE a real CDP settle
+ * call for the same crash-safety reason. Deliberately does NOT store the
+ * signed `PaymentPayload`/`PaymentRequirements` (the buyer's economic
+ * authorization) -- a recovery retry uses the SAME payload the buyer's
+ * own replay request re-supplies (already hash-validated against the
+ * immutable binding by `acquirePaymentAttempt` before this branch is
+ * ever reached), never a value read back out of D1.
+ *
+ * Unlike `PendingNeverminedSettlementDraft` (which stores only
+ * `{payer?}`), this stores the FULL `verification_evidence` object --
+ * a deliberate, disclosed difference: Nevermined's own recovery path
+ * never re-calls `evidenceProvider.settle()` (it reconciles externally
+ * via a dedicated delegation lookup instead), so it never needs the
+ * exact object `hashPaymentObject` originally hashed. A CDP recovery
+ * retry DOES call the real `CdpPaymentEvidenceProvider.settle()` again,
+ * whose internal `verification_evidence_hash` computation must match the
+ * original `canAdvanceToSettled` gate's accepted hash bit-for-bit -- only
+ * possible by re-supplying the identical object, not a re-derived one.
+ * `verification_evidence` is the facilitator's own VERIFY response (not
+ * the buyer's signed authorization) -- non-secret, safe to persist. */
+interface CdpSettlementPendingDraft {
+  kind: 'cdp_settlement_pending_draft';
+  quote_id: string;
+  requirement_id: string;
+  request_input_hash: string;
+  output: unknown;
+  output_hash: string;
+  receipt_id: string;
+  receipt_hash: string;
+  receipt: unknown;
+  pcc?: unknown;
+  verification_evidence: ExternalVerificationEvidence;
+  verification_evidence_hash: string;
+  actual_amount: string;
+  usage_result_hash?: string;
+  usage_result?: UsageResult;
+  scheme: 'exact' | 'upto';
+  authorized_maximum: string;
+}
+
 export class NeverminedEvidenceProviderNotConfiguredError extends Error {
   constructor() {
     super('Nevermined route requires an explicitly selected Nevermined evidence provider');
@@ -227,6 +285,58 @@ function jsonError(c: Context, status: number, code: string, message: string, de
   return c.json(
     { error: code, message, ...(details !== undefined ? { details } : {}) },
     status as never
+  );
+}
+
+/**
+ * SUN-1200 checkpoint C. The CDP rail cannot reuse Nevermined's
+ * `reason === 'provider_rejected'` check -- that literal is a
+ * Nevermined-provider-only fallback default
+ * (`nevermined-provider.ts`'s `safeReason(validation.reason,
+ * 'provider_rejected')`), never produced by the real
+ * `CdpPaymentEvidenceProvider`. That provider instead exposes two
+ * independent, CDP-appropriate signals on `ExternalSettlementEvidence`:
+ *
+ *   - `trust_class`: `'external_verified'` means the facilitator
+ *     genuinely, definitively answered (either the normal
+ *     `response.success` path, or the catch-block's `facilitatorAnswered`
+ *     case -- a structured HTTP error with a real `errorReason`).
+ *     `'external_unverified'` means it did NOT answer at all
+ *     (timeout/transport failure) -- inherently ambiguous, never
+ *     explicit.
+ *   - `reason`: when `trust_class` is `'external_verified'`, this is
+ *     either the facilitator's own real rejection code (a genuine,
+ *     explicit "no"), or one of three purely *structural* post-hoc
+ *     validation labels the provider itself assigns on top of a
+ *     `response.success === true` payload (`settlement_network_mismatch`
+ *     / `settlement_amount_mismatch` / `settlement_transaction_missing`)
+ *     -- these mean the shape of the answer didn't match what we
+ *     expected, not that the facilitator said no, so they stay
+ *     ambiguous/recoverable exactly like a malformed response on any
+ *     other rail.
+ *
+ * Explicit, terminal rejection therefore requires a definitively
+ * answered facilitator (`external_verified`) with a real rejection
+ * reason that is NOT one of those three structural labels. Used
+ * identically for the first settle attempt and every bounded recovery
+ * retry, so the two can never diverge in how they classify the same
+ * evidence shape.
+ */
+const CDP_STRUCTURAL_ONLY_SETTLE_REASONS = new Set([
+  'settlement_network_mismatch',
+  'settlement_amount_mismatch',
+  'settlement_transaction_missing',
+]);
+
+function isExplicitCdpSettlementFailure(
+  settleGateReason: string,
+  settlementEvidence: Pick<ExternalSettlementEvidence, 'trust_class' | 'reason'>
+): boolean {
+  return (
+    settleGateReason === 'settlement_not_successful' &&
+    settlementEvidence.trust_class === 'external_verified' &&
+    settlementEvidence.reason !== undefined &&
+    !CDP_STRUCTURAL_ONLY_SETTLE_REASONS.has(settlementEvidence.reason)
   );
 }
 
@@ -602,7 +712,8 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
         typeof cached === 'object' &&
         cached !== null &&
         'kind' in cached &&
-        (cached as { kind?: unknown }).kind === 'nevermined_settlement_pending_draft'
+        ((cached as { kind?: unknown }).kind === 'nevermined_settlement_pending_draft' ||
+          (cached as { kind?: unknown }).kind === 'cdp_settlement_pending_draft')
       ) {
         // The durable pre-settle draft `createPending` writes, never
         // finalized (a crash landed exactly between `markConsumed` and
@@ -785,6 +896,273 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
       return c.json(responseBody, 200);
     }
 
+    /**
+     * SUN-1200 checkpoint C — CDP-rail settlement-recovery convergence.
+     * Reached only for a `duplicate_same` retry on the CDP rail whose
+     * payment attempt is durably `settlement_failed`. Order, per the
+     * frozen recovery policy:
+     *   1. `explicit_rejection` is permanently terminal — reconstruct the
+     *      same 402, no provider call, ever.
+     *   2. `ambiguous` with a candidate transaction reference: read-only
+     *      chain-receipt reconciliation first (no facilitator write) —
+     *      only if `config.cdpChainReceiptChecker` is actually wired
+     *      (it isn't, in this repository, today).
+     *   3. Otherwise: at most ONE bounded, identical `.settle()` retry,
+     *      reusing the exact original `PaymentPayload` (from the current
+     *      replay request, already binding-hash-validated) and the exact
+     *      original `verification_evidence`/`actualAmount` (from the
+     *      durable draft) — never re-verified, never re-executed, never
+     *      recomputed. `exact`/`upto` EVM authorizations are both
+     *      single-use (EIP-3009 / Permit2 nonce enforcement respectively)
+     *      at the smart-contract level, so an identical retry cannot
+     *      produce a second successful on-chain charge.
+     * Returns `null` only when there is nothing this function can do
+     * (wrong rail, no durable draft, an unclassified outcome) — the
+     * caller's pre-existing `202`/`reconstructFromJob` fallback remains
+     * the safety net for those cases, unchanged.
+     */
+    async function attemptCdpRecovery(): Promise<Response | null> {
+      if (rail !== 'cdp') return null;
+      const recovery = await paymentAttempts.getSettlementRecoveryRecord(paymentIdentifier);
+      if (!recovery || recovery.lifecycleStage !== 'settlement_failed') return null;
+
+      const jobResult = await jobsRepo.getByIdempotencyKey(paymentIdentifier);
+      if (!jobResult.ok || !jobResult.value) return null;
+      const job = jobResult.value;
+      const draft = await results.getByJobId<CdpSettlementPendingDraft>(job.id);
+      if (!draft || draft.kind !== 'cdp_settlement_pending_draft') return null;
+
+      if (recovery.settlementOutcomeKind === 'explicit_rejection') {
+        // Permanently terminal (frozen policy, unchanged from the
+        // original first-attempt behavior) — reconstruct, never re-call
+        // the provider.
+        await audit('payment_recovery_explicit_rejection_replay', {
+          payment_identifier: paymentIdentifier,
+        });
+        return jsonError(c, 402, 'settlement_rejected', 'provider_rejected');
+      }
+      if (recovery.settlementOutcomeKind !== 'ambiguous') return null;
+
+      const evidenceContext: PaymentEvidenceContext = {
+        service_id: config.serviceId,
+        service_version: config.serviceId.endsWith('.v2') ? 'v2' : 'v1',
+        scheme: config.scheme,
+        network: config.network,
+        asset: config.asset,
+        payee: stored.quote.payee,
+        quote_id: draft.quote_id,
+        requirement_id: draft.requirement_id,
+        payment_identifier: paymentIdentifier,
+        amount: stored.quote.amount,
+        nowIso,
+        expiresAt: stored.quote.expires_at,
+      };
+
+      async function finalizeCdpRecoverySuccess(
+        settlementEvidence: ExternalSettlementEvidence,
+        draft: CdpSettlementPendingDraft
+      ): Promise<Response> {
+        let link = await buildPaymentServiceLink({
+          link_version: 2,
+          payment_rail: 'cdp',
+          payment_provider: CDP_PAYMENT_PROVIDER,
+          payment_identifier: paymentIdentifier,
+          quote_id: draft.quote_id,
+          requirement_id: draft.requirement_id,
+          service_id: config.serviceId,
+          service_version: config.serviceId.endsWith('.v2') ? 'v2' : 'v1',
+          request_input_hash: draft.request_input_hash,
+          job_id: job.id,
+          service_output_hash: draft.output_hash,
+          verification_receipt_id: draft.receipt_id,
+          verification_receipt_hash: draft.receipt_hash,
+          verification_evidence_hash: draft.verification_evidence_hash,
+          ...(draft.usage_result_hash ? { usage_result_hash: draft.usage_result_hash } : {}),
+        });
+        const settlementEvidenceHash = await hashPaymentObject(settlementEvidence);
+        link = await extendWithSettlement(link, settlementEvidenceHash);
+
+        await paymentAttempts.transitionLifecycleStage(
+          paymentIdentifier,
+          'settled_external',
+          'link_verified'
+        );
+        await paymentAttempts.transitionLifecycleStage(
+          paymentIdentifier,
+          'link_verified',
+          'settled'
+        );
+        await paymentAttempts.markConsumed(paymentIdentifier);
+        await paymentAttempts.incrementCdpSuccessfulSettlementCount(paymentIdentifier);
+        if (job.current_state === 'SETTLING') {
+          await transition(job.id, 'SETTLING', 'DELIVERED', 'SETTLEMENT_COMPLETE');
+        }
+
+        const responseBody = {
+          service_id: config.serviceId,
+          result_class: 'success',
+          output: draft.output,
+          receipt_id: draft.receipt_id,
+          link_id: link.link_id,
+          link_hash: link.link_hash,
+          ...(draft.scheme === 'upto'
+            ? { authorized_maximum: draft.authorized_maximum, actual_amount: draft.actual_amount }
+            : {}),
+        };
+        const settleResponse: SettleResponse = {
+          success: true,
+          transaction: settlementEvidence.transaction_reference ?? 'recovered:unknown',
+          network: config.network,
+          ...(settlementEvidence.payer ? { payer: settlementEvidence.payer } : {}),
+          amount: draft.actual_amount,
+          extra: { link_id: link.link_id, payment_identifier: paymentIdentifier },
+        };
+        await results.finalize(job.id, { status: 200, body: responseBody, settleResponse }, nowIso);
+        await audit('payment_recovered_settled_cdp', {
+          payment_identifier: paymentIdentifier,
+          job_id: job.id,
+        });
+        c.header('PAYMENT-RESPONSE', encodePaymentResponseHeaderSafe(settleResponse));
+        return c.json(responseBody, 200);
+      }
+
+      // Step 1: read-only chain-receipt reconciliation, only if both a
+      // candidate transaction reference and a real checker are present.
+      // No facilitator write occurs in this step.
+      if (recovery.settlementTransactionReference && config.cdpChainReceiptChecker) {
+        const chainResult = await config.cdpChainReceiptChecker(
+          recovery.settlementTransactionReference,
+          config.network
+        );
+        await audit('payment_recovery_chain_check', {
+          payment_identifier: paymentIdentifier,
+          result: chainResult,
+        });
+        if (chainResult === 'SETTLED') {
+          const recorded = await paymentAttempts.recordSettledExternal(
+            paymentIdentifier,
+            recovery.settlementTransactionReference,
+            ['settlement_failed']
+          );
+          if (recorded.status !== 'transitioned') return null;
+          const settlementEvidence: ExternalSettlementEvidence = {
+            x402_version: SUPPORTED_X402_VERSION,
+            scheme: draft.scheme,
+            network: config.network,
+            asset: config.asset,
+            payee: stored.quote.payee,
+            actual_amount: draft.actual_amount,
+            quote_id: draft.quote_id,
+            requirement_id: draft.requirement_id,
+            payment_identifier: paymentIdentifier,
+            success: true,
+            settled_at: nowIso,
+            facilitator_identity: 'cdp:chain-receipt-recovery',
+            raw_evidence_hash: await hashPaymentObject({
+              kind: 'cdp_settlement_recovered_chain_receipt',
+              payment_identifier: paymentIdentifier,
+              transaction_reference: recovery.settlementTransactionReference,
+            }),
+            verification_evidence_hash: draft.verification_evidence_hash,
+            trust_class: 'external_verified',
+            transaction_reference: recovery.settlementTransactionReference,
+          };
+          return finalizeCdpRecoverySuccess(settlementEvidence, draft);
+        }
+        if (chainResult === 'FAILED') {
+          await paymentAttempts.recordCdpSettlementOutcome(
+            paymentIdentifier,
+            'settlement_failed',
+            'explicit_rejection',
+            recovery.settlementTransactionReference
+          );
+          await audit('settlement_failed', {
+            payment_identifier: paymentIdentifier,
+            reason: 'chain_confirmed_failed',
+          });
+          return jsonError(c, 402, 'settlement_rejected', 'chain_confirmed_failed');
+        }
+        // STILL_UNKNOWN falls through to the bounded retry below.
+      }
+
+      // Step 2: no usable transaction hash or inconclusive chain
+      // evidence -- at most ONE bounded, identical settle() retry.
+      if (!payload) return null; // defensive; unreachable on the CDP rail
+      const retrySettlementContext: PaymentSettlementContext = {
+        ...evidenceContext,
+        authorizationContext: { rail: 'cdp' },
+        paymentPayload: payload,
+        paymentRequirements: payload.accepted,
+        ...(draft.usage_result ? { usageResult: draft.usage_result } : {}),
+      };
+      await paymentAttempts.incrementCdpSettleAttemptCount(paymentIdentifier);
+      const retrySettlementEvidence = await evidenceProvider.settle(
+        retrySettlementContext,
+        draft.verification_evidence,
+        draft.actual_amount
+      );
+      const retryGate = canAdvanceToSettled(
+        retrySettlementEvidence,
+        evidenceContext,
+        config.evidenceMode,
+        draft.verification_evidence_hash
+      );
+      await audit('payment_recovery_settle_retry', {
+        payment_identifier: paymentIdentifier,
+        allowed: retryGate.allowed,
+      });
+      if (retryGate.allowed) {
+        const recorded = await paymentAttempts.recordSettledExternal(
+          paymentIdentifier,
+          retrySettlementEvidence.transaction_reference,
+          ['settlement_failed']
+        );
+        if (recorded.status !== 'transitioned') return null;
+        return finalizeCdpRecoverySuccess(retrySettlementEvidence, draft);
+      }
+      const retryIsExplicit = isExplicitCdpSettlementFailure(
+        retryGate.reason,
+        retrySettlementEvidence
+      );
+      if (retryIsExplicit) {
+        await paymentAttempts.recordCdpSettlementOutcome(
+          paymentIdentifier,
+          'settlement_failed',
+          'explicit_rejection',
+          retrySettlementEvidence.transaction_reference
+        );
+        await audit('settlement_failed', {
+          payment_identifier: paymentIdentifier,
+          reason: retryGate.reason,
+        });
+        return jsonError(c, 402, 'settlement_rejected', retryGate.reason);
+      }
+      // Still ambiguous after the one bounded retry -- persist (attempt
+      // count already incremented above; candidate tx reference updated
+      // if the retry happened to return one) and return a truthful,
+      // distinct, recoverable status. Never a silent permanent 202, and
+      // never a false success.
+      if (retrySettlementEvidence.transaction_reference) {
+        await paymentAttempts.recordCdpSettlementOutcome(
+          paymentIdentifier,
+          'settlement_failed',
+          'ambiguous',
+          retrySettlementEvidence.transaction_reference
+        );
+      }
+      await audit('settlement_manual_reconciliation_required', {
+        payment_identifier: paymentIdentifier,
+        reason: retryGate.reason,
+      });
+      return c.json(
+        {
+          status: 'settlement_manual_reconciliation_required',
+          payment_identifier: paymentIdentifier,
+        },
+        503
+      );
+    }
+
     if (acquireOutcome.status === 'repository_error') {
       return jsonError(c, 500, 'repository_failure', acquireOutcome.reason);
     }
@@ -840,6 +1218,8 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
     if (acquireOutcome.status === 'duplicate_same') {
       const recovered = await attemptNeverminedRecovery();
       if (recovered) return recovered;
+      const cdpRecovered = await attemptCdpRecovery();
+      if (cdpRecovered) return cdpRecovered;
       const reconstructed = await reconstructFromJob();
       if (reconstructed) return reconstructed;
       // Same legitimate retry, but the original request has not finished
@@ -995,9 +1375,12 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
       job_id: jobId,
       result_class: outcome.result.result_class,
     });
-    if (rail === 'nevermined') {
-      await paymentAttempts.transitionLifecycleStage(paymentIdentifier, 'verified', 'executed');
-    }
+    // SUN-1200 checkpoint C: unconditional for both rails now -- CDP
+    // previously never took this transition at all (it had no durable
+    // pre-settle write to follow it with), so its lifecycle stayed at
+    // `verified` all the way through settlement, with no recovery
+    // capability. See the durable pre-settle write below.
+    await paymentAttempts.transitionLifecycleStage(paymentIdentifier, 'verified', 'executed');
 
     const receiptHash = await hashPaymentObject(outcome.result.receipt as Record<string, unknown>);
 
@@ -1151,6 +1534,49 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
           'failed to durably record settlement_pending before settlement'
         );
       }
+    } else {
+      // SUN-1200 checkpoint C: the CDP-rail equivalent durable pre-settle
+      // write, added this checkpoint (previously CDP had none at all —
+      // the root cause a crash/ambiguity mid-settle could never be
+      // recovered). Same crash-safety guarantee, same "settle must never
+      // be reached without this write having committed first" rule.
+      const cdpPendingDraft: CdpSettlementPendingDraft = {
+        kind: 'cdp_settlement_pending_draft',
+        quote_id: stored.quote.quote_id,
+        requirement_id: stored.requirement_id,
+        request_input_hash: inputHash,
+        output: outcome.result.output,
+        output_hash: outcome.result.output_hash,
+        receipt_id: outcome.result.receipt_id,
+        receipt_hash: receiptHash,
+        receipt: outcome.result.receipt,
+        ...(outcome.result.verification !== undefined ? { pcc: outcome.result.verification } : {}),
+        verification_evidence: verificationEvidence,
+        verification_evidence_hash: verificationEvidenceHash,
+        actual_amount: actualAmount,
+        ...(usageResultHash ? { usage_result_hash: usageResultHash } : {}),
+        ...(usageResult ? { usage_result: usageResult } : {}),
+        scheme: config.scheme,
+        authorized_maximum: stored.quote.amount,
+      };
+      await results.createPending(jobId, paymentIdentifier, cdpPendingDraft, nowIso);
+
+      const pending = await paymentAttempts.recordSettlementPending(paymentIdentifier, {
+        serviceOutputHash: outcome.result.output_hash,
+        serviceReceiptId: outcome.result.receipt_id,
+      });
+      if (pending.status !== 'transitioned') {
+        await audit('settlement_pending_persist_failed', {
+          payment_identifier: paymentIdentifier,
+          reason: pending.status,
+        });
+        return jsonError(
+          c,
+          500,
+          'repository_failure',
+          'failed to durably record settlement_pending before settlement'
+        );
+      }
     }
 
     const settlementEvidence = await evidenceProvider.settle(
@@ -1184,22 +1610,50 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
       // `settlement_pending` (already durably persisted above), never
       // auto-retried, recoverable only through
       // `attemptNeverminedRecovery`'s read-only external reconciliation.
-      const isExplicitProviderFailure =
-        settleGate.reason === 'settlement_not_successful' &&
-        settlementEvidence.reason === 'provider_rejected';
-      if (rail === 'nevermined' && !isExplicitProviderFailure) {
-        await audit('settlement_ambiguous', {
+      if (rail === 'nevermined') {
+        const isExplicitProviderFailure =
+          settleGate.reason === 'settlement_not_successful' &&
+          settlementEvidence.reason === 'provider_rejected';
+        if (!isExplicitProviderFailure) {
+          await audit('settlement_ambiguous', {
+            payment_identifier: paymentIdentifier,
+            reason: settleGate.reason,
+          });
+          return jsonError(c, 402, 'settlement_rejected', settleGate.reason);
+        }
+        await paymentAttempts.transitionLifecycleStage(
+          paymentIdentifier,
+          'settlement_pending',
+          'settlement_failed'
+        );
+        await audit('settlement_failed', {
           payment_identifier: paymentIdentifier,
           reason: settleGate.reason,
         });
         return jsonError(c, 402, 'settlement_rejected', settleGate.reason);
       }
-      await paymentAttempts.transitionLifecycleStage(
-        paymentIdentifier,
-        rail === 'nevermined' ? 'settlement_pending' : 'verified',
-        'settlement_failed'
+      // SUN-1200 checkpoint C: see `isExplicitCdpSettlementFailure`'s own
+      // doc comment for why the CDP rail cannot reuse the Nevermined
+      // check above. The CDP rail durably classifies which kind of
+      // failure this was
+      // (`settlement_outcome_kind`), so a later `duplicate_same` retry
+      // (`attemptCdpRecovery`) knows whether recovery may ever be
+      // attempted (`ambiguous` only -- `explicit_rejection` remains
+      // permanently terminal, exactly as before this checkpoint).
+      // External behavior for THIS first attempt is unchanged either
+      // way: both kinds return the same 402 `settlement_rejected`
+      // response.
+      const isExplicitCdpProviderFailure = isExplicitCdpSettlementFailure(
+        settleGate.reason,
+        settlementEvidence
       );
-      await audit('settlement_failed', {
+      await paymentAttempts.recordCdpSettlementOutcome(
+        paymentIdentifier,
+        'settlement_pending',
+        isExplicitCdpProviderFailure ? 'explicit_rejection' : 'ambiguous',
+        settlementEvidence.transaction_reference
+      );
+      await audit(isExplicitCdpProviderFailure ? 'settlement_failed' : 'settlement_ambiguous', {
         payment_identifier: paymentIdentifier,
         reason: settleGate.reason,
       });
@@ -1208,7 +1662,15 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
     // External settlement is only the first half of finalization. The
     // payment remains unconsumed until the rail-aware PaymentServiceLink is
     // constructed, independently self-verified, and durably stored.
-    if (rail === 'nevermined') {
+    //
+    // SUN-1200 checkpoint C: this write is now unconditional (both
+    // rails) -- CDP settlements now flow through the same
+    // `settlement_pending -> settled_external -> link_verified ->
+    // settled` chain Nevermined already used, instead of a shortcut
+    // direct `verified -> settled` edge, since CDP now has its own
+    // durable pre-settle write too (see above) and can genuinely benefit
+    // from the same crash-safety.
+    {
       const recorded = await paymentAttempts.recordSettledExternal(
         paymentIdentifier,
         settlementEvidence.transaction_reference
@@ -1301,52 +1763,36 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
       payment_service_link: link,
     };
 
-    if (rail === 'nevermined') {
-      // A pending draft row already exists for this job_id (written just
-      // before the settle call above) — overwrite it with the final
-      // result rather than a second INSERT.
-      await results.finalize(
-        jobId,
-        { status: 200, body: responseBody, settleResponse, durableEvidence },
-        nowIso
-      );
-    } else {
-      await results.create(
-        jobId,
-        paymentIdentifier,
-        { status: 200, body: responseBody, settleResponse, durableEvidence },
-        nowIso
-      );
-    }
+    // SUN-1200 checkpoint C: both rails now write a pending draft row
+    // before settle (see above), so both finalize the SAME row via
+    // `finalize()` (overwrite) rather than CDP using a fresh `create()`
+    // that would now conflict with its own pending row.
+    await results.finalize(
+      jobId,
+      { status: 200, body: responseBody, settleResponse, durableEvidence },
+      nowIso
+    );
 
-    if (rail === 'nevermined') {
-      const linkRecorded = await paymentAttempts.transitionLifecycleStage(
-        paymentIdentifier,
-        'settled_external',
-        'link_verified'
-      );
-      if (linkRecorded.status !== 'transitioned') {
-        return jsonError(c, 500, 'repository_failure', 'failed to record link_verified');
-      }
-      await audit('payment_link_verified', { payment_identifier: paymentIdentifier });
-      const settled = await paymentAttempts.transitionLifecycleStage(
-        paymentIdentifier,
-        'link_verified',
-        'settled'
-      );
-      if (settled.status !== 'transitioned') {
-        return jsonError(c, 500, 'repository_failure', 'failed to record settled lifecycle');
-      }
-    } else {
-      const settled = await paymentAttempts.transitionLifecycleStage(
-        paymentIdentifier,
-        'verified',
-        'settled'
-      );
-      if (settled.status !== 'transitioned') {
-        return jsonError(c, 500, 'repository_failure', 'failed to record settled lifecycle');
-      }
-      await audit('payment_link_verified', { payment_identifier: paymentIdentifier });
+    // SUN-1200 checkpoint C: both rails now take the same
+    // `settled_external -> link_verified -> settled` path (CDP
+    // previously shortcut directly `verified -> settled`, skipping the
+    // two intermediate durable checkpoints entirely).
+    const linkRecorded = await paymentAttempts.transitionLifecycleStage(
+      paymentIdentifier,
+      'settled_external',
+      'link_verified'
+    );
+    if (linkRecorded.status !== 'transitioned') {
+      return jsonError(c, 500, 'repository_failure', 'failed to record link_verified');
+    }
+    await audit('payment_link_verified', { payment_identifier: paymentIdentifier });
+    const settled = await paymentAttempts.transitionLifecycleStage(
+      paymentIdentifier,
+      'link_verified',
+      'settled'
+    );
+    if (settled.status !== 'transitioned') {
+      return jsonError(c, 500, 'repository_failure', 'failed to record settled lifecycle');
     }
     await paymentAttempts.markConsumed(paymentIdentifier);
     await transition(jobId, 'SETTLING', 'DELIVERED', 'SETTLEMENT_COMPLETE');
