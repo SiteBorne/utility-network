@@ -20,6 +20,7 @@
     "schemas:generate": "pnpm --filter @siteborne/edge-api run generate:input-validators",
     "schemas:check": "pnpm --filter @siteborne/edge-api run generate:input-validators:check",
     "test:worker-runtime": "tsx scripts/test-worker-runtime.mts",
+    "production:preflight": "tsx scripts/production-preflight.mts",
     "pricing:check": "tsx scripts/check-embedded-pricing-drift.mts",
     "contracts:baseline:verify": "pnpm --filter @siteborne/contracts contracts:baseline:verify",
     "contracts:compat": "pnpm --filter @siteborne/contracts contracts:compat",

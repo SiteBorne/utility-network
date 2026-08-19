@@ -65,6 +65,19 @@ PCC_VERSION = "1.0.0"
 ENVIRONMENT = "production"
 LOG_LEVEL = "info"
 AGENT_CARD_SIGNING_KEY_ID = "siteborne-agent-card-2026-08"
+# SUN-1205 checkpoint K (§3, production preflight finding): required
+# alongside NVM_API_KEY/NEVERMINED_API_KEY by resolveNeverminedConfig --
+# must be exactly "sandbox"; "live" is explicitly, permanently rejected
+# by that function regardless of what is set here (the standing
+# Nevermined-live hard-disable, unrelated to and unaffected by
+# PAYMENT_ENVIRONMENT below, which governs the CDP rail only). Not a
+# secret: a fixed literal, never credential material.
+NVM_ENVIRONMENT = "sandbox"
+PAYMENT_ENVIRONMENT = "production"
+PRODUCTION_ENABLED = "true"
+PRODUCTION_CDP_CREDENTIALS_APPROVED = "true"
+HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP = "true"
+PAID_ROUTES_ENABLED = "true"
 # SUN-1200 checkpoint E: the canonical production payment-receiving
 # address, confirmed by the user and independently reconciled read-only
 # against the real CDP account list (cdp.evm.getAccount /
@@ -96,11 +109,23 @@ SELLER_WALLET_ADDRESS = "0x7f44a2dd237938F18632d4CcA40f4c690295E6E1"
 # CDP_WALLET_SECRET removed entirely, same checkpoint -- not required by
 # either the facilitator client or the read-only seller getAccount
 # lookup; see production-payment.ts's own reconciliation comment.)
-#   NEVERMINED_API_KEY      - Nevermined API key
+#   NVM_API_KEY             - Nevermined API key (canonical name; the
+#                             deprecated NEVERMINED_API_KEY alias is also
+#                             still accepted -- see env.ts)
 #   VOYAGE_API_KEY          - Voyage AI API key
 #   MODAL_TOKEN_ID          - Modal deployment token ID (SUN-0400B)
 #   MODAL_TOKEN_SECRET      - Modal deployment token secret (SUN-0400B)
 #   SENTRY_DSN              - Sentry error-reporting DSN
+#   AGENT_CARD_SIGNING_PRIVATE_KEY - ES256 JWK private key material for
+#                             A2A Agent Card signing (SUN-0800B checkpoint
+#                             2), paired with AGENT_CARD_SIGNING_KEY_ID in
+#                             [vars] above -- see env.ts's doc comment
+#                             (both or neither; a partial pair fails
+#                             closed to the ephemeral dev identity).
+# SUN-1205 checkpoint K: this list was stale (omitted NVM_API_KEY under
+# its canonical name and AGENT_CARD_SIGNING_PRIVATE_KEY entirely) --
+# discovered via `pnpm production:preflight`'s real `wrangler secret
+# list` read against the actual target account, corrected here.
 # See docs/operations/CLOUDFLARE_PROVISIONING_CHECKLIST.md.
 
 [[d1_databases]]

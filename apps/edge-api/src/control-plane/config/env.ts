@@ -162,8 +162,52 @@ export function createControlPlaneConfig(env: Env): ControlPlaneConfig {
   };
 }
 
-function validateProductionBindings(env: Env): void {
-  const requiredBindings: (keyof Env)[] = ['DB', 'ARTIFACTS', 'JOBS', 'EVENTS'];
+/**
+ * SUN-1205 checkpoint K (§2) -- `PRODUCTION_BINDING_VALIDATOR_ROOT_CAUSE`:
+ *
+ * This function (and its only caller, `createControlPlaneConfig`) has zero
+ * callers anywhere in the real request path -- `index.ts` imports only the
+ * `Env`/`ControlPlaneConfig` *types* from this module, never the
+ * `createControlPlaneConfig` function. It is exercised exclusively by
+ * `apps/edge-api/tests/env-nevermined-credential.test.ts`.
+ *
+ * Its `requiredBindings` list was stale, independent of the dead-code
+ * question: `ARTIFACTS` has been commented out in `wrangler.toml` since the
+ * SUN-0800B checkpoint 3 decision to defer R2 provisioning ("R2 bucket
+ * commented out - needs dashboard enablement first") and has zero source
+ * references anywhere (`grep -rln "env.ARTIFACTS" apps/edge-api/src`
+ * returns nothing) -- requiring it would make this function reject a
+ * genuinely valid, fully-functional production Worker the instant anyone
+ * wired it into a real path. `JOBS` and `EVENTS` are declared as Queue
+ * producer bindings in `wrangler.toml` but likewise have zero source
+ * references anywhere in the codebase (no code has ever sent or consumed a
+ * message on either queue). `CATALOG` (KV) is declared and bound but also
+ * has zero source references. The only binding any live request-handling
+ * code actually dereferences is `DB` (14 references in `index.ts` alone).
+ *
+ * Production configuration validation belongs at two different layers,
+ * both real and already correct or fixed here: (1) request-time secret
+ * presence for the payment-specific credentials, already correctly handled
+ * by this same package's `production-payment.ts`'s `checkProductionBindingsPresent`
+ * (narrow, accurate, actually wired into `resolveProductionCdpEvidenceProvider`,
+ * fails closed to fixture mode rather than throwing); (2) a preflight/
+ * release-gate check of binding *presence* (not secret values) against
+ * what `wrangler.toml` declares and what source code actually dereferences
+ * -- this is what SUN-1205 §3 wires this function into for real, via
+ * `pnpm production:preflight` (`scripts/production-preflight.mts`).
+ *
+ * Fix applied: narrowed `requiredBindings` to `['DB']` -- the only binding
+ * with a real dependency -- and exported the function so the new preflight
+ * script can call it directly rather than duplicating the check. Left
+ * un-wired into `createControlPlaneConfig`'s runtime call path deliberately
+ * (wiring dead code into a live path is a behavior change out of this
+ * checkpoint's minimal-fix scope, and is unnecessary: `index.ts` already
+ * returns a graceful `configuration_error` 500 per-route when `c.env.DB`
+ * is absent, which is the actual production-facing binding-presence gate
+ * today).
+ */
+export function validateProductionBindings(env: Env): void {
+  const requiredBindings: (keyof Env)[] = ['DB'];
   const missing = requiredBindings.filter((b) => !env[b]);
   if (missing.length > 0) {
     throw new Error(`Missing required production bindings: ${missing.join(', ')}`);
