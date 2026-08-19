@@ -40,6 +40,64 @@ export function declareSiteborneePaymentIdentifierSupport(
   return { [PAYMENT_IDENTIFIER]: declarePaymentIdentifierExtension(required) };
 }
 
+/**
+ * SUN-1202 checkpoint H — SITEBORNE compatibility adapter (Preferred A).
+ *
+ * The official `@x402/extensions` declaration
+ * (`declarePaymentIdentifierExtension`, upstream, unconditionally
+ * attaches `schema: paymentIdentifierSchema` to every declared
+ * extension — SITEBORNE cannot omit it via that official API, confirmed
+ * by reading the installed package source directly (2.21.0, the pinned
+ * version, and 2.23.0, the latest published version at the time of this
+ * fix — identical in this regard). Upstream's own
+ * `validatePaymentIdentifier` (`@x402/extensions/payment-identifier`)
+ * does a real, request-time `new Ajv2020().compile(ext.schema)`
+ * whenever a buyer echoes that `schema` field back — exactly what a
+ * spec-compliant buyer echoing the full server-declared extension
+ * object does, including SITEBORNE's own official buyer helper
+ * (`buildBuyerPaymentIdentifierExtensions`, below). Under real
+ * Cloudflare `workerd`, that compile throws (`EvalError: Code
+ * generation from strings disallowed for this context` —
+ * request-time dynamic code generation is disallowed), and
+ * `validatePaymentIdentifier`'s own internal `try/catch` converts that
+ * exception into `{valid: false}` — silently rejecting an otherwise
+ * perfectly valid Payment Identifier as "malformed".
+ *
+ * `ext.schema` is OPTIONAL from `validatePaymentIdentifier`'s own
+ * perspective (`if (ext.schema) { ...validate... }` runs only when the
+ * field is present) and carries no payment-identity, signature, or
+ * settlement meaning — it is pure self-descriptive JSON Schema metadata
+ * a buyer MAY use to locally validate `info` before sending, never wire
+ * content `info.id`/`info.required` depend on. This function drops it
+ * (and ONLY it) from an already-decoded, already-structurally-validated
+ * `PaymentPayload` before that payload reaches
+ * `validatePaymentIdentifier` — a presentation-only normalization.
+ * `info.id`/`info.required` (the actual payment-identity fields this
+ * package's idempotency binding, `src/replay/binding.ts`, depends on)
+ * pass through completely unchanged; no cryptographic, signature-bound,
+ * or settlement-bound value is touched. See ADR 0057 for the durable
+ * governing rule this fix establishes.
+ */
+export function sanitizePaymentIdentifierExtensionForValidation(
+  payload: PaymentPayload
+): PaymentPayload {
+  const extensions = payload.extensions as Record<string, unknown> | undefined;
+  const extension = extensions?.[PAYMENT_IDENTIFIER] as
+    | { info?: unknown; schema?: unknown }
+    | undefined;
+  if (!extension || typeof extension !== 'object' || !('schema' in extension)) {
+    return payload;
+  }
+  const extensionWithoutSchema: { info?: unknown } = { info: extension.info };
+  return {
+    ...payload,
+    extensions: {
+      ...extensions,
+      [PAYMENT_IDENTIFIER]: extensionWithoutSchema,
+    },
+  };
+}
+
 export type PaymentIdentifierParseOutcome =
   | { status: 'present'; id: string }
   | { status: 'absent' }
@@ -50,12 +108,21 @@ export type PaymentIdentifierParseOutcome =
  * location only** (`payload.extensions['payment-identifier']`) — never an
  * arbitrary nested field. Fails closed: a required-but-missing identifier
  * and a present-but-malformed identifier are each their own distinct,
- * closed outcome. */
+ * closed outcome.
+ *
+ * SUN-1202 checkpoint H: applies
+ * `sanitizePaymentIdentifierExtensionForValidation` first, unconditionally,
+ * for every caller — not just `apps/edge-api`'s HTTP route. See that
+ * function's own doc comment for the full compatibility-adapter rationale;
+ * this is the one, single entry point every payload must pass through
+ * before reaching upstream's `extractAndValidatePaymentIdentifier`, so no
+ * future caller can forget to apply it. */
 export function parsePaymentIdentifier(
   payload: PaymentPayload,
   serverRequired: boolean
 ): PaymentIdentifierParseOutcome {
-  const { id, validation } = extractAndValidatePaymentIdentifier(payload);
+  const sanitized = sanitizePaymentIdentifierExtensionForValidation(payload);
+  const { id, validation } = extractAndValidatePaymentIdentifier(sanitized);
 
   // A structurally-present-but-invalid extension also comes back with
   // `id: null` from the official parser — check validity *before*

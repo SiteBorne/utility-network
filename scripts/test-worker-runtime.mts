@@ -171,33 +171,38 @@ async function get402(base: string, path: string, body: unknown) {
 }
 
 /**
- * Builds a buyer PAYMENT-SIGNATURE payload for the fixture-mode seam.
- * Deliberately omits echoing the server-declared payment-identifier
- * extension's `schema` field -- SUN-1201 checkpoint G discovered, live
- * under real `workerd`, that `@x402/extensions`' own
- * `validatePaymentIdentifier` triggers a self-caught request-time
- * `ajv.compile(ext.schema)` whenever that field IS echoed back, and the
- * real Workers eval restriction poisons that call into a false
- * "malformed" rejection even for a structurally valid identifier -- a
- * genuine, newly-discovered functional-correctness defect in that
- * third-party dependency, reachable by any spec-compliant buyer that
- * echoes the extension exactly as SITEBORNE's own
- * `buildBuyerPaymentIdentifierExtensions` helper does. NOT fixed in this
- * checkpoint (upstream dependency; out of this checkpoint's scope per
- * its own "do not modify upstream package behavior casually" and "do
- * not overbuild" instructions) -- reported prominently as
- * `X402_EXTENSION_CLASSIFICATION=FUNCTIONAL_BLOCKER` in the SUN-1201
- * closure report instead. Omitting the echoed schema here is a
- * deliberate, disclosed harness-construction choice to route around
- * that separate, already-flagged defect so this proof can still
- * demonstrate the actual target of this checkpoint (post-settlement
- * `verify_agent_output` execution) without being blocked by it.
+ * Builds a buyer PAYMENT-SIGNATURE payload for the fixture-mode seam --
+ * faithfully mirroring what SITEBORNE's own official buyer helper
+ * (`buildBuyerPaymentIdentifierExtensions`,
+ * `packages/protocol-x402/src/identifier/payment-identifier.ts`)
+ * produces: the FULL server-declared `payment-identifier` extension
+ * echoed back verbatim, `info.id` filled in -- including the upstream
+ * `schema` field. (This bare tsx script cannot import
+ * `@siteborne/protocol-x402` directly -- workspace packages never build
+ * `dist/`, and only Vitest's own aliased config resolves them -- so this
+ * mirrors the real helper's output rather than calling it; equivalence
+ * is proven separately, using the REAL package, in
+ * `packages/protocol-x402/src/identifier/payment-identifier.test.ts`'s
+ * "H1: the real, official buyer helper output" test.)
+ *
+ * SUN-1201 checkpoint G discovered, live under real `workerd`, that
+ * echoing this `schema` field triggered a self-caught request-time
+ * `ajv.compile(ext.schema)` inside `@x402/extensions`' own
+ * `validatePaymentIdentifier`, poisoning an otherwise-valid identifier
+ * into a false "malformed" rejection -- reported as
+ * `X402_EXTENSION_CLASSIFICATION=FUNCTIONAL_BLOCKER`. SUN-1202 checkpoint
+ * H fixed this with `sanitizePaymentIdentifierExtensionForValidation`
+ * (applied unconditionally inside `parsePaymentIdentifier`, the real
+ * production code path) -- this harness now deliberately echoes the
+ * schema, exactly as a real spec-compliant buyer does, to prove the fix
+ * under real `workerd` rather than routing around the defect as SUN-1201
+ * did.
  */
 function buildBuyerPayload(challenge: any, paymentId: string) {
   const requirement = challenge.accepts[0];
   const declared = challenge.extensions?.['payment-identifier'];
   const extensions = declared
-    ? { 'payment-identifier': { info: { ...declared.info, id: paymentId } } }
+    ? { 'payment-identifier': { ...declared, info: { ...declared.info, id: paymentId } } }
     : {};
   return {
     x402Version: 2,
@@ -432,6 +437,71 @@ async function runPhase2() {
         caseBOk,
         `status=${resultB.status} error=${parsedB.error} message=${parsedB.message}`
       );
+
+      // H3: a structurally malformed extension (schema echoed, but id
+      // fails the pattern/length check) must still be rejected -- proves
+      // the SUN-1202 checkpoint H fix did not turn payment-identifier
+      // validation into "accept anything".
+      {
+        const challenge = await get402(base, '/v1/verify/agent-output', caseABody);
+        const declared = challenge.extensions?.['payment-identifier'];
+        const payload = {
+          x402Version: 2,
+          resource: challenge.resource,
+          accepted: challenge.accepts[0],
+          payload: { synthetic_signature: 'synthetic:buyer-fixture' },
+          extensions: declared
+            ? { 'payment-identifier': { ...declared, info: { ...declared.info, id: 'too-short' } } }
+            : {},
+        };
+        const res = await fetch(`${base}/v1/verify/agent-output`, {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            'PAYMENT-SIGNATURE': encodeHeader(payload),
+          },
+          body: JSON.stringify(caseABody),
+        });
+        const respBody = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+        record(
+          'PHASE 2 (H3): a malformed payment identifier (schema echoed, invalid id) is still rejected',
+          res.status === 400 && respBody.error === 'malformed_payment_signature',
+          `status=${res.status} error=${String(respBody.error)}`
+        );
+      }
+
+      // H4: a buyer that tampers with the server-declared security-
+      // sensitive `info.required` field (attempting to claim "not
+      // required" to skip supplying any identifier at all, on a route
+      // that DOES require one) must still be governed by the server's
+      // own stored requirement, never the buyer-echoed claim.
+      {
+        const challenge = await get402(base, '/v1/verify/agent-output', caseABody);
+        const declared = challenge.extensions?.['payment-identifier'];
+        const payload = {
+          x402Version: 2,
+          resource: challenge.resource,
+          accepted: challenge.accepts[0],
+          payload: { synthetic_signature: 'synthetic:buyer-fixture' },
+          extensions: declared
+            ? { 'payment-identifier': { ...declared, info: { required: false } } }
+            : {},
+        };
+        const res = await fetch(`${base}/v1/verify/agent-output`, {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            'PAYMENT-SIGNATURE': encodeHeader(payload),
+          },
+          body: JSON.stringify(caseABody),
+        });
+        const respBody = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+        record(
+          'PHASE 2 (H4): tampering with the declared info.required flag does not bypass the server-declared requirement',
+          res.status === 400 && respBody.error === 'malformed_payment_signature',
+          `status=${res.status} error=${String(respBody.error)} message=${String(respBody.message)}`
+        );
+      }
 
       const hasEvalError = /EvalError|Code generation from strings disallowed/i.test(getLog());
       record(
