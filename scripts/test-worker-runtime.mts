@@ -513,6 +513,92 @@ async function runPhase2() {
 }
 
 // ---------------------------------------------------------------------
+// Phase 3 (SUN-1203 checkpoint I): extends the same test-only entrypoint's
+// real-workerd post-settlement proof to the three other v1 paid services
+// (company_evidence_graph, web_context_verified, document_evidence_json)
+// -- verify_agent_output already had this coverage from SUN-1201/1202.
+// `worker-runtime-test-entrypoint.ts` already mounts the FULL app
+// (`buildPaidServicesApp`, all /v1/* services) via the same structurally-
+// isolated FixturePaymentEvidenceProvider seam -- no new test seam
+// introduced, only new HTTP scenarios against the existing one. Input
+// fixtures mirror the exact accepted SUN-0300/SUN-0700A scenarios
+// `apps/edge-api/tests/x402-service-route.test.ts` already uses (real,
+// not invented): the Apple Inc. SEC EDGAR CIK for company evidence, the
+// native-fixture PDF artifact for document evidence.
+// ---------------------------------------------------------------------
+async function runPhase3() {
+  const configPath = join(REPO_ROOT, 'wrangler.worker-runtime-test.toml');
+  await withDevServer({ configPath, dbName: 'siteborne-worker-runtime-test' }, async (base) => {
+    record('PHASE 3 (test-only entrypoint): worker boots under real workerd', true);
+
+    const services: Array<{ name: string; path: string; body: unknown }> = [
+      {
+        name: 'company_evidence_graph.v1',
+        path: '/v1/company/evidence-graph',
+        body: {
+          identifiers: { cik: '0000320193' },
+          requested_field_groups: ['identity', 'sec_submissions'],
+        },
+      },
+      {
+        name: 'web_context_verified.v1',
+        path: '/v1/web/context',
+        body: { target_url: 'https://acme.example/', retrieval_mode: 'direct' },
+      },
+      {
+        name: 'document_evidence_json.v1',
+        path: '/v1/document/evidence-json',
+        body: {
+          artifact_reference: {
+            artifact_id: 'doc/native-fixture.pdf',
+            media_type: 'application/pdf',
+            size_bytes: 1,
+          },
+        },
+      },
+    ];
+
+    for (const svc of services) {
+      // P1: unsigned request -> real 402.
+      const challenge = await get402(base, svc.path, svc.body);
+      record(`PHASE 3 (P1): ${svc.name} unsigned request -> real 402 under real workerd`, true);
+
+      // P3: valid synthetic payment -> real post-settlement execution.
+      const result = await payAndFetch(base, svc.path, svc.body, challenge);
+      let parsed: any = {};
+      try {
+        parsed = JSON.parse(result.body);
+      } catch {
+        /* leave {} */
+      }
+      const ok =
+        result.status === 200 &&
+        parsed.result_class === 'success' &&
+        typeof parsed.receipt_id === 'string' &&
+        typeof parsed.link_id === 'string';
+      record(
+        `PHASE 3 (P3): ${svc.name} synthetic payment -> real post-settlement success under real workerd`,
+        ok,
+        `status=${result.status} result_class=${parsed.result_class} receipt_id=${typeof parsed.receipt_id}`
+      );
+
+      // P2: malformed input (missing required field) -> deterministic
+      // pre-economic rejection, never a 402.
+      const badRes = await fetch(base + svc.path, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      record(
+        `PHASE 3 (P2): ${svc.name} malformed input -> deterministic pre-economic rejection (never 402)`,
+        badRes.status === 400 && !badRes.headers.get('PAYMENT-REQUIRED'),
+        `status=${badRes.status}`
+      );
+    }
+  });
+}
+
+// ---------------------------------------------------------------------
 // Bundle isolation proof (§7 / S3): the REAL production wrangler.toml's
 // dry-run bundle must never contain the test-only entrypoint's source
 // chunk.
@@ -539,6 +625,7 @@ async function main() {
   try {
     await runPhase1();
     await runPhase2();
+    await runPhase3();
     await runBundleIsolationCheck();
   } catch (err) {
     record('harness execution', false, String(err));
