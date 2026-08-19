@@ -160,10 +160,7 @@ function isSchemaNode(value: unknown): value is Record<string, unknown> | boolea
   );
 }
 
-function reject(
-  code: Profile1Rejection['code'],
-  reason: string
-): Profile1Rejection {
+function reject(code: Profile1Rejection['code'], reason: string): Profile1Rejection {
   return { supported: false, code, reason };
 }
 
@@ -196,7 +193,10 @@ function walk(
     );
   }
   if (!isSchemaNode(node)) {
-    return reject('unsupported_required_schema', `expected a schema (object or boolean) at ${path}`);
+    return reject(
+      'unsupported_required_schema',
+      `expected a schema (object or boolean) at ${path}`
+    );
   }
   state.nodeCount++;
   state.maxDepth = Math.max(state.maxDepth, depth);
@@ -279,7 +279,10 @@ function walk(
 
     if (shape === 'schemaArray') {
       if (!Array.isArray(value)) {
-        return reject('unsupported_required_schema', `"${key}" at ${keyPath} must be an array of schemas`);
+        return reject(
+          'unsupported_required_schema',
+          `"${key}" at ${keyPath} must be an array of schemas`
+        );
       }
       const limit =
         key === 'prefixItems'
@@ -322,7 +325,13 @@ function walk(
       // propName is an ordinary buyer-chosen name (a property name, or a
       // $defs definition name) -- never checked against the keyword
       // allowlist. Only propSchema (the VALUE) is walked as a schema.
-      const err = walk(propSchema, `${keyPath}/${encodeURIComponent(propName)}`, depth + 1, state, false);
+      const err = walk(
+        propSchema,
+        `${keyPath}/${encodeURIComponent(propName)}`,
+        depth + 1,
+        state,
+        false
+      );
       if (err) return err;
     }
   }
@@ -477,7 +486,10 @@ export interface Profile1ValidationOutcome {
  * interpreter (no `Ajv`, no `new Function`, no request-time codegen of
  * any kind). Callers MUST call `checkSchemaProfile1` first; this
  * function does not re-check keyword support or resource limits. */
-export function validateAgainstProfile1(schema: unknown, candidate: unknown): Profile1ValidationOutcome {
+export function validateAgainstProfile1(
+  schema: unknown,
+  candidate: unknown
+): Profile1ValidationOutcome {
   const validator = new Validator(schema as Record<string, unknown> | boolean, '2020-12');
   const result: ValidationResult = validator.validate(candidate);
   return {

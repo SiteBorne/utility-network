@@ -1,0 +1,26 @@
+# SUN-1201 checkpoint G — TEST-ONLY Wrangler config for
+# `scripts/test-worker-runtime.mts`'s deterministic post-settlement
+# proof. NEVER deployed -- not referenced by any `wrangler deploy`/
+# `versions upload`/`versions deploy` command anywhere in this
+# repository, and not the config any CI/release process uses. `main`
+# points at `apps/edge-api/src/worker-runtime-test-entrypoint.ts`, a
+# file the real production entrypoint (`apps/edge-api/src/index.ts`)
+# never imports -- see that file's own doc comment for the full
+# structural-isolation argument. Deliberately minimal (YAGNI): no
+# `routes`, no production `[vars]`, no KV/R2/queue bindings the real
+# Worker has -- this config exists solely to give
+# `verify_agent_output`'s `/v1/*`/`/v2/*` routes a D1 binding, with the
+# same `compatibility_date`/`compatibility_flags` as the real
+# `wrangler.toml` so this proof runs under the identical real-`workerd`
+# runtime restrictions (no request-time dynamic code generation) the
+# real deployed Worker enforces.
+name = "siteborne-worker-runtime-test"
+main = "apps/edge-api/src/worker-runtime-test-entrypoint.ts"
+compatibility_date = "2026-08-05"
+compatibility_flags = ["nodejs_compat"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "siteborne-worker-runtime-test"
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations"

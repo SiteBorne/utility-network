@@ -215,7 +215,9 @@ export interface X402ServiceRouteConfig {
    * before any quote is minted. Returning `{ ok: true }` continues the
    * normal flow; `{ ok: false, ... }` short-circuits with a 400 and
    * never mints a quote or emits a 402. */
-  preEconomicBodyValidator?: (body: unknown) => { ok: true } | { ok: false; code: string; message: string };
+  preEconomicBodyValidator?: (
+    body: unknown
+  ) => { ok: true } | { ok: false; code: string; message: string };
 }
 
 export const PAYTO_NOT_CONFIGURED = 'siteborne-fixture:payto-not-configured';

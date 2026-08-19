@@ -588,7 +588,11 @@ describe('x402 HTTP vertical slice (SUN-0700A checkpoint 5)', () => {
     it('a Profile-1-supported required_schema still gets a normal 402 challenge (no false-positive rejection)', async () => {
       const challenge = await get402(app, '/v1/verify/agent-output', {
         ...AGENT_INPUT,
-        required_schema: { type: 'object', properties: { total: { type: 'number' } }, required: ['total'] },
+        required_schema: {
+          type: 'object',
+          properties: { total: { type: 'number' } },
+          required: ['total'],
+        },
       });
       expect(challenge.x402Version).toBe(2);
     });

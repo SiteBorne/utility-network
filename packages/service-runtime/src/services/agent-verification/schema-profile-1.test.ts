@@ -33,9 +33,10 @@ function ajvValidate(schema: unknown, candidate: unknown): boolean {
  * differential-equivalence proof. */
 function agree(schema: unknown, cases: Array<[unknown, boolean]>) {
   const check = checkSchemaProfile1(schema);
-  expect(check.supported, `expected schema to be Profile-1 supported: ${JSON.stringify(check)}`).toBe(
-    true
-  );
+  expect(
+    check.supported,
+    `expected schema to be Profile-1 supported: ${JSON.stringify(check)}`
+  ).toBe(true);
   for (const [candidate, expected] of cases) {
     const ajvResult = ajvValidate(schema, candidate);
     expect(ajvResult, `AJV disagreement for ${JSON.stringify(candidate)}`).toBe(expected);
@@ -106,20 +107,30 @@ describe('SITEBORNE JSON Schema Profile 1 — capability matrix (§8) / differen
   });
 
   it('additionalProperties as a schema (not just boolean)', () => {
-    agree({ type: 'object', properties: { a: { type: 'string' } }, additionalProperties: { type: 'number' } }, [
-      [{ a: 'x', b: 1 }, true],
-      [{ a: 'x', b: 'not-a-number' }, false],
-    ]);
+    agree(
+      {
+        type: 'object',
+        properties: { a: { type: 'string' } },
+        additionalProperties: { type: 'number' },
+      },
+      [
+        [{ a: 'x', b: 1 }, true],
+        [{ a: 'x', b: 'not-a-number' }, false],
+      ]
+    );
   });
 
   it('arrays: items/prefixItems/min/maxItems/uniqueItems', () => {
-    agree({ type: 'array', items: { type: 'number' }, minItems: 1, maxItems: 3, uniqueItems: true }, [
-      [[1, 2], true],
-      [[], false],
-      [[1, 2, 3, 4], false],
-      [[1, 1], false],
-      [['x'], false],
-    ]);
+    agree(
+      { type: 'array', items: { type: 'number' }, minItems: 1, maxItems: 3, uniqueItems: true },
+      [
+        [[1, 2], true],
+        [[], false],
+        [[1, 2, 3, 4], false],
+        [[1, 1], false],
+        [['x'], false],
+      ]
+    );
     agree({ type: 'array', prefixItems: [{ type: 'string' }, { type: 'number' }], items: false }, [
       [['a', 1], true],
       [['a', 1, 'extra'], false], // items:false forbids anything beyond prefixItems
@@ -145,7 +156,14 @@ describe('SITEBORNE JSON Schema Profile 1 — capability matrix (§8) / differen
 
   it('numbers: minimum/maximum/exclusiveMinimum/exclusiveMaximum/multipleOf', () => {
     agree(
-      { type: 'number', minimum: 0, maximum: 10, exclusiveMinimum: 0, exclusiveMaximum: 10, multipleOf: 2 },
+      {
+        type: 'number',
+        minimum: 0,
+        maximum: 10,
+        exclusiveMinimum: 0,
+        exclusiveMaximum: 10,
+        multipleOf: 2,
+      },
       [
         [4, true],
         [0, false],
@@ -166,11 +184,19 @@ describe('SITEBORNE JSON Schema Profile 1 — capability matrix (§8) / differen
       [1, true],
       [true, false],
     ]);
-    agree({ oneOf: [{ minimum: 0, maximum: 5 }, { minimum: 3, maximum: 10 }] }, [
-      [1, true], // matches only the first
-      [4, false], // matches both -> oneOf fails
-      [8, true], // matches only the second
-    ]);
+    agree(
+      {
+        oneOf: [
+          { minimum: 0, maximum: 5 },
+          { minimum: 3, maximum: 10 },
+        ],
+      },
+      [
+        [1, true], // matches only the first
+        [4, false], // matches both -> oneOf fails
+        [8, true], // matches only the second
+      ]
+    );
     agree({ not: { type: 'string' } }, [
       [1, true],
       ['x', false],
@@ -212,7 +238,10 @@ describe('SITEBORNE JSON Schema Profile 1 — capability matrix (§8) / differen
   it('$schema, when supplied, must equal the canonical Draft 2020-12 URI', () => {
     const ok = checkSchemaProfile1({ $schema: CANONICAL_DRAFT_2020_12_URI, type: 'string' });
     expect(ok.supported).toBe(true);
-    const bad = checkSchemaProfile1({ $schema: 'http://json-schema.org/draft-07/schema#', type: 'string' });
+    const bad = checkSchemaProfile1({
+      $schema: 'http://json-schema.org/draft-07/schema#',
+      type: 'string',
+    });
     expect(bad).toEqual({
       supported: false,
       code: 'unsupported_required_schema',
@@ -237,12 +266,15 @@ describe('SITEBORNE JSON Schema Profile 1 — capability matrix (§8) / differen
 });
 
 describe('SITEBORNE JSON Schema Profile 1 — unsupported-keyword rejection (§4, §9)', () => {
-  it.each(PROFILE_1_UNSUPPORTED_KEYWORDS)('rejects the explicitly unsupported keyword "%s"', (keyword) => {
-    const schema = { type: 'object', [keyword]: {} };
-    const check = checkSchemaProfile1(schema);
-    expect(check.supported).toBe(false);
-    if (!check.supported) expect(check.code).toBe('unsupported_required_schema');
-  });
+  it.each(PROFILE_1_UNSUPPORTED_KEYWORDS)(
+    'rejects the explicitly unsupported keyword "%s"',
+    (keyword) => {
+      const schema = { type: 'object', [keyword]: {} };
+      const check = checkSchemaProfile1(schema);
+      expect(check.supported).toBe(false);
+      if (!check.supported) expect(check.code).toBe('unsupported_required_schema');
+    }
+  );
 
   it('rejects a genuinely unrecognized keyword rather than silently ignoring it', () => {
     const check = checkSchemaProfile1({ type: 'string', totallyMadeUpKeyword: true });
@@ -252,7 +284,11 @@ describe('SITEBORNE JSON Schema Profile 1 — unsupported-keyword rejection (§4
   it('§9 adversarial: a property literally named "pattern" does NOT trigger unsupported-keyword rejection', () => {
     const schema = {
       type: 'object',
-      properties: { pattern: { type: 'string' }, $dynamicRef: { type: 'number' }, format: { type: 'boolean' } },
+      properties: {
+        pattern: { type: 'string' },
+        $dynamicRef: { type: 'number' },
+        format: { type: 'boolean' },
+      },
       required: ['pattern'],
     };
     const check = checkSchemaProfile1(schema);
@@ -272,7 +308,9 @@ describe('SITEBORNE JSON Schema Profile 1 — unsupported-keyword rejection (§4
   });
 
   it('remote $ref is rejected (never a real dereference/network read)', () => {
-    const check = checkSchemaProfile1({ properties: { x: { $ref: 'https://example.invalid/schema.json' } } });
+    const check = checkSchemaProfile1({
+      properties: { x: { $ref: 'https://example.invalid/schema.json' } },
+    });
     expect(check.supported).toBe(false);
   });
 
@@ -323,13 +361,18 @@ describe('SITEBORNE JSON Schema Profile 1 — unsupported-keyword rejection (§4
 
   it('dependentRequired/dependentSchemas are recorded as unsupported, not silently dropped', () => {
     expect(checkSchemaProfile1({ dependentRequired: { a: ['b'] } }).supported).toBe(false);
-    expect(checkSchemaProfile1({ dependentSchemas: { a: { type: 'object' } } }).supported).toBe(false);
+    expect(checkSchemaProfile1({ dependentSchemas: { a: { type: 'object' } } }).supported).toBe(
+      false
+    );
   });
 });
 
 describe('SITEBORNE JSON Schema Profile 1 — resource limits (§5, §11, §13)', () => {
   it('rejects a schema exceeding MAX_CANONICAL_SCHEMA_BYTES', () => {
-    const schema = { type: 'string', description: 'x'.repeat(PROFILE_1_LIMITS.MAX_CANONICAL_SCHEMA_BYTES) };
+    const schema = {
+      type: 'string',
+      description: 'x'.repeat(PROFILE_1_LIMITS.MAX_CANONICAL_SCHEMA_BYTES),
+    };
     const check = checkSchemaProfile1(schema);
     expect(check.supported).toBe(false);
     if (!check.supported) expect(check.code).toBe('required_schema_limit_exceeded');
@@ -356,22 +399,29 @@ describe('SITEBORNE JSON Schema Profile 1 — resource limits (§5, §11, §13)'
   });
 
   it('rejects a schema exceeding MAX_ENUM_VALUES', () => {
-    const check = checkSchemaProfile1({ enum: Array.from({ length: PROFILE_1_LIMITS.MAX_ENUM_VALUES + 1 }, (_, i) => i) });
+    const check = checkSchemaProfile1({
+      enum: Array.from({ length: PROFILE_1_LIMITS.MAX_ENUM_VALUES + 1 }, (_, i) => i),
+    });
     expect(check.supported).toBe(false);
     if (!check.supported) expect(check.code).toBe('required_schema_limit_exceeded');
   });
 
   it('rejects a schema exceeding MAX_COMBINATOR_BRANCHES_PER_KEYWORD', () => {
-    const branches = Array.from({ length: PROFILE_1_LIMITS.MAX_COMBINATOR_BRANCHES_PER_KEYWORD + 1 }, () => ({
-      type: 'number',
-    }));
+    const branches = Array.from(
+      { length: PROFILE_1_LIMITS.MAX_COMBINATOR_BRANCHES_PER_KEYWORD + 1 },
+      () => ({
+        type: 'number',
+      })
+    );
     const check = checkSchemaProfile1({ anyOf: branches });
     expect(check.supported).toBe(false);
     if (!check.supported) expect(check.code).toBe('required_schema_limit_exceeded');
   });
 
   it('rejects a schema exceeding MAX_PREFIX_ITEMS', () => {
-    const prefixItems = Array.from({ length: PROFILE_1_LIMITS.MAX_PREFIX_ITEMS + 1 }, () => ({ type: 'number' }));
+    const prefixItems = Array.from({ length: PROFILE_1_LIMITS.MAX_PREFIX_ITEMS + 1 }, () => ({
+      type: 'number',
+    }));
     const check = checkSchemaProfile1({ type: 'array', prefixItems });
     expect(check.supported).toBe(false);
     if (!check.supported) expect(check.code).toBe('required_schema_limit_exceeded');

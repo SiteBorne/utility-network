@@ -11,6 +11,7 @@ import {
   buildStandardVerifiers,
   getAjv,
   getOutputSchemaId,
+  getPrecompiledOutputValidator,
   issueReceipt,
   runMesh,
   type CandidateResult,
@@ -21,6 +22,7 @@ import {
   type VerificationMode,
   type VerificationReceipt,
 } from '@siteborne/verification';
+import type { ValidateFunction } from 'ajv';
 import { toVerificationAuditSink, toVerificationClock } from '../context';
 import { toCandidateClaims, toCandidateEvidence } from './candidate-conversion';
 import type { PccDocument } from './document-types';
@@ -160,12 +162,23 @@ export async function verifyAndSign<TExtensionKey extends string, TExtension>(
     receipt: toPccReceiptBlock(receipt),
   };
 
-  const ajv = getAjv();
   const schemaId = getOutputSchemaId(finalized.contract.service_id);
   let schemaValidAfterFinalization = false;
   let schemaErrors: string[] = [];
   if (schemaId) {
-    const validate = ajv.getSchema(schemaId);
+    // SUN-1201 checkpoint G: a real, previously-missed second
+    // request-time-eval call site, found live under real `workerd` while
+    // building this checkpoint's post-settlement proof -- this
+    // post-finalization re-check called `getAjv().getSchema(schemaId)`
+    // directly and unconditionally, bypassing SUN-1200 checkpoint F
+    // (P0-A)'s precompiled-validator override entirely (that fix only
+    // covered `schema-verifier.ts`'s call site). Same fix, same
+    // established pattern: prefer the build-time-precompiled validator,
+    // falling through to `getAjv()` unchanged for every non-Worker
+    // caller that never calls `setPrecompiledOutputValidators`.
+    const validate =
+      (getPrecompiledOutputValidator(schemaId) as ValidateFunction | undefined) ??
+      getAjv().getSchema(schemaId);
     if (validate) {
       schemaValidAfterFinalization = Boolean(validate(finalized));
       schemaErrors = (validate.errors ?? []).map(

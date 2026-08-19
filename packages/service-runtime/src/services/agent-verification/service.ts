@@ -33,7 +33,11 @@ import {
 import type { PccClaim, PccEvidenceItem } from '../../pcc/document-types';
 import type { LocalService, ServiceExecutionContext, ServiceExecutionResult } from '../../types';
 import { evaluateClaim } from './claim-evaluation';
-import { SCHEMA_PROFILE_ID, checkSchemaProfile1, validateAgainstProfile1 } from './schema-profile-1';
+import {
+  SCHEMA_PROFILE_ID,
+  checkSchemaProfile1,
+  validateAgainstProfile1,
+} from './schema-profile-1';
 import type {
   AgentVerificationExtension,
   AgentVerificationInput,
@@ -296,7 +300,10 @@ function evaluateDeterministicRequirement(
         details: `required_schema is not supported by ${SCHEMA_PROFILE_ID}: ${profileCheck.reason}`,
       };
     }
-    const { valid, errors } = validateAgainstProfile1(input.required_schema, input.candidate_output);
+    const { valid, errors } = validateAgainstProfile1(
+      input.required_schema,
+      input.candidate_output
+    );
     return {
       passed: valid,
       details: valid
