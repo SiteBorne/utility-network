@@ -46,7 +46,12 @@
 import { Hono } from 'hono';
 import type { D1Database } from '@cloudflare/workers-types';
 import { FixturePaymentEvidenceProvider } from '@siteborne/protocol-x402';
-import { buildPaidServicesApp } from './control-plane/routes/paid-services';
+import type { NeverminedFacilitatorClient } from '@siteborne/protocol-nevermined';
+import {
+  buildPaidServicesApp,
+  buildNeverminedV2PaidServicesApp,
+} from './control-plane/routes/paid-services';
+import { NeverminedPaymentEvidenceProvider } from './control-plane/evidence/nevermined-provider';
 
 // `scripts/test-worker-runtime.mts`'s bundle-isolation check searches a
 // fresh `wrangler deploy --dry-run` of the REAL `wrangler.toml` for this
@@ -65,6 +70,108 @@ let cachedApp: Awaited<ReturnType<typeof buildPaidServicesApp>> | undefined;
 let cachedDb: D1Database | undefined;
 
 const app = new Hono<{ Bindings: TestEnv }>();
+
+/**
+ * SUN-1204 checkpoint J, Track B — a deterministic
+ * `NeverminedFacilitatorClient` for `NeverminedPaymentEvidenceProvider.fixture()`,
+ * the SAME "only injectable client path" the real production code already
+ * defines (`control-plane/evidence/nevermined-provider.ts`) specifically
+ * for testability -- `providerKind` is unconditionally `'fixture'` for
+ * this path, so `resolvePaymentEvidenceProvider`'s own production-mode
+ * gate rejects it exactly like CDP's `FixturePaymentEvidenceProvider`.
+ * The real production entrypoint (`index.ts`) never calls `.fixture()`,
+ * only `.authenticated()` (which requires a real sandbox API key + the
+ * explicit `RUN_LIVE_NEVERMINED`/environment live-guard) -- this seam is
+ * not new, not invented for this checkpoint, and already structurally
+ * unreachable from production by the existing code's own design.
+ */
+function successNeverminedClient(): NeverminedFacilitatorClient {
+  let verifyCount = 0;
+  let settleCount = 0;
+  return {
+    async verifyPermissions() {
+      verifyCount += 1;
+      return {
+        isValid: true,
+        payer: '0x516F57e1fB800ccEB2E70C42607Fb93E2abEcB99',
+        network: 'eip155:84532',
+        agentRequestId: `fixture-request-${verifyCount}`,
+      };
+    },
+    async settlePermissions(input) {
+      settleCount += 1;
+      return {
+        success: true,
+        payer: '0x516F57e1fB800ccEB2E70C42607Fb93E2abEcB99',
+        transaction: `fixture:settlement:${settleCount}`,
+        network: 'eip155:84532',
+        creditsRedeemed: input.actualAmount,
+        remainingBalance: '999000',
+      };
+    },
+  };
+}
+
+/** N4/N5 (§7): a deterministic client that always explicitly DENIES
+ * verification -- mounted at a distinct, test-only-only path prefix
+ * (`/v2/nevermined-deny/*`, never a real production path; production only
+ * ever mounts `/v2/nevermined/*`) rather than any request-controlled
+ * selector, so the harness can prove denial without any magic
+ * header/value reaching the real route logic. */
+function denyingNeverminedClient(): NeverminedFacilitatorClient {
+  return {
+    async verifyPermissions() {
+      return {
+        isValid: false,
+        invalidReason: 'fixture_explicit_denial',
+      };
+    },
+    async settlePermissions() {
+      throw new Error('settlePermissions must never be reached after an explicit denial');
+    },
+  };
+}
+
+let cachedNeverminedApp: Awaited<ReturnType<typeof buildNeverminedV2PaidServicesApp>> | undefined;
+let cachedNeverminedDb: D1Database | undefined;
+let cachedNeverminedDenyApp:
+  | Awaited<ReturnType<typeof buildNeverminedV2PaidServicesApp>>
+  | undefined;
+let cachedNeverminedDenyDb: D1Database | undefined;
+
+app.all('/v2/nevermined-deny/*', async (c) => {
+  if (!c.env.DB) {
+    return c.json({ error: 'configuration_error', message: 'no D1 binding configured' }, 500);
+  }
+  if (!cachedNeverminedDenyApp || cachedNeverminedDenyDb !== c.env.DB) {
+    cachedNeverminedDenyApp = await buildNeverminedV2PaidServicesApp({
+      db: c.env.DB,
+      evidenceMode: 'fixture',
+      evidenceProvider: NeverminedPaymentEvidenceProvider.fixture(denyingNeverminedClient()),
+    });
+    cachedNeverminedDenyDb = c.env.DB;
+  }
+  // Rewrite /v2/nevermined-deny/* -> /v2/nevermined/* for the inner app,
+  // which only ever registers the real production path shape.
+  const url = new URL(c.req.raw.url);
+  url.pathname = url.pathname.replace('/v2/nevermined-deny/', '/v2/nevermined/');
+  return cachedNeverminedDenyApp.request(new Request(url, c.req.raw));
+});
+
+app.all('/v2/nevermined/*', async (c) => {
+  if (!c.env.DB) {
+    return c.json({ error: 'configuration_error', message: 'no D1 binding configured' }, 500);
+  }
+  if (!cachedNeverminedApp || cachedNeverminedDb !== c.env.DB) {
+    cachedNeverminedApp = await buildNeverminedV2PaidServicesApp({
+      db: c.env.DB,
+      evidenceMode: 'fixture',
+      evidenceProvider: NeverminedPaymentEvidenceProvider.fixture(successNeverminedClient()),
+    });
+    cachedNeverminedDb = c.env.DB;
+  }
+  return cachedNeverminedApp.request(c.req.raw);
+});
 
 app.all('/v1/*', async (c) => {
   if (!c.env.DB) {

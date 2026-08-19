@@ -599,6 +599,390 @@ async function runPhase3() {
 }
 
 // ---------------------------------------------------------------------
+// Phase 4 (SUN-1204 checkpoint J, Track A): closes the v2 CDP portion of
+// SUN-1203's sole R0 blocker. `worker-runtime-test-entrypoint.ts` already
+// mounts `/v2/*` via the exact same, real, unmodified `buildPaidServicesApp`
+// call as `/v1/*` (CDP-only -- `neverminedV2Enabled` is not set, so no
+// Nevermined routes register on this app instance) -- no new test seam,
+// only new HTTP scenarios against the existing one, exactly Phase 3's
+// pattern applied to the three v2 CDP services that lacked real-workerd
+// settled-path proof at SUN-1203 closure (verify_agent_output.v2 already
+// had it, SUN-1200-1202).
+//
+// Each scenario also asserts the 402 challenge's `amount` matches the
+// real, canonical production price (`governance/RISK_LIMITS.yaml` via
+// `pnpm pricing:check`, USDC atomic units = price * 10^6) -- proving the
+// real route logic, not a test-mode price, is what a real buyer would
+// see (§14).
+// ---------------------------------------------------------------------
+async function runPhase4() {
+  const configPath = join(REPO_ROOT, 'wrangler.worker-runtime-test.toml');
+  await withDevServer({ configPath, dbName: 'siteborne-worker-runtime-test' }, async (base) => {
+    record('PHASE 4 (test-only entrypoint, v2 CDP): worker boots under real workerd', true);
+
+    const services: Array<{ name: string; path: string; body: unknown; expectedAmount: string }> = [
+      {
+        name: 'company_evidence_graph.v2',
+        path: '/v2/company/evidence-graph',
+        body: {
+          identifiers: { cik: '0000320193' },
+          requested_field_groups: ['identity', 'sec_submissions'],
+        },
+        expectedAmount: '39000', // 0.039 USD * 1e6
+      },
+      {
+        name: 'web_context_verified.v2',
+        path: '/v2/web/context',
+        body: { target_url: 'https://acme.example/', retrieval_mode: 'direct' },
+        expectedAmount: '9000', // 0.009 USD * 1e6
+      },
+      {
+        name: 'document_evidence_json.v2',
+        path: '/v2/document/evidence-json',
+        body: {
+          artifact_reference: {
+            artifact_id: 'doc/native-fixture.pdf',
+            media_type: 'application/pdf',
+            size_bytes: 1,
+          },
+        },
+        expectedAmount: '190000', // 0.19 USD max * 1e6 (upto scheme)
+      },
+    ];
+
+    for (const svc of services) {
+      // A1: unsigned request -> real 402, WITH canonical price assertion.
+      const challenge = await get402(base, svc.path, svc.body);
+      const actualAmount = challenge.accepts?.[0]?.amount;
+      record(
+        `PHASE 4 (A1): ${svc.name} unsigned request -> real 402 with canonical production price`,
+        actualAmount === svc.expectedAmount,
+        `expected=${svc.expectedAmount} actual=${actualAmount}`
+      );
+
+      // A3: valid synthetic payment -> real post-settlement execution
+      // against the real v2 service implementation (same registry/
+      // executeLocalService call as v1 -- confirmed by reading
+      // paid-services.ts directly, not assumed).
+      const result = await payAndFetch(base, svc.path, svc.body, challenge);
+      let parsed: any = {};
+      try {
+        parsed = JSON.parse(result.body);
+      } catch {
+        /* leave {} */
+      }
+      const ok =
+        result.status === 200 &&
+        parsed.result_class === 'success' &&
+        parsed.service_id === svc.name &&
+        typeof parsed.receipt_id === 'string' &&
+        typeof parsed.link_id === 'string';
+      record(
+        `PHASE 4 (A3): ${svc.name} synthetic payment -> real post-settlement success under real workerd`,
+        ok,
+        `status=${result.status} result_class=${parsed.result_class} service_id=${parsed.service_id}`
+      );
+
+      // A2: malformed input (missing required field) -> deterministic
+      // pre-economic rejection, never a 402.
+      const badRes = await fetch(base + svc.path, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      record(
+        `PHASE 4 (A2): ${svc.name} malformed input -> deterministic pre-economic rejection (never 402)`,
+        badRes.status === 400 && !badRes.headers.get('PAYMENT-REQUIRED'),
+        `status=${badRes.status}`
+      );
+    }
+
+    // A5/A6: malformed/tampered payment -- x402-service.ts's payment-
+    // identifier/structure validation is the SAME shared code path for
+    // every route (proven already for v1 verify_agent_output in Phase 2's
+    // H3/H4); representative proof on one v2 CDP route confirms it also
+    // governs v2 CDP requests, not re-derived per service.
+    {
+      const svc = services[0];
+      const challenge = await get402(base, svc.path, svc.body);
+      const declared = challenge.extensions?.['payment-identifier'];
+      // A5: malformed payment identifier (schema echoed, invalid id).
+      const malformedPayload = {
+        x402Version: 2,
+        resource: challenge.resource,
+        accepted: challenge.accepts[0],
+        payload: { synthetic_signature: 'synthetic:buyer-fixture' },
+        extensions: declared
+          ? { 'payment-identifier': { ...declared, info: { ...declared.info, id: 'too-short' } } }
+          : {},
+      };
+      const malformedRes = await fetch(base + svc.path, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'PAYMENT-SIGNATURE': encodeHeader(malformedPayload),
+        },
+        body: JSON.stringify(svc.body),
+      });
+      const malformedBody = (await malformedRes.json().catch(() => ({}))) as Record<
+        string,
+        unknown
+      >;
+      record(
+        `PHASE 4 (A5): ${svc.name} malformed payment identifier is rejected under real workerd`,
+        malformedRes.status === 400 && malformedBody.error === 'malformed_payment_signature',
+        `status=${malformedRes.status} error=${String(malformedBody.error)}`
+      );
+    }
+    {
+      const svc = services[0];
+      const challenge2 = await get402(base, svc.path, svc.body);
+      // A6: tampered security field -- forged quote_id in accepted.extra.
+      const tamperedAccepted = {
+        ...challenge2.accepts[0],
+        extra: { ...challenge2.accepts[0].extra, quote_id: 'qte_' + 'f'.repeat(24) },
+      };
+      const tamperedPayload = {
+        x402Version: 2,
+        resource: challenge2.resource,
+        accepted: tamperedAccepted,
+        payload: { synthetic_signature: 'synthetic:buyer-fixture' },
+        extensions: {},
+      };
+      const tamperedRes = await fetch(base + svc.path, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'PAYMENT-SIGNATURE': encodeHeader(tamperedPayload),
+        },
+        body: JSON.stringify(svc.body),
+      });
+      const tamperedBody = (await tamperedRes.json().catch(() => ({}))) as Record<string, unknown>;
+      record(
+        `PHASE 4 (A6): ${svc.name} tampered/forged quote_id is rejected under real workerd`,
+        tamperedRes.status === 402 && tamperedBody.error === 'expired_quote',
+        `status=${tamperedRes.status} error=${String(tamperedBody.error)}`
+      );
+    }
+  });
+}
+
+// ---------------------------------------------------------------------
+// Phase 5 (SUN-1204 checkpoint J, Track B): closes the v2 Nevermined
+// portion of SUN-1203's sole R0 blocker. Reuses
+// `NeverminedPaymentEvidenceProvider.fixture()` -- the real production
+// code's OWN "only injectable client path" (`control-plane/evidence/
+// nevermined-provider.ts`), never called by the real production
+// entrypoint (`index.ts`), which only ever calls `.authenticated()` --
+// mounted at two distinct test-only-only paths in
+// `worker-runtime-test-entrypoint.ts`: `/v2/nevermined/*` (a deterministic
+// ALWAYS-VALID client) and `/v2/nevermined-deny/*` (a deterministic
+// ALWAYS-DENIES client, for N4/N5). Neither path exists in real
+// production routing. Real Nevermined-specific request parsing
+// (PAYMENT-DELEGATION-ID, Payment-Identifier headers, quote/requirement
+// binding, `nvm:erc4337` challenge encoding) runs unmodified; only the
+// external verify/settle boundary is substituted -- exactly the
+// "smallest external boundary possible" this checkpoint requires.
+// ---------------------------------------------------------------------
+async function runPhase5() {
+  const configPath = join(REPO_ROOT, 'wrangler.worker-runtime-test.toml');
+  await withDevServer({ configPath, dbName: 'siteborne-worker-runtime-test' }, async (base) => {
+    record('PHASE 5 (test-only entrypoint, v2 Nevermined): worker boots under real workerd', true);
+
+    async function neverminedChallenge(path: string, body: unknown) {
+      const res = await fetch(base + path, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const header = res.headers.get('PAYMENT-REQUIRED');
+      return { status: res.status, header, decoded: header ? decodeHeader(header) : undefined };
+    }
+
+    function neverminedPayHeaders(paymentIdentifier: string, delegationId: string) {
+      return {
+        'content-type': 'application/json',
+        'payment-signature': 'fixture_000000000000000000000000',
+        'Payment-Identifier': paymentIdentifier,
+        'PAYMENT-DELEGATION-ID': delegationId,
+      };
+    }
+
+    function freshId(prefix: string): string {
+      return `${prefix}_${Math.random().toString(16).slice(2)}${Date.now().toString(16)}`.slice(
+        0,
+        40
+      );
+    }
+
+    const services: Array<{ name: string; path: string; body: unknown; expectedAmount: string }> = [
+      {
+        name: 'company_evidence_graph.v2 (Nevermined)',
+        path: '/v2/nevermined/company/evidence-graph',
+        body: {
+          identifiers: { cik: '0000320193' },
+          requested_field_groups: ['identity', 'sec_submissions'],
+        },
+        expectedAmount: '39000',
+      },
+      {
+        name: 'web_context_verified.v2 (Nevermined)',
+        path: '/v2/nevermined/web/context',
+        body: { target_url: 'https://acme.example/', retrieval_mode: 'direct' },
+        expectedAmount: '9000',
+      },
+      {
+        name: 'document_evidence_json.v2 (Nevermined)',
+        path: '/v2/nevermined/document/evidence-json',
+        body: {
+          artifact_reference: {
+            artifact_id: 'doc/native-fixture.pdf',
+            media_type: 'application/pdf',
+            size_bytes: 1,
+          },
+        },
+        expectedAmount: '190000',
+      },
+      {
+        name: 'verify_agent_output.v2 (Nevermined)',
+        path: '/v2/nevermined/verify/agent-output',
+        body: {
+          verification_contract: {
+            claims: [{ claim_id: 'total', predicate: 'equals', expected_value: 42 }],
+            deterministic_requirements: [],
+          },
+          candidate_output: { total: 42 },
+          required_schema: {},
+          verification_mode: 'standard',
+        },
+        expectedAmount: '19000',
+      },
+    ];
+
+    // N1: no access/payment material -> real 402, with canonical price
+    // (each service, individually -- proves per-route positive settled
+    // execution below, §7's "each route still needs its own positive
+    // post-authorization service-execution proof").
+    for (const svc of services) {
+      const challenge = await neverminedChallenge(svc.path, svc.body);
+      const requirement = challenge.decoded?.accepts?.[0];
+      const extAmount = challenge.decoded?.extensions?.['net.siteborne.payment']?.amount;
+      record(
+        `PHASE 5 (N1): ${svc.name} unsigned request -> real 402 with canonical production price`,
+        challenge.status === 402 && !!challenge.header && extAmount === svc.expectedAmount,
+        `status=${challenge.status} scheme=${requirement?.scheme} amount=${extAmount} expected=${svc.expectedAmount}`
+      );
+    }
+
+    // N3 + service-execution proof: valid synthetic verification -> real
+    // post-settlement execution against the real v2 Nevermined service
+    // implementation, for EVERY service (not just one).
+    for (const svc of services) {
+      await neverminedChallenge(svc.path, svc.body); // establishes the stored quote
+      const id = freshId('pay');
+      const res = await fetch(base + svc.path, {
+        method: 'POST',
+        headers: neverminedPayHeaders(id, freshId('deleg')),
+        body: JSON.stringify(svc.body),
+      });
+      let parsed: any = {};
+      try {
+        parsed = JSON.parse(await res.text());
+      } catch {
+        /* leave {} */
+      }
+      const ok =
+        res.status === 200 &&
+        parsed.result_class === 'success' &&
+        parsed.service_id === svc.name.replace(' (Nevermined)', '') &&
+        typeof parsed.receipt_id === 'string' &&
+        typeof parsed.link_id === 'string';
+      record(
+        `PHASE 5 (N3): ${svc.name} synthetic verified access -> real post-settlement success under real workerd`,
+        ok,
+        `status=${res.status} result_class=${parsed.result_class} service_id=${parsed.service_id}`
+      );
+    }
+
+    // N2: malformed Nevermined material (missing PAYMENT-DELEGATION-ID) ->
+    // rejected, never reaches service execution.
+    {
+      const svc = services[0];
+      await neverminedChallenge(svc.path, svc.body);
+      const res = await fetch(base + svc.path, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'payment-signature': 'fixture_000000000000000000000000',
+          'Payment-Identifier': freshId('pay'),
+          // PAYMENT-DELEGATION-ID deliberately omitted.
+        },
+        body: JSON.stringify(svc.body),
+      });
+      record(
+        'PHASE 5 (N2): malformed Nevermined material (missing delegation ID) is rejected',
+        res.status >= 400 && res.status < 500,
+        `status=${res.status}`
+      );
+    }
+
+    // N4: verifier returns explicit denial -> request must not reach
+    // service execution (the deny-only test path).
+    {
+      const svc = services[0];
+      const denyPath = svc.path.replace('/v2/nevermined/', '/v2/nevermined-deny/');
+      await neverminedChallenge(denyPath, svc.body);
+      const id = freshId('pay');
+      const res = await fetch(base + denyPath, {
+        method: 'POST',
+        headers: neverminedPayHeaders(id, freshId('deleg')),
+        body: JSON.stringify(svc.body),
+      });
+      let parsed: any = {};
+      try {
+        parsed = JSON.parse(await res.text());
+      } catch {
+        /* leave {} */
+      }
+      record(
+        'PHASE 5 (N4): explicit verifier denial is rejected, never reaches service execution',
+        res.status === 402 && parsed.error === 'payment_verification_rejected',
+        `status=${res.status} error=${parsed.error}`
+      );
+    }
+
+    // N6: tampered/forged quote_id (a user-controlled security field) is
+    // rejected, never converts a denial-eligible request into
+    // authorization.
+    {
+      const svc = services[0];
+      // The Nevermined rail binds a payment to its quote via stored
+      // server-side state (keyed by resource + canonical request hash),
+      // not an echoed body/header field a buyer could forge -- so the
+      // tamper attempt here is the most direct one available: change the
+      // business input after the challenge was minted for the original
+      // input, and confirm the mismatched request is rejected rather than
+      // silently authorized against a stale/unrelated quote.
+      await neverminedChallenge(svc.path, svc.body);
+      const res = await fetch(base + svc.path, {
+        method: 'POST',
+        headers: neverminedPayHeaders(freshId('pay'), freshId('deleg')),
+        // A body that does not match any stored quote for this resource
+        // (never established via neverminedChallenge above with this
+        // exact body) -- the real route must reject it as an
+        // unrecognized/expired quote, not silently accept.
+        body: JSON.stringify({ ...(svc.body as object), tampered_marker: true }),
+      });
+      record(
+        'PHASE 5 (N6): a request body that never matched any stored quote is rejected, never silently authorized',
+        res.status === 402 || res.status === 400,
+        `status=${res.status}`
+      );
+    }
+  });
+}
+
+// ---------------------------------------------------------------------
 // Bundle isolation proof (§7 / S3): the REAL production wrangler.toml's
 // dry-run bundle must never contain the test-only entrypoint's source
 // chunk.
@@ -615,6 +999,18 @@ async function runBundleIsolationCheck() {
       !containsTestEntrypoint && !containsMarker,
       `containsTestEntrypointChunk=${containsTestEntrypoint} containsMarker=${containsMarker}`
     );
+    // SUN-1204 checkpoint J: the two new deterministic Nevermined client
+    // factories live only inside the same test-only entrypoint file, so
+    // their absence is already implied by the check above -- re-asserted
+    // explicitly by function name for a direct, named
+    // `PRODUCTION_BUNDLE_CONTAINS_NEVERMINED_TEST_PROVIDER` proof.
+    const containsNeverminedTestProvider =
+      bundle.includes('successNeverminedClient') || bundle.includes('denyingNeverminedClient');
+    record(
+      'bundle isolation: real wrangler.toml dry-run bundle does NOT contain the Nevermined test-only client factories',
+      !containsNeverminedTestProvider,
+      `containsNeverminedTestProvider=${containsNeverminedTestProvider}`
+    );
   } finally {
     rmSync(outDir, { recursive: true, force: true });
   }
@@ -626,6 +1022,8 @@ async function main() {
     await runPhase1();
     await runPhase2();
     await runPhase3();
+    await runPhase4();
+    await runPhase5();
     await runBundleIsolationCheck();
   } catch (err) {
     record('harness execution', false, String(err));
