@@ -1,9 +1,9 @@
 # SITEBORNE Production Cutover Runbook
 
-Reconciled by SUN-1205 checkpoint K. This is a procedural reference for a
+Reconciled through SUN-1206 checkpoint L. This is a procedural reference for a
 future, separately authorized upload/cutover checkpoint. **Every mutating
-command below is marked `NOT EXECUTED IN SUN-1205`; none was executed by
-SUN-1205.**
+command below is marked `NOT EXECUTED IN SUN-1205/SUN-1206`; none was executed
+by either checkpoint.**
 
 The current Worker is already Internet-exposed. In particular, `/mcp` receives
 unsolicited machine probes today. Enabling paid routes is therefore not the
@@ -17,11 +17,15 @@ cutover.
 - `pnpm production:preflight`, `pnpm check`, and `pnpm security:release` all
   exit 0 on the exact candidate commit.
 - `pnpm test:worker-runtime` is green on that commit.
+- The production bundle contains no paid-service fixture executor. Until a
+  complete governed production executor is separately implemented and accepted,
+  all 12 paid route configurations return `503 service_executor_not_configured`
+  before payment economics.
 - The release manifest freezes the exact Git SHA, lockfile/config hashes,
   compatibility date, migration head, pricing/contracts, and bundle identity.
 - Required Cloudflare binding and secret **names** are reconciled read-only.
 - Any later cutover variables are reviewed as a new bounded change. They are
-  intentionally absent from the fail-closed SUN-1205 pre-upload candidate.
+  intentionally absent from the fail-closed SUN-1206 pre-upload candidate.
 
 ## 1. Freeze the candidate
 
@@ -39,7 +43,7 @@ The tree must be clean, and the SHA must match the release manifest.
 
 The authoritative gate is `pnpm production:preflight`, which checks the actual
 live D1 dereference, committed non-secret variables, provider/config drift, and
-required Cloudflare secret names. At SUN-1205, the canonical Nevermined secret
+required Cloudflare secret names. At SUN-1206, the canonical Nevermined secret
 name is `NVM_API_KEY`; `NEVERMINED_API_KEY` is a deprecated alias, and differing
 dual values fail closed.
 
@@ -55,7 +59,8 @@ Never retrieve, print, or persist secret values.
 
 ## 3. Upload the fail-closed candidate
 
-**NOT EXECUTED IN SUN-1205. Requires explicit SUN-1206 human authorization.**
+**NOT EXECUTED IN SUN-1205/SUN-1206. Requires a later explicit human upload
+authorization after the pre-upload gate passes.**
 
 ```bash
 pnpm exec wrangler versions upload \
@@ -70,10 +75,16 @@ this project has `workers_dev = true`, and Wrangler's version preview URLs are
 enabled by default when workers.dev is enabled. The uploaded version therefore
 receives a publicly reachable preview URL even before production deployment.
 
-Because the SUN-1205 candidate keeps all five paid/economic activation variables
+Because the SUN-1206 candidate keeps all five paid/economic activation variables
 absent, its v1/v2 paid route families remain 404 on that preview. `/mcp` remains
 a public discovery surface and paid MCP tool calls remain closed at
 `payment_required` with no service/provider execution.
+
+Defense in depth is stronger than those absent flags: if a future preview is
+misconfigured with either paid route-family flag enabled before a governed
+service executor exists, each of the 12 paid routes returns the deterministic
+pre-economic `503 service_executor_not_configured`. It emits neither a payment
+challenge nor fixture/live service output.
 
 ## 4. Preview smoke test
 
@@ -85,16 +96,24 @@ Against the exact uploaded version preview URL:
    governed tools; an unpaid paid-tool call returns `payment_required`; an
    oversized MCP request returns 413.
 3. The four v1 CDP, four v2 CDP, and four v2 Nevermined paid endpoints remain
-   404 in the fail-closed pre-cutover candidate.
+   404 while route flags are absent. A command-scoped negative control may set
+   those flags in an isolated local workerd instance and must observe 12/12
+   `503 service_executor_not_configured` responses with no payment headers.
 4. No real payment signature, entitlement, provider workload, settlement, or
    storage mutation is performed.
 
 ## 5. Paid-route enablement mechanism
 
 Paid routes are compile/config-version controlled, not an independently
-switchable live route. A later, separately reviewed activation candidate must
-set the exact authorized variables and pass all provider gates. For CDP, the
-load-bearing values include:
+switchable live route. SUN-1206 removed the local fixture registry from the
+production module graph and froze every paid route as unavailable before
+economics. Consequently, setting variables alone cannot activate a paid service.
+A later, separately reviewed implementation checkpoint must first wire a
+complete governed production executor (live provider dependencies, artifact
+handling, audit, clock, and paid-service Ed25519 receipt key custody) and pass
+the fixture-eradication gate. Only then may an activation candidate set the
+exact authorized variables and pass all provider gates. For CDP, the
+load-bearing values would include:
 
 - `PAYMENT_ENVIRONMENT = "production"`
 - `PRODUCTION_ENABLED = "true"`
@@ -115,8 +134,8 @@ separately wired economic boundary is provided.
 
 ## 6. Deploy a version to production traffic
 
-**NOT EXECUTED IN SUN-1205. Requires explicit human traffic-shift authorization
-after preview verification.**
+**NOT EXECUTED IN SUN-1205/SUN-1206. Requires explicit human traffic-shift
+authorization after preview verification.**
 
 ```bash
 pnpm exec wrangler versions deploy \
@@ -143,21 +162,21 @@ explicitly selects 100%.
 
 ## 8. Economic smoke test
 
-**NOT EXECUTED IN SUN-1205. Requires a separate, explicit, rail-specific human
-authorization.** Upload or deployment never authorizes payment signing, provider
-consumption, settlement, or a real transaction. A bounded economic smoke test
-must define its Payment-Identifier, rail, amount, provider workload, recovery
-path, and stop boundary before it starts.
+**NOT EXECUTED IN SUN-1205/SUN-1206. Requires a separate, explicit,
+rail-specific human authorization.** Upload or deployment never authorizes
+payment signing, provider consumption, settlement, or a real transaction. A
+bounded economic smoke test must define its Payment-Identifier, rail, amount,
+provider workload, recovery path, and stop boundary before it starts.
 
 ## 9. Rollback
 
-Known-good production version at SUN-1205:
+Known-good production version through SUN-1206:
 
 ```text
 a4ada936-a434-4522-a8af-41c57170f4e4
 ```
 
-**NOT EXECUTED IN SUN-1205.**
+**NOT EXECUTED IN SUN-1205/SUN-1206.**
 
 ```bash
 pnpm exec wrangler rollback --config wrangler.toml
@@ -171,7 +190,7 @@ pnpm exec wrangler versions deploy \
 
 The current migrations are additive and the known-good disabled version does not
 execute paid-service paths. Its binding/config shape was reconciled read-only in
-SUN-1205. Rolling code back cannot reverse an already-finalized external payment
+SUN-1206. Rolling code back cannot reverse an already-finalized external payment
 or provider workload; such economic effects are the irreversible cutover actions
 and must be reconciled by Payment-Identifier.
 
@@ -180,8 +199,8 @@ and must be reconciled by Payment-Identifier.
 There is no independent instantaneous route toggle. Create a new fail-closed
 version with `PAID_ROUTES_ENABLED` absent or not `"true"`, upload it, verify its
 public preview, then deploy it to 100%. Both upload and deployment are mutations
-and were **NOT EXECUTED IN SUN-1205**. `/mcp` remains public through this
-procedure, while paid MCP tool execution remains closed at its economic
+and were **NOT EXECUTED IN SUN-1205/SUN-1206**. `/mcp` remains public through
+this procedure, while paid MCP tool execution remains closed at its economic
 boundary.
 
 ## 11. Evidence required to close a future cutover

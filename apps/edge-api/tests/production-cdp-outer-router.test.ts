@@ -29,7 +29,6 @@ import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Miniflare } from 'miniflare';
 import type { D1Database } from '@cloudflare/workers-types';
-import { decodePaymentRequiredHeaderSafe, type PaymentRequired } from '@siteborne/protocol-x402';
 import app from '../src/index';
 
 const MIGRATIONS_DIR = fileURLToPath(new URL('../../../migrations', import.meta.url));
@@ -125,13 +124,9 @@ describe('production CDP gates at the real public route boundary (SUN-1200 check
       ...FULL_PRODUCTION_ENV_SHAPE,
       DB: db,
     });
-    expect(res.status).toBe(402);
-    const headerValue = res.headers.get('PAYMENT-REQUIRED');
-    const decoded = decodePaymentRequiredHeaderSafe(headerValue!);
-    expect(decoded.ok).toBe(true);
-    const challenge = (decoded as { ok: true; value: PaymentRequired }).value;
-    expect(challenge.accepts[0]!.network).toBe('eip155:84532');
-    expect(challenge.accepts[0]!.asset).toBe('0x036CbD53842c5426634e7929541eC2318f3dCF7e');
+    expect(res.status).toBe(503);
+    expect(res.headers.get('PAYMENT-REQUIRED')).toBeNull();
+    expect(await res.json()).toMatchObject({ error: 'service_executor_not_configured' });
   });
 
   it('kill switch through the full HTTP stack: PRODUCTION_ENABLED=false denies production even with every other gate true', async () => {
@@ -144,11 +139,8 @@ describe('production CDP gates at the real public route boundary (SUN-1200 check
         DB: db,
       }
     );
-    expect(res.status).toBe(402);
-    const headerValue = res.headers.get('PAYMENT-REQUIRED');
-    const decoded = decodePaymentRequiredHeaderSafe(headerValue!);
-    const challenge = (decoded as { ok: true; value: PaymentRequired }).value;
-    expect(challenge.accepts[0]!.network).toBe('eip155:84532');
+    expect(res.status).toBe(503);
+    expect(res.headers.get('PAYMENT-REQUIRED')).toBeNull();
   });
 
   it('credential-approval control through the full HTTP stack: PRODUCTION_CDP_CREDENTIALS_APPROVED=false denies production even with every other gate true', async () => {
@@ -169,11 +161,8 @@ describe('production CDP gates at the real public route boundary (SUN-1200 check
         DB: db,
       }
     );
-    expect(res.status).toBe(402);
-    const headerValue = res.headers.get('PAYMENT-REQUIRED');
-    const decoded = decodePaymentRequiredHeaderSafe(headerValue!);
-    const challenge = (decoded as { ok: true; value: PaymentRequired }).value;
-    expect(challenge.accepts[0]!.network).toBe('eip155:84532');
+    expect(res.status).toBe(503);
+    expect(res.headers.get('PAYMENT-REQUIRED')).toBeNull();
   });
 
   it('human-bootstrap control through the full HTTP stack: HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP=false denies production even with every other gate true', async () => {
@@ -192,11 +181,8 @@ describe('production CDP gates at the real public route boundary (SUN-1200 check
         DB: db,
       }
     );
-    expect(res.status).toBe(402);
-    const headerValue = res.headers.get('PAYMENT-REQUIRED');
-    const decoded = decodePaymentRequiredHeaderSafe(headerValue!);
-    const challenge = (decoded as { ok: true; value: PaymentRequired }).value;
-    expect(challenge.accepts[0]!.network).toBe('eip155:84532');
+    expect(res.status).toBe(503);
+    expect(res.headers.get('PAYMENT-REQUIRED')).toBeNull();
   });
 
   it('missing-credentials control through the full HTTP stack: absent CDP secrets deny production even with every flag true', async () => {
@@ -213,11 +199,8 @@ describe('production CDP gates at the real public route boundary (SUN-1200 check
       // set at all).
       DB: db,
     });
-    expect(res.status).toBe(402);
-    const headerValue = res.headers.get('PAYMENT-REQUIRED');
-    const decoded = decodePaymentRequiredHeaderSafe(headerValue!);
-    const challenge = (decoded as { ok: true; value: PaymentRequired }).value;
-    expect(challenge.accepts[0]!.network).toBe('eip155:84532');
+    expect(res.status).toBe(503);
+    expect(res.headers.get('PAYMENT-REQUIRED')).toBeNull();
   });
 
   it('Model D re-proof through the outer router: /v2/nevermined/* stays structurally absent regardless of every production CDP env var', async () => {
@@ -240,7 +223,7 @@ describe('production CDP gates at the real public route boundary (SUN-1200 check
     );
     expect(res.status).toBe(503);
     const body = (await res.json()) as Record<string, unknown>;
-    expect(body.error).toBe('nevermined_provider_not_configured');
+    expect(body.error).toBe('service_executor_not_configured');
   });
 
   it('secret redaction: none of the synthetic CDP secret values ever appear in any response body across every scenario above', async () => {

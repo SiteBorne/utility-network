@@ -1,6 +1,6 @@
 #!/usr/bin/env -S npx tsx
 /**
- * SUN-1205 checkpoint K (§3) — `pnpm production:preflight`.
+ * SUN-1206 checkpoint L — `pnpm production:preflight`.
  *
  * A real, actually-invoked production-readiness preflight. Distinct from
  * `apps/edge-api/src/control-plane/config/env.ts`'s `validateProductionBindings`
@@ -72,14 +72,15 @@ const WRANGLER_TOML =
   configPathIndex >= 0 && argv[configPathIndex + 1]
     ? argv[configPathIndex + 1]!
     : join(REPO_ROOT, 'wrangler.toml');
-const PAID_SERVICES_SOURCE = join(
+const PRODUCTION_INDEX_SOURCE = join(REPO_ROOT, 'apps', 'edge-api', 'src', 'index.ts');
+const PRODUCTION_PAID_SERVICES_SOURCE = join(
   REPO_ROOT,
   'apps',
   'edge-api',
   'src',
   'control-plane',
   'routes',
-  'paid-services.ts'
+  'production-paid-services.ts'
 );
 
 const REQUIRED_VAR_VALUES = {
@@ -154,7 +155,7 @@ function listRemoteSecretNames(): string[] {
 }
 
 function main(): void {
-  console.log('[production:preflight] SUN-1205 checkpoint K -- production release-gate preflight.');
+  console.log('[production:preflight] SUN-1206 checkpoint L -- production release-gate preflight.');
   console.log('[production:preflight] This performs ZERO mutating Cloudflare API calls.');
 
   const localFailures: string[] = [];
@@ -240,32 +241,43 @@ function main(): void {
     console.error('[production:preflight] PRODUCTION_CONFIG_DRIFT_CHECK: FAIL');
   }
 
+  // SUN-1206: the accepted service registry is local/fixture-only and no
+  // complete Worker-compatible production executor exists. The production
+  // entrypoint must therefore import ONLY the fail-closed disposition module,
+  // never the test/sandbox paid-services graph. Test-only source may retain
+  // fixture implementations; production module reachability may not.
+  const indexSource = readFileSync(PRODUCTION_INDEX_SOURCE, 'utf-8');
+  const dispositionSource = readFileSync(PRODUCTION_PAID_SERVICES_SOURCE, 'utf-8');
+  const forbiddenProductionImports = [
+    "from './control-plane/routes/paid-services'",
+    'buildPaidServicesApp(',
+    'buildNeverminedV2PaidServicesApp(',
+  ].filter((marker) => indexSource.includes(marker));
+  const routeCount = (dispositionSource.match(/^\s*'\/v[12]\//gm) ?? []).length;
+  const dispositionValid =
+    dispositionSource.includes("PRODUCTION_SERVICE_EXECUTOR_STATUS = 'UNIMPLEMENTED'") &&
+    dispositionSource.includes("error: 'service_executor_not_configured'") &&
+    routeCount === 12;
+  if (forbiddenProductionImports.length > 0 || !dispositionValid) {
+    providerBlockers.push(
+      `production paid-service fixture isolation is invalid ` +
+        `(forbidden imports: ${forbiddenProductionImports.join(', ') || 'none'}; ` +
+        `fail-closed route count: ${routeCount}/12)`
+    );
+  } else {
+    console.log(
+      '[production:preflight] PASS: 12/12 paid routes are structurally unavailable before economics; production imports no fixture service executor.'
+    );
+  }
+
   if (CONFIG_ONLY) {
-    if (localFailures.length > 0) {
-      for (const failure of localFailures) console.error(`  - ${failure}`);
+    if (localFailures.length > 0 || providerBlockers.length > 0) {
+      for (const failure of [...localFailures, ...providerBlockers])
+        console.error(`  - ${failure}`);
       process.exit(1);
     }
     console.log('[production:preflight] CONFIG-ONLY RESULT: PASS');
     process.exit(0);
-  }
-
-  // The release gate must describe what the production source really builds,
-  // not just whether payment credentials exist. These markers are load-bearing
-  // constructor calls in the production paid-route source: while present, the
-  // service executor is deterministic fixture infrastructure rather than a
-  // live provider implementation. Payment-provider fail-closed behavior does
-  // not make canned service data production-ready.
-  const paidServicesSource = readFileSync(PAID_SERVICES_SOURCE, 'utf-8');
-  const fixtureServiceMarkers = [
-    'buildFixtureRegistry',
-    'createFixtureSigner',
-    'FixtureDocumentWorkerBridge',
-    "execution_mode: 'fixture'",
-  ].filter((marker) => paidServicesSource.includes(marker));
-  if (fixtureServiceMarkers.length > 0) {
-    providerBlockers.push(
-      `production paid-service executors remain fixture-backed (${fixtureServiceMarkers.join(', ')})`
-    );
   }
 
   // --- Layer 3: real secret NAME presence in the target Cloudflare account ---

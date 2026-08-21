@@ -16,15 +16,16 @@ describe('paid-service route mounting gate (directive §6, §32)', () => {
     expect(res.status).toBe(404);
   });
 
-  it('PAID_ROUTES_ENABLED=true with no D1 binding -> 500 configuration_error, never silently mounted', async () => {
+  it('PAID_ROUTES_ENABLED=true still fails before economics when no production executor exists', async () => {
     const res = await app.request(
       '/v1/company/evidence-graph',
       { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({}) },
       { PAID_ROUTES_ENABLED: 'true' } as never
     );
-    expect(res.status).toBe(500);
+    expect(res.status).toBe(503);
     const body = (await res.json()) as Record<string, unknown>;
-    expect(body.error).toBe('configuration_error');
+    expect(body.error).toBe('service_executor_not_configured');
+    expect(res.headers.get('PAYMENT-REQUIRED')).toBeNull();
   });
 
   it('PAID_ROUTES_ENABLED=false (explicitly disabled) -> /v1/* is still a plain 404', async () => {
@@ -56,7 +57,7 @@ describe('paid-service route mounting gate (directive §6, §32)', () => {
 
     expect(res.status).toBe(503);
     expect(res.headers.get('PAYMENT-REQUIRED')).toBeNull();
-    expect(await res.json()).toMatchObject({ error: 'payment_provider_not_configured' });
+    expect(await res.json()).toMatchObject({ error: 'service_executor_not_configured' });
   });
 
   it('Nevermined routes are absent by default and fail closed without an authenticated provider', async () => {
@@ -70,7 +71,7 @@ describe('paid-service route mounting gate (directive §6, §32)', () => {
       NEVERMINED_ROUTES_ENABLED: 'true',
     } as never);
     expect(enabled.status).toBe(503);
-    expect(await enabled.json()).toMatchObject({ error: 'nevermined_provider_not_configured' });
+    expect(await enabled.json()).toMatchObject({ error: 'service_executor_not_configured' });
   });
 });
 
@@ -84,15 +85,16 @@ describe('SUN-1000 checkpoint 1O-B2 — v2 CDP/Nevermined route mounting gates',
     expect(res.status).toBe(404);
   });
 
-  it('PAID_ROUTES_ENABLED=true with no D1 binding -> 500 configuration_error, never silently mounted', async () => {
+  it('PAID_ROUTES_ENABLED=true still fails before economics when no production executor exists', async () => {
     const res = await app.request(
       '/v2/company/evidence-graph',
       { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({}) },
       { PAID_ROUTES_ENABLED: 'true' } as never
     );
-    expect(res.status).toBe(500);
+    expect(res.status).toBe(503);
     const body = (await res.json()) as Record<string, unknown>;
-    expect(body.error).toBe('configuration_error');
+    expect(body.error).toBe('service_executor_not_configured');
+    expect(res.headers.get('PAYMENT-REQUIRED')).toBeNull();
   });
 
   it('/v2/nevermined/* is absent by default (NEVERMINED_ROUTES_ENABLED unset) -> 404', async () => {
@@ -111,7 +113,7 @@ describe('SUN-1000 checkpoint 1O-B2 — v2 CDP/Nevermined route mounting gates',
       { NEVERMINED_ROUTES_ENABLED: 'true', DB: {} as never } as never
     );
     expect(res.status).toBe(503);
-    expect(await res.json()).toMatchObject({ error: 'nevermined_provider_not_configured' });
+    expect(await res.json()).toMatchObject({ error: 'service_executor_not_configured' });
   });
 
   it('/v2/nevermined/* with credentials present but RUN_LIVE_NEVERMINED unset -> 503 (the future-live guard denies construction, never silently proceeds)', async () => {
@@ -127,7 +129,7 @@ describe('SUN-1000 checkpoint 1O-B2 — v2 CDP/Nevermined route mounting gates',
       } as never
     );
     expect(res.status).toBe(503);
-    expect(await res.json()).toMatchObject({ error: 'nevermined_provider_not_configured' });
+    expect(await res.json()).toMatchObject({ error: 'service_executor_not_configured' });
   });
 
   it('/v2/nevermined/* with NVM_ENVIRONMENT=live -> 503 (live environment hard-rejected, even with RUN_LIVE_NEVERMINED=1)', async () => {
@@ -143,6 +145,6 @@ describe('SUN-1000 checkpoint 1O-B2 — v2 CDP/Nevermined route mounting gates',
       } as never
     );
     expect(res.status).toBe(503);
-    expect(await res.json()).toMatchObject({ error: 'nevermined_provider_not_configured' });
+    expect(await res.json()).toMatchObject({ error: 'service_executor_not_configured' });
   });
 });

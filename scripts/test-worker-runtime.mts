@@ -9,13 +9,10 @@
  *
  * Two independent phases:
  *
- * PHASE 1 (real production config, `wrangler.toml`) — SUN-1200 checkpoint
- * F's original scope: unsigned 402 challenges (web/document exact shape)
- * and the verify_agent_output Profile 1 pre-economic gate (Cases C-F:
- * unsupported keyword / remote $ref / byte-limit / depth-limit, each
- * rejected BEFORE any 402). Never constructs a PAYMENT-SIGNATURE, never
- * touches real settlement. Confirms the real production Worker's normal
- * unsigned/pre-economic behavior is unaffected by anything Phase 2 adds.
+ * PHASE 1 (real production config, `wrangler.toml`) — SUN-1206's stronger
+ * production boundary: all 12 paid route configurations return a governed
+ * unavailable response before payment-provider or service construction.
+ * No PAYMENT-REQUIRED/PAYMENT-RESPONSE header is emitted.
  *
  * PHASE 2 (test-only config, `wrangler.worker-runtime-test.toml` ->
  * `apps/edge-api/src/worker-runtime-test-entrypoint.ts`) — SUN-1201
@@ -386,125 +383,46 @@ async function runPhase1() {
   await withDevServer(
     {
       dbName: 'siteborne-utility',
-      vars: { ENVIRONMENT: 'development', PAID_ROUTES_ENABLED: 'true' },
+      vars: {
+        ENVIRONMENT: 'development',
+        PAID_ROUTES_ENABLED: 'true',
+        NEVERMINED_ROUTES_ENABLED: 'true',
+      },
     },
     async (base, getLog) => {
       record(
-        'PHASE 1 (real production entrypoint, command-scoped local fixture gates): worker boots under real workerd',
+        'PHASE 1 (real production entrypoint, route flags enabled): worker boots under real workerd',
         true
       );
 
-      {
-        const res = await fetch(`${base}/v2/web/context`, {
+      const paths = [
+        '/v1/company/evidence-graph',
+        '/v1/web/context',
+        '/v1/document/evidence-json',
+        '/v1/verify/agent-output',
+        '/v2/company/evidence-graph',
+        '/v2/web/context',
+        '/v2/document/evidence-json',
+        '/v2/verify/agent-output',
+        '/v2/nevermined/company/evidence-graph',
+        '/v2/nevermined/web/context',
+        '/v2/nevermined/document/evidence-json',
+        '/v2/nevermined/verify/agent-output',
+      ];
+      for (const path of paths) {
+        const res = await fetch(base + path, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ target_url: 'https://acme.example/', retrieval_mode: 'direct' }),
+          body: '{}',
         });
-        const header = res.headers.get('PAYMENT-REQUIRED');
+        const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
         record(
-          'PHASE 1: web_context_verified.v2 unsigned request -> real 402 with PAYMENT-REQUIRED',
-          res.status === 402 && !!header
-        );
-      }
-      {
-        const res = await fetch(`${base}/v2/document/evidence-json`, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            artifact_reference: {
-              artifact_id: 'doc/native-fixture.pdf',
-              media_type: 'application/pdf',
-              size_bytes: 1,
-            },
-          }),
-        });
-        const header = res.headers.get('PAYMENT-REQUIRED');
-        record(
-          'PHASE 1: document_evidence_json.v2 unsigned request -> real 402 with PAYMENT-REQUIRED',
-          res.status === 402 && !!header
-        );
-      }
-
-      const agentBase = {
-        verification_contract: { claims: [], deterministic_requirements: [] },
-        candidate_output: {},
-        verification_mode: 'standard',
-      };
-      async function checkPreEconomicRejection(
-        name: string,
-        requiredSchema: unknown,
-        expectedCode: string
-      ) {
-        const res = await fetch(`${base}/v2/verify/agent-output`, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ ...agentBase, required_schema: requiredSchema }),
-        });
-        const respBody = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-        const ok =
-          res.status === 400 &&
-          respBody.error === expectedCode &&
-          !res.headers.get('PAYMENT-REQUIRED');
-        record(`PHASE 1: ${name}`, ok, `status=${res.status} error=${String(respBody.error)}`);
-      }
-      await checkPreEconomicRejection(
-        'verify_agent_output.v2 Case C: unsupported keyword rejected BEFORE economics',
-        { type: 'string', pattern: '^[a-z]+$' },
-        'unsupported_required_schema'
-      );
-      await checkPreEconomicRejection(
-        'verify_agent_output.v2 Case D: remote $ref rejected BEFORE economics',
-        { properties: { x: { $ref: 'https://example.invalid/schema.json' } } },
-        'unsupported_required_schema'
-      );
-      await checkPreEconomicRejection(
-        'verify_agent_output.v2 Case E: over-byte-limit schema rejected BEFORE economics',
-        { type: 'string', description: 'x'.repeat(40_000) },
-        'required_schema_limit_exceeded'
-      );
-      {
-        let deep: Record<string, unknown> = { type: 'number' };
-        for (let i = 0; i < 40; i++) deep = { allOf: [deep] };
-        await checkPreEconomicRejection(
-          'verify_agent_output.v2 Case F: over-depth schema rejected BEFORE economics',
-          deep,
-          'required_schema_limit_exceeded'
-        );
-      }
-      {
-        const res = await fetch(`${base}/v2/verify/agent-output`, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            ...agentBase,
-            required_schema: { type: 'object', properties: { x: { type: 'number' } } },
-          }),
-        });
-        record(
-          'PHASE 1: verify_agent_output.v2 Profile-1-supported schema still gets a normal 402',
-          res.status === 402 && !!res.headers.get('PAYMENT-REQUIRED')
-        );
-      }
-      {
-        const body = JSON.stringify({
-          target_url: 'https://acme.example/replay',
-          retrieval_mode: 'direct',
-        });
-        const [r1, r2] = await Promise.all(
-          [1, 2].map(() =>
-            fetch(`${base}/v2/web/context`, {
-              method: 'POST',
-              headers: { 'content-type': 'application/json' },
-              body,
-            })
-          )
-        );
-        record(
-          'PHASE 1: two identical unsigned requests each independently mint a valid 402',
-          r1.status === 402 &&
-            r2.status === 402 &&
-            !!r1.headers.get('PAYMENT-REQUIRED') &&
-            !!r2.headers.get('PAYMENT-REQUIRED')
+          `PHASE 1: ${path} is unavailable before economics under real workerd`,
+          res.status === 503 &&
+            body.error === 'service_executor_not_configured' &&
+            !res.headers.get('PAYMENT-REQUIRED') &&
+            !res.headers.get('PAYMENT-RESPONSE'),
+          `status=${res.status} error=${String(body.error)}`
         );
       }
 
@@ -1168,6 +1086,22 @@ async function runBundleIsolationCheck() {
       'bundle isolation: real wrangler.toml dry-run bundle does NOT contain the Nevermined test-only client factories',
       !containsNeverminedTestProvider,
       `containsNeverminedTestProvider=${containsNeverminedTestProvider}`
+    );
+    const fixtureMarkers = [
+      'buildFixtureRegistry',
+      'createFixtureSigner',
+      'FixtureDocumentWorkerBridge',
+      'createTestClock',
+      'createTestArtifactStore',
+      'createTestServiceAuditSink',
+      "execution_mode: 'fixture'",
+      'synthetic_fixture',
+      'doc/native-fixture.pdf',
+    ].filter((marker) => bundle.includes(marker));
+    record(
+      'bundle isolation: production runtime contains zero paid-service fixture markers',
+      fixtureMarkers.length === 0,
+      `markers=${fixtureMarkers.join(',') || 'none'}`
     );
   } finally {
     rmSync(outDir, { recursive: true, force: true });

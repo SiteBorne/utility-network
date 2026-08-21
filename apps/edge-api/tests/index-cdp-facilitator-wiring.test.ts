@@ -1,45 +1,10 @@
 /**
- * SUN-1200 checkpoint F — real bug found and fixed live during this
- * checkpoint's own cutover attempt: `index.ts`'s `resolveCdpEvidence`
- * previously passed `createCdpFacilitatorClient` bare (zero-arg) as
- * `createFacilitatorClient`. Confirmed directly in the installed
- * `@coinbase/cdp-sdk`'s own source (`x402/facilitator.js`): called with
- * no args, it falls back to `process.env.CDP_API_KEY_ID`/
- * `process.env.CDP_API_KEY_SECRET`. (Root-cause note: this repository's
- * own checkpoint-F incident report classifies WHY the real deployed
- * Worker actually returned 500 as `AMBIENT_PROCESS_ENV_SHOULD_HAVE_BEEN_AVAILABLE`
- * -- Cloudflare's `nodejs_compat_populate_process_env` is enabled by
- * default for compatibility dates ≥ 2025-04-01, and the failed version's
- * compatibility date was well past that threshold, so the ambient
- * fallback should have worked and the exact original cause remains
- * genuinely unresolved without further diagnosis. Regardless of that
- * classification, this file proves the code now consumes its declared
- * Worker `Env` dependency explicitly rather than relying on ambient
- * runtime behavior, which is correct practice independent of what
- * turns out to have caused the specific incident.)
- *
- * Every prior test (including every other file in this repository)
- * injects its own mock `createFacilitatorClient` closure directly into
- * `buildPaidServicesApp`/`resolveProductionCdpEvidenceProvider`, never
- * exercising `index.ts`'s own real, non-injected wiring at all. This
- * file closes that coverage gap: it mocks `@coinbase/cdp-sdk`'s
- * `CdpClient` (so the seller-lookup gate can succeed without a real
- * network call) and `@coinbase/cdp-sdk/x402`'s `createCdpFacilitatorClient`
- * (capturing exactly what arguments `index.ts` invokes it with), then
- * exercises the REAL `index.ts` app end-to-end with every ADR 0055 gate
- * true. No real CDP SDK call, no real network call, anywhere in this
- * file -- both SDK entry points are fully mocked.
- *
- * Each test re-imports `../src/index` fresh via `vi.resetModules()` --
- * `index.ts` caches its built app instance keyed only by D1 identity
- * (`cachedV2CdpDb !== c.env.DB`), and every test in this file shares one
- * real Miniflare D1 instance, so without a fresh module per test the
- * negative-control tests would silently reuse the positive test's
- * already-cached production app instance instead of genuinely
- * re-evaluating `resolveCdpEvidence` for their own env shape -- caught
- * live while writing this file (the first negative control initially,
- * incorrectly, "passed" a mainnet challenge because of exactly this
- * cache collision).
+ * SUN-1206 supersedes the production-entrypoint portion of checkpoint F:
+ * payment-provider construction is now behind a stronger service-availability
+ * gate.  Until a governed production executor exists, even a complete CDP
+ * configuration must not construct the facilitator or emit payment terms.
+ * The payment provider's explicit-credential behavior remains covered at its
+ * own injected boundary by production-cdp-provider/full-stack tests.
  */
 import { readFileSync, readdirSync, rmSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -48,7 +13,6 @@ import { fileURLToPath } from 'node:url';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Miniflare } from 'miniflare';
 import type { D1Database } from '@cloudflare/workers-types';
-import { decodePaymentRequiredHeaderSafe, type PaymentRequired } from '@siteborne/protocol-x402';
 
 const SELLER = '0x7f44a2dd237938F18632d4CcA40f4c690295E6E1';
 
@@ -136,7 +100,7 @@ describe('index.ts real CDP facilitator wiring (SUN-1200 checkpoint F regression
     vi.doUnmock('../src/index');
   });
 
-  it('with every ADR 0055 gate true, index.ts reaches a real 402 (not a 500) -- proving createCdpFacilitatorClient is invoked with explicit credentials, never relying on process.env', async () => {
+  it('with every ADR 0055 gate true, service unavailability wins before facilitator construction', async () => {
     const env = {
       DB: db,
       PAID_ROUTES_ENABLED: 'true',
@@ -157,23 +121,10 @@ describe('index.ts real CDP facilitator wiring (SUN-1200 checkpoint F regression
       },
       env as never
     );
-    expect(res.status).toBe(402);
-    const headerValue = res.headers.get('PAYMENT-REQUIRED');
-    expect(headerValue).toBeTruthy();
-    const decoded = decodePaymentRequiredHeaderSafe(headerValue!);
-    expect(decoded.ok).toBe(true);
-    const challenge = (decoded as { ok: true; value: PaymentRequired }).value;
-    expect(challenge.accepts[0]!.network).toBe('eip155:8453');
-    expect(challenge.accepts[0]!.asset).toBe('0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913');
-    expect(challenge.accepts[0]!.payTo).toBe(SELLER);
-
-    // The real bug: `createCdpFacilitatorClient` called bare (zero-arg)
-    // would show up here as `[[]]` (an empty args array) -- a genuine
-    // fix must call it with an explicit credentials object.
-    expect(capturedFacilitatorArgs.length).toBeGreaterThan(0);
-    for (const args of capturedFacilitatorArgs) {
-      expect(args).toEqual([{ apiKeyId: 'mock-key-id', apiKeySecret: 'mock-key-secret' }]);
-    }
+    expect(res.status).toBe(503);
+    expect(res.headers.get('PAYMENT-REQUIRED')).toBeNull();
+    expect(await res.json()).toMatchObject({ error: 'service_executor_not_configured' });
+    expect(capturedFacilitatorArgs).toHaveLength(0);
   });
 
   it('negative control: missing CDP_API_KEY_ID fails closed -- production provider unreachable, facilitator never constructed', async () => {
@@ -197,16 +148,8 @@ describe('index.ts real CDP facilitator wiring (SUN-1200 checkpoint F regression
       },
       env as never
     );
-    expect(res.status).toBe(402);
-    const headerValue = res.headers.get('PAYMENT-REQUIRED');
-    const decoded = decodePaymentRequiredHeaderSafe(headerValue!);
-    expect(decoded.ok).toBe(true);
-    const challenge = (decoded as { ok: true; value: PaymentRequired }).value;
-    // Fails closed to preproduction (Base Sepolia), not mainnet.
-    expect(challenge.accepts[0]!.network).toBe('eip155:84532');
-    // The facilitator was never constructed at all -- checkProductionBindingsPresent
-    // rejects before resolveProductionCdpEvidenceProvider ever reaches the
-    // createFacilitatorClient call.
+    expect(res.status).toBe(503);
+    expect(res.headers.get('PAYMENT-REQUIRED')).toBeNull();
     expect(capturedFacilitatorArgs.length).toBe(0);
   });
 
@@ -231,12 +174,8 @@ describe('index.ts real CDP facilitator wiring (SUN-1200 checkpoint F regression
       },
       env as never
     );
-    expect(res.status).toBe(402);
-    const headerValue = res.headers.get('PAYMENT-REQUIRED');
-    const decoded = decodePaymentRequiredHeaderSafe(headerValue!);
-    expect(decoded.ok).toBe(true);
-    const challenge = (decoded as { ok: true; value: PaymentRequired }).value;
-    expect(challenge.accepts[0]!.network).toBe('eip155:84532');
+    expect(res.status).toBe(503);
+    expect(res.headers.get('PAYMENT-REQUIRED')).toBeNull();
     expect(capturedFacilitatorArgs.length).toBe(0);
   });
 });
