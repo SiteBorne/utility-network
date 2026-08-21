@@ -24,8 +24,8 @@
  *      error this preflight deliberately avoids.
  *   3. Real secret NAME presence in the target Cloudflare account — calls
  *      `wrangler secret list` (read-only, lists names only, never values)
- *      for the credentials that are genuinely secret material (the three
- *      CDP secrets, the Nevermined API key under either name,
+ *      for the credentials that are genuinely secret material (the two
+ *      CDP API secrets, the Nevermined API key under either name,
  *      AGENT_CARD_SIGNING_PRIVATE_KEY paired with its [vars] KEY_ID).
  *
  * This script performs ZERO mutating Cloudflare API calls: it only ever
@@ -51,7 +51,7 @@ import {
 // `@siteborne/protocol-x402`, a workspace package that is never built to
 // `dist/` outside Vitest's aliased resolution (the same cross-package
 // resolution limitation documented in `scripts/test-worker-runtime.mts`).
-// Its `checkProductionBindingsPresent` logic (three required CDP secret
+// Its `checkProductionBindingsPresent` logic (two required CDP secret
 // names, presence-only) is hand-mirrored below as `CDP_REQUIRED_SECRETS`;
 // equivalence with the real function is proven separately by
 // `apps/edge-api/tests/*` Vitest tests that import the real module.
