@@ -42,7 +42,10 @@ import { execFileSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readFileSync } from 'node:fs';
-import { validateProductionBindings, type Env } from '../apps/edge-api/src/control-plane/config/env';
+import {
+  validateProductionBindings,
+  type Env,
+} from '../apps/edge-api/src/control-plane/config/env';
 // NOTE: `production-payment.ts` cannot be imported directly by a bare
 // `tsx` script at repo root -- it transitively imports
 // `@siteborne/protocol-x402`, a workspace package that is never built to
@@ -54,11 +57,44 @@ import { validateProductionBindings, type Env } from '../apps/edge-api/src/contr
 // `apps/edge-api/tests/*` Vitest tests that import the real module.
 const CDP_REQUIRED_SECRETS = ['CDP_API_KEY_ID', 'CDP_API_KEY_SECRET'] as const;
 const NEVERMINED_API_KEY_NAMES = ['NVM_API_KEY', 'NEVERMINED_API_KEY'] as const;
-const REQUIRED_VARS = ['SELLER_WALLET_ADDRESS', 'AGENT_CARD_SIGNING_KEY_ID', 'NVM_ENVIRONMENT'] as const;
+const REQUIRED_VARS = [
+  'SELLER_WALLET_ADDRESS',
+  'AGENT_CARD_SIGNING_KEY_ID',
+  'NVM_ENVIRONMENT',
+] as const;
 
 const REPO_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const WRANGLER_BIN = join(REPO_ROOT, 'node_modules', '.bin', 'wrangler');
-const WRANGLER_TOML = join(REPO_ROOT, 'wrangler.toml');
+const argv = process.argv.slice(2);
+const configPathIndex = argv.indexOf('--config-path');
+const CONFIG_ONLY = argv.includes('--config-only');
+const WRANGLER_TOML =
+  configPathIndex >= 0 && argv[configPathIndex + 1]
+    ? argv[configPathIndex + 1]!
+    : join(REPO_ROOT, 'wrangler.toml');
+const PAID_SERVICES_SOURCE = join(
+  REPO_ROOT,
+  'apps',
+  'edge-api',
+  'src',
+  'control-plane',
+  'routes',
+  'paid-services.ts'
+);
+
+const REQUIRED_VAR_VALUES = {
+  ENVIRONMENT: 'production',
+  PCC_VERSION: '1.0.0',
+  NVM_ENVIRONMENT: 'sandbox',
+} as const;
+
+const ECONOMIC_ACTIVATION_VALUES = {
+  PAYMENT_ENVIRONMENT: 'production',
+  PRODUCTION_ENABLED: 'true',
+  PRODUCTION_CDP_CREDENTIALS_APPROVED: 'true',
+  HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP: 'true',
+  PAID_ROUTES_ENABLED: 'true',
+} as const;
 
 /** Source of truth: the D1 binding this repo's real request path
  * dereferences. Parsed from wrangler.toml so this preflight fails loudly
@@ -68,6 +104,12 @@ function parseD1BindingName(): string | null {
   const toml = readFileSync(WRANGLER_TOML, 'utf-8');
   const match = /\[\[d1_databases\]\]\s*\nbinding\s*=\s*"([^"]+)"/.exec(toml);
   return match ? match[1] : null;
+}
+
+function parseScalar(name: string): string | null {
+  const toml = readFileSync(WRANGLER_TOML, 'utf-8');
+  const match = new RegExp(`^${name}\\s*=\\s*"([^"]+)"`, 'm').exec(toml);
+  return match?.[1] ?? null;
 }
 
 /** Parses the [vars] table's simple `KEY = "value"` lines (this repo's
@@ -103,7 +145,11 @@ function listRemoteSecretNames(): string[] {
     throw new Error('wrangler secret list returned a non-array JSON payload');
   }
   return parsed
-    .map((entry) => (typeof entry === 'object' && entry && 'name' in entry ? (entry as { name: unknown }).name : undefined))
+    .map((entry) =>
+      typeof entry === 'object' && entry && 'name' in entry
+        ? (entry as { name: unknown }).name
+        : undefined
+    )
     .filter((name): name is string => typeof name === 'string');
 }
 
@@ -111,12 +157,14 @@ function main(): void {
   console.log('[production:preflight] SUN-1205 checkpoint K -- production release-gate preflight.');
   console.log('[production:preflight] This performs ZERO mutating Cloudflare API calls.');
 
-  const failures: string[] = [];
+  const localFailures: string[] = [];
+  const providerBlockers: string[] = [];
+  const externalFailures: string[] = [];
 
   // --- Layer 1: binding presence, against wrangler.toml's declared name ---
   const d1BindingName = parseD1BindingName();
   if (d1BindingName !== 'DB') {
-    failures.push(
+    localFailures.push(
       `wrangler.toml's D1 binding name is ${JSON.stringify(d1BindingName)}, expected "DB" ` +
         `(the name env.ts's validateProductionBindings and every live source reference assume).`
     );
@@ -136,7 +184,9 @@ function main(): void {
       validateProductionBindings(fakeBoundEnv);
       console.log('[production:preflight] PASS: required binding(s) present -- DB.');
     } catch (err) {
-      failures.push(`validateProductionBindings rejected the declared bindings: ${String(err)}`);
+      localFailures.push(
+        `validateProductionBindings rejected the declared bindings: ${String(err)}`
+      );
     }
   }
 
@@ -144,10 +194,77 @@ function main(): void {
   const vars = parseVarsTable();
   const missingVars = REQUIRED_VARS.filter((name) => !vars[name]);
   if (missingVars.length > 0) {
-    failures.push(`wrangler.toml's [vars] table is missing: ${missingVars.join(', ')}`);
+    localFailures.push(`wrangler.toml's [vars] table is missing: ${missingVars.join(', ')}`);
   } else {
     console.log(
       `[production:preflight] PASS: required [vars] present -- ${REQUIRED_VARS.join(', ')}.`
+    );
+  }
+
+  for (const [name, expected] of Object.entries(REQUIRED_VAR_VALUES)) {
+    if (vars[name] !== expected) {
+      localFailures.push(
+        `wrangler.toml [vars].${name} is ${JSON.stringify(vars[name] ?? null)}, expected ${JSON.stringify(expected)}`
+      );
+    }
+  }
+  const activeEconomicVars = Object.entries(ECONOMIC_ACTIVATION_VALUES)
+    .filter(([name, active]) => vars[name] === active)
+    .map(([name]) => name);
+  if (activeEconomicVars.length > 0) {
+    localFailures.push(
+      `pre-upload candidate contains active economic/cutover vars: ${activeEconomicVars.join(', ')}`
+    );
+  } else {
+    console.log(
+      '[production:preflight] PASS: economic/cutover vars are absent or fail-closed in the pre-upload candidate.'
+    );
+  }
+
+  const main = parseScalar('main');
+  if (main !== 'apps/edge-api/src/index.ts') {
+    localFailures.push(
+      `wrangler.toml main is ${JSON.stringify(main)}, expected production index.ts`
+    );
+  }
+  const compatibilityDate = parseScalar('compatibility_date');
+  if (compatibilityDate !== '2026-08-05') {
+    localFailures.push(
+      `wrangler.toml compatibility_date is ${JSON.stringify(compatibilityDate)}, expected "2026-08-05"`
+    );
+  }
+
+  if (localFailures.length === 0) {
+    console.log('[production:preflight] PRODUCTION_CONFIG_DRIFT_CHECK: PASS');
+  } else {
+    console.error('[production:preflight] PRODUCTION_CONFIG_DRIFT_CHECK: FAIL');
+  }
+
+  if (CONFIG_ONLY) {
+    if (localFailures.length > 0) {
+      for (const failure of localFailures) console.error(`  - ${failure}`);
+      process.exit(1);
+    }
+    console.log('[production:preflight] CONFIG-ONLY RESULT: PASS');
+    process.exit(0);
+  }
+
+  // The release gate must describe what the production source really builds,
+  // not just whether payment credentials exist. These markers are load-bearing
+  // constructor calls in the production paid-route source: while present, the
+  // service executor is deterministic fixture infrastructure rather than a
+  // live provider implementation. Payment-provider fail-closed behavior does
+  // not make canned service data production-ready.
+  const paidServicesSource = readFileSync(PAID_SERVICES_SOURCE, 'utf-8');
+  const fixtureServiceMarkers = [
+    'buildFixtureRegistry',
+    'createFixtureSigner',
+    'FixtureDocumentWorkerBridge',
+    "execution_mode: 'fixture'",
+  ].filter((marker) => paidServicesSource.includes(marker));
+  if (fixtureServiceMarkers.length > 0) {
+    providerBlockers.push(
+      `production paid-service executors remain fixture-backed (${fixtureServiceMarkers.join(', ')})`
     );
   }
 
@@ -191,15 +308,25 @@ function main(): void {
   }
 
   if (missingSecrets.length > 0) {
-    failures.push(`missing required real secret name(s) in the target Cloudflare account: ${missingSecrets.join(', ')}`);
+    externalFailures.push(
+      `missing required real secret name(s) in the target Cloudflare account: ${missingSecrets.join(', ')}`
+    );
   } else {
     console.log('[production:preflight] PASS: all required real secret names are present.');
   }
 
-  if (failures.length > 0) {
-    console.error('[production:preflight] FAIL:');
-    for (const f of failures) console.error(`  - ${f}`);
+  if (localFailures.length > 0 || providerBlockers.length > 0) {
+    console.error('[production:preflight] FAIL (repository-owned blocker):');
+    for (const f of [...localFailures, ...providerBlockers]) console.error(`  - ${f}`);
+    for (const f of externalFailures) console.error(`  - external: ${f}`);
     console.error('[production:preflight] PREFLIGHT RESULT: FAIL');
+    process.exit(1);
+  }
+
+  if (externalFailures.length > 0) {
+    console.error('[production:preflight] EXTERNAL_BLOCK:');
+    for (const f of externalFailures) console.error(`  - ${f}`);
+    console.error('[production:preflight] PREFLIGHT RESULT: EXTERNAL_BLOCK');
     process.exit(1);
   }
 

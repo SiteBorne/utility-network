@@ -52,6 +52,8 @@ import {
   buildNeverminedV2PaidServicesApp,
 } from './control-plane/routes/paid-services';
 import { NeverminedPaymentEvidenceProvider } from './control-plane/evidence/nevermined-provider';
+import { mcpRoute } from './routes/mcp';
+import type { Env } from './control-plane/config/env';
 
 // `scripts/test-worker-runtime.mts`'s bundle-isolation check searches a
 // fresh `wrangler deploy --dry-run` of the REAL `wrangler.toml` for this
@@ -62,14 +64,16 @@ import { NeverminedPaymentEvidenceProvider } from './control-plane/evidence/neve
 // bundled module chunk entirely.
 const WORKER_RUNTIME_TEST_ENTRYPOINT_MARKER = 'SUN-1201-WORKER-RUNTIME-TEST-ENTRYPOINT-b7f2c4';
 
-interface TestEnv {
-  DB: D1Database;
-}
-
 let cachedApp: Awaited<ReturnType<typeof buildPaidServicesApp>> | undefined;
 let cachedDb: D1Database | undefined;
 
-const app = new Hono<{ Bindings: TestEnv }>();
+const app = new Hono<{ Bindings: Env }>();
+
+// Public MCP uses the exact production route implementation. This test-only
+// Worker adds no MCP service boundary: paid tools therefore retain the real
+// closed default (`payment_required`) and cannot reach any fixture/payment
+// provider mounted below for the paid-route workerd scenarios.
+app.all('/mcp', mcpRoute);
 
 /**
  * SUN-1204 checkpoint J, Track B — a deterministic

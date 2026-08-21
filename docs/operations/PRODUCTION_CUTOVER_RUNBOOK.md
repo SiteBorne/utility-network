@@ -1,178 +1,198 @@
 # SITEBORNE Production Cutover Runbook
 
-Produced by SUN-1203 checkpoint I. This is a procedural reference for the
-future, separately-authorized cutover checkpoint — **no command in this document
-has been executed by SUN-1203**. Steps marked **NOT AUTHORIZED IN SUN-1203** are
-mutating and require explicit human authorization in a later checkpoint.
+Reconciled by SUN-1205 checkpoint K. This is a procedural reference for a
+future, separately authorized upload/cutover checkpoint. **Every mutating
+command below is marked `NOT EXECUTED IN SUN-1205`; none was executed by
+SUN-1205.**
+
+The current Worker is already Internet-exposed. In particular, `/mcp` receives
+unsolicited machine probes today. Enabling paid routes is therefore not the
+first Internet exposure of this Worker; it is a separate economic-surface
+cutover.
 
 ## 0. Preconditions
 
-- All R0 blockers from the current release-readiness report
-  (`docs/reports/SUN-1203-checkpoint-i-preproduction-release-readiness.md`)
-  resolved, or explicitly accepted by a human as R1 risk.
-- `pnpm check` and `pnpm security:release` both exit 0 on the candidate commit.
-- `pnpm test:worker-runtime` green on the candidate commit.
-- The transient `wrangler.toml` diff (`PAYMENT_ENVIRONMENT`,
-  `PRODUCTION_ENABLED`, `PRODUCTION_CDP_CREDENTIALS_APPROVED`,
-  `HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP`, `PAID_ROUTES_ENABLED`) reviewed and
-  its exact content re-confirmed against the human's actual intent.
+- `PREUPLOAD_RELEASE_GATE = PASS`; neither `FAIL` nor `EXTERNAL_BLOCK` is
+  upload-eligible.
+- `pnpm production:preflight`, `pnpm check`, and `pnpm security:release` all
+  exit 0 on the exact candidate commit.
+- `pnpm test:worker-runtime` is green on that commit.
+- The release manifest freezes the exact Git SHA, lockfile/config hashes,
+  compatibility date, migration head, pricing/contracts, and bundle identity.
+- Required Cloudflare binding and secret **names** are reconciled read-only.
+- Any later cutover variables are reviewed as a new bounded change. They are
+  intentionally absent from the fail-closed SUN-1205 pre-upload candidate.
 
-## 1. Pre-cutover git SHA
-
-Record the exact commit SHA about to be uploaded:
+## 1. Freeze the candidate
 
 ```bash
+git status --short
 git rev-parse HEAD
-```
-
-## 2. Required CI/security gates
-
-```bash
+pnpm production:preflight
 pnpm check
 pnpm security:release
 ```
 
-Both must exit 0. `pnpm security:release` includes `pnpm test:worker-runtime` as
-its final step (SUN-1200/1201 wiring).
+The tree must be clean, and the SHA must match the release manifest.
 
-## 3. Required production bindings/secrets
+## 2. Required production configuration
 
-From `wrangler.toml` (read-only reconciliation — see the checkpoint report's
-`PROVIDER_READINESS_MATRIX`/binding audit for the full list):
+The authoritative gate is `pnpm production:preflight`, which checks the actual
+live D1 dereference, committed non-secret variables, provider/config drift, and
+required Cloudflare secret names. At SUN-1205, the canonical Nevermined secret
+name is `NVM_API_KEY`; `NEVERMINED_API_KEY` is a deprecated alias, and differing
+dual values fail closed.
 
-- `DB` (D1, `siteborne-utility`)
-- `CATALOG` (KV)
-- `JOBS`, `EVENTS` (Queues, producer-only)
-- `AI` (Workers AI)
-- `BROWSER` (Browser Rendering)
-- Secrets (never printed; presence-only check): `SELLER_WALLET_ADDRESS`,
-  `CDP_API_KEY_ID`, `CDP_API_KEY_SECRET`, and any other secret
-  `production-payment.ts`'s real gate requires.
+Read-only operator checks may include:
 
 ```bash
-# NOT AUTHORIZED IN SUN-1203 -- presence-only check, run by a human operator
-# with real Cloudflare credentials at actual cutover time.
-wrangler secret list
+pnpm exec wrangler secret list --config wrangler.toml
+pnpm exec wrangler versions view --config wrangler.toml
+pnpm exec wrangler deployments status --config wrangler.toml
 ```
 
-## 4. Candidate version upload command
+Never retrieve, print, or persist secret values.
 
-**NOT AUTHORIZED IN SUN-1203.**
+## 3. Upload the fail-closed candidate
+
+**NOT EXECUTED IN SUN-1205. Requires explicit SUN-1206 human authorization.**
 
 ```bash
-wrangler versions upload --message "<release description>"
+pnpm exec wrangler versions upload \
+  --config wrangler.toml \
+  --strict \
+  --message "<approved release description>"
 ```
 
-This creates a new version and routes **zero** traffic to it (Cloudflare's own
-documented behavior — see the `wrangler` skill's guidance already used
-throughout SUN-1200 checkpoint F).
+This creates a Worker Version but does not change the production deployment or
+its traffic percentages. It is not, however, a zero-public-traffic operation:
+this project has `workers_dev = true`, and Wrangler's version preview URLs are
+enabled by default when workers.dev is enabled. The uploaded version therefore
+receives a publicly reachable preview URL even before production deployment.
 
-## 5. Candidate smoke-test procedure
+Because the SUN-1205 candidate keeps all five paid/economic activation variables
+absent, its v1/v2 paid route families remain 404 on that preview. `/mcp` remains
+a public discovery surface and paid MCP tool calls remain closed at
+`payment_required` with no service/provider execution.
 
-Against the new version's preview URL only (never production traffic):
+## 4. Preview smoke test
 
-1. `GET /` → 200.
-2. `GET /.well-known/agent-card.json` → 200.
-3. Unsigned `POST` to each of the four v1 and four v2 CDP paid routes → 402 with
-   a decodable `PAYMENT-REQUIRED` header.
-4. **Do not** construct a real `PAYMENT-SIGNATURE` against this preview URL —
-   see §9 below for the one, explicitly bounded economic smoke test.
+Against the exact uploaded version preview URL:
 
-## 6. How paid routes become reachable
+1. `GET /`, `/health`, `/ready`, the Agent Card, catalogs, schemas, and
+   discovery documents return governed responses.
+2. Malformed `/mcp` JSON returns bounded 400; valid discovery lists the six
+   governed tools; an unpaid paid-tool call returns `payment_required`; an
+   oversized MCP request returns 413.
+3. The four v1 CDP, four v2 CDP, and four v2 Nevermined paid endpoints remain
+   404 in the fail-closed pre-cutover candidate.
+4. No real payment signature, entitlement, provider workload, settlement, or
+   storage mutation is performed.
 
-Paid routes are gated by `env.PAID_ROUTES_ENABLED === 'true'` AND a real
-`env.DB` binding (`index.ts`) — both already present in the transient
-`wrangler.toml` diff. Routing traffic to the new version (§7) is what actually
-exposes this to real buyers; the version upload alone (§4) does not.
+## 5. Paid-route enablement mechanism
 
-## 7. How traffic percentage would change
+Paid routes are compile/config-version controlled, not an independently
+switchable live route. A later, separately reviewed activation candidate must
+set the exact authorized variables and pass all provider gates. For CDP, the
+load-bearing values include:
 
-**NOT AUTHORIZED IN SUN-1203.**
+- `PAYMENT_ENVIRONMENT = "production"`
+- `PRODUCTION_ENABLED = "true"`
+- `PRODUCTION_CDP_CREDENTIALS_APPROVED = "true"`
+- `HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP = "true"` for the exact bounded
+  authorized action only; it is never standing authority
+- `PAID_ROUTES_ENABLED = "true"`
+
+Nevermined additionally requires its own route/live guards, canonical secret,
+sandbox-only classification under the current implementation, and an explicit
+economic authorization checkpoint. Uploading a version alone does not deploy it
+to production, but does expose its preview URL; deploying the activated version
+is what moves production traffic to those route implementations.
+
+`/mcp` is independent of `PAID_ROUTES_ENABLED`: it is mounted unconditionally
+and is already public. Its paid tools use a closed execution boundary unless a
+separately wired economic boundary is provided.
+
+## 6. Deploy a version to production traffic
+
+**NOT EXECUTED IN SUN-1205. Requires explicit human traffic-shift authorization
+after preview verification.**
 
 ```bash
-wrangler versions deploy <version-id>@<percentage>% -y
+pnpm exec wrangler versions deploy \
+  --config wrangler.toml \
+  <version-id>@<approved-percentage>% \
+  --message "<approved deployment description>" \
+  -y
 ```
 
-Per SUN-1200 checkpoint F's own precedent: start at a low percentage (or 100%
-only if the team's risk tolerance and monitoring plan supports it — this
-repository's own prior cutover attempts used 100% directly, given Nevermined/CDP
-structural gates keep real settlement additionally gated).
+Record the deployment ID, every serving version ID/percentage, and the exact
+timestamp. A staged percentage is preferred unless the approved risk decision
+explicitly selects 100%.
 
-## 8. Verification immediately after enablement
+## 7. Post-deployment verification
 
-1. Re-run the smoke test (§5) against the **production** URL now that traffic is
-   routed.
-2. Confirm `wrangler deployments list` shows the new version at the intended
-   percentage.
-3. Confirm `wrangler tail` shows no unexpected exceptions on the first several
-   real requests.
+1. Confirm `wrangler deployments status` reports the approved version mix.
+2. Re-run the non-economic public/MCP smoke tests against production.
+3. Confirm paid routes have exactly the expected pre-payment behavior for the
+   deployed activation state.
+4. Monitor `wrangler tail` for bounded errors, provider/config failures,
+   correlation IDs, and accidental secret/payload logging.
+5. Stop on any payment ambiguity, price mismatch, duplicate execution, or
+   request-time dynamic-code-generation error.
 
-## 9. Payment/economic smoke test procedure
+## 8. Economic smoke test
 
-**NOT AUTHORIZED IN SUN-1203 — requires explicit, separate human authorization,
-exactly as SUN-1200 checkpoint F's bootstrap did.** A real buyer payment is the
-only way to prove real CDP settlement end-to-end; this is a deliberate, bounded,
-single-transaction action, never a side effect of upload or route enablement
-alone.
+**NOT EXECUTED IN SUN-1205. Requires a separate, explicit, rail-specific human
+authorization.** Upload or deployment never authorizes payment signing, provider
+consumption, settlement, or a real transaction. A bounded economic smoke test
+must define its Payment-Identifier, rail, amount, provider workload, recovery
+path, and stop boundary before it starts.
 
-## 10. Observability checks
+## 9. Rollback
 
-- `wrangler tail` during and immediately after cutover.
-- Confirm request correlation IDs, result classes, and failure categories are
-  visible per the checkpoint report's `PAYMENT_PHASE_OBSERVABLE`/
-  `PROVIDER_FAILURE_OBSERVABLE` findings.
-- Confirm no secret/credential/raw payload appears in logs (re-verify the
-  checkpoint report's `SECRET_LOGGING_FINDINGS` before relying on this).
+Known-good production version at SUN-1205:
 
-## 11. Rollback trigger criteria
+```text
+a4ada936-a434-4522-a8af-41c57170f4e4
+```
 
-Any of:
-
-- Elevated 5xx rate on paid routes beyond baseline.
-- A real settlement failing or behaving ambiguously (see checkpoint report's
-  `RETRY_AFTER_SETTLEMENT_BEHAVIOR` for what "ambiguous" means in this
-  codebase).
-- Any `EvalError`/request-time dynamic-code-generation exception appearing in
-  `wrangler tail` (the exact defect class SUN-1200/1201/1202 closed — its
-  reappearance means a regression escaped every gate).
-- Any evidence of a real economic double-charge or price mismatch.
-
-## 12. Rollback command/process
-
-**NOT AUTHORIZED IN SUN-1203.**
+**NOT EXECUTED IN SUN-1205.**
 
 ```bash
-wrangler rollback
-# or, to a specific known-good version explicitly:
-wrangler versions deploy <known-good-version-id>@100% -y
+pnpm exec wrangler rollback --config wrangler.toml
+# Or pin the known-good version explicitly:
+pnpm exec wrangler versions deploy \
+  --config wrangler.toml \
+  a4ada936-a434-4522-a8af-41c57170f4e4@100% \
+  --message "emergency rollback to disabled known-good version" \
+  -y
 ```
 
-Known-good version as of this checkpoint: `a4ada936-a434-4522-a8af-41c57170f4e4`
-(100%, the disabled/rollback-safe version every checkpoint since SUN-1200 has
-verified production remains on).
+The current migrations are additive and the known-good disabled version does not
+execute paid-service paths. Its binding/config shape was reconciled read-only in
+SUN-1205. Rolling code back cannot reverse an already-finalized external payment
+or provider workload; such economic effects are the irreversible cutover actions
+and must be reconciled by Payment-Identifier.
 
-## 13. Route-disable emergency procedure
+## 10. Emergency paid-route disable
 
-Fastest mitigation short of a full rollback: flip `PAID_ROUTES_ENABLED` to
-`"false"` (or unset) in `wrangler.toml` and upload+deploy that single-line
-change — `/v1/*`/`/v2/*` immediately return 404 again, exactly the structural
-default this repository has maintained since SUN-0700A. Does not require
-reverting any code logic, only the one environment variable.
+There is no independent instantaneous route toggle. Create a new fail-closed
+version with `PAID_ROUTES_ENABLED` absent or not `"true"`, upload it, verify its
+public preview, then deploy it to 100%. Both upload and deployment are mutations
+and were **NOT EXECUTED IN SUN-1205**. `/mcp` remains public through this
+procedure, while paid MCP tool execution remains closed at its economic
+boundary.
 
-## 14. Post-cutover reconciliation
+## 11. Evidence required to close a future cutover
 
-1. Re-run the full smoke test (§5) plus one real economic transaction's
-   receipt/PSL inspection (read-only D1 query, no mutation).
-2. Confirm D1 state matches expectations (one `x402_service_results` row,
-   correct `payment_attempts` lifecycle stage).
-3. Confirm no unexpected version is serving traffic
-   (`wrangler deployments list`).
-
-## 15. Required evidence to close the deployment checkpoint
-
-- Pre-cutover SHA (§1) and gate results (§2).
-- Smoke-test evidence (§5, §8) with timestamps.
-- The one authorized economic smoke-test's receipt/PSL (§9), if performed.
-- Observability confirmation (§10).
-- Explicit sign-off that no rollback trigger (§11) fired within the post-cutover
-  observation window.
+- Frozen candidate/activation SHA and release manifest.
+- Preflight, full regression, security, bundle, and preview-smoke evidence.
+- Uploaded version ID and preview URL, with the public-preview exposure
+  explicitly acknowledged.
+- Deployment ID and traffic percentages.
+- Production route/MCP observations and logs.
+- Any separately authorized economic test's durable receipt, PSL, provider
+  evidence, exactly-once/recovery proof, and reconciliation.
+- Rollback readiness and explicit confirmation that no rollback trigger fired
+  during the approved observation window.

@@ -201,6 +201,21 @@ async function resolveCdpEvidence(env: Env) {
   return { productionAuthorization, cdpEvidence };
 }
 
+function productionPaymentProviderUnavailable(
+  env: Env,
+  evidenceMode: 'fixture' | 'production'
+): boolean {
+  return env.ENVIRONMENT === 'production' && evidenceMode !== 'production';
+}
+
+function paymentProviderNotConfiguredResponse() {
+  return {
+    error: 'payment_provider_not_configured',
+    message:
+      'Production paid routes require a fully authenticated production payment provider; fixture fallback is disabled',
+  };
+}
+
 /**
  * SUN-1200 checkpoint D: the real, read-only chain-receipt checker,
  * wired into both CDP-rail route families below. Construction alone
@@ -248,6 +263,9 @@ app.all('/v1/*', async (c) => {
   }
   if (!cachedPaidServicesApp || cachedPaidServicesDb !== c.env.DB) {
     const { productionAuthorization, cdpEvidence } = await resolveCdpEvidence(c.env);
+    if (productionPaymentProviderUnavailable(c.env, cdpEvidence.evidenceMode)) {
+      return c.json(paymentProviderNotConfiguredResponse(), 503);
+    }
     cachedPaidServicesApp = await buildPaidServicesApp({
       db: c.env.DB,
       evidenceMode: cdpEvidence.evidenceMode,
@@ -392,6 +410,9 @@ app.all('/v2/*', async (c) => {
   }
   if (!cachedV2CdpApp || cachedV2CdpDb !== c.env.DB) {
     const { productionAuthorization, cdpEvidence } = await resolveCdpEvidence(c.env);
+    if (productionPaymentProviderUnavailable(c.env, cdpEvidence.evidenceMode)) {
+      return c.json(paymentProviderNotConfiguredResponse(), 503);
+    }
     cachedV2CdpApp = await buildPaidServicesApp({
       db: c.env.DB,
       evidenceMode: cdpEvidence.evidenceMode,

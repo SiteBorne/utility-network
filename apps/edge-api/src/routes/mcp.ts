@@ -12,6 +12,40 @@ const MCP_ALLOWED_HOSTS = [
   'test.local',
 ] as const;
 
+// MCP is a public discovery surface. Keep its measured request envelope far
+// below the Worker's general 10 MiB service-upload ceiling: MCP requests carry
+// JSON-RPC metadata and bounded tool arguments, never document bytes.
+const MCP_MAX_REQUEST_BYTES = 1024 * 1024;
+
+async function readBoundedMcpRequest(request: Request): Promise<Request | null> {
+  if (request.method === 'GET' || request.method === 'HEAD' || request.body === null)
+    return request;
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let observed = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      observed += value.byteLength;
+      if (observed > MCP_MAX_REQUEST_BYTES) {
+        await reader.cancel();
+        return null;
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const body = new Uint8Array(observed);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new Request(request, { body });
+}
+
 /**
  * Credential-independent MCP endpoint. Each HTTP request receives a fresh
  * official SDK handler/server. Service tools use protocol-mcp's closed
@@ -20,6 +54,17 @@ const MCP_ALLOWED_HOSTS = [
  * only; it does not enable paid execution, settlement, or production.
  */
 export async function mcpRoute(context: Context<{ Bindings: Env }>): Promise<Response> {
+  const boundedRequest = await readBoundedMcpRequest(context.req.raw);
+  if (!boundedRequest) {
+    return Response.json(
+      {
+        code: 'PAYLOAD_TOO_LARGE',
+        message: `MCP request body exceeds maximum size of ${MCP_MAX_REQUEST_BYTES} bytes`,
+      },
+      { status: 413 }
+    );
+  }
+
   const options: CreateSiteborneMcpOptions = {
     health: { production_ready: false, production_enabled: false },
     allowedHosts: [...MCP_ALLOWED_HOSTS],
@@ -42,5 +87,5 @@ export async function mcpRoute(context: Context<{ Bindings: Env }>): Promise<Res
     };
   }
 
-  return createSiteborneMcpHonoApp(options).fetch(context.req.raw);
+  return createSiteborneMcpHonoApp(options).fetch(boundedRequest);
 }

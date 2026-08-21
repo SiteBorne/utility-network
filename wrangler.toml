@@ -73,11 +73,14 @@ AGENT_CARD_SIGNING_KEY_ID = "siteborne-agent-card-2026-08"
 # PAYMENT_ENVIRONMENT below, which governs the CDP rail only). Not a
 # secret: a fixed literal, never credential material.
 NVM_ENVIRONMENT = "sandbox"
-PAYMENT_ENVIRONMENT = "production"
-PRODUCTION_ENABLED = "true"
-PRODUCTION_CDP_CREDENTIALS_APPROVED = "true"
-HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP = "true"
-PAID_ROUTES_ENABLED = "true"
+# SUN-1205 checkpoint K completion: the five payment/cutover switches that
+# appeared in partial commit 7a62d4b were a previously-transient cutover diff,
+# accidentally committed while still set to their activating values. They are
+# deliberately absent from the frozen pre-upload candidate. Every consumer is
+# fail-closed on absence: CDP resolves to preproduction/disabled, and the paid
+# route families return 404. A later, separately authorized cutover must set
+# the exact bounded values it needs in its own reviewed commit/version; an
+# upload of this candidate cannot activate paid routes or authorize economics.
 # SUN-1200 checkpoint E: the canonical production payment-receiving
 # address, confirmed by the user and independently reconciled read-only
 # against the real CDP account list (cdp.evm.getAccount /

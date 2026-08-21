@@ -86,4 +86,28 @@ describe('edge-api /mcp route', () => {
     expect(response.status).toBe(413);
     expect(await response.json()).toEqual(expect.objectContaining({ code: 'PAYLOAD_TOO_LARGE' }));
   });
+
+  it('measures the MCP body and rejects an oversized request even when Content-Length understates it', async () => {
+    const oversized = JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'tools/call',
+      params: {
+        name: 'siteborne_get_quote',
+        arguments: { padding: 'x'.repeat(1024 * 1024) },
+      },
+    });
+    const response = await app.request('/mcp', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': '1',
+        Host: 'test.local',
+      },
+      body: oversized,
+    });
+
+    expect(response.status).toBe(413);
+    expect(await response.json()).toEqual(expect.objectContaining({ code: 'PAYLOAD_TOO_LARGE' }));
+  });
 });

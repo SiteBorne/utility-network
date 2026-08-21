@@ -36,6 +36,29 @@ describe('paid-service route mounting gate (directive §6, §32)', () => {
     expect(res.status).toBe(404);
   });
 
+  it('production Worker with paid routes enabled but no authenticated CDP provider fails closed instead of serving fixture economics', async () => {
+    const res = await app.request(
+      '/v1/company/evidence-graph',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          identifiers: { cik: '0000320193' },
+          requested_field_groups: ['identity'],
+        }),
+      },
+      {
+        ENVIRONMENT: 'production',
+        PAID_ROUTES_ENABLED: 'true',
+        DB: {} as never,
+      } as never
+    );
+
+    expect(res.status).toBe(503);
+    expect(res.headers.get('PAYMENT-REQUIRED')).toBeNull();
+    expect(await res.json()).toMatchObject({ error: 'payment_provider_not_configured' });
+  });
+
   it('Nevermined routes are absent by default and fail closed without an authenticated provider', async () => {
     const request = {
       method: 'POST',

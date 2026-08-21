@@ -83,7 +83,7 @@ function runCommand(cmd: string, args: string[], cwd: string): Promise<void> {
 }
 
 async function withDevServer<T>(
-  opts: { configPath?: string; dbName: string },
+  opts: { configPath?: string; dbName: string; vars?: Record<string, string> },
   fn: (base: string, getLog: () => string) => Promise<T>
 ): Promise<T> {
   const tempDir = mkdtempSync(join(tmpdir(), 'siteborne-worker-runtime-'));
@@ -113,9 +113,22 @@ async function withDevServer<T>(
       [
         'dev',
         '--local',
+        // The committed config has one apex Worker Route used only for MCP
+        // Registry domain proof. Wrangler otherwise chooses that route's
+        // zone (`siteborne.net`) as the local upstream Host for *every* test
+        // request, including /mcp, even though production /mcp is served on
+        // utility.siteborne.net. Pin the real production MCP host so the
+        // DNS-rebinding allowlist is exercised faithfully without widening
+        // production policy merely to accommodate Wrangler's local default.
+        '--host',
+        'utility.siteborne.net',
         '--port',
         String(port),
         ...(opts.configPath ? ['--config', opts.configPath] : []),
+        ...Object.entries(opts.vars ?? {}).flatMap(([name, value]) => [
+          '--var',
+          `${name}:${value}`,
+        ]),
         '--persist-to',
         tempDir,
       ],
@@ -140,6 +153,142 @@ async function withDevServer<T>(
     rmSync(tempDir, { recursive: true, force: true });
     console.log(`[test:worker-runtime] isolated state at ${tempDir} removed`);
   }
+}
+
+const MCP_PROTOCOL_VERSION = '2026-07-28';
+
+function mcpHeaders(method: string, toolName?: string): Record<string, string> {
+  return {
+    Accept: 'application/json, text/event-stream',
+    'Content-Type': 'application/json',
+    'MCP-Protocol-Version': MCP_PROTOCOL_VERSION,
+    'Mcp-Method': method,
+    ...(toolName ? { 'Mcp-Name': toolName } : {}),
+    Host: 'utility.siteborne.net',
+  };
+}
+
+function mcpMeta() {
+  return {
+    'io.modelcontextprotocol/protocolVersion': MCP_PROTOCOL_VERSION,
+    'io.modelcontextprotocol/clientInfo': { name: 'siteborne-workerd-audit', version: '1.0.0' },
+    'io.modelcontextprotocol/clientCapabilities': {},
+  };
+}
+
+// ---------------------------------------------------------------------
+// Phase 0 (SUN-1205 checkpoint K): exact committed production config.
+// Paid routes remain structurally absent, while the already-public MCP
+// surface is exercised through the real production entrypoint/workerd.
+// ---------------------------------------------------------------------
+async function runPhase0() {
+  await withDevServer({ dbName: 'siteborne-utility' }, async (base, getLog) => {
+    record('PHASE 0 (exact committed wrangler.toml): worker boots under real workerd', true);
+
+    for (const path of ['/v1/company/evidence-graph', '/v2/company/evidence-graph']) {
+      const res = await fetch(base + path, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: '{}',
+      });
+      record(`PHASE 0: ${path} remains 404 before paid-route cutover`, res.status === 404);
+    }
+
+    const malformed = await fetch(`${base}/mcp`, {
+      method: 'POST',
+      headers: mcpHeaders('tools/list'),
+      body: '{',
+    });
+    record('PHASE 0 (M1): malformed MCP JSON is a bounded 400', malformed.status === 400);
+
+    const listBody = {
+      jsonrpc: '2.0',
+      id: 1205,
+      method: 'tools/list',
+      params: { _meta: mcpMeta() },
+    };
+    const listed = await fetch(`${base}/mcp`, {
+      method: 'POST',
+      headers: mcpHeaders('tools/list'),
+      body: JSON.stringify(listBody),
+    });
+    const listedJson = (await listed.json().catch(() => ({}))) as any;
+    record(
+      'PHASE 0 (M2): valid MCP discovery returns the six governed tools',
+      listed.status === 200 && listedJson?.result?.tools?.length === 6,
+      `status=${listed.status} tools=${String(listedJson?.result?.tools?.length)} message=${String(listedJson?.error?.message)}`
+    );
+
+    const unknown = await fetch(`${base}/mcp`, {
+      method: 'POST',
+      headers: mcpHeaders('siteborne/unknown'),
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1206,
+        method: 'siteborne/unknown',
+        params: { _meta: mcpMeta() },
+      }),
+    });
+    const unknownJson = (await unknown.json().catch(() => ({}))) as any;
+    record(
+      'PHASE 0 (M3): unknown MCP method is a governed method-not-found failure',
+      unknown.status === 404 && unknownJson?.error?.code === -32601,
+      `status=${unknown.status} code=${String(unknownJson?.error?.code)} message=${String(unknownJson?.error?.message)}`
+    );
+
+    const unpaid = await fetch(`${base}/mcp`, {
+      method: 'POST',
+      headers: mcpHeaders('tools/call', 'siteborne_company_evidence_graph'),
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1207,
+        method: 'tools/call',
+        params: {
+          name: 'siteborne_company_evidence_graph',
+          arguments: {
+            identifiers: { cik: '0000320193' },
+            requested_field_groups: ['identity'],
+          },
+          _meta: mcpMeta(),
+        },
+      }),
+    });
+    const unpaidText = await unpaid.text();
+    record(
+      'PHASE 0 (M4/M6): unauthenticated paid MCP tool stops at payment_required with zero provider execution',
+      unpaid.status === 200 && unpaidText.includes('payment_required'),
+      `status=${unpaid.status} body=${unpaidText.slice(0, 240)}`
+    );
+
+    const oversized = await fetch(`${base}/mcp`, {
+      method: 'POST',
+      headers: mcpHeaders('tools/call', 'siteborne_get_quote'),
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1208,
+        method: 'tools/call',
+        params: {
+          name: 'siteborne_get_quote',
+          arguments: { padding: 'x'.repeat(1024 * 1024) },
+          _meta: mcpMeta(),
+        },
+      }),
+    });
+    const oversizedJson = (await oversized.json().catch(() => ({}))) as any;
+    record(
+      'PHASE 0 (M5): measured oversized MCP request is rejected with 413',
+      oversized.status === 413 && oversizedJson?.code === 'PAYLOAD_TOO_LARGE',
+      `status=${oversized.status} code=${String(oversizedJson?.code)}`
+    );
+
+    const hasProviderTraffic = /api\.sandbox\.nevermined\.app|api\.cdp\.coinbase\.com/i.test(
+      getLog()
+    );
+    record(
+      'PHASE 0 (M6): MCP probe produced no Nevermined/CDP provider traffic signal',
+      !hasProviderTraffic
+    );
+  });
 }
 
 // ---------------------------------------------------------------------
@@ -234,129 +383,138 @@ async function payAndFetch(base: string, path: string, body: unknown, challenge:
 // Phase 1: real production config (wrangler.toml)
 // ---------------------------------------------------------------------
 async function runPhase1() {
-  await withDevServer({ dbName: 'siteborne-utility' }, async (base, getLog) => {
-    record('PHASE 1 (real wrangler.toml): worker boots under real workerd', true);
-
+  await withDevServer(
     {
-      const res = await fetch(`${base}/v2/web/context`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ target_url: 'https://acme.example/', retrieval_mode: 'direct' }),
-      });
-      const header = res.headers.get('PAYMENT-REQUIRED');
+      dbName: 'siteborne-utility',
+      vars: { ENVIRONMENT: 'development', PAID_ROUTES_ENABLED: 'true' },
+    },
+    async (base, getLog) => {
       record(
-        'PHASE 1: web_context_verified.v2 unsigned request -> real 402 with PAYMENT-REQUIRED',
-        res.status === 402 && !!header
+        'PHASE 1 (real production entrypoint, command-scoped local fixture gates): worker boots under real workerd',
+        true
       );
-    }
-    {
-      const res = await fetch(`${base}/v2/document/evidence-json`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          artifact_reference: {
-            artifact_id: 'doc/native-fixture.pdf',
-            media_type: 'application/pdf',
-            size_bytes: 1,
-          },
-        }),
-      });
-      const header = res.headers.get('PAYMENT-REQUIRED');
-      record(
-        'PHASE 1: document_evidence_json.v2 unsigned request -> real 402 with PAYMENT-REQUIRED',
-        res.status === 402 && !!header
-      );
-    }
 
-    const agentBase = {
-      verification_contract: { claims: [], deterministic_requirements: [] },
-      candidate_output: {},
-      verification_mode: 'standard',
-    };
-    async function checkPreEconomicRejection(
-      name: string,
-      requiredSchema: unknown,
-      expectedCode: string
-    ) {
-      const res = await fetch(`${base}/v2/verify/agent-output`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ ...agentBase, required_schema: requiredSchema }),
-      });
-      const respBody = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-      const ok =
-        res.status === 400 &&
-        respBody.error === expectedCode &&
-        !res.headers.get('PAYMENT-REQUIRED');
-      record(`PHASE 1: ${name}`, ok, `status=${res.status} error=${String(respBody.error)}`);
-    }
-    await checkPreEconomicRejection(
-      'verify_agent_output.v2 Case C: unsupported keyword rejected BEFORE economics',
-      { type: 'string', pattern: '^[a-z]+$' },
-      'unsupported_required_schema'
-    );
-    await checkPreEconomicRejection(
-      'verify_agent_output.v2 Case D: remote $ref rejected BEFORE economics',
-      { properties: { x: { $ref: 'https://example.invalid/schema.json' } } },
-      'unsupported_required_schema'
-    );
-    await checkPreEconomicRejection(
-      'verify_agent_output.v2 Case E: over-byte-limit schema rejected BEFORE economics',
-      { type: 'string', description: 'x'.repeat(40_000) },
-      'required_schema_limit_exceeded'
-    );
-    {
-      let deep: Record<string, unknown> = { type: 'number' };
-      for (let i = 0; i < 40; i++) deep = { allOf: [deep] };
+      {
+        const res = await fetch(`${base}/v2/web/context`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ target_url: 'https://acme.example/', retrieval_mode: 'direct' }),
+        });
+        const header = res.headers.get('PAYMENT-REQUIRED');
+        record(
+          'PHASE 1: web_context_verified.v2 unsigned request -> real 402 with PAYMENT-REQUIRED',
+          res.status === 402 && !!header
+        );
+      }
+      {
+        const res = await fetch(`${base}/v2/document/evidence-json`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            artifact_reference: {
+              artifact_id: 'doc/native-fixture.pdf',
+              media_type: 'application/pdf',
+              size_bytes: 1,
+            },
+          }),
+        });
+        const header = res.headers.get('PAYMENT-REQUIRED');
+        record(
+          'PHASE 1: document_evidence_json.v2 unsigned request -> real 402 with PAYMENT-REQUIRED',
+          res.status === 402 && !!header
+        );
+      }
+
+      const agentBase = {
+        verification_contract: { claims: [], deterministic_requirements: [] },
+        candidate_output: {},
+        verification_mode: 'standard',
+      };
+      async function checkPreEconomicRejection(
+        name: string,
+        requiredSchema: unknown,
+        expectedCode: string
+      ) {
+        const res = await fetch(`${base}/v2/verify/agent-output`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ ...agentBase, required_schema: requiredSchema }),
+        });
+        const respBody = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+        const ok =
+          res.status === 400 &&
+          respBody.error === expectedCode &&
+          !res.headers.get('PAYMENT-REQUIRED');
+        record(`PHASE 1: ${name}`, ok, `status=${res.status} error=${String(respBody.error)}`);
+      }
       await checkPreEconomicRejection(
-        'verify_agent_output.v2 Case F: over-depth schema rejected BEFORE economics',
-        deep,
+        'verify_agent_output.v2 Case C: unsupported keyword rejected BEFORE economics',
+        { type: 'string', pattern: '^[a-z]+$' },
+        'unsupported_required_schema'
+      );
+      await checkPreEconomicRejection(
+        'verify_agent_output.v2 Case D: remote $ref rejected BEFORE economics',
+        { properties: { x: { $ref: 'https://example.invalid/schema.json' } } },
+        'unsupported_required_schema'
+      );
+      await checkPreEconomicRejection(
+        'verify_agent_output.v2 Case E: over-byte-limit schema rejected BEFORE economics',
+        { type: 'string', description: 'x'.repeat(40_000) },
         'required_schema_limit_exceeded'
       );
-    }
-    {
-      const res = await fetch(`${base}/v2/verify/agent-output`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          ...agentBase,
-          required_schema: { type: 'object', properties: { x: { type: 'number' } } },
-        }),
-      });
-      record(
-        'PHASE 1: verify_agent_output.v2 Profile-1-supported schema still gets a normal 402',
-        res.status === 402 && !!res.headers.get('PAYMENT-REQUIRED')
-      );
-    }
-    {
-      const body = JSON.stringify({
-        target_url: 'https://acme.example/replay',
-        retrieval_mode: 'direct',
-      });
-      const [r1, r2] = await Promise.all(
-        [1, 2].map(() =>
-          fetch(`${base}/v2/web/context`, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body,
-          })
-        )
-      );
-      record(
-        'PHASE 1: two identical unsigned requests each independently mint a valid 402',
-        r1.status === 402 &&
-          r2.status === 402 &&
-          !!r1.headers.get('PAYMENT-REQUIRED') &&
-          !!r2.headers.get('PAYMENT-REQUIRED')
-      );
-    }
+      {
+        let deep: Record<string, unknown> = { type: 'number' };
+        for (let i = 0; i < 40; i++) deep = { allOf: [deep] };
+        await checkPreEconomicRejection(
+          'verify_agent_output.v2 Case F: over-depth schema rejected BEFORE economics',
+          deep,
+          'required_schema_limit_exceeded'
+        );
+      }
+      {
+        const res = await fetch(`${base}/v2/verify/agent-output`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            ...agentBase,
+            required_schema: { type: 'object', properties: { x: { type: 'number' } } },
+          }),
+        });
+        record(
+          'PHASE 1: verify_agent_output.v2 Profile-1-supported schema still gets a normal 402',
+          res.status === 402 && !!res.headers.get('PAYMENT-REQUIRED')
+        );
+      }
+      {
+        const body = JSON.stringify({
+          target_url: 'https://acme.example/replay',
+          retrieval_mode: 'direct',
+        });
+        const [r1, r2] = await Promise.all(
+          [1, 2].map(() =>
+            fetch(`${base}/v2/web/context`, {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body,
+            })
+          )
+        );
+        record(
+          'PHASE 1: two identical unsigned requests each independently mint a valid 402',
+          r1.status === 402 &&
+            r2.status === 402 &&
+            !!r1.headers.get('PAYMENT-REQUIRED') &&
+            !!r2.headers.get('PAYMENT-REQUIRED')
+        );
+      }
 
-    const hasEvalError = /EvalError|Code generation from strings disallowed/i.test(getLog());
-    record(
-      'PHASE 1: zero EvalError/request-time-eval exception in the dev server log',
-      !hasEvalError
-    );
-  });
+      const hasEvalError = /EvalError|Code generation from strings disallowed/i.test(getLog());
+      record(
+        'PHASE 1: zero EvalError/request-time-eval exception in the dev server log',
+        !hasEvalError
+      );
+    }
+  );
 }
 
 // ---------------------------------------------------------------------
@@ -1019,6 +1177,7 @@ async function runBundleIsolationCheck() {
 async function main() {
   let exitCode = 0;
   try {
+    await runPhase0();
     await runPhase1();
     await runPhase2();
     await runPhase3();
