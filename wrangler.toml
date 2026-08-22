@@ -28,6 +28,11 @@ compatibility_flags = ["nodejs_compat"]
 # after this checkpoint's first `routes` deploy. Restored explicitly; this
 # was never an intended change.
 workers_dev = true
+# SUN-1207 M3: undeployed Worker versions can inherit production secrets and
+# stale version-scoped variables. Versioned and aliased preview URLs must never
+# make those versions publicly routable. Keep the normal workers.dev surface
+# above; disable only per-version/per-alias previews.
+preview_urls = false
 
 # SUN-1100 checkpoint 2: a narrowly-scoped Worker Route (not a full custom
 # domain) for exactly one path on the apex zone -- proves domain control to

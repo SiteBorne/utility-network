@@ -113,6 +113,12 @@ function parseScalar(name: string): string | null {
   return match?.[1] ?? null;
 }
 
+function parseBoolean(name: string): boolean | null {
+  const toml = readFileSync(WRANGLER_TOML, 'utf-8');
+  const match = new RegExp(`^${name}\\s*=\\s*(true|false)\\s*$`, 'm').exec(toml);
+  return match ? match[1] === 'true' : null;
+}
+
 /** Parses the [vars] table's simple `KEY = "value"` lines (this repo's
  * wrangler.toml never nests structured values under [vars]). Stops at the
  * next `[section]` header. */
@@ -155,7 +161,7 @@ function listRemoteSecretNames(): string[] {
 }
 
 function main(): void {
-  console.log('[production:preflight] SUN-1206 checkpoint L -- production release-gate preflight.');
+  console.log('[production:preflight] SUN-1207 M3 -- production release-gate preflight.');
   console.log('[production:preflight] This performs ZERO mutating Cloudflare API calls.');
 
   const localFailures: string[] = [];
@@ -232,6 +238,18 @@ function main(): void {
   if (compatibilityDate !== '2026-08-05') {
     localFailures.push(
       `wrangler.toml compatibility_date is ${JSON.stringify(compatibilityDate)}, expected "2026-08-05"`
+    );
+  }
+
+  const previewUrls = parseBoolean('preview_urls');
+  if (previewUrls !== false) {
+    localFailures.push(
+      `wrangler.toml preview_urls must be explicitly false, received ${JSON.stringify(previewUrls)} ` +
+        `(undeployed Worker versions may contain production secrets or stale economic configuration).`
+    );
+  } else {
+    console.log(
+      '[production:preflight] PASS: versioned and aliased Worker preview URLs are explicitly disabled.'
     );
   }
 
