@@ -34,8 +34,27 @@ function fullEnv() {
 }
 
 describe('buildVerifyAgentOutputV2CdpProductionRouteConfig', () => {
-  it('assembles a well-formed X402ServiceRouteConfig when every dependency is present', async () => {
+  // SUN-1218 checkpoint X: this test's own expectation intentionally
+  // changed from the pre-SUN-1218 behavior. Before this checkpoint, the
+  // production call site (no third argument) silently fell back to
+  // `evidenceMode: 'fixture'` whenever real evidence could not be
+  // established -- the exact R0 this checkpoint closes. `fullEnv()`
+  // deliberately never sets the ADR-0055 gates, so real evidence
+  // genuinely cannot be established here; the correct, new behavior is
+  // `{unavailable: true}`, not a silently-mounted fixture-evidenced
+  // route. See the two tests below for the two real, intended outcomes
+  // this call site can now produce.
+  it('SUN-1218: with no explicit test evidence override, real evidence unavailable -> unavailable, never a silently fixture-evidenced route', async () => {
     const result = await buildVerifyAgentOutputV2CdpProductionRouteConfig(fullEnv(), fakeDb());
+    expect('unavailable' in result).toBe(true);
+    if (!('unavailable' in result)) throw new Error('unreachable');
+    expect(result.reason).toMatch(/production payment evidence unavailable/);
+  });
+
+  it('SUN-1218: with an explicit test evidence override (the only legitimate way to select fixture evidence), assembles a well-formed X402ServiceRouteConfig', async () => {
+    const result = await buildVerifyAgentOutputV2CdpProductionRouteConfig(fullEnv(), fakeDb(), {
+      evidenceMode: 'fixture',
+    });
     expect('unavailable' in result).toBe(false);
     if ('unavailable' in result) throw new Error('unreachable');
     expect(result.serviceId).toBe('verify_agent_output.v2');
@@ -44,10 +63,7 @@ describe('buildVerifyAgentOutputV2CdpProductionRouteConfig', () => {
     expect(result.contractRelease).toBe('2.0.0');
     expect(result.pccDependency).toBe('1.1.0');
     expect(typeof result.executor).toBe('function');
-    expect(result.evidenceMode).toBe('fixture'); // getAuthenticatedSellerAddress is never
-    // supplied anywhere in this repository today (a deliberate, pre-existing,
-    // separate external blocker -- see the closure report) -- resolution
-    // always falls back to fixture mode regardless of secret presence.
+    expect(result.evidenceMode).toBe('fixture');
   });
 
   it('returns unavailable, never throws, when the signing key is missing', async () => {

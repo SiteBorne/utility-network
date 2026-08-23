@@ -7,15 +7,33 @@
  * `resolvePaymentAsset`, `resolveProductionCdpEvidenceProvider`) --
  * never `buildFixtureRegistry`, never `createFixtureSigner`.
  *
- * This module is never imported by `index.ts` in this checkpoint. It
- * exists to be proven under real workerd via the test-only entrypoint
- * (Task 5) and to be a candidate for a future checkpoint's wiring
- * decision -- not this one's.
+ * SUN-1216 wired this module into the real, bundle-reachable production
+ * entrypoint (`production-verify-v2-cdp-route.ts`, imported by
+ * `index.ts`).
+ *
+ * SUN-1218 checkpoint X closes the payment-evidence trust gap this
+ * exposed: `getAuthenticatedSellerAddress` is now wired for real (SUN-1200
+ * checkpoints C/D's already-tested `buildCdpSellerAddressLookup`/
+ * `buildProductionCdpAccountLookupClientFactory`), and this function now
+ * enforces, structurally, the permanent invariant
+ *
+ *   PRODUCTION_PAYMENT_EVIDENCE_FALLBACK_TO_SYNTHETIC = IMPOSSIBLE
+ *
+ * PRODUCTION_EVIDENCE_SELECTION = real provider OR unavailable, never
+ * real provider OR synthetic fallback. Fixture/synthetic evidence is
+ * selectable ONLY via the explicit, narrowly-typed
+ * `explicitTestEvidenceOverride` third parameter, which the real
+ * production route module never supplies -- see that parameter's own
+ * doc comment for the full reasoning. No ambient signal (an env var
+ * value, secret presence/absence, or a provider-construction failure)
+ * may ever implicitly select fixture evidence for a real caller.
  *
  * Fails closed (`{unavailable: true, reason}`) rather than throwing on
  * any missing/malformed dependency: missing signing key material,
- * missing signing key ID, malformed key material, or no D1 database.
- * Never falls back to a fixture signer or fixture registry on any path.
+ * missing signing key ID, malformed key material, no D1 database, or
+ * (new in SUN-1218) real production payment evidence being unavailable
+ * with no explicit test override supplied. Never falls back to a
+ * fixture signer or fixture registry on any path.
  */
 import type { D1Database } from '@cloudflare/workers-types';
 import { createCdpFacilitatorClient } from '@coinbase/cdp-sdk/x402';
@@ -24,6 +42,7 @@ import {
   assertPreproductionNetwork,
   isProductionPaymentAuthorized,
   resolvePaymentNetwork,
+  type PaymentEvidenceProvider,
 } from '@siteborne/protocol-x402';
 import {
   buildProductionSigner,
@@ -31,6 +50,8 @@ import {
   ProductionSignerConfigurationError,
 } from '@siteborne/service-runtime';
 import {
+  buildCdpSellerAddressLookup,
+  buildProductionCdpAccountLookupClientFactory,
   resolvePaymentAsset,
   resolveProductionAuthorizationInput,
   resolveProductionCdpEvidenceProvider,
@@ -55,6 +76,29 @@ export interface ProductionCompositionUnavailable {
   reason: string;
 }
 
+/**
+ * SUN-1218 checkpoint X — the ONLY way this composition may ever resolve
+ * fixture/synthetic payment evidence. Deliberately narrow, deliberately
+ * explicit: no ambient signal (an env var value, secret presence/
+ * absence, or a provider-construction failure) may ever implicitly
+ * select this on the real production call site's behalf. The real
+ * production route module (`production-verify-v2-cdp-route.ts`) never
+ * supplies this argument at all -- only `worker-runtime-test-entrypoint.ts`
+ * (a file `index.ts` never imports, proven by the existing bundle-
+ * isolation checks) constructs and passes one, explicitly, for its own
+ * real-workerd qualification purpose. This is the literal mechanism
+ * behind the required invariant:
+ *
+ *   PRODUCTION_EVIDENCE_SELECTION = real provider OR unavailable
+ *   TEST_EVIDENCE_SELECTION       = explicitly injected controlled test provider
+ *
+ * never "real provider OR synthetic fallback."
+ */
+export interface ExplicitTestEvidenceOverride {
+  evidenceMode: 'fixture';
+  evidenceProvider?: PaymentEvidenceProvider;
+}
+
 /** Mirrors `paid-services.ts`'s private `verifyAgentOutputPreEconomicCheck`
  * exactly (that function is not exported, and this checkpoint does not
  * modify that frozen file) -- both are thin argument-extraction glue
@@ -71,7 +115,8 @@ function verifyAgentOutputPreEconomicCheck(
 
 export async function buildVerifyAgentOutputV2CdpProductionRouteConfig(
   env: VerifyAgentOutputV2CdpProductionEnv,
-  db: D1Database
+  db: D1Database,
+  explicitTestEvidenceOverride?: ExplicitTestEvidenceOverride
 ): Promise<X402ServiceRouteConfig | ProductionCompositionUnavailable> {
   if (!db) {
     return { unavailable: true, reason: 'no D1 database binding supplied' };
@@ -101,39 +146,58 @@ export async function buildVerifyAgentOutputV2CdpProductionRouteConfig(
   const network = resolvePaymentNetwork(productionAuthorization);
   assertPreproductionNetwork(network, isProductionPaymentAuthorized(productionAuthorization));
 
-  // The real, existing, unmodified provider-construction boundary
-  // (SUN-1200 checkpoint B). `getAuthenticatedSellerAddress` is
-  // deliberately omitted here -- exactly as it is omitted everywhere
-  // else in this repository today (see that function's own doc
-  // comment: wiring a real implementation is "a separate, future
-  // credential-provisioning checkpoint's job") -- so this resolves to
-  // `{evidenceMode: 'fixture'}` unconditionally today, regardless of
-  // which secrets are present. This is a real, pre-existing, external
-  // gap this checkpoint does not close and does not need to: no live
-  // CDP evidence can be produced through this composition until that
-  // future checkpoint exists, which is strictly safer than SUN-1214
-  // requires.
-  const cdpEvidence = await resolveProductionCdpEvidenceProvider(
-    productionAuthorization,
-    {
-      SELLER_WALLET_ADDRESS: env.SELLER_WALLET_ADDRESS ?? '',
-      CDP_API_KEY_ID: env.CDP_API_KEY_ID ?? '',
-      CDP_API_KEY_SECRET: env.CDP_API_KEY_SECRET ?? '',
-    },
-    {
-      // Only ever invoked past a live authenticated-seller-address
-      // resolution this repository does not wire anywhere today -- see
-      // the comment above. Constructed with the real SDK function,
-      // matching production convention, in case a future checkpoint
-      // supplies `getAuthenticatedSellerAddress` and this path becomes
-      // genuinely reachable.
-      createFacilitatorClient: () =>
-        createCdpFacilitatorClient({
-          apiKeyId: env.CDP_API_KEY_ID,
-          apiKeySecret: env.CDP_API_KEY_SECRET,
-        }),
+  // SUN-1218 checkpoint X: `getAuthenticatedSellerAddress` is now wired
+  // to the real, already-implemented, already-tested
+  // `buildCdpSellerAddressLookup`/`buildProductionCdpAccountLookupClientFactory`
+  // (SUN-1200 checkpoints C/D) -- construction alone makes no network
+  // call; only actually invoking the returned closure does, and that
+  // only happens inside `resolveProductionCdpEvidenceProvider`'s own
+  // gate #3, itself only reached once gates #1/#2 (ADR-0055 human
+  // authorization + real binding presence) already hold.
+  let cdpEvidence: { evidenceMode: 'fixture' | 'production'; evidenceProvider?: PaymentEvidenceProvider };
+  if (explicitTestEvidenceOverride) {
+    cdpEvidence = explicitTestEvidenceOverride;
+  } else {
+    const resolved = await resolveProductionCdpEvidenceProvider(
+      productionAuthorization,
+      {
+        SELLER_WALLET_ADDRESS: env.SELLER_WALLET_ADDRESS ?? '',
+        CDP_API_KEY_ID: env.CDP_API_KEY_ID ?? '',
+        CDP_API_KEY_SECRET: env.CDP_API_KEY_SECRET ?? '',
+      },
+      {
+        createFacilitatorClient: () =>
+          createCdpFacilitatorClient({
+            apiKeyId: env.CDP_API_KEY_ID,
+            apiKeySecret: env.CDP_API_KEY_SECRET,
+          }),
+        getAuthenticatedSellerAddress: buildCdpSellerAddressLookup(
+          buildProductionCdpAccountLookupClientFactory({
+            CDP_API_KEY_ID: env.CDP_API_KEY_ID ?? '',
+            CDP_API_KEY_SECRET: env.CDP_API_KEY_SECRET ?? '',
+          }),
+          env.SELLER_WALLET_ADDRESS ?? ''
+        ),
+      }
+    );
+    // SUN-1218's central invariant, enforced structurally, not by an
+    // ambient signal: PRODUCTION_EVIDENCE_SELECTION = real provider OR
+    // unavailable, NEVER real provider OR synthetic fallback. Any
+    // resolution other than 'production' fails closed here,
+    // unconditionally -- regardless of which secrets are present,
+    // absent, or malformed, and regardless of ENVIRONMENT/any other
+    // ambient config. The only way this composition ever mounts a
+    // fixture-evidenced route is via `explicitTestEvidenceOverride`
+    // above, which the real production route module never supplies.
+    if (resolved.evidenceMode !== 'production') {
+      return {
+        unavailable: true,
+        reason:
+          'production payment evidence unavailable and no explicit test evidence override was supplied',
+      };
     }
-  );
+    cdpEvidence = resolved;
+  }
 
   const executor: ServiceExecutor = buildVerifyAgentOutputV2ProductionExecutor(signer, registry);
 

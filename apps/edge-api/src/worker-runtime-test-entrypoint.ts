@@ -252,6 +252,13 @@ app.all('/v2/verify-production/*', async (c) => {
          * already seeded this row. */
       });
 
+    // SUN-1218 checkpoint X: this test-only entrypoint is the ONE place
+    // in the repository explicitly permitted to select fixture/synthetic
+    // payment evidence -- it does so explicitly, via the composition's
+    // own narrowly-typed `explicitTestEvidenceOverride` third argument,
+    // never implicitly. This file is never imported by `index.ts`
+    // (proven by the existing bundle-isolation checks), so this
+    // explicit override can never reach the real production call site.
     const config = await buildVerifyAgentOutputV2CdpProductionRouteConfig(
       {
         PAID_RECEIPT_SIGNING_PRIVATE_KEY: cachedTestSigningKeyHex,
@@ -264,7 +271,8 @@ app.all('/v2/verify-production/*', async (c) => {
         HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP: c.env.HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP,
         PRODUCTION_CDP_CREDENTIALS_APPROVED: c.env.PRODUCTION_CDP_CREDENTIALS_APPROVED,
       },
-      c.env.DB
+      c.env.DB,
+      { evidenceMode: 'fixture' }
     );
     if ('unavailable' in config) {
       return c.json({ error: 'configuration_error', message: config.reason }, 500);
