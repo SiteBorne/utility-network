@@ -412,7 +412,17 @@ async function runPhase1() {
         true
       );
 
-      const paths = [
+      // SUN-1218 checkpoint X: PAID_ROUTES_ENABLED alone (this phase's
+      // own vars, unchanged) no longer implies any non-nevermined route
+      // is even nominally "enabled but unready" -- the 8 non-nevermined
+      // paths (including /v2/verify/agent-output, which additionally
+      // requires its own VERIFY_V2_CDP_ROUTE_ENABLED, deliberately not
+      // set here) are now unconditionally 404 (Tasks 3+4). Only the 4
+      // Nevermined routes (NEVERMINED_ROUTES_ENABLED=true, a genuinely
+      // separate, untouched flag) still reach the existing governed
+      // 503. Disclosed, intentional change from the pre-SUN-1218
+      // behavior.
+      const unsupportedPaths = [
         '/v1/company/evidence-graph',
         '/v1/web/context',
         '/v1/document/evidence-json',
@@ -421,12 +431,28 @@ async function runPhase1() {
         '/v2/web/context',
         '/v2/document/evidence-json',
         '/v2/verify/agent-output',
+      ];
+      const neverminedPaths = [
         '/v2/nevermined/company/evidence-graph',
         '/v2/nevermined/web/context',
         '/v2/nevermined/document/evidence-json',
         '/v2/nevermined/verify/agent-output',
       ];
-      for (const path of paths) {
+      for (const path of unsupportedPaths) {
+        const res = await fetch(base + path, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: '{}',
+        });
+        record(
+          `PHASE 1: ${path} remains 404 (no route-specific executor / activation gate satisfied) under real workerd`,
+          res.status === 404 &&
+            !res.headers.get('PAYMENT-REQUIRED') &&
+            !res.headers.get('PAYMENT-RESPONSE'),
+          `status=${res.status}`
+        );
+      }
+      for (const path of neverminedPaths) {
         const res = await fetch(base + path, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
@@ -1249,39 +1275,15 @@ async function runPhase7() {
       vars: {
         ENVIRONMENT: 'development',
         PAID_ROUTES_ENABLED: 'true',
+        VERIFY_V2_CDP_ROUTE_ENABLED: 'true',
         PAID_RECEIPT_SIGNING_PRIVATE_KEY: testKeyHex,
         PAID_RECEIPT_SIGNING_KEY_ID: testKeyId,
       },
     },
-    async (base, _getLog, tempDir) => {
+    async (base) => {
       record(
-        'PHASE 7 (REAL production entrypoint, verify v2/CDP production composition enabled): worker boots under real workerd',
+        'PHASE 7 (REAL production entrypoint, both activation gates enabled, no real CDP bindings): worker boots under real workerd',
         true
-      );
-
-      // The REAL production entrypoint (unlike the test-only one)
-      // correctly never self-seeds the D1 `services` table -- a real
-      // deployed candidate's D1 is expected to already carry this row
-      // (SUN-0800B checkpoint 3's out-of-band seed), which this
-      // script's own isolated local D1 instance does not. Seed the one
-      // row this scenario needs, mirroring
-      // `worker-runtime-test-entrypoint.ts`'s own idempotent insert
-      // (registry/services/verify_agent_output.v2.json's real, committed
-      // field values) -- a test-harness fixture action, not a
-      // production-code change.
-      await runCommand(
-        WRANGLER_BIN,
-        [
-          'd1',
-          'execute',
-          'siteborne-utility',
-          '--local',
-          '--persist-to',
-          tempDir,
-          '--command',
-          `INSERT OR IGNORE INTO services (id, version, title, description, input_schema, output_schema, price_usd, production_enabled, production_ready, protocol_status) VALUES ('verify_agent_output.v2', 'v2', 'Agent Output Verification', 'Verifies the output of another agent against provided criteria, performing independent reproduction and comparison to produce a verification receipt.', 'https://siteborne.net/schemas/services/agent-verification-input.schema.json', 'https://siteborne.net/schemas/services/agent-verification-output.schema.json', 0.019, 0, 0, 'preproduction');`,
-        ],
-        REPO_ROOT
       );
 
       const path = '/v2/verify/agent-output';
@@ -1299,55 +1301,49 @@ async function runPhase7() {
         verification_mode: 'standard',
       };
 
-      // (1) unsigned request through the REAL production entrypoint ->
-      // real 402 with the canonical production price -- the central
-      // SUN-1216 bundle-reachability proof at the HTTP level.
-      const challenge = await get402(base, path, body);
-      const actualAmount = challenge.accepts?.[0]?.amount;
+      // SUN-1218 checkpoint X: with both activation gates true but no
+      // real CDP bindings (the exact shape of this local run, matching
+      // every prior phase -- never the real production secrets), the
+      // REAL entrypoint now correctly fails closed to the existing
+      // governed pre-economic 503, NEVER a 402 challenge and NEVER a
+      // fixture-evidenced "success." This is the corrected, intended
+      // replacement for the pre-SUN-1218 version of this scenario,
+      // which incorrectly reached a full synthetic-payment success
+      // through the real entrypoint via a silent fixture fallback --
+      // exactly the R0 this checkpoint closes. The full 402 -> real
+      // post-settlement success flow through the real SUN-1214
+      // composition remains proven by Phase 6, via the test-only
+      // entrypoint's explicit, narrowly-scoped test-evidence injection.
+      const res = await fetch(base + path, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const resBody = (await res.json().catch(() => ({}))) as Record<string, unknown>;
       record(
-        'PHASE 7 (1): REAL entrypoint, unsigned request -> real 402 with canonical production price',
-        actualAmount === '19000',
-        `expected=19000 actual=${actualAmount}`
+        'PHASE 7 (1): REAL entrypoint, both gates enabled, no real CDP bindings -> governed pre-economic 503, never a payment challenge, never a silent fixture success',
+        res.status === 503 &&
+          resBody.error === 'service_executor_not_configured' &&
+          !res.headers.get('PAYMENT-REQUIRED') &&
+          !res.headers.get('PAYMENT-RESPONSE'),
+        `status=${res.status} error=${String(resBody.error)}`
       );
 
-      // (2) synthetic payment -> real post-settlement success through
-      // the REAL production entrypoint (not the test-only one Phase 6
-      // already proved this against).
-      const result = await payAndFetch(base, path, body, challenge);
-      let parsed: any = {};
-      try {
-        parsed = JSON.parse(result.body);
-      } catch {
-        /* leave {} */
-      }
-      const ok =
-        result.status === 200 &&
-        parsed.result_class === 'success' &&
-        parsed.output?.outcome === 'pass' &&
-        typeof parsed.receipt_id === 'string';
-      record(
-        'PHASE 7 (2): REAL entrypoint, synthetic payment -> real post-settlement success',
-        ok,
-        `status=${result.status} result_class=${parsed.result_class} receipt_id_present=${typeof parsed.receipt_id === 'string'}`
-      );
-
-      // (3) method safety under real workerd: GET on the exact same
+      // (2) method safety under real workerd: GET on the exact same
       // path is not claimed by the new POST-only registration -- it
-      // falls through to the untouched, still-gated `/v2/*` wildcard
-      // (503, the same governed disposition every other paid route
-      // returns), never a 405 and never the new route's own behavior.
+      // falls through to the untouched `/v2/*` wildcard, now
+      // unconditionally 404 (SUN-1218 Task 4), never a 405 and never
+      // the new route's own behavior.
       const getRes = await fetch(base + path, { method: 'GET' });
-      const getBody = (await getRes.json().catch(() => ({}))) as Record<string, unknown>;
       record(
-        'PHASE 7 (3): GET /v2/verify/agent-output is not claimed by the new POST-only route -- falls through to the unchanged /v2/* wildcard',
-        getRes.status === 503 && getBody.error === 'service_executor_not_configured',
-        `status=${getRes.status} error=${String(getBody.error)}`
+        'PHASE 7 (2): GET /v2/verify/agent-output is not claimed by the new POST-only route -- falls through to the unconditionally-404 /v2/* wildcard',
+        getRes.status === 404,
+        `status=${getRes.status}`
       );
 
-      // (4) the other 11 paid routes remain unaffected by the two new
-      // signing vars being present -- still the existing governed
-      // unavailable disposition, never accidentally reached through
-      // this checkpoint's new composition.
+      // (3) the other 7 non-nevermined paid routes remain unconditional
+      // 404, decoupled from PAID_ROUTES_ENABLED (SUN-1218 Task 4), even
+      // with both verify activation gates true.
       const otherPaths = [
         '/v1/company/evidence-graph',
         '/v1/web/context',
@@ -1359,19 +1355,150 @@ async function runPhase7() {
       ];
       let allUnaffected = true;
       for (const otherPath of otherPaths) {
-        const res = await fetch(base + otherPath, {
+        const otherRes = await fetch(base + otherPath, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: '{}',
         });
-        const b = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-        if (res.status !== 503 || b.error !== 'service_executor_not_configured') {
-          allUnaffected = false;
-        }
+        if (otherRes.status !== 404) allUnaffected = false;
       }
       record(
-        'PHASE 7 (4): the other paid routes remain unaffected by the new signing vars being present',
+        'PHASE 7 (3): the other 7 non-nevermined paid routes remain unconditionally 404, decoupled from PAID_ROUTES_ENABLED',
         allUnaffected
+      );
+    }
+  );
+}
+
+// ---------------------------------------------------------------------
+// Phase 8 (SUN-1218 checkpoint X): the full two-gate activation matrix
+// against the REAL production entrypoint, under real workerd. Proves
+// the exact frozen truth table:
+//   GLOBAL=false, ROUTE=false -> 12/12 404
+//   GLOBAL=true,  ROUTE=false -> 12/12 404
+//   GLOBAL=false, ROUTE=true  -> 12/12 404
+//   GLOBAL=true,  ROUTE=true  -> verify governed (503 pre-economic here,
+//                                no real CDP bindings), other 11 -> 404
+// plus that turning GLOBAL back off immediately restores 404 (kill
+// switch still works after both gates were briefly true). No live CDP
+// call anywhere in this phase.
+// ---------------------------------------------------------------------
+async function runPhase8() {
+  const testKeyHex = generateLocalTestSigningKeyHex();
+  const testKeyId = 'kid_sun1216local0123456789ab';
+  const ALL_TWELVE = [
+    '/v1/company/evidence-graph',
+    '/v1/web/context',
+    '/v1/document/evidence-json',
+    '/v1/verify/agent-output',
+    '/v2/company/evidence-graph',
+    '/v2/web/context',
+    '/v2/document/evidence-json',
+    '/v2/verify/agent-output',
+    '/v2/nevermined/company/evidence-graph',
+    '/v2/nevermined/web/context',
+    '/v2/nevermined/document/evidence-json',
+    '/v2/nevermined/verify/agent-output',
+  ];
+
+  async function allTwelveStatuses(base: string): Promise<Record<string, number>> {
+    const out: Record<string, number> = {};
+    for (const p of ALL_TWELVE) {
+      const res = await fetch(base + p, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: '{}',
+      });
+      out[p] = res.status;
+    }
+    return out;
+  }
+
+  function allAre(statuses: Record<string, number>, expected: number): boolean {
+    return Object.values(statuses).every((s) => s === expected);
+  }
+
+  // State A: global=false, route=false.
+  await withDevServer(
+    {
+      dbName: 'siteborne-utility',
+      vars: { ENVIRONMENT: 'development' },
+    },
+    async (base) => {
+      record('PHASE 8 (State A, real entrypoint): worker boots under real workerd', true);
+      const statuses = await allTwelveStatuses(base);
+      record(
+        'PHASE 8 (State A): global=false, route=false -> 12/12 404',
+        allAre(statuses, 404),
+        JSON.stringify(statuses)
+      );
+    }
+  );
+
+  // State B: global=true, route=false.
+  await withDevServer(
+    {
+      dbName: 'siteborne-utility',
+      vars: { ENVIRONMENT: 'development', PAID_ROUTES_ENABLED: 'true' },
+    },
+    async (base) => {
+      record('PHASE 8 (State B, real entrypoint): worker boots under real workerd', true);
+      const statuses = await allTwelveStatuses(base);
+      record(
+        'PHASE 8 (State B): global=true, route=false -> 12/12 404 (the exact contradiction SUN-1218 resolves)',
+        allAre(statuses, 404),
+        JSON.stringify(statuses)
+      );
+    }
+  );
+
+  // State C: global=false, route=true.
+  await withDevServer(
+    {
+      dbName: 'siteborne-utility',
+      vars: { ENVIRONMENT: 'development', VERIFY_V2_CDP_ROUTE_ENABLED: 'true' },
+    },
+    async (base) => {
+      record('PHASE 8 (State C, real entrypoint): worker boots under real workerd', true);
+      const statuses = await allTwelveStatuses(base);
+      record(
+        'PHASE 8 (State C): global=false, route=true -> 12/12 404 (master kill switch checked first)',
+        allAre(statuses, 404),
+        JSON.stringify(statuses)
+      );
+    }
+  );
+
+  // State D: global=true, route=true, no real CDP bindings -> verify
+  // governed pre-economic 503, other 11 -> 404. Then flip global back to
+  // false without restarting the Worker -- proven via a fresh dev server
+  // started directly in the "already off again" shape, since flipping a
+  // committed [vars] value requires a new Worker instance in this local
+  // harness; the kill-switch-still-works property is separately and
+  // exactly proven by production-verify-v2-cdp-route.test.ts's own unit
+  // test at the vitest level (already covered, Task 3) -- this phase's
+  // job is the real-workerd HTTP-level proof of State D specifically.
+  await withDevServer(
+    {
+      dbName: 'siteborne-utility',
+      vars: {
+        ENVIRONMENT: 'development',
+        PAID_ROUTES_ENABLED: 'true',
+        VERIFY_V2_CDP_ROUTE_ENABLED: 'true',
+        PAID_RECEIPT_SIGNING_PRIVATE_KEY: testKeyHex,
+        PAID_RECEIPT_SIGNING_KEY_ID: testKeyId,
+      },
+    },
+    async (base) => {
+      record('PHASE 8 (State D, real entrypoint): worker boots under real workerd', true);
+      const statuses = await allTwelveStatuses(base);
+      const verifyOk = statuses['/v2/verify/agent-output'] === 503;
+      const otherEleven = ALL_TWELVE.filter((p) => p !== '/v2/verify/agent-output');
+      const othersOk = otherEleven.every((p) => statuses[p] === 404);
+      record(
+        'PHASE 8 (State D): global=true, route=true, no real CDP bindings -> verify=503 (governed pre-economic), other 11=404',
+        verifyOk && othersOk,
+        JSON.stringify(statuses)
       );
     }
   );
@@ -1441,10 +1568,13 @@ async function runBundleIsolationCheck() {
     //     bundling does not eliminate the unreachable function bodies
     //     from the source file that also exports the reachable
     //     `buildServiceContext`.
-    //   - synthetic_fixture: `resolveProductionCdpEvidenceProvider`'s
-    //     (apps/edge-api/src/control-plane/config/production-payment.ts)
-    //     own, real, frozen fail-closed default when
-    //     `getAuthenticatedSellerAddress` is not supplied.
+    //   - synthetic_fixture: (SUN-1218 checkpoint X) now reachable
+    //     ONLY via the composition's explicit, narrowly-typed
+    //     `explicitTestEvidenceOverride` third parameter -- the real
+    //     production route module never supplies it (structurally
+    //     proven, see below); the only file that does is
+    //     `worker-runtime-test-entrypoint.ts`, never imported by
+    //     `index.ts`.
     //
     // FIXTURE_RUNTIME_REACHABILITY (the real gate, proven with
     // structural evidence, not asserted):
@@ -1457,23 +1587,24 @@ async function runBundleIsolationCheck() {
     //     evaluate, by JS operator semantics, not by current argument
     //     choice), and no other production-reachable file calls
     //     `buildServiceContext` at all.
-    //   - Finding B (synthetic_fixture): the underlying capability gap
-    //     (`getAuthenticatedSellerAddress` unwired anywhere in this
-    //     repository -- a pre-existing, SUN-1213-documented R0 to
-    //     PAID-ROUTE ACTIVATION, not something this checkpoint
-    //     introduces or closes) is NOT resolved -- but
+    //   - Finding B (synthetic_fixture): SUN-1218 checkpoint X closes
+    //     this. `getAuthenticatedSellerAddress` is now wired for real
+    //     (`buildCdpSellerAddressLookup`/
+    //     `buildProductionCdpAccountLookupClientFactory`, SUN-1200
+    //     checkpoints C/D). The production call site (no third
+    //     argument) fails closed to `{unavailable: true}` whenever real
+    //     evidence cannot be established -- proven by
     //     `verify-agent-output-v2-cdp-composition.evidence-integrity.test.ts`
-    //     proves the composition can only ever resolve to
-    //     `evidenceMode: 'fixture'` under that gap, and that the
-    //     repository's own frozen `isTrustClassAllowed`
-    //     (packages/protocol-x402/src/evidence/policy.ts, unmodified)
-    //     never allows `'synthetic_fixture'` to satisfy `'production'`
-    //     mode. This is a real, tracked, standing R0 to activation --
-    //     not a defect newly introduced by this checkpoint's bundle
-    //     integration, and not something a "bundle integration behind a
-    //     disabled gate" checkpoint can or should close (see the
-    //     closure report's activation-blocker section). It remains
-    //     the reason `PAID_ROUTE_ACTIVATION_AUTHORIZED=NO` stands.
+    //     and `verify-agent-output-v2-cdp-composition.production-evidence.test.ts`,
+    //     and by fixture-reintroduction Proof D
+    //     (`scripts/test-production-fixture-reintroduction-caught.mts`).
+    //     `synthetic_fixture` is reachable ONLY via the explicit
+    //     `explicitTestEvidenceOverride` parameter the real production
+    //     route module never supplies (structurally proven below).
+    //     This is no longer a standing R0 to activation via this
+    //     mechanism -- the remaining activation prerequisites are
+    //     ADR-0055's deliberate human-authorization gates (see the
+    //     closure report).
     const stringMarkerPresent = [
       'createTestClock',
       'createTestArtifactStore',
@@ -1486,9 +1617,26 @@ async function runBundleIsolationCheck() {
       `markers=${stringMarkerPresent.join(',') || 'none'}`
     );
     record(
-      'FIXTURE_RUNTIME_REACHABILITY (the real gate): hard-bypass markers=0 AND structural non-reachability proven for both disclosed findings -- see verify-agent-output-v2-production-executor.context-defaults.test.ts and verify-agent-output-v2-cdp-composition.evidence-integrity.test.ts',
+      'FIXTURE_RUNTIME_REACHABILITY (the real gate): hard-bypass markers=0 AND structural non-reachability proven for both disclosed findings -- see verify-agent-output-v2-production-executor.context-defaults.test.ts, verify-agent-output-v2-cdp-composition.evidence-integrity.test.ts, and Proof D',
       hardFixtureBypassMarkers.length === 0,
-      `hardBypassMarkers=${hardFixtureBypassMarkers.length} findingA=UNREACHABLE(proven) findingB=CONFINED_TO_NON_PRODUCTION_MODE(proven, R0-to-activation-standing)`
+      `hardBypassMarkers=${hardFixtureBypassMarkers.length} findingA=UNREACHABLE(proven) findingB=FAIL_CLOSED_R0_CLOSED_SUN1218(proven, synthetic_fixture reachable only via explicit test-only override)`
+    );
+    // SUN-1218 checkpoint X: the real production evidence-resolution
+    // functions must now be present in the real bundle -- confirms
+    // Task 1's wiring is genuinely reachable, not merely present in
+    // source.
+    const productionEvidenceMarkers = {
+      SELLER_ADDRESS_LOOKUP_IN_NEW_BUNDLE: bundle.includes('buildCdpSellerAddressLookup'),
+      ACCOUNT_LOOKUP_CLIENT_FACTORY_IN_NEW_BUNDLE: bundle.includes(
+        'buildProductionCdpAccountLookupClientFactory'
+      ),
+    };
+    record(
+      'bundle inclusion (SUN-1218 central deliverable): real wrangler.toml dry-run bundle DOES contain the real production payment-evidence resolution functions',
+      Object.values(productionEvidenceMarkers).every(Boolean),
+      Object.entries(productionEvidenceMarkers)
+        .map(([k, v]) => `${k}=${v ? 'YES' : 'NO'}`)
+        .join(' ')
     );
     // SUN-1216 checkpoint V: unlike SUN-1214 (where these three modules
     // were built but never imported by index.ts), the real production
@@ -1536,6 +1684,7 @@ async function main() {
     await runPhase5();
     await runPhase6();
     await runPhase7();
+    await runPhase8();
     await runBundleIsolationCheck();
   } catch (err) {
     record('harness execution', false, String(err));
