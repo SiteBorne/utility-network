@@ -29,6 +29,7 @@
     "@siteborne/pcc-schema": "workspace:*",
     "@siteborne/provider-adapters": "workspace:*",
     "@siteborne/verification": "workspace:*",
+    "@noble/ed25519": "^2.1.0",
     "@cfworker/json-schema": "^4.1.1",
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1",

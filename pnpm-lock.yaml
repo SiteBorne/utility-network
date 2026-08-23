@@ -462,6 +462,9 @@ importers:
       '@cfworker/json-schema':
         specifier: ^4.1.1
         version: 4.1.1
+      '@noble/ed25519':
+        specifier: ^2.1.0
+        version: 2.3.0
       '@siteborne/pcc-schema':
         specifier: workspace:*
         version: link:../pcc-schema
