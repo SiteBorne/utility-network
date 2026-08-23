@@ -58,11 +58,29 @@ describe('index.ts — SUN-1216 integration point', () => {
     expect(res.status).toBe(404);
   });
 
-  it("POST /v2/verify/agent-output enabled + no signing secrets -> the existing governed 503, matching every other paid route's unavailable disposition", async () => {
+  it('SUN-1218: POST /v2/verify/agent-output global=true, route-specific=absent -> 404 (the exact contradiction this checkpoint resolves)', async () => {
     const res = await app.request(
       '/v2/verify/agent-output',
       { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' },
       baseEnv({ PAID_ROUTES_ENABLED: 'true' })
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it('SUN-1218: POST /v2/verify/agent-output global=false, route-specific=true -> 404 (master kill switch checked first)', async () => {
+    const res = await app.request(
+      '/v2/verify/agent-output',
+      { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' },
+      baseEnv({ VERIFY_V2_CDP_ROUTE_ENABLED: 'true' })
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it("POST /v2/verify/agent-output both gates enabled + no signing secrets -> the existing governed 503, matching every other paid route's unavailable disposition", async () => {
+    const res = await app.request(
+      '/v2/verify/agent-output',
+      { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' },
+      baseEnv({ PAID_ROUTES_ENABLED: 'true', VERIFY_V2_CDP_ROUTE_ENABLED: 'true' })
     );
     expect(res.status).toBe(503);
     const body = (await res.json()) as Record<string, unknown>;

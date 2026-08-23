@@ -8,9 +8,16 @@
  * `buildVerifyAgentOutputV2ProductionExecutor`,
  * `buildVerifyAgentOutputV2CdpProductionRouteConfig`) or the shared
  * `createX402ServiceRoute` lifecycle handler -- it only makes the
- * already-real composition reachable from the actual Worker bundle,
- * gated behind the same `PAID_ROUTES_ENABLED` flag every other paid
- * route family already uses.
+ * already-real composition reachable from the actual Worker bundle.
+ *
+ * SUN-1218 checkpoint X: gated behind TWO flags, both required --
+ * `PAID_ROUTES_ENABLED` (the global master/emergency-kill-switch, shared
+ * with every other paid route family) AND `VERIFY_V2_CDP_ROUTE_ENABLED`
+ * (new, route-specific, additive). `PAID_ROUTES_ENABLED` alone is no
+ * longer sufficient to reach this route, and — critically — no longer
+ * affects any *other* paid route's disposition either: the `/v1/*`/
+ * `/v2/*` wildcards in `index.ts` are now unconditional 404s,
+ * independent of any flag (see `index.ts`'s own SUN-1218 comment).
  *
  * Registered for exactly `POST /v2/verify/agent-output` (the one HTTP
  * method `createX402ServiceRoute` itself uses -- see
@@ -20,9 +27,9 @@
  * method on this path, and every other of the 12 paid routes, continues
  * through the existing, untouched wildcard handlers exactly as before.
  *
- * Disabled (the default, `PAID_ROUTES_ENABLED !== 'true'`): returns
- * `c.notFound()` -- byte-identical to the pre-SUN-1216 behavior, with
- * zero construction of the signer, executor, or route config.
+ * Disabled (either flag absent): returns `c.notFound()` -- byte-identical
+ * to the pre-SUN-1216 behavior, with zero construction of the signer,
+ * executor, or route config.
  *
  * Enabled + composition unavailable (missing/malformed signing key
  * material, missing key ID, or no D1 binding): falls back to the
@@ -87,7 +94,16 @@ let cachedDb: Env['DB'] | undefined;
 export async function verifyAgentOutputV2CdpProductionRoute(
   c: Context<{ Bindings: Env }>
 ): Promise<Response> {
+  // SUN-1218 checkpoint X: two-level gate. The global master switch is
+  // checked first, unconditionally -- setting it back to false makes
+  // this route 404 immediately, regardless of the route-specific gate's
+  // value (the emergency kill switch is preserved exactly). The
+  // route-specific gate is checked second; both must be the exact
+  // literal 'true' before any dependency construction is attempted.
   if (c.env?.PAID_ROUTES_ENABLED !== 'true') {
+    return c.notFound();
+  }
+  if (c.env?.VERIFY_V2_CDP_ROUTE_ENABLED !== 'true') {
     return c.notFound();
   }
 

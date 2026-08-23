@@ -57,6 +57,16 @@ export interface Env {
    * This is independent of, and does not itself enable, real payment
    * execution: `production_enabled` remains `false` regardless. */
   PAID_ROUTES_ENABLED?: string;
+  /** SUN-1218 checkpoint X: the route-specific activation gate for
+   * `verify_agent_output.v2` / CDP, required IN ADDITION TO
+   * `PAID_ROUTES_ENABLED` (both must be the exact literal `'true'`) --
+   * `PAID_ROUTES_ENABLED` alone is no longer sufficient to reach this
+   * one route, and no longer affects any other paid route's disposition
+   * at all (the `/v1/*`/`/v2/*` wildcards are now unconditional 404,
+   * independent of any flag). Absent/unset (the default everywhere
+   * today) means the route is not reachable, matching every other
+   * paid-route gate's fail-closed convention. */
+  VERIFY_V2_CDP_ROUTE_ENABLED?: string;
   /** Additive Nevermined route-family gate. Checkpoint 2 still has no
    * authenticated sandbox provider, so setting this alone fails closed. */
   NEVERMINED_ROUTES_ENABLED?: string;

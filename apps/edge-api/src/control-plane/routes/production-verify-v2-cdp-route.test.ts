@@ -70,6 +70,46 @@ describe('verifyAgentOutputV2CdpProductionRoute (integration point only)', () =>
     spy.mockRestore();
   });
 
+  // SUN-1218 checkpoint X: the two-gate activation matrix.
+  it('global=true, route-specific=absent -> 404, zero dependency construction (the exact contradiction SUN-1218 resolves)', async () => {
+    const spy = vi.spyOn(composition, 'buildVerifyAgentOutputV2CdpProductionRouteConfig');
+    const app = appWithRoute();
+    const res = await app.request(
+      '/v2/verify/agent-output',
+      { method: 'POST' },
+      baseEnv({ PAID_ROUTES_ENABLED: 'true' })
+    );
+    expect(res.status).toBe(404);
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
+  });
+
+  it('global=false, route-specific=true -> 404 (the global master switch is checked first, unconditionally)', async () => {
+    const app = appWithRoute();
+    const res = await app.request(
+      '/v2/verify/agent-output',
+      { method: 'POST' },
+      baseEnv({ VERIFY_V2_CDP_ROUTE_ENABLED: 'true' })
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it('global=true, route-specific=true, then global flipped back to false -> immediate 404 (kill switch still works)', async () => {
+    const app = appWithRoute();
+    const enabledRes = await app.request(
+      '/v2/verify/agent-output',
+      { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' },
+      baseEnv({ PAID_ROUTES_ENABLED: 'true', VERIFY_V2_CDP_ROUTE_ENABLED: 'true' })
+    );
+    expect(enabledRes.status).toBe(503); // no signing key configured in baseEnv -> unavailable
+    const disabledRes = await app.request(
+      '/v2/verify/agent-output',
+      { method: 'POST' },
+      baseEnv({ PAID_ROUTES_ENABLED: 'false', VERIFY_V2_CDP_ROUTE_ENABLED: 'true' })
+    );
+    expect(disabledRes.status).toBe(404);
+  });
+
   it('enabled + missing signing private key -> the existing governed unavailable response, before economics', async () => {
     const app = appWithRoute();
     const res = await app.request(
@@ -77,6 +117,7 @@ describe('verifyAgentOutputV2CdpProductionRoute (integration point only)', () =>
       { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' },
       baseEnv({
         PAID_ROUTES_ENABLED: 'true',
+        VERIFY_V2_CDP_ROUTE_ENABLED: 'true',
         PAID_RECEIPT_SIGNING_KEY_ID: 'kid_prod0123456789abcdefghij',
       })
     );
@@ -93,6 +134,7 @@ describe('verifyAgentOutputV2CdpProductionRoute (integration point only)', () =>
       { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' },
       baseEnv({
         PAID_ROUTES_ENABLED: 'true',
+        VERIFY_V2_CDP_ROUTE_ENABLED: 'true',
         PAID_RECEIPT_SIGNING_PRIVATE_KEY: 'not-hex',
         PAID_RECEIPT_SIGNING_KEY_ID: 'kid_prod0123456789abcdefghij',
       })
@@ -109,6 +151,7 @@ describe('verifyAgentOutputV2CdpProductionRoute (integration point only)', () =>
       { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' },
       baseEnv({
         PAID_ROUTES_ENABLED: 'true',
+        VERIFY_V2_CDP_ROUTE_ENABLED: 'true',
         PAID_RECEIPT_SIGNING_PRIVATE_KEY: validHex,
       })
     );
@@ -124,6 +167,7 @@ describe('verifyAgentOutputV2CdpProductionRoute (integration point only)', () =>
       { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' },
       baseEnv({
         PAID_ROUTES_ENABLED: 'true',
+        VERIFY_V2_CDP_ROUTE_ENABLED: 'true',
         PAID_RECEIPT_SIGNING_PRIVATE_KEY: validHex,
         PAID_RECEIPT_SIGNING_KEY_ID: 'kid_prod0123456789abcdefghij',
         DB: undefined as unknown as Env['DB'],
