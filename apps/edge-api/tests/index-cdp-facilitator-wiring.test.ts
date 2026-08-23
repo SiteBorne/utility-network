@@ -121,9 +121,13 @@ describe('index.ts real CDP facilitator wiring (SUN-1200 checkpoint F regression
       },
       env as never
     );
-    expect(res.status).toBe(503);
+    // SUN-1218 checkpoint X: /v2/web/context (the /v2/* wildcard) has no
+    // route-specific executor and is now unconditionally 404, decoupled
+    // from PAID_ROUTES_ENABLED -- disclosed, intentional change. The
+    // facilitator-never-constructed assertion (this test's own real
+    // point) still holds.
+    expect(res.status).toBe(404);
     expect(res.headers.get('PAYMENT-REQUIRED')).toBeNull();
-    expect(await res.json()).toMatchObject({ error: 'service_executor_not_configured' });
     expect(capturedFacilitatorArgs).toHaveLength(0);
   });
 
@@ -148,7 +152,7 @@ describe('index.ts real CDP facilitator wiring (SUN-1200 checkpoint F regression
       },
       env as never
     );
-    expect(res.status).toBe(503);
+    expect(res.status).toBe(404);
     expect(res.headers.get('PAYMENT-REQUIRED')).toBeNull();
     expect(capturedFacilitatorArgs.length).toBe(0);
   });
@@ -174,7 +178,7 @@ describe('index.ts real CDP facilitator wiring (SUN-1200 checkpoint F regression
       },
       env as never
     );
-    expect(res.status).toBe(503);
+    expect(res.status).toBe(404);
     expect(res.headers.get('PAYMENT-REQUIRED')).toBeNull();
     expect(capturedFacilitatorArgs.length).toBe(0);
   });

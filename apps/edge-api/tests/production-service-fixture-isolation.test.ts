@@ -147,6 +147,15 @@ describe('SUN-1206 production paid-service fixture isolation', () => {
   });
 
   for (const route of ROUTES) {
+    // SUN-1218 checkpoint X: with only PAID_ROUTES_ENABLED set (as this
+    // test's own env does, unchanged), the 7 unsupported non-nevermined
+    // routes AND /v2/verify/agent-output (which additionally requires
+    // its own VERIFY_V2_CDP_ROUTE_ENABLED, deliberately not set here)
+    // are now unconditionally 404, decoupled from PAID_ROUTES_ENABLED --
+    // disclosed, intentional change from the pre-SUN-1218 behavior. Only
+    // the 4 Nevermined routes (a genuinely separate, untouched flag)
+    // still reach the existing governed 503.
+    const expectedStatus = route.nevermined ? 503 : 404;
     it(`${route.path} is unavailable before payment and cannot emit fixture output`, async () => {
       const response = await app.request(
         route.path,
@@ -163,16 +172,21 @@ describe('SUN-1206 production paid-service fixture isolation', () => {
         } as never
       );
 
-      expect(response.status).toBe(503);
+      expect(response.status).toBe(expectedStatus);
       expect(response.headers.get('PAYMENT-REQUIRED')).toBeNull();
       expect(response.headers.get('PAYMENT-RESPONSE')).toBeNull();
-      const body = (await response.json()) as Record<string, unknown>;
-      expect(body).toEqual({
-        error: 'service_executor_not_configured',
-        message:
-          'Paid service execution is unavailable until a governed production executor is configured',
-      });
-      expect(JSON.stringify(body)).not.toContain('fixture');
+      if (expectedStatus === 503) {
+        const body = (await response.json()) as Record<string, unknown>;
+        expect(body).toEqual({
+          error: 'service_executor_not_configured',
+          message:
+            'Paid service execution is unavailable until a governed production executor is configured',
+        });
+        expect(JSON.stringify(body)).not.toContain('fixture');
+      } else {
+        const text = await response.text();
+        expect(text.toLowerCase()).not.toContain('fixture');
+      }
     });
   }
 });

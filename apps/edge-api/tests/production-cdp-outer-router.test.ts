@@ -124,9 +124,14 @@ describe('production CDP gates at the real public route boundary (SUN-1200 check
       ...FULL_PRODUCTION_ENV_SHAPE,
       DB: db,
     });
-    expect(res.status).toBe(503);
+    // SUN-1218 checkpoint X: /v2/company/evidence-graph (the /v2/*
+    // wildcard) has no route-specific executor and is now unconditionally
+    // 404, decoupled from PAID_ROUTES_ENABLED -- disclosed, intentional
+    // change. The zero-network-call guarantee this test's own title
+    // describes is even stronger now (the route never reads these env
+    // vars at all).
+    expect(res.status).toBe(404);
     expect(res.headers.get('PAYMENT-REQUIRED')).toBeNull();
-    expect(await res.json()).toMatchObject({ error: 'service_executor_not_configured' });
   });
 
   it('kill switch through the full HTTP stack: PRODUCTION_ENABLED=false denies production even with every other gate true', async () => {
@@ -139,7 +144,9 @@ describe('production CDP gates at the real public route boundary (SUN-1200 check
         DB: db,
       }
     );
-    expect(res.status).toBe(503);
+    // SUN-1218 checkpoint X: this route has no route-specific executor
+    // and is now unconditionally 404, decoupled from PAID_ROUTES_ENABLED.
+    expect(res.status).toBe(404);
     expect(res.headers.get('PAYMENT-REQUIRED')).toBeNull();
   });
 
@@ -161,7 +168,9 @@ describe('production CDP gates at the real public route boundary (SUN-1200 check
         DB: db,
       }
     );
-    expect(res.status).toBe(503);
+    // SUN-1218 checkpoint X: this route has no route-specific executor
+    // and is now unconditionally 404, decoupled from PAID_ROUTES_ENABLED.
+    expect(res.status).toBe(404);
     expect(res.headers.get('PAYMENT-REQUIRED')).toBeNull();
   });
 
@@ -181,7 +190,9 @@ describe('production CDP gates at the real public route boundary (SUN-1200 check
         DB: db,
       }
     );
-    expect(res.status).toBe(503);
+    // SUN-1218 checkpoint X: this route has no route-specific executor
+    // and is now unconditionally 404, decoupled from PAID_ROUTES_ENABLED.
+    expect(res.status).toBe(404);
     expect(res.headers.get('PAYMENT-REQUIRED')).toBeNull();
   });
 
@@ -199,7 +210,9 @@ describe('production CDP gates at the real public route boundary (SUN-1200 check
       // set at all).
       DB: db,
     });
-    expect(res.status).toBe(503);
+    // SUN-1218 checkpoint X: this route has no route-specific executor
+    // and is now unconditionally 404, decoupled from PAID_ROUTES_ENABLED.
+    expect(res.status).toBe(404);
     expect(res.headers.get('PAYMENT-REQUIRED')).toBeNull();
   });
 

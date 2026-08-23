@@ -16,16 +16,19 @@ describe('paid-service route mounting gate (directive §6, §32)', () => {
     expect(res.status).toBe(404);
   });
 
-  it('PAID_ROUTES_ENABLED=true still fails before economics when no production executor exists', async () => {
+  // SUN-1218 checkpoint X: /v1/* has no route-specific executor and is
+  // now unconditionally 404, decoupled from PAID_ROUTES_ENABLED --
+  // disclosed, intentional change from the pre-SUN-1218 behavior (see
+  // apps/edge-api/src/index.wildcard-decoupling.test.ts for the full
+  // proof). PAID_ROUTES_ENABLED alone no longer implies any route in
+  // this family is even nominally "enabled but unready."
+  it('PAID_ROUTES_ENABLED=true -> /v1/* remains 404 (no route-specific executor exists for this family)', async () => {
     const res = await app.request(
       '/v1/company/evidence-graph',
       { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({}) },
       { PAID_ROUTES_ENABLED: 'true' } as never
     );
-    expect(res.status).toBe(503);
-    const body = (await res.json()) as Record<string, unknown>;
-    expect(body.error).toBe('service_executor_not_configured');
-    expect(res.headers.get('PAYMENT-REQUIRED')).toBeNull();
+    expect(res.status).toBe(404);
   });
 
   it('PAID_ROUTES_ENABLED=false (explicitly disabled) -> /v1/* is still a plain 404', async () => {
@@ -37,7 +40,10 @@ describe('paid-service route mounting gate (directive §6, §32)', () => {
     expect(res.status).toBe(404);
   });
 
-  it('production Worker with paid routes enabled but no authenticated CDP provider fails closed instead of serving fixture economics', async () => {
+  // SUN-1218 checkpoint X: same disclosed change as above -- /v1/*
+  // remains 404 even under a fully production-shaped env, since it has
+  // no route-specific executor at all.
+  it('production Worker with paid routes enabled but no route-specific executor -> /v1/* remains 404', async () => {
     const res = await app.request(
       '/v1/company/evidence-graph',
       {
@@ -55,9 +61,7 @@ describe('paid-service route mounting gate (directive §6, §32)', () => {
       } as never
     );
 
-    expect(res.status).toBe(503);
-    expect(res.headers.get('PAYMENT-REQUIRED')).toBeNull();
-    expect(await res.json()).toMatchObject({ error: 'service_executor_not_configured' });
+    expect(res.status).toBe(404);
   });
 
   it('Nevermined routes are absent by default and fail closed without an authenticated provider', async () => {
@@ -85,16 +89,17 @@ describe('SUN-1000 checkpoint 1O-B2 — v2 CDP/Nevermined route mounting gates',
     expect(res.status).toBe(404);
   });
 
-  it('PAID_ROUTES_ENABLED=true still fails before economics when no production executor exists', async () => {
+  // SUN-1218 checkpoint X: same disclosed change -- /v2/company/evidence-graph
+  // (routed through the /v2/* wildcard, distinct from the exact
+  // /v2/verify/agent-output route) has no route-specific executor and
+  // is now unconditionally 404.
+  it('PAID_ROUTES_ENABLED=true -> /v2/* (non-verify) remains 404 (no route-specific executor exists for this family)', async () => {
     const res = await app.request(
       '/v2/company/evidence-graph',
       { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({}) },
       { PAID_ROUTES_ENABLED: 'true' } as never
     );
-    expect(res.status).toBe(503);
-    const body = (await res.json()) as Record<string, unknown>;
-    expect(body.error).toBe('service_executor_not_configured');
-    expect(res.headers.get('PAYMENT-REQUIRED')).toBeNull();
+    expect(res.status).toBe(404);
   });
 
   it('/v2/nevermined/* is absent by default (NEVERMINED_ROUTES_ENABLED unset) -> 404', async () => {
