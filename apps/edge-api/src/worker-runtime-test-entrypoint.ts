@@ -45,13 +45,16 @@
  */
 import { Hono } from 'hono';
 import type { D1Database } from '@cloudflare/workers-types';
-import { FixturePaymentEvidenceProvider } from '@siteborne/protocol-x402';
+import { FixturePaymentEvidenceProvider, REGISTRY_SERVICES } from '@siteborne/protocol-x402';
 import type { NeverminedFacilitatorClient } from '@siteborne/protocol-nevermined';
 import {
   buildPaidServicesApp,
   buildNeverminedV2PaidServicesApp,
 } from './control-plane/routes/paid-services';
 import { NeverminedPaymentEvidenceProvider } from './control-plane/evidence/nevermined-provider';
+import { createX402ServiceRoute } from './control-plane/routes/x402-service';
+import { buildVerifyAgentOutputV2CdpProductionRouteConfig } from './control-plane/production/verify-agent-output-v2-cdp-composition';
+import { D1ServicesRepository } from './control-plane/repositories/d1/services';
 import { mcpRoute } from './routes/mcp';
 import type { Env } from './control-plane/config/env';
 
@@ -175,6 +178,108 @@ app.all('/v2/nevermined/*', async (c) => {
     cachedNeverminedDb = c.env.DB;
   }
   return cachedNeverminedApp.request(c.req.raw);
+});
+
+/**
+ * SUN-1214 checkpoint T — real-workerd proof for the new production
+ * composition (`verify_agent_output.v2` / CDP), mounted at a distinct,
+ * test-only-only path prefix (`/v2/verify-production/*`, never a real
+ * production path -- production only ever mounts the generic
+ * `/v2/*` family above, which this test entrypoint's own `/v2/*` handler
+ * still serves via the unrelated `buildPaidServicesApp`/fixture-registry
+ * path). This proves the REAL production composition module
+ * (`buildVerifyAgentOutputV2CdpProductionRouteConfig`), not a fixture
+ * stand-in for it.
+ *
+ * The signing key below is generated once, in memory, at module load --
+ * never written to disk, never committed, never read from any env
+ * binding or wrangler config. This is the same secure-handling standard
+ * this project has used for every other test-only credential (compare
+ * `successNeverminedClient`'s fixture wallet address, which is likewise
+ * hardcoded test-only material, never a real one). `PRODUCTION_ENABLED`/
+ * `PAYMENT_ENVIRONMENT`/etc. are read from `c.env`, exactly as the real
+ * production composition module would -- this
+ * `wrangler.worker-runtime-test.toml` config declares none of them, so
+ * they resolve to `undefined`, and `resolveProductionAuthorizationInput`
+ * correctly resolves to preproduction, matching every other scenario in
+ * this harness.
+ */
+async function testSigningPrivateKeyHex(): Promise<string> {
+  const bytes = crypto.getRandomValues(new Uint8Array(32));
+  return Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+const TEST_SIGNING_KEY_ID = 'kid_workerdtest0123456789abc';
+let cachedTestSigningKeyHex: string | undefined;
+
+let cachedVerifyProductionApp: Hono | undefined;
+let cachedVerifyProductionDb: D1Database | undefined;
+
+app.all('/v2/verify-production/*', async (c) => {
+  if (!c.env.DB) {
+    return c.json({ error: 'configuration_error', message: 'no D1 binding configured' }, 500);
+  }
+  if (!cachedVerifyProductionApp || cachedVerifyProductionDb !== c.env.DB) {
+    if (!cachedTestSigningKeyHex) {
+      cachedTestSigningKeyHex = await testSigningPrivateKeyHex();
+    }
+    // The FK from jobs.service_id -> services(id) requires a row for
+    // verify_agent_output.v2 to exist before job creation can succeed.
+    // The real production entrypoint has no equivalent seeding step
+    // today (paid routes are structurally disabled before reaching this
+    // point) -- this mirrors paid-services.ts's own private
+    // seedServices() helper exactly (not exported, so reimplemented
+    // here at the same idempotent granularity, for this one service
+    // only) rather than modifying that frozen file to export it.
+    const servicesRepo = new D1ServicesRepository(c.env.DB);
+    const entry = REGISTRY_SERVICES['verify_agent_output.v2'];
+    await servicesRepo
+      .create({
+        service_id: 'verify_agent_output.v2',
+        version: entry.service_version,
+        title: entry.title,
+        description: entry.description,
+        input_schema: entry.input_schema_uri,
+        output_schema: entry.output_schema_uri,
+        price_usd: entry.maximum_price.amount,
+        production_enabled: false,
+        production_ready: false,
+        protocol_status: 'preproduction',
+      })
+      .catch(() => {
+        /* idempotent: a prior request in this same isolated D1 instance
+         * already seeded this row. */
+      });
+
+    const config = await buildVerifyAgentOutputV2CdpProductionRouteConfig(
+      {
+        PAID_RECEIPT_SIGNING_PRIVATE_KEY: cachedTestSigningKeyHex,
+        PAID_RECEIPT_SIGNING_KEY_ID: TEST_SIGNING_KEY_ID,
+        SELLER_WALLET_ADDRESS: c.env.SELLER_WALLET_ADDRESS,
+        CDP_API_KEY_ID: c.env.CDP_API_KEY_ID,
+        CDP_API_KEY_SECRET: c.env.CDP_API_KEY_SECRET,
+        PAYMENT_ENVIRONMENT: c.env.PAYMENT_ENVIRONMENT,
+        PRODUCTION_ENABLED: c.env.PRODUCTION_ENABLED,
+        HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP: c.env.HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP,
+        PRODUCTION_CDP_CREDENTIALS_APPROVED: c.env.PRODUCTION_CDP_CREDENTIALS_APPROVED,
+      },
+      c.env.DB
+    );
+    if ('unavailable' in config) {
+      return c.json({ error: 'configuration_error', message: config.reason }, 500);
+    }
+
+    const subApp = new Hono();
+    createX402ServiceRoute(subApp, config);
+    cachedVerifyProductionApp = subApp;
+    cachedVerifyProductionDb = c.env.DB;
+  }
+  // Rewrite /v2/verify-production/* -> /v2/verify/agent-output for the
+  // inner app, which only ever registers the real production path shape.
+  const url = new URL(c.req.raw.url);
+  url.pathname = url.pathname.replace('/v2/verify-production/', '/v2/verify/');
+  return cachedVerifyProductionApp.request(new Request(url, c.req.raw));
 });
 
 app.all('/v1/*', async (c) => {

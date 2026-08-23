@@ -1059,6 +1059,156 @@ async function runPhase5() {
 }
 
 // ---------------------------------------------------------------------
+// Phase 6 (SUN-1214 checkpoint T): the new verify_agent_output.v2/CDP
+// PRODUCTION composition (buildVerifyAgentOutputV2CdpProductionRouteConfig
+// + buildVerifyAgentOutputV2ProductionExecutor + buildProductionSigner),
+// mounted at the test-only-only path /v2/verify-production/*. Proves the
+// real production composition module under real workerd -- not a
+// fixture stand-in for it. The signing key is generated once, in
+// memory, inside worker-runtime-test-entrypoint.ts (never written to
+// disk/committed); the CDP evidence resolution correctly falls back to
+// FixturePaymentEvidenceProvider (via resolveProductionCdpEvidenceProvider's
+// own existing fail-closed default, since getAuthenticatedSellerAddress
+// is not supplied) -- the same synthetic evidence seam every other
+// phase already uses, not a new one.
+// ---------------------------------------------------------------------
+async function runPhase6() {
+  const configPath = join(REPO_ROOT, 'wrangler.worker-runtime-test.toml');
+  await withDevServer({ configPath, dbName: 'siteborne-worker-runtime-test' }, async (base) => {
+    record(
+      'PHASE 6 (test-only entrypoint, verify v2/CDP PRODUCTION composition): worker boots under real workerd',
+      true
+    );
+
+    const path = '/v2/verify-production/agent-output';
+    const body = {
+      verification_contract: {
+        claims: [],
+        deterministic_requirements: [{ requirement_id: 'schema_check', check: 'schema_valid' }],
+      },
+      candidate_output: { total: 42 },
+      required_schema: {
+        type: 'object',
+        properties: { total: { type: 'number' } },
+        required: ['total'],
+      },
+      verification_mode: 'standard',
+    };
+
+    // Scenario 1: unsigned request -> real 402 with canonical price.
+    const challenge = await get402(base, path, body);
+    const actualAmount = challenge.accepts?.[0]?.amount;
+    record(
+      'PHASE 6 (1): verify-production unsigned request -> real 402 with canonical production price',
+      actualAmount === '19000',
+      `expected=19000 actual=${actualAmount}`
+    );
+
+    // Scenario 2: successful synthetic payment -> real production
+    // executor -> real x402-service.ts result/audit persistence. The
+    // HTTP response body deliberately never includes the full receipt
+    // (x402-service.ts's own responseBody carries only receipt_id, not
+    // `receipt` -- confirmed by reading that construction directly, not
+    // assumed); cryptographic proof that the PRODUCTION (not fixture)
+    // signer genuinely produced a valid Ed25519 signature is proven at
+    // the unit level instead (Task 3's differential test, which does
+    // have in-process access to the full receipt via
+    // buildVerifyAgentOutputV2ProductionExecutor's direct return value).
+    // This scenario proves the real composition executes successfully
+    // end to end under real workerd, which the wire response can prove.
+    const result = await payAndFetch(base, path, body, challenge);
+    let parsed: any = {};
+    try {
+      parsed = JSON.parse(result.body);
+    } catch {
+      /* leave {} */
+    }
+    const ok =
+      result.status === 200 &&
+      parsed.result_class === 'success' &&
+      parsed.output?.outcome === 'pass' &&
+      typeof parsed.receipt_id === 'string';
+    record(
+      'PHASE 6 (2): verify-production synthetic payment -> real post-settlement success through the real production composition',
+      ok,
+      `status=${result.status} result_class=${parsed.result_class} receipt_id_present=${typeof parsed.receipt_id === 'string'}`
+    );
+
+    // Scenario 3: malformed input -> deterministic pre-economic
+    // rejection (never a 402), same Profile 1 gate every other phase
+    // already proves, reused unmodified here.
+    const malformedBody = { ...body, required_schema: { $recursiveAnchor: true } };
+    const malformedRes = await fetch(base + path, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(malformedBody),
+    });
+    record(
+      'PHASE 6 (3): verify-production malformed input -> deterministic pre-economic rejection (never 402)',
+      malformedRes.status === 400,
+      `status=${malformedRes.status}`
+    );
+
+    // Scenario 4: duplicate request with the same payment identifier
+    // returns a consistent result through the real production
+    // composition -- proving this composition plugs into the existing
+    // x402-service.ts idempotency machinery (idempotency_records) rather
+    // than bypassing or duplicating it, exactly as the approved design
+    // requires. This does not re-derive x402-service.ts's own
+    // idempotency guarantee from scratch (that is already proven by its
+    // own extensive existing test suite) -- it proves this NEW
+    // composition is subject to that same existing guarantee, not
+    // exempt from it. The wire response deliberately never exposes
+    // enough state (no receipt/timestamp field, only receipt_id/link_id)
+    // to further distinguish "served from cache" from "a second
+    // deterministic execution reached the identical result" at the HTTP
+    // level; both are safe outcomes for this checkpoint's purposes
+    // (idempotency_records's own dedupe correctness is x402-service.ts's
+    // concern, unmodified by this checkpoint), so this scenario checks
+    // response consistency, not an internal execution count.
+    {
+      const dupChallenge = await get402(base, path, body);
+      const paymentId = 'pay_dup_' + Date.now().toString(16).padStart(24, '0').slice(0, 24);
+      const requirement = dupChallenge.accepts[0];
+      const declared = dupChallenge.extensions?.['payment-identifier'];
+      const payload = {
+        x402Version: 2,
+        resource: dupChallenge.resource,
+        accepted: requirement,
+        payload: { synthetic_signature: 'synthetic:buyer-fixture' },
+        extensions: declared
+          ? { 'payment-identifier': { ...declared, info: { ...declared.info, id: paymentId } } }
+          : {},
+      };
+      const header = encodeHeader(payload);
+      const first = await fetch(base + path, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'PAYMENT-SIGNATURE': header },
+        body: JSON.stringify(body),
+      });
+      const firstParsed = await first.json().catch(() => ({}) as any);
+      const second = await fetch(base + path, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'PAYMENT-SIGNATURE': header },
+        body: JSON.stringify(body),
+      });
+      const secondParsed = await second.json().catch(() => ({}) as any);
+      const consistentDuplicate =
+        first.status === 200 &&
+        second.status === 200 &&
+        typeof firstParsed.receipt_id === 'string' &&
+        firstParsed.receipt_id === secondParsed.receipt_id &&
+        firstParsed.link_id === secondParsed.link_id;
+      record(
+        'PHASE 6 (4): duplicate request (same payment identifier) returns a consistent result via the existing x402 idempotency machinery',
+        consistentDuplicate,
+        `firstStatus=${first.status} secondStatus=${second.status} sameReceiptId=${firstParsed.receipt_id === secondParsed.receipt_id} sameLinkId=${firstParsed.link_id === secondParsed.link_id}`
+      );
+    }
+  });
+}
+
+// ---------------------------------------------------------------------
 // Bundle isolation proof (§7 / S3): the REAL production wrangler.toml's
 // dry-run bundle must never contain the test-only entrypoint's source
 // chunk.
@@ -1103,6 +1253,19 @@ async function runBundleIsolationCheck() {
       fixtureMarkers.length === 0,
       `markers=${fixtureMarkers.join(',') || 'none'}`
     );
+    // SUN-1214 checkpoint T: the new verify_agent_output.v2/CDP
+    // production composition modules are equally unreachable from the
+    // real bundle -- index.ts imports none of them.
+    const productionCompositionMarkers = [
+      'verify-agent-output-v2-cdp-composition',
+      'verify-agent-output-v2-production-executor',
+      'buildProductionSigner',
+    ].filter((marker) => bundle.includes(marker));
+    record(
+      'bundle isolation: real wrangler.toml dry-run bundle does NOT contain the new verify v2/CDP production composition modules',
+      productionCompositionMarkers.length === 0,
+      `markers=${productionCompositionMarkers.join(',') || 'none'}`
+    );
   } finally {
     rmSync(outDir, { recursive: true, force: true });
   }
@@ -1117,6 +1280,7 @@ async function main() {
     await runPhase3();
     await runPhase4();
     await runPhase5();
+    await runPhase6();
     await runBundleIsolationCheck();
   } catch (err) {
     record('harness execution', false, String(err));
