@@ -5,4 +5,5 @@ export * from './candidate-conversion';
 export * from './receipt-mapping';
 export * from './verify-and-sign';
 export * from './test-signer';
+export * from './production-signer';
 export * from './receipt-verification';
