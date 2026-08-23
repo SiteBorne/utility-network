@@ -25,6 +25,7 @@ import { InMemoryQueueProducer } from './control-plane/queue/dispatch';
 import { QueueDispatchHandler } from './control-plane/queue/dispatch';
 import { AuditLogger } from './control-plane/audit/events';
 import { productionServiceExecutorUnavailable } from './control-plane/routes/production-paid-services';
+import { verifyAgentOutputV2CdpProductionRoute } from './control-plane/routes/production-verify-v2-cdp-route';
 import type { Env } from './control-plane/config/env';
 
 export type { ControlPlaneConfig };
@@ -112,6 +113,20 @@ app.all('/v2/nevermined/*', (c) => {
   if (c.env?.NEVERMINED_ROUTES_ENABLED !== 'true') return c.notFound();
   return productionServiceExecutorUnavailable(c);
 });
+
+/**
+ * SUN-1216: the first real, bundle-reachable production paid-service
+ * composition (`verify_agent_output.v2` / CDP, built in SUN-1214).
+ * Registered for exactly `POST` -- the one HTTP method
+ * `createX402ServiceRoute` itself uses -- and mounted here, before the
+ * generic `/v2/*` wildcard below, so Hono matches this route first for
+ * this one path only. Every other method on this path, and every other
+ * of the 12 paid routes, falls through unchanged to the wildcard
+ * handlers that follow. Still gated by the same `PAID_ROUTES_ENABLED`
+ * flag (default-absent -> 404, identical to the pre-SUN-1216 behavior);
+ * no route-specific activation flag is introduced by this checkpoint.
+ */
+app.post('/v2/verify/agent-output', verifyAgentOutputV2CdpProductionRoute);
 
 app.all('/v2/*', (c) => {
   if (c.env?.PAID_ROUTES_ENABLED !== 'true') {

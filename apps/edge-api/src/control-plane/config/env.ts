@@ -109,6 +109,19 @@ export interface Env {
    * testnet credential set never automatically satisfies this — see ADR
    * 0055 §8 (credential policy) and SUN-1200 checkpoint A's report. */
   PRODUCTION_CDP_CREDENTIALS_APPROVED?: string;
+  /** SUN-1215 checkpoint U: dedicated Ed25519 paid-receipt signing key
+   * material (raw hex), provisioned as a real Cloudflare secret,
+   * distinct from `AGENT_CARD_SIGNING_PRIVATE_KEY` (different key,
+   * different algorithm family, different trust domain). Consumed only
+   * by `buildProductionSigner`/`buildVerifyAgentOutputV2CdpProductionRouteConfig`
+   * (SUN-1214), which fail closed on any missing/malformed value — never
+   * falls back to a fixture key. Never logged, hashed, or echoed
+   * anywhere. */
+  PAID_RECEIPT_SIGNING_PRIVATE_KEY?: string;
+  /** Paired with `PAID_RECEIPT_SIGNING_PRIVATE_KEY` above — must match
+   * the frozen PCC receipt block's `signing_key_id` pattern
+   * (`^kid_[a-z0-9]{24}$`); see `production-signer.ts`. */
+  PAID_RECEIPT_SIGNING_KEY_ID?: string;
   /** SUN-1200 checkpoint D: non-secret Base mainnet JSON-RPC endpoint URL
    * for the read-only chain-receipt checker (`chain-receipt-checker.ts`).
    * A public RPC URL is not credential material -- never a secret -- but

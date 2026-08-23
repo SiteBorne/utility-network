@@ -1,6 +1,7 @@
 #!/usr/bin/env -S npx tsx
 /**
- * SUN-1206 mutation proof, extended by SUN-1214 checkpoint T.
+ * SUN-1206 mutation proof, extended by SUN-1214 checkpoint T and
+ * SUN-1216 checkpoint V.
  *
  * Proof A (SUN-1206): temporarily reintroduces the test/sandbox paid
  * service graph into the real production entrypoint's module graph,
@@ -13,9 +14,17 @@
  * `production:preflight` has no knowledge of, since it is not wired
  * into `index.ts` -- and requires that module's own structural
  * fixture-exclusion test (Task 3) to catch the mutation, then restores
- * the exact original bytes. Both proofs run in the same process, each
- * restoring its own target unconditionally in its own `finally` block,
- * so a failure in one never leaves the other's target unrestored.
+ * the exact original bytes.
+ *
+ * Proof C (SUN-1216): unlike Proof B's target, `production-verify-v2-
+ * cdp-route.ts` IS now wired into `index.ts`'s real module graph -- this
+ * proof reintroduces a fixture-signer import directly into that new
+ * integration point and requires its own structural fixture-exclusion
+ * test to catch it, then restores the exact original bytes.
+ *
+ * All three proofs run in the same process, each restoring its own
+ * target unconditionally in its own `finally` block, so a failure in
+ * one never leaves another unrestored.
  */
 import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -165,9 +174,78 @@ function runProofB(): void {
   );
 }
 
+function runProofC(): void {
+  const TARGET = join(
+    REPO_ROOT,
+    'apps/edge-api/src/control-plane/routes/production-verify-v2-cdp-route.ts'
+  );
+  const ANCHOR = "import { Hono } from 'hono';";
+  const MUTANT =
+    `${ANCHOR}\n` +
+    "import { createFixtureSigner } from '@siteborne/service-runtime'; // mutation proof only";
+
+  const original = readFileSync(TARGET, 'utf8');
+  const originalImportLines = original
+    .split('\n')
+    .filter((line) => /^\s*import\b/.test(line))
+    .join('\n');
+  if (!original.includes(ANCHOR)) {
+    throw new Error('verify v2 CDP production route mutation anchor not found; refusing');
+  }
+  if (originalImportLines.includes('createFixtureSigner')) {
+    throw new Error(
+      'verify v2 CDP production route already imports createFixtureSigner; canonical state is unsafe'
+    );
+  }
+
+  let caught = false;
+  try {
+    writeFileSync(TARGET, original.replace(ANCHOR, MUTANT), 'utf8');
+    try {
+      execFileSync(
+        PNPM,
+        [
+          'exec',
+          'vitest',
+          'run',
+          'apps/edge-api/src/control-plane/routes/production-verify-v2-cdp-route.test.ts',
+        ],
+        { cwd: REPO_ROOT, encoding: 'utf8', stdio: 'pipe' }
+      );
+    } catch (error) {
+      const output =
+        typeof error === 'object' && error && 'stdout' in error
+          ? String((error as { stdout?: unknown }).stdout ?? '') +
+            String((error as { stderr?: unknown }).stderr ?? '')
+          : String(error);
+      caught =
+        output.includes('never imports a fixture signer') &&
+        (output.includes('FAIL') || output.includes('failed'));
+      if (!caught) throw new Error(`vitest failed for an unexpected reason:\n${output}`);
+    }
+  } finally {
+    writeFileSync(TARGET, original, 'utf8');
+  }
+
+  const restored = readFileSync(TARGET, 'utf8');
+  if (hash(restored) !== hash(original)) {
+    throw new Error('verify v2 CDP production route was not restored byte-for-byte');
+  }
+  if (!caught) {
+    throw new Error(
+      'the structural fixture-exclusion test accepted a fixture-signer import into the bundle-reachable production route'
+    );
+  }
+
+  console.log(
+    '[fixture-reintroduction-proof C] PASS: the structural fixture-exclusion test rejected the fixture-signer import into the bundle-reachable integration point, and canonical source was restored byte-for-byte.'
+  );
+}
+
 runProofA();
 runProofB();
+runProofC();
 
 console.log(
-  '[fixture-reintroduction-proof] PASS: both proofs A and B caught their mutation and each restored its own target byte-for-byte.'
+  '[fixture-reintroduction-proof] PASS: proofs A, B, and C each caught their mutation and each restored its own target byte-for-byte.'
 );

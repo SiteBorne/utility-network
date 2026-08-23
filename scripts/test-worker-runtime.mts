@@ -29,10 +29,27 @@
  * `synthetic_fixture`-trust-class evidence, never real infrastructure.
  */
 import { spawn, type ChildProcess } from 'node:child_process';
+import { generateKeyPairSync } from 'node:crypto';
 import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+/** A fresh, local, throwaway Ed25519 seed for exercising the real
+ * production entrypoint's signing composition under this script's own
+ * isolated `wrangler dev --local` server -- generated per run via
+ * Node's built-in `node:crypto` (not `@noble/ed25519`, which this bare
+ * script cannot resolve outside its consuming package), never printed,
+ * never the real SUN-1215-provisioned production secret, and discarded
+ * when the process exits. The Ed25519 JWK `d` member is the raw 32-byte
+ * private seed (RFC 8032), the exact format `production-signer.ts`'s
+ * `decodeHexPrivateKey` expects. */
+function generateLocalTestSigningKeyHex(): string {
+  const { privateKey } = generateKeyPairSync('ed25519');
+  const jwk = privateKey.export({ format: 'jwk' }) as { d?: string };
+  if (!jwk.d) throw new Error('failed to export ed25519 private key seed as JWK');
+  return Buffer.from(jwk.d, 'base64url').toString('hex');
+}
 
 const REPO_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const WRANGLER_BIN = join(REPO_ROOT, 'node_modules', '.bin', 'wrangler');
@@ -81,7 +98,7 @@ function runCommand(cmd: string, args: string[], cwd: string): Promise<void> {
 
 async function withDevServer<T>(
   opts: { configPath?: string; dbName: string; vars?: Record<string, string> },
-  fn: (base: string, getLog: () => string) => Promise<T>
+  fn: (base: string, getLog: () => string, tempDir: string) => Promise<T>
 ): Promise<T> {
   const tempDir = mkdtempSync(join(tmpdir(), 'siteborne-worker-runtime-'));
   let devProcess: ChildProcess | undefined;
@@ -141,7 +158,7 @@ async function withDevServer<T>(
     });
 
     await waitForReady(`${base}/`, 60_000);
-    return await fn(base, () => devLog);
+    return await fn(base, () => devLog, tempDir);
   } finally {
     if (devProcess && !devProcess.killed) {
       devProcess.kill('SIGTERM');
@@ -1209,6 +1226,158 @@ async function runPhase6() {
 }
 
 // ---------------------------------------------------------------------
+// Phase 7 (SUN-1216 checkpoint V): the REAL production entrypoint
+// (`wrangler.toml` -> `index.ts`), not the test-only entrypoint, now
+// serving `POST /v2/verify/agent-output` through the genuine SUN-1214
+// composition when `PAID_ROUTES_ENABLED=true` AND both signing vars are
+// present. Proves: (a) the real entrypoint reaches real 402 issuance and
+// real post-settlement success end to end; (b) GET on the exact same
+// path is not claimed by the new registration -- it still falls through
+// to the untouched `/v2/*` wildcard; (c) the other 11 paid routes'
+// disposition is provably unaffected by the two new signing vars being
+// present. The signing key is a fresh, local, throwaway value (see
+// `generateLocalTestSigningKeyHex` above) -- never the real
+// SUN-1215-provisioned production secret, which this checkpoint does
+// not read, rotate, or reuse anywhere.
+// ---------------------------------------------------------------------
+async function runPhase7() {
+  const testKeyHex = generateLocalTestSigningKeyHex();
+  const testKeyId = 'kid_sun1216local0123456789ab';
+  await withDevServer(
+    {
+      dbName: 'siteborne-utility',
+      vars: {
+        ENVIRONMENT: 'development',
+        PAID_ROUTES_ENABLED: 'true',
+        PAID_RECEIPT_SIGNING_PRIVATE_KEY: testKeyHex,
+        PAID_RECEIPT_SIGNING_KEY_ID: testKeyId,
+      },
+    },
+    async (base, _getLog, tempDir) => {
+      record(
+        'PHASE 7 (REAL production entrypoint, verify v2/CDP production composition enabled): worker boots under real workerd',
+        true
+      );
+
+      // The REAL production entrypoint (unlike the test-only one)
+      // correctly never self-seeds the D1 `services` table -- a real
+      // deployed candidate's D1 is expected to already carry this row
+      // (SUN-0800B checkpoint 3's out-of-band seed), which this
+      // script's own isolated local D1 instance does not. Seed the one
+      // row this scenario needs, mirroring
+      // `worker-runtime-test-entrypoint.ts`'s own idempotent insert
+      // (registry/services/verify_agent_output.v2.json's real, committed
+      // field values) -- a test-harness fixture action, not a
+      // production-code change.
+      await runCommand(
+        WRANGLER_BIN,
+        [
+          'd1',
+          'execute',
+          'siteborne-utility',
+          '--local',
+          '--persist-to',
+          tempDir,
+          '--command',
+          `INSERT OR IGNORE INTO services (id, version, title, description, input_schema, output_schema, price_usd, production_enabled, production_ready, protocol_status) VALUES ('verify_agent_output.v2', 'v2', 'Agent Output Verification', 'Verifies the output of another agent against provided criteria, performing independent reproduction and comparison to produce a verification receipt.', 'https://siteborne.net/schemas/services/agent-verification-input.schema.json', 'https://siteborne.net/schemas/services/agent-verification-output.schema.json', 0.019, 0, 0, 'preproduction');`,
+        ],
+        REPO_ROOT
+      );
+
+      const path = '/v2/verify/agent-output';
+      const body = {
+        verification_contract: {
+          claims: [],
+          deterministic_requirements: [{ requirement_id: 'schema_check', check: 'schema_valid' }],
+        },
+        candidate_output: { total: 42 },
+        required_schema: {
+          type: 'object',
+          properties: { total: { type: 'number' } },
+          required: ['total'],
+        },
+        verification_mode: 'standard',
+      };
+
+      // (1) unsigned request through the REAL production entrypoint ->
+      // real 402 with the canonical production price -- the central
+      // SUN-1216 bundle-reachability proof at the HTTP level.
+      const challenge = await get402(base, path, body);
+      const actualAmount = challenge.accepts?.[0]?.amount;
+      record(
+        'PHASE 7 (1): REAL entrypoint, unsigned request -> real 402 with canonical production price',
+        actualAmount === '19000',
+        `expected=19000 actual=${actualAmount}`
+      );
+
+      // (2) synthetic payment -> real post-settlement success through
+      // the REAL production entrypoint (not the test-only one Phase 6
+      // already proved this against).
+      const result = await payAndFetch(base, path, body, challenge);
+      let parsed: any = {};
+      try {
+        parsed = JSON.parse(result.body);
+      } catch {
+        /* leave {} */
+      }
+      const ok =
+        result.status === 200 &&
+        parsed.result_class === 'success' &&
+        parsed.output?.outcome === 'pass' &&
+        typeof parsed.receipt_id === 'string';
+      record(
+        'PHASE 7 (2): REAL entrypoint, synthetic payment -> real post-settlement success',
+        ok,
+        `status=${result.status} result_class=${parsed.result_class} receipt_id_present=${typeof parsed.receipt_id === 'string'}`
+      );
+
+      // (3) method safety under real workerd: GET on the exact same
+      // path is not claimed by the new POST-only registration -- it
+      // falls through to the untouched, still-gated `/v2/*` wildcard
+      // (503, the same governed disposition every other paid route
+      // returns), never a 405 and never the new route's own behavior.
+      const getRes = await fetch(base + path, { method: 'GET' });
+      const getBody = (await getRes.json().catch(() => ({}))) as Record<string, unknown>;
+      record(
+        'PHASE 7 (3): GET /v2/verify/agent-output is not claimed by the new POST-only route -- falls through to the unchanged /v2/* wildcard',
+        getRes.status === 503 && getBody.error === 'service_executor_not_configured',
+        `status=${getRes.status} error=${String(getBody.error)}`
+      );
+
+      // (4) the other 11 paid routes remain unaffected by the two new
+      // signing vars being present -- still the existing governed
+      // unavailable disposition, never accidentally reached through
+      // this checkpoint's new composition.
+      const otherPaths = [
+        '/v1/company/evidence-graph',
+        '/v1/web/context',
+        '/v1/document/evidence-json',
+        '/v1/verify/agent-output',
+        '/v2/company/evidence-graph',
+        '/v2/web/context',
+        '/v2/document/evidence-json',
+      ];
+      let allUnaffected = true;
+      for (const otherPath of otherPaths) {
+        const res = await fetch(base + otherPath, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: '{}',
+        });
+        const b = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+        if (res.status !== 503 || b.error !== 'service_executor_not_configured') {
+          allUnaffected = false;
+        }
+      }
+      record(
+        'PHASE 7 (4): the other paid routes remain unaffected by the new signing vars being present',
+        allUnaffected
+      );
+    }
+  );
+}
+
+// ---------------------------------------------------------------------
 // Bundle isolation proof (§7 / S3): the REAL production wrangler.toml's
 // dry-run bundle must never contain the test-only entrypoint's source
 // chunk.
@@ -1237,34 +1406,88 @@ async function runBundleIsolationCheck() {
       !containsNeverminedTestProvider,
       `containsNeverminedTestProvider=${containsNeverminedTestProvider}`
     );
-    const fixtureMarkers = [
+    // SUN-1216: these markers indicate an actual fixture/bypass EXECUTION
+    // path reaching production -- a fixture signer, a fixture service
+    // registry, or a fixture document worker bridge that could produce
+    // an unsigned/synthetic result instead of the real one. Must remain
+    // exactly zero, unconditionally -- never weakened by this or any
+    // later checkpoint.
+    const hardFixtureBypassMarkers = [
       'buildFixtureRegistry',
       'createFixtureSigner',
       'FixtureDocumentWorkerBridge',
+      'doc/native-fixture.pdf',
+    ].filter((marker) => bundle.includes(marker));
+    record(
+      'bundle isolation: production runtime contains zero fixture BYPASS markers (fixture signer/registry/worker-bridge)',
+      hardFixtureBypassMarkers.length === 0,
+      `markers=${hardFixtureBypassMarkers.join(',') || 'none'}`
+    );
+    // SUN-1216 disclosed, expected residual: unlike the hard bypass
+    // markers above, these are NOT new fixture execution paths --
+    // `createTestClock`/`createTestArtifactStore`/`createTestServiceAuditSink`
+    // are dead code (present as unreachable source text only, because
+    // `buildServiceContext`'s own default-parameter expressions
+    // reference them as its fixture-mode fallback -- the production
+    // executor always supplies real values and never hits that
+    // fallback; `packages/service-runtime/src/context.ts` colocates
+    // both, and esbuild's Workers bundling does not eliminate them from
+    // the emitted source). `synthetic_fixture` / "execution_mode:
+    // 'fixture'" are a real, reachable, SUN-1214-approved-and-documented
+    // literal: `resolveProductionCdpEvidenceProvider`'s existing,
+    // intentional fail-closed default when `getAuthenticatedSellerAddress`
+    // is not supplied (true everywhere in this repository today) --
+    // labeling that safety fallback, not bypassing production logic.
+    // Reported separately, not silently folded into the hard-bypass
+    // check above, and not treated as passing -- left for explicit human
+    // classification at the pre-upload stop.
+    const disclosedResidualMarkers = [
       'createTestClock',
       'createTestArtifactStore',
       'createTestServiceAuditSink',
       "execution_mode: 'fixture'",
       'synthetic_fixture',
-      'doc/native-fixture.pdf',
     ].filter((marker) => bundle.includes(marker));
+    record(
+      'bundle content (SUN-1216 disclosed residual, NOT a hard-bypass finding): dead-code test-helper markers + the existing fixture-labeled CDP evidence fallback',
+      disclosedResidualMarkers.length === 0,
+      `markers=${disclosedResidualMarkers.join(',') || 'none'} -- see closure report for root-cause disposition of each`
+    );
+    const fixtureMarkers = [...hardFixtureBypassMarkers, ...disclosedResidualMarkers];
     record(
       'bundle isolation: production runtime contains zero paid-service fixture markers',
       fixtureMarkers.length === 0,
       `markers=${fixtureMarkers.join(',') || 'none'}`
     );
-    // SUN-1214 checkpoint T: the new verify_agent_output.v2/CDP
-    // production composition modules are equally unreachable from the
-    // real bundle -- index.ts imports none of them.
-    const productionCompositionMarkers = [
-      'verify-agent-output-v2-cdp-composition',
-      'verify-agent-output-v2-production-executor',
-      'buildProductionSigner',
-    ].filter((marker) => bundle.includes(marker));
+    // SUN-1216 checkpoint V: unlike SUN-1214 (where these three modules
+    // were built but never imported by index.ts), the real production
+    // entrypoint now DOES import the verify_agent_output.v2/CDP
+    // production composition -- this is the central SUN-1216
+    // deliverable, so the assertion inverts from SUN-1214's own
+    // "must be absent" check to "must be present".
+    const productionCompositionMarkers = {
+      PRODUCTION_SIGNER_IN_NEW_BUNDLE: bundle.includes('buildProductionSigner'),
+      VERIFY_V2_PRODUCTION_EXECUTOR_IN_NEW_BUNDLE: bundle.includes(
+        'buildVerifyAgentOutputV2ProductionExecutor'
+      ),
+      VERIFY_V2_CDP_COMPOSITION_IN_NEW_BUNDLE: bundle.includes(
+        'buildVerifyAgentOutputV2CdpProductionRouteConfig'
+      ),
+    };
     record(
-      'bundle isolation: real wrangler.toml dry-run bundle does NOT contain the new verify v2/CDP production composition modules',
-      productionCompositionMarkers.length === 0,
-      `markers=${productionCompositionMarkers.join(',') || 'none'}`
+      'bundle inclusion (SUN-1216 central deliverable): real wrangler.toml dry-run bundle DOES contain the verify v2/CDP production composition modules',
+      Object.values(productionCompositionMarkers).every(Boolean),
+      Object.entries(productionCompositionMarkers)
+        .map(([k, v]) => `${k}=${v ? 'YES' : 'NO'}`)
+        .join(' ')
+    );
+    // The new integration point itself must also be present -- proves
+    // the route module, not just the three modules it imports, is
+    // bundle-reachable.
+    const containsIntegrationRoute = bundle.includes('verifyAgentOutputV2CdpProductionRoute');
+    record(
+      'bundle inclusion: real wrangler.toml dry-run bundle contains the new SUN-1216 integration route module',
+      containsIntegrationRoute
     );
   } finally {
     rmSync(outDir, { recursive: true, force: true });
@@ -1281,6 +1504,7 @@ async function main() {
     await runPhase4();
     await runPhase5();
     await runPhase6();
+    await runPhase7();
     await runBundleIsolationCheck();
   } catch (err) {
     record('harness execution', false, String(err));
