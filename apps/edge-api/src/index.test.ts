@@ -126,7 +126,11 @@ describe('index.ts — SUN-1216 integration point', () => {
     'other paid route %s: enabled -> correct disposition for its own route family',
     async (route) => {
       if (route.includes('/nevermined/')) {
-        const res = await app.request(route, postInit, baseEnv({ NEVERMINED_ROUTES_ENABLED: 'true' }));
+        const res = await app.request(
+          route,
+          postInit,
+          baseEnv({ NEVERMINED_ROUTES_ENABLED: 'true' })
+        );
         expect(res.status).toBe(503);
       } else {
         const res = await app.request(

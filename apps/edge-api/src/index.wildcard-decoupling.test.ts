@@ -98,7 +98,11 @@ describe('SUN-1218: /v1/* and /v2/* wildcards are unconditional 404, decoupled f
   it.each(NEVERMINED_ROUTES)(
     '%s: NEVERMINED_ROUTES_ENABLED=true still reaches the existing governed 503 (that flag itself is untouched by this checkpoint)',
     async (route) => {
-      const res = await app.request(route, postInit, baseEnv({ NEVERMINED_ROUTES_ENABLED: 'true' }));
+      const res = await app.request(
+        route,
+        postInit,
+        baseEnv({ NEVERMINED_ROUTES_ENABLED: 'true' })
+      );
       expect(res.status).toBe(503);
     }
   );

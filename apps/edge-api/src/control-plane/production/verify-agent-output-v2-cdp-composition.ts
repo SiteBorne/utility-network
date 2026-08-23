@@ -154,7 +154,10 @@ export async function buildVerifyAgentOutputV2CdpProductionRouteConfig(
   // only happens inside `resolveProductionCdpEvidenceProvider`'s own
   // gate #3, itself only reached once gates #1/#2 (ADR-0055 human
   // authorization + real binding presence) already hold.
-  let cdpEvidence: { evidenceMode: 'fixture' | 'production'; evidenceProvider?: PaymentEvidenceProvider };
+  let cdpEvidence: {
+    evidenceMode: 'fixture' | 'production';
+    evidenceProvider?: PaymentEvidenceProvider;
+  };
   if (explicitTestEvidenceOverride) {
     cdpEvidence = explicitTestEvidenceOverride;
   } else {

@@ -259,8 +259,7 @@ function runProofD(): void {
   );
   const ANCHOR = "    if (resolved.evidenceMode !== 'production') {";
   const MUTANT =
-    '    // mutation proof only -- disables the SUN-1218 fail-closed check\n' +
-    '    if (false) {';
+    '    // mutation proof only -- disables the SUN-1218 fail-closed check\n' + '    if (false) {';
 
   const original = readFileSync(TARGET, 'utf8');
   if (!original.includes(ANCHOR)) {
@@ -295,7 +294,7 @@ function runProofD(): void {
       caught =
         (output.includes('FAIL') || output.includes('failed')) &&
         output.includes('verify-agent-output-v2-cdp-composition.production-evidence.test.ts') &&
-        output.includes("expected false to be true");
+        output.includes('expected false to be true');
       if (!caught) throw new Error(`vitest failed for an unexpected reason:\n${output}`);
     }
   } finally {
@@ -313,7 +312,7 @@ function runProofD(): void {
   }
 
   console.log(
-    '[fixture-reintroduction-proof D] PASS: the composition\'s own behavioral test rejected the reintroduced synthetic-evidence fallback, and canonical source was restored byte-for-byte.'
+    "[fixture-reintroduction-proof D] PASS: the composition's own behavioral test rejected the reintroduced synthetic-evidence fallback, and canonical source was restored byte-for-byte."
   );
 }
 
