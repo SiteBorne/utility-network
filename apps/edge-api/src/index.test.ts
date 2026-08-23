@@ -94,14 +94,13 @@ describe('index.ts — SUN-1216 integration point', () => {
     const enabledRes = await app.request(
       '/v2/verify/agent-output',
       { method: 'GET' },
-      baseEnv({ PAID_ROUTES_ENABLED: 'true' })
+      baseEnv({ PAID_ROUTES_ENABLED: 'true', VERIFY_V2_CDP_ROUTE_ENABLED: 'true' })
     );
-    // The generic /v2/* wildcard's own governed disposition (503), not a
-    // 405 or anything the new POST-only registration would produce --
-    // proving GET was never claimed by the new route.
-    expect(enabledRes.status).toBe(503);
-    const body = (await enabledRes.json()) as Record<string, unknown>;
-    expect(body.error).toBe('service_executor_not_configured');
+    // SUN-1218: the generic /v2/* wildcard is now unconditionally 404
+    // (decoupled from PAID_ROUTES_ENABLED, see index.wildcard-decoupling.test.ts)
+    // -- proving GET was never claimed by the new POST-only route
+    // registration, not merely that it produces some other non-405 status.
+    expect(enabledRes.status).toBe(404);
   });
 
   const postInit = {
@@ -119,13 +118,24 @@ describe('index.ts — SUN-1216 integration point', () => {
   );
 
   it.each(OTHER_ELEVEN_PAID_ROUTES)(
-    'other paid route %s: enabled -> existing governed 503 (unchanged wildcard behavior)',
+    // SUN-1218: nevermined routes still reach the existing governed 503
+    // when their own (untouched) flag is true; the 7 non-nevermined
+    // routes are now unconditionally 404 (see
+    // index.wildcard-decoupling.test.ts for the full decoupling proof)
+    // -- disclosed, intentional change from the pre-SUN-1218 behavior.
+    'other paid route %s: enabled -> correct disposition for its own route family',
     async (route) => {
-      const flagEnv = route.includes('/nevermined/')
-        ? baseEnv({ NEVERMINED_ROUTES_ENABLED: 'true' })
-        : baseEnv({ PAID_ROUTES_ENABLED: 'true' });
-      const res = await app.request(route, postInit, flagEnv);
-      expect(res.status).toBe(503);
+      if (route.includes('/nevermined/')) {
+        const res = await app.request(route, postInit, baseEnv({ NEVERMINED_ROUTES_ENABLED: 'true' }));
+        expect(res.status).toBe(503);
+      } else {
+        const res = await app.request(
+          route,
+          postInit,
+          baseEnv({ PAID_ROUTES_ENABLED: 'true', VERIFY_V2_CDP_ROUTE_ENABLED: 'true' })
+        );
+        expect(res.status).toBe(404);
+      }
     }
   );
 });

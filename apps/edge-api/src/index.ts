@@ -96,18 +96,36 @@ app.route('/', openapiRoute);
  * Payment-provider and fixture-backed orchestration remain independently
  * tested through test-only module graphs that this production entrypoint does
  * not import.
+ *
+ * SUN-1218 checkpoint X: `NEVERMINED_ROUTES_ENABLED` is a genuinely
+ * separate, unrelated flag from `PAID_ROUTES_ENABLED` -- unaffected by
+ * this checkpoint's activation-model correction -- and these two
+ * wildcards (still covering only unsupported, no-real-executor routes)
+ * retain their original 503-on-flag-true diagnostic unchanged.
  */
 app.all('/v1/nevermined/*', (c) => {
   if (c.env?.NEVERMINED_ROUTES_ENABLED !== 'true') return c.notFound();
   return productionServiceExecutorUnavailable(c);
 });
 
-app.all('/v1/*', (c) => {
-  if (c.env?.PAID_ROUTES_ENABLED !== 'true') {
-    return c.notFound();
-  }
-  return productionServiceExecutorUnavailable(c);
-});
+/**
+ * SUN-1218 checkpoint X: `/v1/*` and `/v2/*` (below) previously shared
+ * `PAID_ROUTES_ENABLED` with the verify route's own activation gate --
+ * turning that flag on to authorize the one qualified route also flipped
+ * these 7 unrelated, permanently-unsupported routes from 404 to 503, an
+ * externally-observable behavior change this checkpoint's own activation
+ * design never intended. `PAID_ROUTES_ENABLED`'s meaning has shifted
+ * (since SUN-1216) from "enable this whole family" to "one of two
+ * required gates for an individually-activated route" -- the SUN-1206
+ * family-wide 503 diagnostic no longer applies here. Neither wildcard
+ * covers any route with a real executor, and none is expected to: a
+ * future route with one gets pulled out into its own exact route + its
+ * own two-level gate, exactly like verify was in SUN-1216 -- never by
+ * reintroducing a flag check here. `productionServiceExecutorUnavailable`
+ * itself is untouched and still reachable, exclusively from the verify
+ * route's own dependency-unavailable branch.
+ */
+app.all('/v1/*', (c) => c.notFound());
 
 app.all('/v2/nevermined/*', (c) => {
   if (c.env?.NEVERMINED_ROUTES_ENABLED !== 'true') return c.notFound();
@@ -122,18 +140,16 @@ app.all('/v2/nevermined/*', (c) => {
  * generic `/v2/*` wildcard below, so Hono matches this route first for
  * this one path only. Every other method on this path, and every other
  * of the 12 paid routes, falls through unchanged to the wildcard
- * handlers that follow. Still gated by the same `PAID_ROUTES_ENABLED`
- * flag (default-absent -> 404, identical to the pre-SUN-1216 behavior);
- * no route-specific activation flag is introduced by this checkpoint.
+ * handlers that follow. Gated by `PAID_ROUTES_ENABLED` AND (SUN-1218
+ * checkpoint X) `VERIFY_V2_CDP_ROUTE_ENABLED` -- both required, checked
+ * inside the handler itself; default-absent on either -> 404, identical
+ * to the pre-SUN-1216 behavior.
  */
 app.post('/v2/verify/agent-output', verifyAgentOutputV2CdpProductionRoute);
 
-app.all('/v2/*', (c) => {
-  if (c.env?.PAID_ROUTES_ENABLED !== 'true') {
-    return c.notFound();
-  }
-  return productionServiceExecutorUnavailable(c);
-});
+// SUN-1218 checkpoint X: see the `/v1/*` wildcard's own doc comment
+// above -- same correction, same reasoning, unconditional 404.
+app.all('/v2/*', (c) => c.notFound());
 
 app.get('/', (c) => {
   return c.json({
