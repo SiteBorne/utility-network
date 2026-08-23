@@ -1,9 +1,10 @@
 # SUN-1216 Checkpoint V — Verify v2/CDP Production Bundle Integration Behind Disabled Gate + New Executable Candidate Freeze
 
-Status: implementation complete, source frozen, **upload not yet executed** —
-awaiting the separate, explicit action-time authorization this checkpoint's
-directive requires before the real Cloudflare candidate upload
-(`SUN1216_CANDIDATE_UPLOAD_AUTHORIZED=NO` until granted).
+Status: **complete.** Implementation frozen, residual bundle-marker findings
+adjudicated with structural proof, and the real executable candidate uploaded on
+explicit authorization — `f39acc84-f574-4676-8f78-171ff7402c66`, 0% traffic, not
+deployed. Production remains `f4f20676-bbd0-4717-8e90-9cc2c3c9b2ce` @ 100%,
+unchanged throughout.
 
 ## 1. Starting state (§2–§4)
 
@@ -479,40 +480,101 @@ the 2 new adjudication tests) PASS; `pnpm lint` 16/16; `pnpm typecheck` clean;
 unrelated SUN-1210 files remain flagged; `pnpm secrets:scan` 0 leaks. Production
 containment re-verified: `f4f20676-...` still 100%, `GET /health` → 200.
 
-## 19. Remaining work (deferred to the authorized upload step, then SUN-1217+)
+## 19. Executable candidate — real upload executed and reconciled
 
-Execute the real `wrangler versions upload` (no `--dry-run`) only after explicit
-action-time authorization; verify exactly one new version created and production
-traffic unchanged; record the real candidate's version
-ID/number/created-at/message; reconcile secret-name preservation and
-activation-var absence against the _uploaded_ candidate (not just the local
-dry-run); re-run `pnpm production:preflight` post-upload; merge this worktree
-branch into `main`; propose SUN-1217 (0%-traffic edge smoke).
+Executed on your explicit authorization: exactly one
+`wrangler versions upload --message "SUN-1216 verify_agent_output.v2/CDP production bundle integration behind disabled gate"`
+(no `--dry-run`, no `--secrets-file`, no `deploy`, no `versions deploy`, no
+`secret put`). Output was unambiguous — no repeat attempted.
+
+```
+EXECUTABLE_CANDIDATE_VERSION_ID=f39acc84-f574-4676-8f78-171ff7402c66
+EXECUTABLE_CANDIDATE_VERSION_NUMBER=(Wrangler 4.119.0 does not print a numeric
+  version index for `versions upload`; version identity is the UUID above,
+  confirmed unique via `wrangler versions list` — exactly one match)
+EXECUTABLE_CANDIDATE_CREATED_AT=2026-08-23T03:58:12.801Z
+WORKER_VERSIONS_CREATED=1
+EXECUTABLE_CANDIDATE_TRAFFIC_PERCENT=0
+EXECUTABLE_CANDIDATE_IN_ACTIVE_DEPLOYMENT=NO
+```
+
+**Candidate metadata** (`wrangler versions view f39acc84-...`, read-only):
+`compatibility_date=2026-08-05`, `compatibility_flags=[nodejs_compat]`, `DB`
+binding present, `NVM_ENVIRONMENT=sandbox` present, all 6 expected secret names
+present (`AGENT_CARD_SIGNING_PRIVATE_KEY`, `CDP_API_KEY_ID`,
+`CDP_API_KEY_SECRET`, `NVM_API_KEY`, `PAID_RECEIPT_SIGNING_KEY_ID`,
+`PAID_RECEIPT_SIGNING_PRIVATE_KEY`) — values never read, retrieved, or printed,
+only names via `wrangler versions view`'s own output. Zero governed
+activation/economic vars present in the listed `[vars]`
+(`CANDIDATE_ACTIVATION_VARS_PRESENT=0`). `workers_dev`/preview URL settings
+unchanged from the committed `wrangler.toml` (`preview_urls = false`, untouched
+by this upload).
+
+**Bundle/source/config/lockfile identity, proven against the real uploaded
+candidate** (not just the pre-upload local dry-run): a fresh local
+`wrangler versions upload --dry-run` immediately after the real upload produced
+a bundle with SHA256
+`d19287066896d6db58cc90dab6a7d7d872015a2fcae34441bb1709ea8e0a4fb7` —
+byte-identical to the frozen, pre-upload value recorded in §12/§18b, and
+containing all four required symbols (`verifyAgentOutputV2CdpProductionRoute`,
+`buildProductionSigner`, `buildVerifyAgentOutputV2ProductionExecutor`,
+`buildVerifyAgentOutputV2CdpProductionRouteConfig`) confirmed present.
+
+```
+CANDIDATE_SOURCE_IDENTITY=PASS
+CANDIDATE_BUNDLE_IDENTITY=PASS
+CANDIDATE_CONFIG_IDENTITY=PASS
+CANDIDATE_LOCKFILE_IDENTITY=PASS
+CANDIDATE_CONTAINS_VERIFY_V2_PRODUCTION_COMPOSITION=YES
+VERIFY_V2_CDP_ROUTE_DEFAULT_ENABLED=NO
+```
+
+**Final production containment** (post-upload, live HTTPS checks): `GET /health`
+→ 200, `GET /ready` → 200, `GET /mcp` → 405, all 12/12 paid routes (including
+the new `/v2/verify/agent-output`) → 404. Production
+`wrangler deployments status` still shows 100% on
+`f4f20676-bbd0-4717-8e90-9cc2c3c9b2ce`, unchanged (created timestamp identical
+to before this checkpoint began). `pnpm production:preflight` → PASS.
+
+```
+POSTUPLOAD_CURRENT_PRODUCTION_PREFLIGHT=PASS
+```
+
+No version override, no candidate request, no temporary deployment was
+performed. `pnpm secrets:scan` post-upload: 0 leaks.
 
 ---
 
-## SUN-1216 EXECUTABLE CANDIDATE UPLOAD READY (post-adjudication)
+## SUN-1216 FINAL CLOSURE STATE
 
 ```
-SUN1216_INTEGRATION_GATE=PASS (residuals structurally adjudicated, see §18a/§18b — no assertion weakened, renamed, or skipped)
+SUN1216_INTEGRATION_GATE=PASS
+EXECUTABLE_CANDIDATE_CREATED=YES
+EXECUTABLE_CANDIDATE_VERSION_ID=f39acc84-f574-4676-8f78-171ff7402c66
+EXECUTABLE_CANDIDATE_TRAFFIC_PERCENT=0
 VERIFY_V2_CDP_PRODUCTION_CODE_IN_BUNDLE=YES
 VERIFY_V2_CDP_ROUTE_DEFAULT_ENABLED=NO (404 by default, PAID_ROUTES_ENABLED unset)
 VERIFY_V2_CDP_DEFAULT_HTTP_STATUS=404
 STRING_MARKER_PRESENT=YES (createTestClock, createTestArtifactStore, createTestServiceAuditSink, synthetic_fixture — informational, not a gate)
-PRODUCTION_FIXTURE_REACHABILITY=0 (proven structurally, not asserted — §18a; pnpm test:worker-runtime now 80/80)
+PRODUCTION_FIXTURE_REACHABILITY=0 (proven structurally, not asserted — §18a; pnpm test:worker-runtime 80/80)
 PRODUCTION_FIXTURE_FALLBACK=NONE (Finding A: unreachable by JS operator semantics, proven; Finding B: confined to 'fixture' evidence mode, which the frozen policy.ts never accepts as satisfying 'production' mode, proven)
 PAYMENT_EVIDENCE_R0_STANDING=YES (Finding B classified D. SYNTHETIC_PRODUCTION_EVIDENCE at the payment/settlement-evidence layer only — pre-existing, SUN-1213-documented, unchanged, unclosed by this checkpoint, and the reason PAID_ROUTE_ACTIVATION_AUTHORIZED remains NO)
 ENTRYPOINT_FIXTURE_REINTRODUCTION_CAUGHT=YES
-PAID_SIGNING_SECRET_BINDINGS_PRESERVED=NOT_YET_VERIFIED (verified post-upload only, no new secrets introduced)
+PAID_SIGNING_SECRET_BINDINGS_PRESERVED=YES (verified against the real uploaded candidate: all 6 names present, values never read/printed)
 BOUND_SIGNER_RUNTIME_EXECUTION_PROVEN=NO (proven only with local/test key material under real workerd, per boundary -- real secret never read outside Cloudflare's own bound runtime)
-EXECUTABLE_CANDIDATE_CREATED=NO
-CANDIDATE_ACTIVATION_VARS_PRESENT=0 (planned, dry-run confirmed)
+CANDIDATE_ACTIVATION_VARS_PRESENT=0 (verified against the real uploaded candidate)
+CANDIDATE_SOURCE_IDENTITY=PASS
+CANDIDATE_BUNDLE_IDENTITY=PASS
+CANDIDATE_CONFIG_IDENTITY=PASS
+CANDIDATE_LOCKFILE_IDENTITY=PASS
 CURRENT_PRODUCTION_VERSION=f4f20676-bbd0-4717-8e90-9cc2c3c9b2ce
 CURRENT_PRODUCTION_TRAFFIC=100%
-CURRENT_FREEZE_INVALIDATED=NO (BUNDLE_SHA256/WRANGLER_CONFIG_SHA256/LOCKFILE_SHA256 all byte-identical pre- and post-adjudication — only GIT_TREE_SHA changed, from new test-only commits)
-EXECUTABLE_CANDIDATE_READY_FOR_ZERO_TRAFFIC_SMOKE=YES (pending real upload)
+POSTUPLOAD_CURRENT_PRODUCTION_PREFLIGHT=PASS
+CURRENT_FREEZE_INVALIDATED=NO
+EXECUTABLE_CANDIDATE_READY_FOR_ZERO_TRAFFIC_SMOKE=YES
 PAID_ROUTE_ACTIVATION_ELIGIBLE=NO
 PAID_ROUTE_ACTIVATION_EXECUTED=NO
+CANDIDATE_REQUESTS_SENT=0
 ```
 
 **R0 blockers to activation** (unchanged from SUN-1213, still open, now with
@@ -523,13 +585,10 @@ already-implemented `CdpPaymentEvidenceProvider` exists and would be selected
 automatically the moment that one dependency is supplied
 (`resolveProductionCdpEvidenceProvider`, unmodified). Closing this remains a
 distinct, future, credential-provisioning checkpoint's job — not something
-SUN-1216 does or should attempt.
+SUN-1216 does or should attempt, and it must be resolved before any
+production-mode paid transaction is ever accepted as release evidence.
 
-No new R1s from this adjudication — the classification question posed in the
-pre-adjudication report is now resolved (§18a/§18b) rather than left open.
-
-I am ready to execute the real Cloudflare candidate upload
-(`wrangler versions upload`, no `--dry-run`, no `--secrets-file`) on your
-explicit authorization. Proposing **SUN-1217 — Verify v2/CDP Executable
-Candidate 0%-Traffic Edge Smoke & Attribution** as the next checkpoint once the
-candidate is created.
+SUN-1216 is complete. Proposing **SUN-1217 — Verify v2/CDP Executable Candidate
+0%-Traffic Edge Smoke & Attribution** as the next checkpoint, scoped to
+zero-traffic edge smoke of disabled surfaces only — not started automatically,
+per your instruction.
