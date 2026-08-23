@@ -4,6 +4,7 @@
  * mutation of the real production entrypoint.
  */
 import { describe, expect, it } from 'vitest';
+import type { D1Database } from '@cloudflare/workers-types';
 import { buildVerifyAgentOutputV2CdpProductionRouteConfig } from './verify-agent-output-v2-cdp-composition';
 
 function randomPrivateKeyHex(): string {
@@ -12,10 +13,10 @@ function randomPrivateKeyHex(): string {
     .join('');
 }
 
-function fakeDb() {
+function fakeDb(): D1Database {
   // A minimal stand-in -- this test never issues a query, it only
   // proves config assembly/fail-closed behavior.
-  return {} as unknown as import('@cloudflare/workers-types').D1Database;
+  return {} as unknown as D1Database;
 }
 
 function fullEnv() {
@@ -73,7 +74,7 @@ describe('buildVerifyAgentOutputV2CdpProductionRouteConfig', () => {
   it('returns unavailable when no D1 database is supplied', async () => {
     const result = await buildVerifyAgentOutputV2CdpProductionRouteConfig(
       fullEnv(),
-      undefined as unknown as import('@cloudflare/workers-types').D1Database
+      undefined as unknown as D1Database
     );
     expect('unavailable' in result).toBe(true);
   });
