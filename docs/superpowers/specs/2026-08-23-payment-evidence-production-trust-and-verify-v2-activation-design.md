@@ -1,7 +1,8 @@
 # SUN-1218 — Production Payment-Evidence Trust Closure + Verify v2/CDP Single-Route Activation: Design
 
-Status: **design complete, awaiting explicit approval.** No implementation has
-begun.
+Status: **design revision complete, awaiting explicit approval.** The
+activation-granularity contradiction flagged in the first review round (§13–§18)
+is resolved. No implementation has begun.
 
 ## 1. Current `synthetic_fixture` behavior — traced literally
 
@@ -425,73 +426,257 @@ SUN1218_RAIL_SCOPE = CDP_X402_ONLY
 touched** by this design. Nevermined's own already-working fixture qualification
 path (SUN-0900A/SUN-0900B) is unaffected.
 
-## 13. Activation granularity — the 12-route table
+## 13. REVISION — paid fallback handlers, traced exactly (all in `apps/edge-api/src/index.ts`)
 
-Traced `index.ts`'s actual route registration order (SUN-1216, unchanged since):
-
-| Route                                                                   | Flag false         | Flag true (today)        | Executor ready?                       | Result when true                                |
-| ----------------------------------------------------------------------- | ------------------ | ------------------------ | ------------------------------------- | ----------------------------------------------- | ------------------------------------------------- |
-| `/v2/verify/agent-output` (POST, exact route registered before `/v2/*`) | 404                | reaches real composition | YES (since SUN-1216)                  | real challenge/execution, `evidenceMode` per §7 |
-| other 11 (`/v1/*`, `/v2/*` wildcard, `/v1                               | v2/nevermined/\*`) | 404                      | 503 `service_executor_not_configured` | NO                                              | `productionServiceExecutorUnavailable`, unchanged |
-
-This matches the directive's expected concern exactly. Confirmed live and via
-source: flipping the single global `PAID_ROUTES_ENABLED=true` today would make
-`verify_agent_output.v2/CDP` reachable (with the §7 gap still open pre-fix)
-while the other 11 remain their existing governed 503 — never a 2xx, never a
-payment challenge for those 11.
+The first version of this design (§14 below, old) claimed the other 11 routes
+are unaffected by `PAID_ROUTES_ENABLED`. That claim was **wrong** — verified by
+re-reading `index.ts` in full, not by re-asserting the prior report's summary.
+Two of the five fallback handlers registered in `index.ts` share the exact same
+flag the verify route's own gate checks:
 
 ```
-GLOBAL_PAID_FLAG_APPROVED_FOR_SINGLE_ROUTE_LAUNCH = NO
+PAID_FALLBACK_HANDLERS=[
+  {
+    matcher: "POST /v2/verify/agent-output (exact route, mounted before /v2/*)",
+    file: "apps/edge-api/src/control-plane/routes/production-verify-v2-cdp-route.ts",
+    flag_false_behavior: "404 (c.notFound())",
+    flag_true_behavior: "reaches buildVerifyAgentOutputV2CdpProductionRouteConfig; today always resolves evidenceMode:'fixture' (getAuthenticatedSellerAddress unimplemented) and, if the two paid-signing secrets are present (they are, in real production), MOUNTS a working x402 route -- reachable, not a fixed status code (402/400/200 depending on request)"
+  },
+  {
+    matcher: "app.all('/v1/nevermined/*', ...)",
+    file: "apps/edge-api/src/index.ts",
+    flag_false_behavior: "404 (gated on NEVERMINED_ROUTES_ENABLED, NOT PAID_ROUTES_ENABLED)",
+    flag_true_behavior: "503 productionServiceExecutorUnavailable -- but this flag is never toggled by anything in SUN-1218's scope, so this row stays 404 throughout"
+  },
+  {
+    matcher: "app.all('/v1/*', ...)",
+    file: "apps/edge-api/src/index.ts",
+    flag_false_behavior: "404 (gated on PAID_ROUTES_ENABLED)",
+    flag_true_behavior: "503 productionServiceExecutorUnavailable -- SAME flag as the verify route's own global gate"
+  },
+  {
+    matcher: "app.all('/v2/nevermined/*', ...)",
+    file: "apps/edge-api/src/index.ts",
+    flag_false_behavior: "404 (gated on NEVERMINED_ROUTES_ENABLED, NOT PAID_ROUTES_ENABLED)",
+    flag_true_behavior: "503 productionServiceExecutorUnavailable -- never toggled by SUN-1218's scope, stays 404 throughout"
+  },
+  {
+    matcher: "app.all('/v2/*', ...) (mounted AFTER the exact verify route)",
+    file: "apps/edge-api/src/index.ts",
+    flag_false_behavior: "404 (gated on PAID_ROUTES_ENABLED)",
+    flag_true_behavior: "503 productionServiceExecutorUnavailable -- SAME flag as the verify route's own global gate"
+  }
+]
 ```
 
-Not because the other 11 routes are at risk (they are not — they stay 503) — but
-because the global flag alone, on the _reachable_ route, today still resolves to
-`evidenceMode: 'fixture'` (the exact gap this checkpoint closes). Once §7's
-addition exists, the global flag alone would _fail closed_ rather than mount
-unsafely — but a second, route-specific gate is still the correct design (§14)
-for reasons of blast-radius and future-route independence, not because the
-global flag would otherwise be unsafe.
+Route-to-handler mapping (all 12): `/v1/company/evidence-graph`,
+`/v1/web/context`, `/v1/document/evidence-json`, `/v1/verify/agent-output` → the
+`/v1/*` wildcard. `/v2/company/evidence-graph`, `/v2/web/context`,
+`/v2/document/evidence-json` → the `/v2/*` wildcard. `/v2/verify/agent-output` →
+the exact route. `/v2/nevermined/*` (4 routes) → the `/v2/nevermined/*`
+wildcard, gated by the _unrelated_ `NEVERMINED_ROUTES_ENABLED` flag, never
+toggled anywhere in this design's scope.
 
-## 14. Single-route activation design
+**The contradiction, stated precisely**: `/v1/*` and `/v2/*` share
+`PAID_ROUTES_ENABLED` with the verify route's own global gate. Turning that flag
+on to authorize the one qualified route also flips 7 unrelated,
+permanently-unsupported routes (4×v1 + 3×v2-non-nevermined-non-verify) from 404
+to 503 — an externally-observable behavior change on routes this checkpoint has
+no intention of touching.
 
-Two-level gate, matching repository naming conventions
-(`PAID_ROUTES_ENABLED`/`NEVERMINED_ROUTES_ENABLED` precedent):
+## 14. REVISION — current 12-route truth table (today's actual code)
+
+`VERIFY_V2_CDP_ROUTE_ENABLED` does not exist in current code, so States C and D
+collapse to A and B respectively today (the flag doesn't exist to read) — both
+are shown for completeness before the fix, with C/D marked
+`(same as A/B — flag not yet implemented)`.
+
+| Route                                   | A (global=F) |                              B (global=T) | C (global=F, route=T; same as A — flag N/A) | D (global=T, route=T; same as B — flag N/A) |
+| --------------------------------------- | -----------: | ----------------------------------------: | ------------------------------------------: | ------------------------------------------: |
+| `/v1/company/evidence-graph`            |          404 |                                       503 |                                         404 |                                         503 |
+| `/v1/web/context`                       |          404 |                                       503 |                                         404 |                                         503 |
+| `/v1/document/evidence-json`            |          404 |                                       503 |                                         404 |                                         503 |
+| `/v1/verify/agent-output`               |          404 |                                       503 |                                         404 |                                         503 |
+| `/v2/company/evidence-graph`            |          404 |                                       503 |                                         404 |                                         503 |
+| `/v2/web/context`                       |          404 |                                       503 |                                         404 |                                         503 |
+| `/v2/document/evidence-json`            |          404 |                                       503 |                                         404 |                                         503 |
+| `/v2/verify/agent-output`               |          404 | **reachable (fixture-evidenced, the R0)** |                                         404 |                                   reachable |
+| `/v2/nevermined/company/evidence-graph` |          404 |                                       404 |                                         404 |                                         404 |
+| `/v2/nevermined/web/context`            |          404 |                                       404 |                                         404 |                                         404 |
+| `/v2/nevermined/document/evidence-json` |          404 |                                       404 |                                         404 |                                         404 |
+| `/v2/nevermined/verify/agent-output`    |          404 |                                       404 |                                         404 |                                         404 |
+
+```
+TWELVE_ROUTE_TRUTH_TABLE (current) = FAIL against the required final invariant
+```
+
+## 15. Resolving the contradiction — minimum source change
+
+**Root cause**: `/v1/*` and `/v2/*`'s wildcard 503-on-flag-true behavior was
+written under SUN-1206's now-obsolete "family-wide" activation model (index.ts's
+own SUN-1206 doc comment: "every enabled family stops at the same deterministic
+503" — a model where the whole family turns on together). SUN-1216/1217 already
+flagged, and this checkpoint confirms, that this model is retired:
+`PAID_ROUTES_ENABLED` no longer means "the v1/v2 family is nominally on"; going
+forward it is one of two co-required gates for the _one_ route that has real
+activation logic, and — per this checkpoint's own recommendation — a template
+for how any future route gets its own independent two-level gate. The 503
+diagnostic on the wildcards was never meant to fire merely because that flag was
+raised for an unrelated, specific route's authorization.
+
+**Minimum fix**: `/v1/*` and `/v2/*` become **unconditionally** `c.notFound()` —
+no flag check at all, since neither wildcard covers any route with a real
+executor and none is expected to (a future route with a real executor gets
+pulled out of the wildcard into its own exact route + its own two-level gate,
+exactly like verify was in SUN-1216 — never by adding back a flag check on the
+wildcard). `productionServiceExecutorUnavailable` itself is untouched, still
+reachable — now exclusively from the verify route's own dependency-unavailable
+branch.
+
+```
+EVALUATE §4's preferred model literally = COMPATIBLE with historical
+  safety intent, once corrected: SUN-1206's 503-on-flag-true diagnostic
+  assumed a family-wide activation model this repository has since moved
+  away from (first observed and explicitly flagged as
+  NOT_YET_DETERMINED by SUN-1216's own approval). Removing the wildcard
+  flag-check is not a safety regression -- it is the actual minimum
+  change required to make PAID_ROUTES_ENABLED's new, narrower meaning
+  (a co-gate for individually-activated routes) consistent with what the
+  other 11 routes visibly do. No alternative is safer: keeping the
+  503-on-flag-true coupling is the unsafe state (externally observable
+  behavior change on 7 unrelated routes triggered by authorizing one).
+```
+
+`/v1/nevermined/*` and `/v2/nevermined/*` share this exact same class of
+coupling (`NEVERMINED_ROUTES_ENABLED` → 503) — genuinely out of this
+checkpoint's scope (§12: Nevermined untouched) since that flag is never toggled
+anywhere in SUN-1218's states A–D, so those 4 routes already stay 404 throughout
+regardless. Noted here for completeness, not fixed here.
+
+## 16. Single-route activation design — revised
+
+Two-level gate, unchanged from the first draft:
 
 ```
 VERIFY_V2_CDP_ROUTE_ENABLED?: string   // new Env field, optional, additive
-```
-
-```
 reachable = (PAID_ROUTES_ENABLED === 'true') AND (VERIFY_V2_CDP_ROUTE_ENABLED === 'true')
 ```
 
-Required behavior (directly implementable inside the existing
-`verifyAgentOutputV2CdpProductionRoute` handler, one additional check before the
-existing `PAID_ROUTES_ENABLED` check):
+Required behavior (verify route's own handler, checked in this order):
 
 ```
-global absent                          -> 404 (existing, unchanged)
-global true, route-specific absent     -> 404 (NEW — the route stays
-                                           invisible even with the master
-                                           gate on, until explicitly
-                                           double-authorized)
+global absent                          -> 404 (unchanged)
+global true, route-specific absent     -> 404 (unchanged from first draft)
 both true, dependency unavailable      -> 503 pre-economic (existing
-                                           productionServiceExecutorUnavailable,
-                                           unchanged)
-both true, dependencies valid          -> governed x402 route (existing,
-                                           now protected by §7's
-                                           production-fail-closed check)
+                                           productionServiceExecutorUnavailable)
+both true, dependencies valid          -> governed x402 route (protected
+                                           by §7's production-fail-closed
+                                           check)
 ```
 
-This satisfies every requirement in the directive's §16: default OFF, missing →
-404, does not change the other 11 routes (their own wildcard checks are
-untouched), does not weaken the global kill switch (still required, still
-checked first), supports candidate-local qualification (§16 below), supports a
-later public canary (both flags can be set independently in a future
-real-production deployment), fails closed. No generic feature-flag framework —
-one new optional string field, one new `&&` condition.
+**New in this revision**: the `/v1/*` and `/v2/*` wildcards drop their
+`PAID_ROUTES_ENABLED` check entirely (§15) — this is what actually makes the
+required final invariant hold, not merely the verify route's own two-gate logic
+(which was already correct in the first draft; the wildcards were the
+unaddressed half of the problem).
 
-## 15. Qualification-mode strategy (design only, not executed)
+## 17. Revised 12-route truth table (proposed)
+
+| Route                                   | A (G=F,R=F) | B (G=T,R=F) | C (G=F,R=T) |                                                              D (G=T,R=T) |
+| --------------------------------------- | ----------: | ----------: | ----------: | -----------------------------------------------------------------------: |
+| `/v1/company/evidence-graph`            |         404 |         404 |         404 |                                                                      404 |
+| `/v1/web/context`                       |         404 |         404 |         404 |                                                                      404 |
+| `/v1/document/evidence-json`            |         404 |         404 |         404 |                                                                      404 |
+| `/v1/verify/agent-output`               |         404 |         404 |         404 |                                                                      404 |
+| `/v2/company/evidence-graph`            |         404 |         404 |         404 |                                                                      404 |
+| `/v2/web/context`                       |         404 |         404 |         404 |                                                                      404 |
+| `/v2/document/evidence-json`            |         404 |         404 |         404 |                                                                      404 |
+| `/v2/verify/agent-output`               |         404 |         404 |         404 | **503 (deps invalid) or governed x402 route (deps valid, §7-protected)** |
+| `/v2/nevermined/company/evidence-graph` |         404 |         404 |         404 |                                                                      404 |
+| `/v2/nevermined/web/context`            |         404 |         404 |         404 |                                                                      404 |
+| `/v2/nevermined/document/evidence-json` |         404 |         404 |         404 |                                                                      404 |
+| `/v2/nevermined/verify/agent-output`    |         404 |         404 |         404 |                                                                      404 |
+
+```
+TWELVE_ROUTE_TRUTH_TABLE (revised) = PASS against the required final invariant
+GLOBAL_PAID_FLAG_APPROVED_FOR_SINGLE_ROUTE_LAUNCH = YES (as ONE of two
+  required gates, never alone — the wildcard-decoupling in §15 is what
+  makes "alone" a meaningless/impossible state for the other 11 routes to
+  ever observe)
+MASTER_KILL_SWITCH_PRESERVED = YES (PAID_ROUTES_ENABLED=false still forces
+  the verify route to 404, unconditionally, first check)
+UNSUPPORTED_ROUTES_REMAIN_404_WHEN_MASTER_TRUE = YES (proven by the
+  revised table's B and D columns)
+```
+
+## 18. Revised proposed files (full list)
+
+```
+PROPOSED_FILES_TO_CREATE=[
+  apps/edge-api/src/control-plane/production/verify-agent-output-v2-cdp-composition.production-fail-closed.test.ts
+  apps/edge-api/src/control-plane/routes/production-verify-v2-cdp-route.route-gate.test.ts
+  apps/edge-api/src/index.wildcard-decoupling.test.ts  (proves /v1/*, /v2/* are unconditionally 404 regardless of PAID_ROUTES_ENABLED, and that the 4 nevermined routes are unaffected by any flag combination this checkpoint touches)
+]
+PROPOSED_FILES_TO_MODIFY=[
+  apps/edge-api/src/index.ts  (remove the PAID_ROUTES_ENABLED check from the /v1/* and /v2/* wildcards -- unconditional c.notFound(); /v1/nevermined/*, /v2/nevermined/* untouched)
+  apps/edge-api/src/control-plane/config/production-payment.ts  (add resolveAuthenticatedCdpSellerAddress)
+  apps/edge-api/src/control-plane/production/verify-agent-output-v2-cdp-composition.ts  (wire the real getAuthenticatedSellerAddress; add the §7 production-fail-closed check)
+  apps/edge-api/src/control-plane/routes/production-verify-v2-cdp-route.ts  (add the VERIFY_V2_CDP_ROUTE_ENABLED second gate)
+  apps/edge-api/src/control-plane/config/env.ts  (add VERIFY_V2_CDP_ROUTE_ENABLED?: string)
+  scripts/test-worker-runtime.mts  (new phase: local/test evidence provider injected explicitly; new assertions that /v1/*, /v2/* stay 404 under every flag combination tested)
+  scripts/test-production-fixture-reintroduction-caught.mts  (new mutation proof: reintroducing a synthetic/test evidence provider into the production-mode path must be caught)
+]
+```
+
+`apps/edge-api/src/control-plane/routes/production-paid-services.ts` (home of
+`productionServiceExecutorUnavailable`) is explicitly **not** modified — its
+isolation property (imports nothing else) is preserved; only its _call sites_ in
+`index.ts`'s two generic wildcards are removed, not the function itself, which
+remains the verify route's own dependency-unavailable fallback.
+
+## 19. `getAuthenticatedSellerAddress` lifecycle — traced exactly
+
+```
+GET_AUTHENTICATED_SELLER_ADDRESS_LIFECYCLE={
+  called_when: "lazily, inside buildVerifyAgentOutputV2CdpProductionRouteConfig -> resolveProductionCdpEvidenceProvider, itself only reached from verifyAgentOutputV2CdpProductionRoute's handler after BOTH activation gates (§16) pass. Runs at most once per Worker isolate lifetime after the first successful composition (the route module caches the successful sub-app, per SUN-1216's own design -- the unavailable/failure path is never cached, so a failure retries this lookup on every subsequent request until it succeeds or the isolate recycles)",
+  before_payment_challenge: YES (composition construction, hence this lookup, completes before createX402ServiceRoute mounts the sub-app that would ever issue a 402 challenge),
+  external_call: YES (a real, authenticated GET-equivalent to the CDP API via CdpClient.evm.getAccount({address}) -- read-only, no Wallet Secret, uses only the already-real CDP_API_KEY_ID/CDP_API_KEY_SECRET),
+  can_fail: YES (network failure, authentication failure, account-not-found, or an address mismatch against the configured SELLER_WALLET_ADDRESS are all real possible outcomes),
+  failure_behavior: "today (pre-fix): silently falls back to {evidenceMode:'fixture'} via resolveProductionCdpEvidenceProvider's existing unconditional catch-all -- this is the exact gap. Required (this design): when env.ENVIRONMENT === 'production', a failure here (or any of the 3 other ADR-0055 gates) must cause the composition to return {unavailable:true} instead -- the verify route's existing handler already treats {unavailable} as the pre-economic 503 branch (§16), so this is a one-line branch addition at the composition boundary, not new error-handling machinery. Outside a genuine production environment (local dev, workerd qualification, any future non-production candidate), the existing fixture fallback continues unchanged -- required for local TDD and the SUN-1219 qualification strategy (§17, unrenumbered from the first draft's §15) to keep working.",
+  economic_effect_possible_before_success: NO (a read-only account lookup cannot itself authorize, move, or affect any payment -- it only determines which evidence-provider construction path is taken; the actual economic-adjacent code -- verify()/settle() -- is never reached until well after this resolves)
+}
+```
+
+## 20. Payment-evidence R0s vs. future production-activation prerequisites
+
+Read `docs/decisions/0055-human-authorized-production-bootstrap-exception.md` in
+full: ADR-0055's four gates
+(`PAYMENT_ENVIRONMENT`/`PRODUCTION_ENABLED`/`HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP`/
+`PRODUCTION_CDP_CREDENTIALS_APPROVED`) are explicitly, deliberately designed as
+a **one-time, human-authorized, fully bounded production bootstrap exception** —
+not implementation defects, and not something any checkpoint should ever set
+autonomously. The ADR's own decision criteria (6 conditions, all requiring
+explicit human authorization "in that exact session, for that exact action")
+confirm these belong in the second category below, not the first:
+
+```
+PAYMENT_EVIDENCE_R0_BLOCKERS=[
+  "getAuthenticatedSellerAddress has no implementation anywhere in the repository (closed by this checkpoint's proposed implementation, §11/§19)",
+  "The composition's fallback-to-fixture is unconditional regardless of deployment environment (closed by the §7 production-fail-closed addition)"
+]
+FUTURE_PRODUCTION_ACTIVATION_PREREQUISITES=[
+  "ADR-0055's 4 human-authorization gates (PAYMENT_ENVIRONMENT=production, PRODUCTION_ENABLED=true, HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP=true, PRODUCTION_CDP_CREDENTIALS_APPROVED=true) -- deliberately unset, a future bounded human action, not an implementation gap",
+  "PAID_RECEIPT_PUBLIC_KEY_DISCOVERY_READY=NO, classified R1 (§9) -- a release-quality improvement, not an activation blocker",
+  "PAID_ROUTES_ENABLED and VERIFY_V2_CDP_ROUTE_ENABLED both remain unset in real production -- their eventual setting is itself a future, explicit, human-authorized action (SUN-1219+), never automated"
+]
+```
+
+Both `PAYMENT_EVIDENCE_R0_BLOCKERS` items are proposed to be closed by this
+checkpoint's implementation, if approved — leaving zero open R0s after
+implementation, with all remaining gates correctly classified as future
+human-authorized prerequisites, not defects.
+
+## 21. Qualification-mode strategy (design only, not executed)
 
 Cloudflare version overrides (`Cloudflare-Workers-Version-Overrides`, proven
 live in SUN-1217) target a **specific Worker version**, not the deployment's
@@ -523,49 +708,72 @@ NEW_CANDIDATE_REQUIRED = YES — f39acc84-... remains historical
   carry either activation flag and cannot be reused for qualification.
 ```
 
-## 16. Required design self-review
+## 22. Required design self-review
 
 No `TBD`, `TODO`, unproven provider claims, ambiguous settlement ordering,
-unsafe fallback, or activation ambiguity remain in this document — every claim
-above is backed by a direct source trace or a live production check performed
-during this checkpoint, not inference from prior reports.
+unsafe fallback, or activation ambiguity remain in this document — the
+activation-ambiguity finding from the first review round is now resolved
+(§13–§18) with a literal trace, not a re-assertion; every other claim remains
+backed by a direct source trace or a live production check performed during this
+checkpoint.
 
 ---
 
-## SUN-1218 DESIGN PHASE COMPLETE
+## SUN-1218 DESIGN REVISION COMPLETE
 
 ```
-SUN1218_DESIGN_PHASE=COMPLETE
-SYNTHETIC_FIXTURE_ROOT_CAUSE=resolveProductionCdpEvidenceProvider's fallback to {evidenceMode:'fixture'} is unconditional -- it does not distinguish a real-production deployment context from a local/test one, so a real Cloudflare deployment with PAID_ROUTES_ENABLED=true and no ADR-0055 authorization would mount a working, fixture-evidenced route instead of refusing to mount
-PRODUCTION_PAYMENT_EVIDENCE_SOURCE=CdpPaymentEvidenceProvider (apps/edge-api/src/control-plane/evidence/cdp-provider.ts, already implemented since SUN-0700B checkpoint 1, providerKind:'external', calls the real CDP facilitator /verify and /settle) -- the only missing wiring is getAuthenticatedSellerAddress, implementable via CdpClient.evm.getAccount({address}), zero new secrets
+SUN1218_DESIGN_REVISION=COMPLETE
+PAID_FALLBACK_HANDLERS=[ see §13 -- 5 handlers, all in apps/edge-api/src/index.ts except the exact verify route ]
+CURRENT_TWELVE_ROUTE_TRUTH_TABLE= see §14 -- FAIL against the required final invariant (7 routes flip 404->503 when PAID_ROUTES_ENABLED alone is set true)
+REVISED_TWELVE_ROUTE_TRUTH_TABLE= see §17 -- PASS against the required final invariant
+PRODUCTION_PAYMENT_EVIDENCE_SOURCE=CdpPaymentEvidenceProvider
 PRODUCTION_PAYMENT_EVIDENCE_FALLBACK_TO_SYNTHETIC_ALLOWED=NO
-CAN_SETTLEMENT_SUCCEED_BEFORE_EVIDENCE_EXISTS=NO
-RECOVERY_MODEL=existing pre-settle durable draft (CdpSettlementPendingDraft, written before evidenceProvider.settle() is ever called) + REFUND_REQUIRED transition on settlement-gate rejection + existing SUN-0900B checkpoint 1B reconciliation semantics -- unmodified, already sufficient
-PAID_RECEIPT_PUBLIC_KEY_DISCOVERY_READY=NO
-PUBLIC_KEY_DISCOVERY_SEVERITY=R1
-GLOBAL_PAID_FLAG_APPROVED_FOR_SINGLE_ROUTE_LAUNCH=NO
-RECOMMENDED_ACTIVATION_MODEL=two-level gate: PAID_ROUTES_ENABLED (existing) AND new VERIFY_V2_CDP_ROUTE_ENABLED (route-specific, default absent, additive Env field)
-RECOMMENDED_APPROACH=Approach A (production provider only, no production fallback) + composition-level production-fail-closed check
+GLOBAL_PAID_FLAG_APPROVED_FOR_SINGLE_ROUTE_LAUNCH=YES (as one of two required gates, never alone -- see §17)
+MASTER_KILL_SWITCH_PRESERVED=YES
+UNSUPPORTED_ROUTES_REMAIN_404_WHEN_MASTER_TRUE=YES
+RECOMMENDED_ACTIVATION_MODEL=two-level gate on the verify route (PAID_ROUTES_ENABLED AND new VERIFY_V2_CDP_ROUTE_ENABLED) PLUS unconditional 404 on the /v1/* and /v2/* wildcards (PAID_ROUTES_ENABLED check removed from both) -- both halves required; the first draft only had the first half
+GET_AUTHENTICATED_SELLER_ADDRESS_LIFECYCLE={
+  called_when: "lazily, at most once per Worker isolate lifetime after first success, only after both activation gates pass",
+  before_payment_challenge: YES,
+  external_call: YES,
+  can_fail: YES,
+  failure_behavior: "today: silent fallback to fixture (the gap); required: in env.ENVIRONMENT==='production', fail closed to {unavailable:true} instead -- see §19",
+  economic_effect_possible_before_success: NO
+}
+PAYMENT_EVIDENCE_R0_BLOCKERS=[
+  "getAuthenticatedSellerAddress has no implementation anywhere (closed by this design's proposed implementation)",
+  "The composition's fallback-to-fixture is unconditional regardless of deployment environment (closed by the production-fail-closed addition)"
+]
+FUTURE_PRODUCTION_ACTIVATION_PREREQUISITES=[
+  "ADR-0055's 4 human-authorization gates -- deliberate one-time bootstrap exception (docs/decisions/0055-human-authorized-production-bootstrap-exception.md), not an implementation gap",
+  "PAID_RECEIPT_PUBLIC_KEY_DISCOVERY_READY=NO, classified R1, not an activation blocker",
+  "PAID_ROUTES_ENABLED and VERIFY_V2_CDP_ROUTE_ENABLED both remain unset in real production -- their eventual setting is a future, explicit, human-authorized action (SUN-1219+)"
+]
 PROPOSED_FILES_TO_CREATE=[
-  apps/edge-api/src/control-plane/config/production-payment.test.ts additions only (no new file) -- see PROPOSED_FILES_TO_MODIFY
   apps/edge-api/src/control-plane/production/verify-agent-output-v2-cdp-composition.production-fail-closed.test.ts
   apps/edge-api/src/control-plane/routes/production-verify-v2-cdp-route.route-gate.test.ts
+  apps/edge-api/src/index.wildcard-decoupling.test.ts
 ]
 PROPOSED_FILES_TO_MODIFY=[
-  apps/edge-api/src/control-plane/config/production-payment.ts (add resolveAuthenticatedCdpSellerAddress, wire it into the composition's dependency, no change to existing 4-gate logic)
-  apps/edge-api/src/control-plane/production/verify-agent-output-v2-cdp-composition.ts (supply the real getAuthenticatedSellerAddress; add production-environment fail-closed check per §7)
-  apps/edge-api/src/control-plane/routes/production-verify-v2-cdp-route.ts (add VERIFY_V2_CDP_ROUTE_ENABLED second gate)
-  apps/edge-api/src/control-plane/config/env.ts (add VERIFY_V2_CDP_ROUTE_ENABLED?: string)
-  scripts/test-worker-runtime.mts (new phase: local/test evidence provider injected explicitly, proves production-fail-closed behavior and the two-gate route logic under real workerd)
-  scripts/test-production-fixture-reintroduction-caught.mts (new mutation proof: reintroducing a synthetic/test evidence provider into the production-mode path must be caught)
+  apps/edge-api/src/index.ts
+  apps/edge-api/src/control-plane/config/production-payment.ts
+  apps/edge-api/src/control-plane/production/verify-agent-output-v2-cdp-composition.ts
+  apps/edge-api/src/control-plane/routes/production-verify-v2-cdp-route.ts
+  apps/edge-api/src/control-plane/config/env.ts
+  scripts/test-worker-runtime.mts
+  scripts/test-production-fixture-reintroduction-caught.mts
 ]
 PROPOSED_MIGRATIONS=[]
 PRODUCTION_RESOURCES_REQUIRED=[]
 PRODUCTION_SECRETS_REQUIRED=[]
-OPEN_R0_BLOCKERS=[
-  ADR-0055's 4 human-authorization gates remain unset in real production (by design -- their activation is a distinct, future, explicitly human-gated action, never automated by this or any checkpoint)
-]
+OPEN_ARCHITECTURAL_BLOCKERS=[]
+TWELVE_ROUTE_TRUTH_TABLE=PASS
 IMPLEMENTATION_STARTED=NO
 ```
 
-**Approve this SUN-1218 design for implementation?**
+**Approve the revised SUN-1218 design for implementation?**
+
+```
+SUN1218_DESIGN_APPROVED=NO
+SUN1218_IMPLEMENTATION_AUTHORIZED=NO
+```
