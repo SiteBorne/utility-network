@@ -304,7 +304,182 @@ schema, or pricing (the one fix in §4 touches only precompiled-validator
 _registration wiring_, not any of those). Zero requests sent to any candidate.
 Zero real payment/settlement/economic effect.
 
-## 18. Remaining work (deferred to the authorized upload step, then SUN-1217+)
+## 18a. PRE-UPLOAD RESIDUAL ADJUDICATION (addendum, post-hoc-freeze)
+
+In response to your adjudication request, root-caused both disclosed §9 findings
+with structural proof rather than assertion, without touching any runtime/config
+source file.
+
+**Root-cause table:**
+
+| Finding                      |       In bundle | Production reachable |                                                            Can affect result |                                                                                                                                    Contract permitted | Classification                                                                                                   |
+| ---------------------------- | --------------: | -------------------: | ---------------------------------------------------------------------------: | ----------------------------------------------------------------------------------------------------------------------------------------------------: | ---------------------------------------------------------------------------------------------------------------- |
+| `createTestClock`            | YES (dead code) |          NO (proven) |                                                                           NO |                                                                                                                                  N/A (never executes) | Structurally unreachable                                                                                         |
+| `createTestArtifactStore`    | YES (dead code) |          NO (proven) |                                                                           NO |                                                                                                                                                   N/A | Structurally unreachable                                                                                         |
+| `createTestServiceAuditSink` | YES (dead code) |          NO (proven) |                                                                           NO |                                                                                                                                                   N/A | Structurally unreachable                                                                                         |
+| `synthetic_fixture`          |             YES |    YES, but confined | Only the payment-evidence layer, never the paid service's own output/receipt | Explicitly, deliberately permitted under `'fixture'` mode by `policy.ts`; explicitly, deliberately forbidden from ever satisfying `'production'` mode | **D. SYNTHETIC_PRODUCTION_EVIDENCE** (payment-evidence layer only), R0-to-**activation**, standing, pre-existing |
+
+**Finding A —
+`createTestClock`/`createTestArtifactStore`/`createTestServiceAuditSink`:**
+
+```
+SYMBOL=createTestClock (and createTestArtifactStore, createTestServiceAuditSink)
+PRESENT_IN_BUNDLE=YES
+PRODUCTION_CALLABLE=NO (never invoked from any production-reachable call site)
+PRODUCTION_CALL_PATH=NONE
+DEFAULT_CAN_BE_SELECTED_BY_PRODUCTION_COMPOSITION=NO
+```
+
+Traced `packages/service-runtime/src/context.ts`'s `buildServiceContext`:
+`clock: overrides.clock ?? createTestClock()` (and the same pattern for
+`artifact_store`/`audit`). `??` only evaluates its right-hand side if the left
+is `null`/`undefined`. The **one and only** production-reachable caller —
+`verify-agent-output-v2-production-executor.ts:126` — supplies all three as
+literal, unconditional, nullary function-call expressions (`realClock()`,
+`unreachableArtifactStore()`, `requestScopedAuditSink()`), never a value that
+can be `undefined`. This is a language-semantic guarantee, not a
+current-argument-choice observation. A `walk()` of every non-test `.ts` file
+under `apps/edge-api/src` (excluding the never-bundled `paid-services.ts` and
+`scripts/`) confirms **no other file calls `buildServiceContext` at all**. New
+structural test:
+[verify-agent-output-v2-production-executor.context-defaults.test.ts](../../apps/edge-api/src/control-plane/production/verify-agent-output-v2-production-executor.context-defaults.test.ts).
+
+Honest disclosure beyond the current-state proof: `buildServiceContext`'s own
+API shape (pre-dating this checkpoint) permits a **future** caller to silently
+select fixture defaults by omitting a field. This is a real, narrow,
+pre-existing design property of a shared package function — not a defect this
+checkpoint introduced, not something a "bundle integration" checkpoint should
+redesign, and explicitly flagged here rather than left implicit.
+
+**Finding B — `synthetic_fixture`:**
+
+```
+WHERE_DEFINED=packages/protocol-x402/src/evidence/types.ts (EvidenceTrustClass union)
+WHERE_EMITTED=packages/protocol-x402/src/evidence/fixtures.ts (FixturePaymentEvidenceProvider); selected by apps/edge-api/src/control-plane/config/production-payment.ts's resolveProductionCdpEvidenceProvider fail-closed default
+WHAT_OBJECT_FIELD_CONTAINS_IT=ExternalVerificationEvidence.trust_class / ExternalSettlementEvidence.trust_class (payment/settlement evidence records, NOT the service's PCC output)
+WHAT_CONDITION_SELECTS_IT=resolveProductionCdpEvidenceProvider falls back to {evidenceMode:'fixture'} whenever ANY of 4 gates fails; today all compositions in this repo fail gate 3 (`getAuthenticatedSellerAddress` is never supplied anywhere)
+WHAT_REAL_DATA_IS_AVAILABLE_AT_THAT_POINT=a real signed buyer PAYMENT-SIGNATURE header, real quote/requirement binding, real D1 state
+WHAT_DATA_IS_SYNTHESIZED=the claim that a facilitator verified/settled the payment — FixturePaymentEvidenceProvider always returns success without any real crypto/facilitator check
+IS_THE_OUTPUT_USER_VISIBLE=NO (confirmed live: the wire response body contains only `service_id`/`result_class`/`output`/`receipt_id`/`link_id`/`link_hash` — no `trust_class` field)
+IS_IT_SIGNED=NO (not part of the Ed25519-signed PCC receipt — `VerifyAgentOutputService`'s receipt construction has no dependency on x402 evidence types at all)
+IS_IT_PERSISTED=YES (durable `x402_service_results`/pending-draft rows via `X402ServiceResultRepository.createPending`)
+IS_IT_INCLUDED_IN_A_RECEIPT_OR_EVIDENCE_RECORD=in the x402 settlement EVIDENCE record, never in the cryptographic RECEIPT
+IS_IT_REACHABLE_FROM_VERIFY_V2_CDP_PRODUCTION_COMPOSITION=YES, if and only if `PAID_ROUTES_ENABLED=true` AND a real payment request is sent (both currently false/never in production)
+```
+
+Classification: **D. SYNTHETIC_PRODUCTION_EVIDENCE**, scoped precisely to the
+**payment/settlement evidence layer** — a paid execution's _settlement proof_
+can be fabricated (accepted without real crypto verification). This does **not**
+contaminate the paid service's actual output: `VerifyAgentOutputService`'s
+comparison result and PCC receipt are computed and signed independently of x402
+evidence, with `execution_mode: 'live'` and the real production Ed25519 signer,
+confirmed unconditionally real regardless of evidence mode.
+
+**§4's semantic question, answered directly:** can a successful real paid
+execution produce a result whose evidence/provenance claims/implies
+`synthetic_fixture`? **Yes, at the payment-evidence layer.** Is this truthful?
+Yes for what it is — `trust_class: 'synthetic_fixture'` is an honest,
+deliberate, permanently-typed label meaning "no real facilitator checked this
+payment," never presented to the buyer as if it were `external_verified`. It is
+not user-visible, not signed into the receipt, and the repository's own frozen
+`isTrustClassAllowed` gate structurally guarantees it can never satisfy
+`'production'`-mode evidence policy
+(`packages/protocol-x402/src/evidence/policy.ts`, unmodified —
+`production: new Set(['external_verified'])`). `createX402ServiceRoute` itself
+(`x402-service.ts`, unmodified, frozen) throws at construction time if any
+route's `evidenceMode === 'production'` — there is no working
+`'production'`-mode evidence provider anywhere in this repository (confirmed:
+`resolveProductionCdpEvidenceProvider` HAS a real, already-implemented
+`CdpPaymentEvidenceProvider` branch, but it requires
+`getAuthenticatedSellerAddress`, which is supplied nowhere in this codebase — a
+distinct, larger, future credential-provisioning checkpoint's job, exactly as
+`production-payment.ts`'s own doc comment has said unmodified since SUN-1200).
+
+**Is this new to SUN-1216, or pre-existing?** Pre-existing and already tracked —
+SUN-1213's capability inventory already classified "no production payment
+evidence provider wiring" as an R0 blocker to `PAID_SERVICES_PRODUCTION_READY`,
+and every checkpoint since (SUN-1214 through SUN-1216) has kept
+`PAID_ROUTE_ACTIVATION_AUTHORIZED=NO` for exactly this reason. SUN-1216 did not
+introduce it, does not close it, and does not claim to — it only makes the
+(already-known, already-disclosed) limitation's literal text newly visible in
+the bundle, because SUN-1216 is the first checkpoint to wire _any_ real
+composition to the entrypoint at all.
+
+New structural test:
+[verify-agent-output-v2-cdp-composition.evidence-integrity.test.ts](../../apps/edge-api/src/control-plane/production/verify-agent-output-v2-cdp-composition.evidence-integrity.test.ts)
+— proves `isTrustClassAllowed('synthetic_fixture', 'production') === false` (and
+the positive control
+`isTrustClassAllowed('synthetic_fixture', 'fixture') === true`), proves this
+composition resolves to `evidenceMode: 'fixture'` (never `'production'`) under
+current repository capability, and proves the composition module contains no
+reference to `getAuthenticatedSellerAddress` at all.
+
+```
+ROOT_CAUSE_A=buildServiceContext's own `??` fixture-mode defaults are colocated in the same source file as the reachable buildServiceContext function; esbuild's Workers bundling does not eliminate the unreachable function bodies from that file. The one production call site never triggers them (proven structurally).
+ROOT_CAUSE_B=No production evidence provider is wired anywhere in this repository (getAuthenticatedSellerAddress unimplemented) — a pre-existing, SUN-1213-documented R0 to paid-route ACTIVATION specifically, not to bundle integration. The composition can therefore only ever construct with evidenceMode:'fixture', and the repository's own frozen policy.ts guarantees that trust class can never satisfy 'production' mode.
+SOURCE_CHANGE_REQUIRED=NO
+```
+
+Reasoning for `SOURCE_CHANGE_REQUIRED=NO`: (1) the frozen candidate's real
+`wrangler.toml` does not set `PAID_ROUTES_ENABLED`, so both residuals are inert
+in the actual deployed/candidate state; (2) `x402-service.ts`'s
+construction-time guard and `policy.ts`'s mode-gating are cross-cutting, frozen,
+protected invariants this checkpoint may not modify; (3) closing Finding B
+requires wiring a real `getAuthenticatedSellerAddress` — a distinct, larger,
+future checkpoint, not a "tiny bounded fix"; (4) the correct remediation was a
+**test-definition correction** (§18b), not a runtime change, matching your own
+§7 branching instruction.
+
+## 18b. Test-definition correction (no runtime/config change)
+
+Per §8's requirement to distinguish `STRING_MARKER_PRESENT` from
+`FIXTURE_RUNTIME_REACHABILITY` with structural evidence rather than renaming a
+failure, `scripts/test-worker-runtime.mts`'s bundle-marker check was
+restructured (not deleted, not silently passed):
+
+- **`STRING_MARKER_PRESENT`** (informational, explicitly not a gate): reports
+  the 4 residual markers verbatim, always, whether present or not.
+- **`FIXTURE_RUNTIME_REACHABILITY`** (the real gate): hard-bypass markers
+  (`buildFixtureRegistry`/`createFixtureSigner`/`FixtureDocumentWorkerBridge`/fixture
+  PDF path) must be exactly zero, **and** both disclosed findings must have
+  their own structural non-reachability/non-satisfaction proof (the two new test
+  files above) passing. This is the corrected, precise capture of what
+  `PRODUCTION_FIXTURE_REACHABILITY=0` / `PRODUCTION_FIXTURE_FALLBACK=NONE`
+  should mean under the original invariant's actual intent — nothing in the
+  bundle can execute as, or be accepted as, a fixture bypass of the paid
+  service's real output or of production-grade evidence policy.
+
+Result: `pnpm test:worker-runtime` now reports **80/80** (up from 78/80), with
+zero assertions removed, skipped, or weakened — every prior check still runs;
+two now pass under a correct, evidenced, disclosed definition instead of failing
+under an imprecise one.
+
+```
+CURRENT_FREEZE_INVALIDATED=NO (runtime/config identity unchanged — see below)
+```
+
+Only test files were added/modified (`scripts/test-worker-runtime.mts` is a
+release-gate harness, never bundled into the Worker; the two new files are
+`.test.ts`, excluded from the bundle by the same convention as every other test
+in this repository). Recomputed identity confirms this claim rather than
+asserting it:
+
+```
+GIT_TREE_SHA      = f5fe89198d7c82652c34022abe7195cc79c88582   (changed — new commits)
+BUNDLE_SHA256     = d19287066896d6db58cc90dab6a7d7d872015a2fcae34441bb1709ea8e0a4fb7   (UNCHANGED)
+WRANGLER_CONFIG_SHA256 = 10328cd55ae007d10c2a775c15a31ab8a7fe7acff12fbe17ecc9f5a3983e0387   (UNCHANGED)
+LOCKFILE_SHA256   = b95d04c58768f6e047edc5717cc03ccd82865240083767984683eda7eb1d923d   (UNCHANGED)
+```
+
+Post-adjudication regression, all rerun fresh: `pnpm test:worker-runtime` 80/80;
+fixture-reintroduction proofs A/B/C all PASS;
+`apps/edge-api/src/control-plane/production/*` vitest suite (14 tests, including
+the 2 new adjudication tests) PASS; `pnpm lint` 16/16; `pnpm typecheck` clean;
+`pnpm test` 2129 passed/0 failed; `pnpm format:check` — only the 2 pre-existing
+unrelated SUN-1210 files remain flagged; `pnpm secrets:scan` 0 leaks. Production
+containment re-verified: `f4f20676-...` still 100%, `GET /health` → 200.
+
+## 19. Remaining work (deferred to the authorized upload step, then SUN-1217+)
 
 Execute the real `wrangler versions upload` (no `--dry-run`) only after explicit
 action-time authorization; verify exactly one new version created and production
@@ -316,14 +491,17 @@ branch into `main`; propose SUN-1217 (0%-traffic edge smoke).
 
 ---
 
-## SUN-1216 EXECUTABLE CANDIDATE UPLOAD READY
+## SUN-1216 EXECUTABLE CANDIDATE UPLOAD READY (post-adjudication)
 
 ```
-SUN1216_INTEGRATION_GATE=PASS (with 2 disclosed, explained, non-hard-bypass residual findings — see §9)
+SUN1216_INTEGRATION_GATE=PASS (residuals structurally adjudicated, see §18a/§18b — no assertion weakened, renamed, or skipped)
 VERIFY_V2_CDP_PRODUCTION_CODE_IN_BUNDLE=YES
 VERIFY_V2_CDP_ROUTE_DEFAULT_ENABLED=NO (404 by default, PAID_ROUTES_ENABLED unset)
 VERIFY_V2_CDP_DEFAULT_HTTP_STATUS=404
-PRODUCTION_FIXTURE_REACHABILITY=0 (hard-bypass markers; disclosed dead-code/evidence-fallback residual is NOT a bypass, see §9)
+STRING_MARKER_PRESENT=YES (createTestClock, createTestArtifactStore, createTestServiceAuditSink, synthetic_fixture — informational, not a gate)
+PRODUCTION_FIXTURE_REACHABILITY=0 (proven structurally, not asserted — §18a; pnpm test:worker-runtime now 80/80)
+PRODUCTION_FIXTURE_FALLBACK=NONE (Finding A: unreachable by JS operator semantics, proven; Finding B: confined to 'fixture' evidence mode, which the frozen policy.ts never accepts as satisfying 'production' mode, proven)
+PAYMENT_EVIDENCE_R0_STANDING=YES (Finding B classified D. SYNTHETIC_PRODUCTION_EVIDENCE at the payment/settlement-evidence layer only — pre-existing, SUN-1213-documented, unchanged, unclosed by this checkpoint, and the reason PAID_ROUTE_ACTIVATION_AUTHORIZED remains NO)
 ENTRYPOINT_FIXTURE_REINTRODUCTION_CAUGHT=YES
 PAID_SIGNING_SECRET_BINDINGS_PRESERVED=NOT_YET_VERIFIED (verified post-upload only, no new secrets introduced)
 BOUND_SIGNER_RUNTIME_EXECUTION_PROVEN=NO (proven only with local/test key material under real workerd, per boundary -- real secret never read outside Cloudflare's own bound runtime)
@@ -331,24 +509,24 @@ EXECUTABLE_CANDIDATE_CREATED=NO
 CANDIDATE_ACTIVATION_VARS_PRESENT=0 (planned, dry-run confirmed)
 CURRENT_PRODUCTION_VERSION=f4f20676-bbd0-4717-8e90-9cc2c3c9b2ce
 CURRENT_PRODUCTION_TRAFFIC=100%
+CURRENT_FREEZE_INVALIDATED=NO (BUNDLE_SHA256/WRANGLER_CONFIG_SHA256/LOCKFILE_SHA256 all byte-identical pre- and post-adjudication — only GIT_TREE_SHA changed, from new test-only commits)
 EXECUTABLE_CANDIDATE_READY_FOR_ZERO_TRAFFIC_SMOKE=YES (pending real upload)
 PAID_ROUTE_ACTIVATION_ELIGIBLE=NO
 PAID_ROUTE_ACTIVATION_EXECUTED=NO
 ```
 
-**R0 blockers to activation** (unchanged from SUN-1213, still open): none newly
-introduced by this checkpoint; the CDP evidence path remains `fixture`-mode only
-(`getAuthenticatedSellerAddress` still never supplied anywhere) — genuine
-live-evidence wiring remains a distinct future checkpoint's job, as already
-documented since SUN-1214.
+**R0 blockers to activation** (unchanged from SUN-1213, still open, now with
+structural proof rather than assertion): the CDP evidence path can only ever
+resolve to `evidenceMode: 'fixture'`/`trust_class: 'synthetic_fixture'` because
+`getAuthenticatedSellerAddress` is wired nowhere in this repository — a real,
+already-implemented `CdpPaymentEvidenceProvider` exists and would be selected
+automatically the moment that one dependency is supplied
+(`resolveProductionCdpEvidenceProvider`, unmodified). Closing this remains a
+distinct, future, credential-provisioning checkpoint's job — not something
+SUN-1216 does or should attempt.
 
-**R1 (new, this checkpoint)**: the §9 bundle-marker check split is a disclosed,
-unresolved classification question — should the "zero fixture markers" release
-gate be redefined to exclude dead-code test-helper text and the documented
-fixture-labeled evidence fallback, or should `buildServiceContext`'s defaults be
-refactored to remove the dead-code residual entirely? Recommend resolving this
-explicitly (accept as documented, or scope a small follow-up) rather than
-letting it linger silently.
+No new R1s from this adjudication — the classification question posed in the
+pre-adjudication report is now resolved (§18a/§18b) rather than left open.
 
 I am ready to execute the real Cloudflare candidate upload
 (`wrangler versions upload`, no `--dry-run`, no `--secrets-file`) on your
