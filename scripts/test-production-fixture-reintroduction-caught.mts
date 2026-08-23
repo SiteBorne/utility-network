@@ -1,7 +1,7 @@
 #!/usr/bin/env -S npx tsx
 /**
- * SUN-1206 mutation proof, extended by SUN-1214 checkpoint T and
- * SUN-1216 checkpoint V.
+ * SUN-1206 mutation proof, extended by SUN-1214 checkpoint T, SUN-1216
+ * checkpoint V, and SUN-1218 checkpoint X.
  *
  * Proof A (SUN-1206): temporarily reintroduces the test/sandbox paid
  * service graph into the real production entrypoint's module graph,
@@ -22,7 +22,17 @@
  * integration point and requires its own structural fixture-exclusion
  * test to catch it, then restores the exact original bytes.
  *
- * All three proofs run in the same process, each restoring its own
+ * Proof D (SUN-1218): the permanent release invariant for the
+ * payment-evidence trust closure itself --
+ * `PRODUCTION_PAYMENT_EVIDENCE_FALLBACK_TO_SYNTHETIC=IMPOSSIBLE`.
+ * Disables `verify-agent-output-v2-cdp-composition.ts`'s own new
+ * fail-closed check (the exact mechanism this checkpoint added to
+ * refuse mounting a fixture-evidenced route in the production call
+ * site), reintroducing the silent-fixture-fallback behavior this
+ * checkpoint closed, and requires that composition's own behavioral
+ * test to catch it, then restores the exact original bytes.
+ *
+ * All four proofs run in the same process, each restoring its own
  * target unconditionally in its own `finally` block, so a failure in
  * one never leaves another unrestored.
  */
@@ -242,10 +252,76 @@ function runProofC(): void {
   );
 }
 
+function runProofD(): void {
+  const TARGET = join(
+    REPO_ROOT,
+    'apps/edge-api/src/control-plane/production/verify-agent-output-v2-cdp-composition.ts'
+  );
+  const ANCHOR = "    if (resolved.evidenceMode !== 'production') {";
+  const MUTANT =
+    '    // mutation proof only -- disables the SUN-1218 fail-closed check\n' +
+    '    if (false) {';
+
+  const original = readFileSync(TARGET, 'utf8');
+  if (!original.includes(ANCHOR)) {
+    throw new Error(
+      'verify v2 CDP composition fail-closed-check mutation anchor not found; refusing an ambiguous mutation'
+    );
+  }
+
+  let caught = false;
+  try {
+    writeFileSync(TARGET, original.replace(ANCHOR, MUTANT), 'utf8');
+    try {
+      execFileSync(
+        PNPM,
+        [
+          'exec',
+          'vitest',
+          'run',
+          'apps/edge-api/src/control-plane/production/verify-agent-output-v2-cdp-composition.production-evidence.test.ts',
+        ],
+        { cwd: REPO_ROOT, encoding: 'utf8', stdio: 'pipe' }
+      );
+      // No throw means every test passed against the mutant -- that
+      // would mean the mutation (silently falling back to fixture
+      // evidence instead of failing closed) went undetected.
+    } catch (error) {
+      const output =
+        typeof error === 'object' && error && 'stdout' in error
+          ? String((error as { stdout?: unknown }).stdout ?? '') +
+            String((error as { stderr?: unknown }).stderr ?? '')
+          : String(error);
+      caught =
+        (output.includes('FAIL') || output.includes('failed')) &&
+        output.includes('verify-agent-output-v2-cdp-composition.production-evidence.test.ts') &&
+        output.includes("expected false to be true");
+      if (!caught) throw new Error(`vitest failed for an unexpected reason:\n${output}`);
+    }
+  } finally {
+    writeFileSync(TARGET, original, 'utf8');
+  }
+
+  const restored = readFileSync(TARGET, 'utf8');
+  if (hash(restored) !== hash(original)) {
+    throw new Error('verify v2 CDP composition was not restored byte-for-byte');
+  }
+  if (!caught) {
+    throw new Error(
+      'a mutation reintroducing the silent fixture-evidence fallback into the production evidence path went undetected'
+    );
+  }
+
+  console.log(
+    '[fixture-reintroduction-proof D] PASS: the composition\'s own behavioral test rejected the reintroduced synthetic-evidence fallback, and canonical source was restored byte-for-byte.'
+  );
+}
+
 runProofA();
 runProofB();
 runProofC();
+runProofD();
 
 console.log(
-  '[fixture-reintroduction-proof] PASS: proofs A, B, and C each caught their mutation and each restored its own target byte-for-byte.'
+  '[fixture-reintroduction-proof] PASS: proofs A, B, C, and D each caught their mutation and each restored its own target byte-for-byte.'
 );
