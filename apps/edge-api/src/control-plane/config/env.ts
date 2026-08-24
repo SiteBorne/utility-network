@@ -70,6 +70,20 @@ export interface Env {
   /** Additive Nevermined route-family gate. Checkpoint 2 still has no
    * authenticated sandbox provider, so setting this alone fails closed. */
   NEVERMINED_ROUTES_ENABLED?: string;
+  /** SUN-1220C: temporary, single-gated diagnostic-only flag for
+   * `production-cdp-buyer-provenance-diagnostic-route.ts`. Deliberately
+   * NOT combined with `PAID_ROUTES_ENABLED`/`VERIFY_V2_CDP_ROUTE_ENABLED`
+   * -- this route has no relationship to either paid-route family and
+   * must not become reachable as a side effect of enabling them, nor
+   * vice versa. Must be the exact literal `'true'`; absent/unset (the
+   * default everywhere today, including current production) means the
+   * route is not mounted -- byte-identical 404, zero dependency
+   * construction. This flag, and the route it gates, are
+   * TEMPORARY_VALIDATION_INSTRUMENTATION: a later checkpoint removes
+   * both once the one live provenance read has been captured (matches
+   * the already-removed SUN-1219B `CDP_X402_SUPPORT_DIAGNOSTIC_ENABLED`
+   * precedent). Never reused as a permanent production capability. */
+  CDP_BUYER_PROVENANCE_DIAGNOSTIC_ENABLED?: string;
   /** SUN-1000 checkpoint 1O-B2: the explicit future-live guard flag
    * consumed by `evaluateNeverminedLiveGuard` (via
    * `NeverminedPaymentEvidenceProvider.authenticated()`) — must be
