@@ -26,7 +26,6 @@ import { QueueDispatchHandler } from './control-plane/queue/dispatch';
 import { AuditLogger } from './control-plane/audit/events';
 import { productionServiceExecutorUnavailable } from './control-plane/routes/production-paid-services';
 import { verifyAgentOutputV2CdpProductionRoute } from './control-plane/routes/production-verify-v2-cdp-route';
-import { cdpBuyerProvenanceDiagnosticRoute } from './control-plane/routes/production-cdp-buyer-provenance-diagnostic-route';
 import type { Env } from './control-plane/config/env';
 
 export type { ControlPlaneConfig };
@@ -87,20 +86,6 @@ app.route('/services', serviceMetadataRoute);
 app.route('/schemas', schemasRoute);
 app.route('/benchmarks', benchmarksRoute);
 app.route('/', openapiRoute);
-
-/**
- * SUN-1220C — TEMPORARY_VALIDATION_INSTRUMENTATION. Mounted on its own
- * path, entirely outside `/v1/*`/`/v2/*`, so it shares no wildcard, no
- * kill switch, and no activation semantics with any of the 12 paid
- * routes. Gated solely by `CDP_BUYER_PROVENANCE_DIAGNOSTIC_ENABLED` --
- * see `production-cdp-buyer-provenance-diagnostic-route.ts`'s own doc
- * comment. Registered with no second argument, so the route's
- * test-only `createClientOverride` seam is structurally unreachable
- * through this (or any other) real HTTP dispatch path. A later
- * checkpoint removes this route once the one live provenance read has
- * been captured; it is not approved as a permanent surface.
- */
-app.get('/diagnostics/cdp-buyer-provenance', cdpBuyerProvenanceDiagnosticRoute);
 
 /**
  * SUN-1206: route-family flags retain their historical 404 mounting contract,

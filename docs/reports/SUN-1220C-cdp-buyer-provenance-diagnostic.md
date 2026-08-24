@@ -537,3 +537,115 @@ the buyer is a CDP-managed `server_account` reachable by the currently
 bound credential, and `fromCdpEvmAccount` is the structurally correct
 official adapter. Signing capability, buyer funding, and the paid E2E
 remain separately unauthorized and unattempted.
+
+## 16. Temporary diagnostic teardown
+
+Live provenance evidence commit: `a1e66e34fc4de112d0122e73a72038073639e53d`
+(§15 above). With evidence frozen, the temporary instrumentation
+introduced by `2edc114ed730f0088b696900679f72dca4dcbeb8` was surgically
+removed, keeping this report and all prior SUN-1220C evidence intact.
+
+### Exact removal
+
+Deleted (full files, `TEMPORARY_VALIDATION_INSTRUMENTATION` only):
+
+- `apps/edge-api/src/control-plane/routes/production-cdp-buyer-provenance-diagnostic-route.ts`
+- `apps/edge-api/src/control-plane/routes/production-cdp-buyer-provenance-diagnostic-route.test.ts`
+- `scripts/test-cdp-buyer-provenance-diagnostic-reintroduction-caught.mts`
+
+Reverted (single isolated hunk each, verified byte-identical via
+`git diff 2edc114^ -- <path>` producing empty output):
+
+- `apps/edge-api/src/control-plane/config/env.ts` — removed the
+  `CDP_BUYER_PROVENANCE_DIAGNOSTIC_ENABLED` field and its doc comment.
+- `apps/edge-api/src/index.ts` — removed the diagnostic import and the
+  `app.get('/diagnostics/cdp-buyer-provenance', ...)` mount.
+- `scripts/test-worker-runtime.mts` — removed the PHASE 0
+  diagnostic-404 check.
+
+Nothing else in these three files was touched; no unrelated line moved.
+Underlying production CDP functionality
+(`buildProductionCdpAccountLookupClientFactory`, `cdp.evm.getAccount`,
+`@coinbase/cdp-sdk`, `fromCdpEvmAccount`, `fromCdpSmartWallet`) predates
+the diagnostic and was not modified.
+
+A repo-wide search (`grep -rln "cdp-buyer-provenance\|cdpBuyerProvenanceDiagnosticRoute\|CDP_BUYER_PROVENANCE_DIAGNOSTIC_ENABLED"` across `.ts`/`.mts`/`.json`, excluding `node_modules`) returned zero
+matches outside this report.
+
+### Test-scope cleanup
+
+`scripts/verify-secret-scan-scope.ts` (a dynamic `git ls-files`
+consistency check, not a hardcoded file-list test) initially failed
+because the three deletions were unstaged — the git index still listed
+them as tracked while they were absent from disk. `git add -A` staged
+the deletions; no test source was modified. This is not a weakening of
+the scope test: the check remains exactly as strict, and now correctly
+reports a clean, fully-staged tree.
+
+### Post-teardown regression (all fresh, force-executed where cache
+could apply)
+
+- `pnpm lint` → PASS
+- `pnpm typecheck` (forced, 0 cached) → PASS
+- `pnpm test` → **179 passed, 19 skipped (198 files)**;
+  **2171 passed, 35 skipped (2206 tests)**, 0 failed — down from 2185
+  tests / 199 files pre-teardown, exactly the 14 diagnostic-route tests
+  and 1 diagnostic test file removed.
+- `pnpm test:worker-runtime` → **88/88 scenarios passed** — down from
+  89, exactly the one removed PHASE 0 diagnostic-404 check.
+- `pnpm production:preflight` → PASS
+- `pnpm secrets:scan` → PASS (**1082 tracked files**, down from 1085 —
+  exactly the three deleted files; no leaks found, 209 commits scanned)
+- `pnpm test:production-fixture-reintroduction` → all four existing
+  proofs (A, B, C, D) still PASS, each catching its mutation and
+  restoring byte-for-byte.
+
+`TWELVE_ROUTE_TRUTH_TABLE=PASS` (worker-runtime PHASE 8, both State C
+and State D, all 12 routes exactly as expected).
+`PRODUCTION_SYNTHETIC_PAYMENT_EVIDENCE_REACHABILITY=0` and
+`VERIFY_V2_CDP_ROUTE_SPECIFIC_GATE_READY=YES` (unchanged — nothing in
+§4's protected list was touched).
+
+### Diagnostic absence proof
+
+`TEMPORARY_BUYER_PROVENANCE_DIAGNOSTIC_RUNTIME_REACHABILITY=0`,
+`DIAGNOSTIC_ROUTE_PRESENT_IN_RUNTIME_SOURCE=NO`,
+`DIAGNOSTIC_GATE_PRESENT_IN_RUNTIME_SOURCE=NO` — proven by the source
+grep above, the reverted `index.ts` mount, and the worker-runtime PHASE
+0 check no longer existing (its assertion target no longer exists
+either).
+
+### Fresh live production containment (read-only; zero mutation)
+
+`wrangler deployments status` (fresh): unchanged since §15 —
+`FINAL_PRODUCTION_VERSION=f4f20676-bbd0-4717-8e90-9cc2c3c9b2ce`,
+`FINAL_PRODUCTION_TRAFFIC=100%`. Ordinary `GET /health` → `200`.
+Ordinary `GET /diagnostics/cdp-buyer-provenance` → `404` (route was
+never uploaded/deployed to production in the first place — this
+confirms absence from the currently *deployed* Worker, not merely from
+local source). All 12 paid REST routes → `404`. `pnpm
+production:preflight` → `PASS`. `WORKER_VERSIONS_CREATED=0`,
+`DEPLOYMENTS=0`, `TRAFFIC_SHIFTS=0`,
+`LIVE_CDP_CALLS_AFTER_PROVENANCE_DIAGNOSTIC=0` this checkpoint.
+
+### Historical candidate retained, undeployed
+
+`5483e288-6dea-4951-92ba-f09dcc192429` (the diagnostic candidate
+version uploaded in §14, invoked exactly once in §15) is **not**
+deleted — Cloudflare Worker versions are immutable historical records.
+It remains historical evidence only, was never part of the active
+deployment beyond the bounded §15 window, and
+`DIAGNOSTIC_CANDIDATE_REUSABLE_AS_PAID_E2E_CANDIDATE=NO`: it contains
+only the now-removed diagnostic route and none of the paid-route or
+ADR-0055 production gates a real paid-E2E candidate would need.
+
+### What remains true and what remains open
+
+Buyer provenance stands as established evidence, independent of the
+now-removed instrumentation that produced it:
+`BUYER_FOUND_IN_CDP_PROJECT=YES`, `BUYER_CDP_ACCOUNT_TYPE=server_account`,
+`OFFICIAL_X402_SIGNER_ADAPTER=fromCdpEvmAccount`. Signing authority was
+never tested and remains `CURRENT_CDP_CREDENTIAL_CAN_SIGN_FOR_BUYER=UNPROVEN`.
+No signing, payment, funding, service execution, settlement, or
+transaction has occurred at any point across the full SUN-1220/1220B/1220C
+sequence.

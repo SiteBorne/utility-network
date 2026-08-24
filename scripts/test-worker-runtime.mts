@@ -208,21 +208,6 @@ async function runPhase0() {
       record(`PHASE 0: ${path} remains 404 before paid-route cutover`, res.status === 404);
     }
 
-    // SUN-1220C: the temporary CDP buyer-provenance diagnostic's gate
-    // (CDP_BUYER_PROVENANCE_DIAGNOSTIC_ENABLED) is absent from the exact
-    // committed wrangler.toml, matching every other disabled gate's
-    // fail-closed default -- under real workerd, with no override of any
-    // kind, this must be a byte-identical 404, and this phase makes no
-    // live CDP call (the gate being absent means the route never even
-    // constructs a client).
-    const buyerProvenance = await fetch(`${base}/diagnostics/cdp-buyer-provenance`, {
-      method: 'GET',
-    });
-    record(
-      'PHASE 0: GET /diagnostics/cdp-buyer-provenance remains 404 (gate absent from committed config, real workerd, zero live CDP calls)',
-      buyerProvenance.status === 404
-    );
-
     const malformed = await fetch(`${base}/mcp`, {
       method: 'POST',
       headers: mcpHeaders('tools/list'),
