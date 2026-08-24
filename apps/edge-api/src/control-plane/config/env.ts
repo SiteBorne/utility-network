@@ -70,6 +70,14 @@ export interface Env {
   /** Additive Nevermined route-family gate. Checkpoint 2 still has no
    * authenticated sandbox provider, so setting this alone fails closed. */
   NEVERMINED_ROUTES_ENABLED?: string;
+  /** SUN-1220D — TEMPORARY_VALIDATION_INSTRUMENTATION. Dedicated,
+   * default-off gate for `cdpBuyerSignerCapabilityDiagnosticRoute`
+   * (`GET /diagnostics/cdp-buyer-signer-capability`). Absent/unset (the
+   * default everywhere, including current production) -> 404. Must be
+   * removed, along with the route it gates, once the bounded live
+   * signer-capability proof is complete — see
+   * `docs/reports/SUN-1220D-cdp-buyer-signer-capability-diagnostic.md`. */
+  CDP_BUYER_SIGNER_CAPABILITY_DIAGNOSTIC_ENABLED?: string;
   /** SUN-1000 checkpoint 1O-B2: the explicit future-live guard flag
    * consumed by `evaluateNeverminedLiveGuard` (via
    * `NeverminedPaymentEvidenceProvider.authenticated()`) — must be

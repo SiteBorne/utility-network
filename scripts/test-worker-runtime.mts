@@ -208,6 +208,18 @@ async function runPhase0() {
       record(`PHASE 0: ${path} remains 404 before paid-route cutover`, res.status === 404);
     }
 
+    {
+      // SUN-1220D: the temporary signer-capability diagnostic gate is
+      // absent from committed wrangler.toml, so this must 404 under
+      // real workerd with zero live CDP calls -- no signing is
+      // authorized in this phase.
+      const res = await fetch(`${base}/diagnostics/cdp-buyer-signer-capability`);
+      record(
+        'PHASE 0: /diagnostics/cdp-buyer-signer-capability remains 404 (gate absent, no live CDP call)',
+        res.status === 404
+      );
+    }
+
     const malformed = await fetch(`${base}/mcp`, {
       method: 'POST',
       headers: mcpHeaders('tools/list'),
