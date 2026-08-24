@@ -423,3 +423,55 @@ SECRET_VALUES_NEED_NOT_BE_READ=YES (and none were read)
 Every command run this checkpoint was read-only: `git`, `curl` against public
 production endpoints, `wrangler deployments status`, `wrangler secret list`
 (names only), `pnpm production:preflight`, and source/doc reads.
+
+---
+
+## 17. Addendum — Path C reversed by explicit operator attestation (post-commit)
+
+After this report was committed (`b1de50159c0da28a59945c99ab084bb2c879453b`)
+recommending Path C (provision fresh, explicitly production-designated CDP
+credentials), the operator was asked directly whether to keep Path C or reverse
+course and approve the existing sandbox-origin credential pair instead. The
+operator selected:
+
+```text
+"Reverse to existing credentials — Explicitly approve the existing
+sandbox-origin CDP_API_KEY_ID/SECRET for production/mainnet use, overriding
+SUN-1219A's Path C recommendation, and record that reversal with reasoning."
+```
+
+This is recorded as the explicit human attestation ADR-0055 and
+`PRODUCTION_CDP_CREDENTIALS_APPROVED`'s own code doc require — not inferred, not
+assumed from credential presence or prior sandbox use. No reasoning beyond the
+quoted decision was supplied by the operator; none is invented here.
+
+```text
+PRODUCTION_CDP_CREDENTIALS_APPROVED_GATE_AUTHORIZED=YES (as of this addendum)
+ATTESTED_CREDENTIAL_PAIR=CDP_API_KEY_ID / CDP_API_KEY_SECRET (existing
+  Cloudflare secrets; sandbox-Proof provenance per SUN-1200 checkpoint E,
+  reused for production per that checkpoint's separate override)
+FRESH_PRODUCTION_CREDENTIAL_PROVISIONING=NO LONGER REQUIRED (Path C superseded)
+EXISTING_CDP_CREDENTIALS_PRODUCTION_APPROVED=YES (by this addendum's attestation)
+```
+
+**What this addendum does not do:** it does not itself set
+`PRODUCTION_CDP_CREDENTIALS_APPROVED=true` (or any of the other three gates) in
+any Worker version, `wrangler.toml`, or secret. No runtime or config mutation
+occurred in this turn. Actually setting the four gates into a real, 0%-traffic
+mainnet candidate — and reaching a genuine unpaid 402 boundary against Base
+mainnet — requires its own bounded checkpoint (freeze, dry run, hard stop,
+single authorized upload), following the same pattern SUN-1219 already
+established, since it is the first checkpoint that would make a real live CDP
+mainnet call.
+
+```text
+MAINNET_CANDIDATE_CREATION_ELIGIBLE=YES (attestation now on record for all
+  four gates: PAYMENT_ENVIRONMENT, PRODUCTION_ENABLED,
+  HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP already established in prior
+  checkpoints' operator instructions; PRODUCTION_CDP_CREDENTIALS_APPROVED
+  as of this addendum)
+NEXT_CHECKPOINT_SCOPE=SUN-1219B — create and freeze a new immutable Worker
+  candidate with all four ADR-0055 gates set, prove the real unpaid 402
+  boundary against Base mainnet with at most one live read-only CDP call,
+  send no valid payment material, restore known-good.
+```
