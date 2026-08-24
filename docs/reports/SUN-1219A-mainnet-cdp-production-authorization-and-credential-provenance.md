@@ -475,3 +475,61 @@ NEXT_CHECKPOINT_SCOPE=SUN-1219B — create and freeze a new immutable Worker
   boundary against Base mainnet with at most one live read-only CDP call,
   send no valid payment material, restore known-good.
 ```
+
+---
+
+## 18. Correction — §17's attestation is superseded; Path C reinstated
+
+The operator has since stated that §17's "explicit attestation reversing Path C"
+is not supported by the authoritative decision record they are tracking outside
+this session, and has directed that this record be corrected before any mainnet
+checkpoint opens.
+
+Stating the observable discrepancy plainly, without inventing a cause for it:
+§17 recorded a reversal based on an in-session question-and-answer exchange in
+which the operator selected "Reverse to existing credentials." The operator has
+now instructed that this does not reflect their authoritative decision, and that
+Path C — provision fresh, explicitly production-designated CDP credentials
+before any ADR-0055 gate is set — remains governing. No explanation for the
+discrepancy is asserted here beyond that instruction; none is fabricated.
+
+**§17's attestation is superseded as of this correction.** It is not deleted and
+the commit that recorded it (`4ce3c175d93e00c9aeb86c895497203e7cdb0dda`) is not
+rewritten — both remain in git history for audit purposes — but §17 no longer
+states the governing decision.
+
+```text
+INCORRECT_AUTHORIZATION_COMMIT=4ce3c175d93e00c9aeb86c895497203e7cdb0dda
+AUTHORITATIVE_PATH=C (reinstated)
+EXISTING_CDP_CREDENTIALS_PRODUCTION_APPROVED=NO
+PRODUCTION_CDP_CREDENTIALS_APPROVED_GATE_AUTHORIZED=NO
+ADR0055_GATES_AUTHORIZED_COUNT=0
+ADR0055_GATES_SET=0 (unchanged throughout — no runtime/config ever mutated)
+MAINNET_CANDIDATE_CREATION_AUTHORIZED=NO
+LIVE_CDP_MAINNET_CALL_AUTHORIZED=NO
+SUN1219B_ELIGIBLE=NO
+```
+
+Confirmed unchanged by this correction (fresh read-only verification at
+correction time):
+
+```text
+WORKER_VERSIONS_CREATED=0 (this checkpoint)
+DEPLOYMENTS=0 (this checkpoint)
+TRAFFIC_SHIFTS=0
+LIVE_CDP_CALLS=0
+LIVE_BASE_MAINNET_CALLS=0
+REAL_PAYMENT_MATERIAL_SENT=NO
+SETTLEMENTS=0
+TRANSACTIONS=0
+REAL_ECONOMIC_EFFECTS=0
+FINAL_PRODUCTION_VERSION=f4f20676-bbd0-4717-8e90-9cc2c3c9b2ce
+FINAL_PRODUCTION_TRAFFIC=100%
+PAID_ROUTES_404=12/12
+PRODUCTION_PREFLIGHT=PASS
+SECRETS_SCAN=PASS (no leaks)
+```
+
+Until a human explicitly resolves this discrepancy, the governing state is Path
+C, unapproved existing credentials, zero gates authorized, and SUN-1219B does
+not open.
