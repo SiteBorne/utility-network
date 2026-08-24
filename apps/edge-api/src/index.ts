@@ -26,6 +26,7 @@ import { QueueDispatchHandler } from './control-plane/queue/dispatch';
 import { AuditLogger } from './control-plane/audit/events';
 import { productionServiceExecutorUnavailable } from './control-plane/routes/production-paid-services';
 import { verifyAgentOutputV2CdpProductionRoute } from './control-plane/routes/production-verify-v2-cdp-route';
+import { cdpX402SupportDiagnosticRoute } from './control-plane/routes/production-cdp-x402-support-diagnostic-route';
 import type { Env } from './control-plane/config/env';
 
 export type { ControlPlaneConfig };
@@ -86,6 +87,17 @@ app.route('/services', serviceMetadataRoute);
 app.route('/schemas', schemasRoute);
 app.route('/benchmarks', benchmarksRoute);
 app.route('/', openapiRoute);
+
+/**
+ * SUN-1219B — TEMPORARY_VALIDATION_INSTRUMENTATION. Mounted on its own
+ * path, entirely outside `/v1/*`/`/v2/*`, so it shares no wildcard, no
+ * kill switch, and no activation semantics with any of the 12 paid
+ * routes. Gated solely by `CDP_X402_SUPPORT_DIAGNOSTIC_ENABLED` -- see
+ * `production-cdp-x402-support-diagnostic-route.ts`'s own doc comment.
+ * A later checkpoint removes this route once the one live validation
+ * read has been captured; it is not approved as a permanent surface.
+ */
+app.get('/diagnostics/cdp-x402-supported', cdpX402SupportDiagnosticRoute);
 
 /**
  * SUN-1206: route-family flags retain their historical 404 mounting contract,

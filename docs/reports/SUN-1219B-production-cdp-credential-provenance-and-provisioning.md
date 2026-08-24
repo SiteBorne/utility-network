@@ -255,3 +255,330 @@ single-upload discipline already established.
 MAINNET_CANDIDATE_PREPARATION_ELIGIBLE=NO (blocked on Portal step)
 NEXT_ACTION_REQUIRES_EXPLICIT_HUMAN_AUTHORIZATION=YES
 ```
+
+---
+
+## Amendment 1 — existing key selected; provenance re-evaluation; auth-path research
+
+This amendment supersedes the "blocked on fresh credential creation" framing
+above. It does not delete or rewrite that history — the Portal-provenance
+requirement stated earlier was the correct requirement _at the time_, given what
+the record then showed. The user has since made a new, explicit, in-conversation
+decision that changes which credential this checkpoint evaluates. Per the
+authorization-authority governance rule adopted earlier this conversation, an
+explicit in-conversation decision is authoritative on its own terms; it does not
+need external justification to be honored.
+
+### 21. Selected credential
+
+```text
+EXISTING_CDP_KEY_SELECTED_FOR_PRODUCTION=YES
+SELECTED_PRODUCTION_CDP_KEY=siteborne-x402-facilitator
+SELECTED_KEY_DISPLAY_NAME=siteborne-x402-facilitator
+SELECTED_KEY_ALGORITHM=Ed25519
+SELECTED_KEY_STATUS=Enabled
+SELECTED_KEY_PORTFOLIO=Primary
+SELECTED_KEY_PERMISSION_DISPLAY="Trade - View"
+SELECTED_KEY_CREATED_AT=2026-08-10 17:02
+```
+
+The full key ID and secret value are intentionally not recorded here or anywhere
+in this repository. `KEY_ID_DISPLAY=f3058d…c384c` is a truncated Portal display
+value, not independently verifiable against the live Cloudflare `CDP_API_KEY_ID`
+secret without reading that secret's plaintext — which this checkpoint continues
+to refuse to do. The identification of this key as "the existing production CDP
+key" rests on the user's own Portal access and explicit statement, which is the
+correct authority for that fact.
+
+### 22. Re-evaluating "sandbox-origin" — three distinct questions
+
+The earlier SUN-1200 / SUN-1219A analysis used the shorthand "sandbox-origin"
+for this credential. That shorthand conflated three separate questions. Kept
+apart, with what is and is not actually known:
+
+**(1) Credential creation / provenance.** Portal metadata now available: created
+2026-08-10, algorithm Ed25519, portfolio "Primary", permission display "Trade -
+View", status Enabled. Nothing in this metadata says the key was created "for
+sandbox" or "for mainnet" — Portal API-key metadata does not carry a
+network-scope field at all (confirmed by SDK/API surface inspection below). The
+only _evidence_ of intent found anywhere in this repository is usage history,
+not a Portal-recorded creation intent.
+
+**(2) Network the credential was historically exercised against.** The one
+concrete usage record this repository holds is `SUN-0700B checkpoint 2`
+(`apps/edge-api/tests/live/x402-live-upto.test.ts`,
+`apps/edge-api/tests/live/x402-live-exact.test.ts`,
+`apps/edge-api/tests/live/x402-live-exact-v2.test.ts`), a guarded live-CDP proof
+suite (`RUN_LIVE_X402=1`-gated, skipped by default) that ran the full
+verify/settle path against Base **Sepolia** only — the network is hardcoded in
+that suite (`baseSepolia` from `viem/chains`). This establishes that the
+credential _was used_ on Sepolia in that checkpoint. It does not establish that
+Sepolia is the only network it is capable of or authorized for.
+
+**(3) Actual technical/authorization restriction.** Re-inspected fresh this turn
+(not relying on the earlier SUN-1219A summary alone):
+
+- CDP Secret API Keys (`apiKeyId`/`apiKeySecret`) authenticate at the
+  **Project** level. Nothing in `@coinbase/cdp-sdk`'s account or facilitator
+  APIs takes a "sandbox key" vs "mainnet key" type — there is one key type.
+- `CdpClient.evm.getAccount({ address })` takes no network parameter — EVM
+  accounts are network-agnostic; network is selected per _operation_ (a
+  transfer, a facilitator call, a chain read), not baked into the account or the
+  key.
+- The x402 facilitator client SITEBORNE uses (`createCdpFacilitatorClient` from
+  `@coinbase/cdp-sdk/x402`, see §23) is likewise constructed from
+  `{ apiKeyId, apiKeySecret }` alone — no network argument at construction time.
+  Network is a parameter of individual facilitator calls
+  (`verify`/`settle`/`getSupported` filtering), not a property of the client or
+  key.
+- No file in this repository, the installed CDP SDK, or its type definitions
+  declares or exposes a Portal-side "network restriction" field on a Secret API
+  Key. If Coinbase enforces any such restriction, it is enforced
+  Portal-side/server-side and is not visible from static inspection — it can
+  only be observed by an authenticated call.
+
+**Conclusion:** historical Base-Sepolia use is a fact about how the credential
+was exercised in one prior checkpoint, not a fact about what the credential is
+restricted to. Representing "used on Sepolia before" as "is Sepolia-only" would
+be an unsupported inference this checkpoint declines to make.
+
+```text
+HISTORICAL_SEPOLIA_USE_IMPLIES_SEPOLIA_ONLY=NO
+CDP_KEY_NETWORK_RESTRICTION=NOT_EXPRESSED_AT_SDK_OR_KEY_LEVEL — Project-scoped
+  Secret API Key; network is a per-call parameter, not a key attribute; any
+  Portal-side network allowlisting (if it exists) is not visible without an
+  authenticated call
+```
+
+### 23. Existing JWT / facilitator auth construction path (re-used, not re-invented)
+
+Grepped fresh this turn. SITEBORNE's production code does **not** hand-roll CDP
+JWT construction. The full chain:
+
+- `apps/edge-api/src/control-plane/production/verify-agent-output-v2-cdp-composition.ts:39`
+  — `import { createCdpFacilitatorClient } from '@coinbase/cdp-sdk/x402'`
+- same file,
+  `createFacilitatorClient: () => createCdpFacilitatorClient({ apiKeyId: env.CDP_API_KEY_ID, apiKeySecret: env.CDP_API_KEY_SECRET })`
+  — this is the _only_ place production code constructs a facilitator client,
+  and it uses the official Coinbase SDK helper, not a custom implementation.
+- `apps/edge-api/src/control-plane/evidence/cdp-provider.ts` consumes that
+  client as `HTTPFacilitatorClient` (from `@x402/core/server`) for
+  `verify()`/`settle()`, and separately exports
+  `checkCdpSupportsNetwork(facilitator, network, requiredSchemes)` (same file,
+  ~line 274), whose own doc comment reads: _"The first, and only gating, live
+  call this checkpoint makes before any activation decision or payment
+  attempt... Never throws for an ordinary 'not supported' outcome — that's
+  `ok: false` with a reason."_ This function already exists, is already
+  unit-tested (`apps/edge-api/tests/cdp-provider.test.ts`), and was
+  purpose-built in an earlier checkpoint for exactly the kind of single,
+  bounded, non-payment readiness call this amendment is being asked to scope. It
+  calls `facilitator.getSupported()` internally — the SDK-level equivalent of
+  `GET /platform/v2/x402/supported` — and nothing else.
+- It is **not currently wired into any live route or the production
+  composition** — its only callers today are the guarded live tests
+  (`tests/live/x402-live-*.test.ts`) and its own unit test. Using it for a real
+  validation call would mean invoking it directly (e.g. from a local, human-run
+  Node/Vitest process, the same way `SUN-0700B` did), not adding a new
+  production code path.
+
+```text
+EXISTING_AUTH_IMPLEMENTATION_FOUND=YES — createCdpFacilitatorClient (@coinbase/cdp-sdk/x402), official SDK, not custom
+EXISTING_SUPPORTED_CHECK_FOUND=YES — checkCdpSupportsNetwork() in cdp-provider.ts, already unit-tested, not wired into any route
+X402_FACILITATOR_AUTH_COMPATIBLE=UNPROVEN — proven end-to-end on Base Sepolia in SUN-0700B; never exercised against Base mainnet; never exercised under the `siteborne-x402-facilitator` Portal identity specifically
+READ_ONLY_SUPPORTED_ENDPOINT_VALIDATION_READY=YES — checkCdpSupportsNetwork() is the exact, already-built, already-tested function for this call
+```
+
+### 24. Two ways to make the one validation call, and which avoids secret exposure
+
+**Option 1 — local Node/Vitest run, same shape as SUN-0700B.** The user (or a
+locally-run script) sets `CDP_API_KEY_ID`/`CDP_API_KEY_SECRET` in a local,
+untracked env file, and calls `createCdpFacilitatorClient` +
+`checkCdpSupportsNetwork` directly, printing only `{ ok, reason, kinds }`
+(non-secret). This reuses proven code but requires the credential value to exist
+in _some_ local shell/env — never pasted to Claude, but not sourced from the
+Cloudflare-bound secret either (a second, parallel copy of the same value would
+need to be typed in locally).
+
+**Option 2 — exercise the Cloudflare-bound secret in place, without ever reading
+it.** Because `env.CDP_API_KEY_ID` / `env.CDP_API_KEY_SECRET` are already bound
+as Cloudflare secrets on the current Worker, a narrowly-scoped, read-only
+diagnostic path (invoked only via an explicit version override, 0% traffic, no
+route exposure change) could call `checkCdpSupportsNetwork` using those
+_existing_ bindings and return only a redacted summary (e.g.
+`{ ok: boolean, hasMainnetUpto: boolean }`) — no facilitator response body, no
+address, no key material. The secret plaintext would never leave Cloudflare's
+execution boundary and would never be read, printed, or seen by Claude at any
+point. This is the option that best satisfies "preserves secret confidentiality"
+as stated in the directive, because it removes the local-copy problem in Option
+1 entirely.
+
+Option 2 requires writing and freezing a small amount of new code (a diagnostic
+handler), which is a runtime change and therefore its own scoped,
+separately-authorized step — it is not "no runtime redesign," so it is not
+something this checkpoint performs unilaterally.
+
+```text
+VALIDATION_REQUIRES_SECRET_VALUE_EXPOSURE=NO (if Option 2 is used — the Cloudflare secret is exercised in place, never read/printed)
+VALIDATION_REQUIRES_SECRET_VALUE_EXPOSURE=YES-TO-LOCAL-SHELL-ONLY, NO-TO-CLAUDE (if Option 1 is used)
+RECOMMENDED_VALIDATION_MECHANISM=OPTION_2 — small read-only diagnostic handler, 0%-traffic version override, redacted boolean result only; requires its own explicit authorization before being written
+```
+
+### 25. Amendment status
+
+```text
+SUN1219B_PROVENANCE_REEVALUATION=COMPLETE
+SELECTED_PRODUCTION_CDP_KEY=siteborne-x402-facilitator
+HISTORICAL_SEPOLIA_USE_IMPLIES_SEPOLIA_ONLY=NO
+CDP_KEY_NETWORK_RESTRICTION=NOT_EXPRESSED_AT_SDK_OR_KEY_LEVEL (Portal-side restriction, if any, unobservable without an authenticated call)
+X402_FACILITATOR_AUTH_COMPATIBLE=UNPROVEN
+READ_ONLY_SUPPORTED_ENDPOINT_VALIDATION_READY=YES
+VALIDATION_REQUIRES_SECRET_VALUE_EXPOSURE=NO (via recommended Option 2)
+
+ADR0055_GATES_SET=0
+LIVE_CDP_CALLS=0
+WORKER_VERSIONS_CREATED=0
+DEPLOYMENTS=0
+TRAFFIC_SHIFTS=0
+REAL_PAYMENT_MATERIAL_SENT=NO
+```
+
+---
+
+## Amendment 2 — diagnostic implementation (source + tests only; no upload)
+
+Authorized: a narrowly scoped, temporary, single-gated diagnostic that exercises
+the already-bound `siteborne-x402-facilitator` credential's
+`/platform/v2/x402/supported` capability without exposing its plaintext value to
+the operator or to Claude.
+
+### Design implemented
+
+- **New route module**:
+  [`apps/edge-api/src/control-plane/routes/production-cdp-x402-support-diagnostic-route.ts`](../../apps/edge-api/src/control-plane/routes/production-cdp-x402-support-diagnostic-route.ts).
+  Reuses, unmodified: `createCdpFacilitatorClient` from `@coinbase/cdp-sdk/x402`
+  (the same official-SDK factory the real production route already uses) and
+  `checkCdpSupportsNetwork` from `../evidence/cdp-provider` — an existing,
+  already-unit-tested function that had no production call site before this
+  checkpoint. **No second CDP authentication implementation was created.**
+- **New gate**: `CDP_X402_SUPPORT_DIAGNOSTIC_ENABLED` (exact literal `'true'`),
+  added to `Env` in
+  [`apps/edge-api/src/control-plane/config/env.ts`](../../apps/edge-api/src/control-plane/config/env.ts).
+  Single-gated, deliberately independent of `PAID_ROUTES_ENABLED` and
+  `VERIFY_V2_CDP_ROUTE_ENABLED` — neither enables nor is required by this route.
+  Absent/unset (current state everywhere, including production) →
+  `c.notFound()`, zero dependency construction.
+- **Mounting**: `GET /diagnostics/cdp-x402-supported`, wired in
+  [`apps/edge-api/src/index.ts`](../../apps/edge-api/src/index.ts) on its own
+  path, outside `/v1/*` and `/v2/*` — no interaction with either wildcard's
+  kill-switch semantics.
+- **Response shape** (redacted):
+  `{ ok, authentication_succeeded, base_mainnet_supported }` on success; the
+  same three fields plus a single fixed string
+  `error: "diagnostic provider call failed"` on any provider/authentication
+  failure — never the raw error, `kinds` list, `uptoFacilitatorAddress`,
+  credential identifiers, headers, or JWTs.
+- **Structural containment**: this module imports nothing from
+  `x402-service.ts`, `production-paid-services.ts`,
+  `verify-agent-output-v2-cdp-composition.ts`, `buildProductionSigner`, or any
+  receipt/signer/executor module. Its only external call is
+  `facilitator.getSupported()`. It cannot call `verify`, `settle`,
+  `CdpClient.evm.getAccount`, execute a service, or invoke the paid-receipt
+  signer — those capabilities are not imported, referenced, or reachable from
+  this file at all.
+
+### Tests (written first; all reused/extended the existing route-test pattern)
+
+[`production-cdp-x402-support-diagnostic-route.test.ts`](../../apps/edge-api/src/control-plane/routes/production-cdp-x402-support-diagnostic-route.test.ts)
+— 9 tests, all passing:
+
+1. gate absent → 404, zero facilitator construction
+2. gate present but not the exact literal `'true'` → 404
+3. `PAID_ROUTES_ENABLED`+`VERIFY_V2_CDP_ROUTE_ENABLED` alone (diagnostic gate
+   absent) → 404 — proves no reuse of either flag as authorization
+4. gate true + facilitator advertises Base mainnet `upto` → redacted 200,
+   `base_mainnet_supported=true`
+5. gate true + facilitator does not advertise Base mainnet → redacted 200,
+   `authentication_succeeded=true`, `base_mainnet_supported=false`
+6. provider throws (mocked
+   `Unauthorized: ... Bearer ... rejected for key cdp-key-id`) → 502, fixed
+   sanitized string only; asserted the response body never contains
+   `cdp-key-id`, `Bearer`, or `Authorization`
+7. missing CDP credentials → 503, zero facilitator construction
+8. success-path response contains exactly the three redacted keys — no `kinds`,
+   `facilitatorAddress`, or credential fields
+9. structural: the mocked facilitator's `verify`/`settle` throw immediately if
+   ever called; every reachable branch in this file passes without triggering
+   that throw
+
+### Local qualification (fresh, this checkpoint)
+
+```text
+pnpm lint          -> PASS (16/16 tasks)
+pnpm typecheck     -> PASS (23/23 tasks)
+pnpm test          -> PASS (2180 passed, 35 skipped, 0 failed -- +9 vs SUN-1219B baseline, exactly the new file)
+pnpm test:worker-runtime -> PASS (88/88 scenarios; Phase 8 States A-D unchanged;
+                      new route module confirmed present in the real dry-run
+                      bundle without altering any existing route's disposition)
+pnpm production:preflight -> PASS
+pnpm secrets:scan  -> PASS (no leaks; 0 credential values in any file)
+```
+
+### Zero cloud mutation (verified, not asserted)
+
+```text
+git status: 5 files touched (env.ts, index.ts, this report, +2 new route/test files) -- all local, none committed
+HEAD: aec0e287494244a70b6c681065d7671f794e0df1 (unchanged -- source not yet committed)
+wrangler deployments status: unchanged -- f4f20676-bbd0-4717-8e90-9cc2c3c9b2ce @ 100%,
+  Created 2026-08-24T05:37:18.593Z, Message "SUN-1219 restore known-good..."
+Live production /health: 200
+Live production /diagnostics/cdp-x402-supported (workers.dev, no version override): 404
+  -- confirms the new route exists only in local source; the currently
+  deployed Worker version has never seen it.
+```
+
+### Final status
+
+```text
+SUN1219B_DIAGNOSTIC_IMPLEMENTATION_GATE=PASS
+
+DIAGNOSTIC_SOURCE_READY=YES
+DIAGNOSTIC_GATE_NAME=CDP_X402_SUPPORT_DIAGNOSTIC_ENABLED
+CHECK_CDP_SUPPORTS_NETWORK_REUSED=YES
+NEW_CDP_AUTH_IMPLEMENTATION_CREATED=NO
+DIAGNOSTIC_RESPONSE_REDACTED=YES
+
+DIAGNOSTIC_CAN_CALL_VERIFY=NO
+DIAGNOSTIC_CAN_CALL_SETTLE=NO
+DIAGNOSTIC_CAN_CALL_GET_ACCOUNT=NO
+DIAGNOSTIC_CAN_EXECUTE_SERVICE=NO
+DIAGNOSTIC_CAN_EXECUTE_PAID_SIGNER=NO
+
+CDP_SECRET_VALUES_EXPOSED=NO
+
+ADR0055_GATES_SET=0
+
+LIVE_CDP_CALLS=0
+LIVE_BASE_MAINNET_CALLS=0
+
+WORKER_VERSIONS_CREATED=0
+DEPLOYMENTS=0
+TRAFFIC_SHIFTS=0
+
+REAL_PAYMENT_MATERIAL_SENT=NO
+SETTLEMENTS=0
+TRANSACTIONS=0
+REAL_ECONOMIC_EFFECTS=0
+
+CURRENT_PRODUCTION_VERSION=f4f20676-bbd0-4717-8e90-9cc2c3c9b2ce
+CURRENT_PRODUCTION_TRAFFIC=100%
+
+DIAGNOSTIC_CANDIDATE_UPLOAD_ELIGIBLE=YES
+```
+
+Source and tests are complete and locally qualified but **not committed and not
+uploaded**. This checkpoint stops here per its own scope ("SOURCE + TEST
+implementation only") and awaits explicit authorization to freeze/upload a
+temporary diagnostic candidate — a `wrangler versions upload` that would create
+one new Worker version (0% traffic, undeployed) carrying this diagnostic route
+plus the gate set to `'true'`. That upload has not occurred. The live
+`/supported` call itself has not occurred.
