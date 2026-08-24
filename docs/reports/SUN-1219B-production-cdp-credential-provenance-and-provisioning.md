@@ -827,3 +827,174 @@ not approve `siteborne-x402-facilitator` for production, and does not create a
 mainnet paid candidate — those remain separate, explicitly authorized future
 actions. This report file is not committed as part of this amendment unless
 separately authorized.
+
+---
+
+## Amendment 4 — Temporary diagnostic instrumentation teardown
+
+_Appended 2026-08-24 14:16 UTC. Preceding sections (including Amendments 1–3)
+remain unmodified and authoritative for their own scope._
+
+### 4.1 Reference points
+
+```text
+AMENDMENT_3_EVIDENCE_COMMIT_SHA=c4f1072cc4d94231fc38cf40f1fc9d62e7d37155
+INSTRUMENTATION_SOURCE_COMMIT_SHA=40b05e01291f1a0d33cd4f8118a308c87ccfecf0
+```
+
+### 4.2 What was removed
+
+A surgical removal, not a blind revert of commit `40b05e0`: the SUN-1219B
+Amendment 2 report text introduced by that commit is explicitly **preserved**
+(this file). Only the four runtime/test files it touched were reverted to their
+pre-instrumentation state:
+
+```text
+DELETED (entire file, matches original addition exactly):
+  apps/edge-api/src/control-plane/routes/production-cdp-x402-support-diagnostic-route.ts       (-107 lines)
+  apps/edge-api/src/control-plane/routes/production-cdp-x402-support-diagnostic-route.test.ts  (-222 lines)
+
+EDITED (removed only the diagnostic-specific addition, all other content byte-identical
+to the state immediately before commit 40b05e0):
+  apps/edge-api/src/control-plane/config/env.ts   (-13 lines: CDP_X402_SUPPORT_DIAGNOSTIC_ENABLED field + doc comment)
+  apps/edge-api/src/index.ts                      (-12 lines: import + app.get('/diagnostics/cdp-x402-supported', ...) mount)
+
+Net: 4 files changed, 354 deletions -- the exact mirror of the +354 insertions
+those same 4 files received in commit 40b05e0.
+```
+
+`apps/edge-api/src/control-plane/evidence/cdp-provider.ts` (home of
+`checkCdpSupportsNetwork`, which predates this instrumentation and was never
+part of the diagnostic commit's diff) was **not touched** — confirmed via
+`git diff HEAD -- .../cdp-provider.ts` returning empty.
+
+A repo-wide search confirms zero remaining runtime-source references:
+
+```text
+grep -rln "CDP_X402_SUPPORT_DIAGNOSTIC_ENABLED\|cdp-x402-supported\|cdpX402SupportDiagnosticRoute" apps/ packages/ --include="*.ts"
+→ (no matches)
+```
+
+The only remaining references to the diagnostic exist in this report's own
+history (Amendments 1–3) and in the preserved git commit `40b05e0` itself —
+exactly the intended "historical evidence only" disposition.
+
+### 4.3 Regression evidence (fresh, this session)
+
+```text
+LINT=PASS (turbo, 16/16 tasks)
+TYPECHECK=PASS (apps/edge-api tsc --noEmit run directly, uncached, both
+                tsconfig.json and tsconfig.live-tests.json projects)
+```
+
+One methodological note preserved for honesty: the first `pnpm test` run was
+executed concurrently with `test:worker-runtime`, a direct `tsc`, and
+`production:preflight` competing for the same machine's CPU. That run reported
+97 failures, concentrated in unrelated packages (`protocol-x402` property-based
+fuzz tests, a subprocess/`.venv`-dependent OCR test) with
+`Error: Test timed out in Nms` as the failure mode on nearly every one — a
+classic resource-contention signature, not a functional regression. Rather than
+report that number, the suite was re-run in isolation. That isolated run
+surfaced a real, narrower, and fully explained result:
+
+```text
+FULL_TEST_SUITE (isolated re-run, before staging the deletions)=
+  1 file failed | 178 passed | 19 skipped (198)
+  5 tests failed | 2166 passed | 35 skipped (2206)
+```
+
+All 5 failures were in a single file,
+`scripts/verify-secret-scan-scope.regression.test.ts`, with the identical root
+cause: `git ls-files` still listed the two just-`rm`'d diagnostic files as
+tracked (their deletion had not yet been `git add`'d), so the secret-scan scope
+verifier correctly detected a tracked/working-tree mismatch and refused to
+proceed — the intended failure-closed behavior of that guard, not a defect.
+Staging the deletions (`git add -A` over exactly the 4 touched paths) resolved
+this by construction. The suite was re-run a third time, this time clean:
+
+```text
+FULL_TEST_SUITE (isolated re-run, after staging)=PASS
+  179 test files passed | 19 skipped (198)
+  2171 tests passed | 35 skipped (2206)
+```
+
+`2171 = 2180 - 9`, exactly the 9 diagnostic-specific tests removed with the
+route/test files — no other test count moved.
+
+```text
+WORKER_RUNTIME=PASS (88/88 scenarios; Phase 7 and Phase 8 States A-D
+                      unchanged; bundle isolation confirms the diagnostic
+                      module is absent from the real wrangler.toml dry-run
+                      bundle)
+PRODUCTION_PREFLIGHT=PASS (12/12 paid routes structurally unavailable
+                            before economics; no fixture service executor
+                            imported; 6 required secret names present;
+                            preview URLs disabled)
+SECRETS_SCAN=PASS (0 leaks, 205 commits scanned, run twice -- before and
+                    after staging)
+FORMAT_CHECK (env.ts, index.ts)=PASS
+```
+
+Specific proofs required by this checkpoint, all confirmed above:
+
+```text
+1. diagnostic path absent/unreachable in clean source:        CONFIRMED (grep, bundle isolation)
+2. verify-v2/CDP two-gate behavior intact:                     CONFIRMED (Phase 7/8, unchanged)
+3. other 11 paid routes remain 404:                            CONFIRMED (Phase 8 States A-D, preflight)
+4. production synthetic payment evidence reachability = 0:     CONFIRMED (FIXTURE_RUNTIME_REACHABILITY=0)
+5. no fixture service executor production-reachable:           CONFIRMED (preflight: "imports no fixture service executor")
+6. checkCdpSupportsNetwork unchanged (predates instrumentation): CONFIRMED (git diff empty on cdp-provider.ts)
+```
+
+### 4.4 Live production containment (fresh, unchanged throughout this amendment)
+
+No Cloudflare command of any kind — mutating or read-only — was issued during
+this teardown. Production state is exactly what Amendment 3 already established
+and restored:
+
+```text
+CURRENT_PRODUCTION_VERSION=f4f20676-bbd0-4717-8e90-9cc2c3c9b2ce
+CURRENT_PRODUCTION_TRAFFIC=100%
+WORKER_VERSIONS_CREATED=0
+DEPLOYMENTS=0
+TRAFFIC_SHIFTS=0
+LIVE_CDP_CALLS_AFTER_DIAGNOSTIC=0
+```
+
+The historical diagnostic Worker version `dd466fc8-8305-4cef-bf04-9a3c8a9658ad`
+was not deleted or mutated; it remains, undeployed, at 0% traffic, as historical
+evidence of the one live diagnostic call recorded in Amendment 3.
+
+### 4.5 Selected-key validation status (carried forward, not re-tested here)
+
+```text
+SELECTED_PRODUCTION_CDP_KEY=siteborne-x402-facilitator
+CDP_X402_AUTHENTICATION_PROVEN=YES        (Amendment 3)
+BASE_MAINNET_X402_SUPPORT_PROVEN=YES      (Amendment 3)
+SELECTED_CDP_KEY_VALIDATION=PASS
+```
+
+This teardown neither strengthens nor weakens that finding — it only removes the
+temporary instrumentation that produced it. Human production approval of this
+credential against the four ADR-0055 gates remains **not yet recorded**:
+
+```text
+ADR0055_GATES_SET=0
+PRODUCTION_CDP_CREDENTIALS_APPROVED_GATE_AUTHORIZED=NO
+```
+
+### 4.6 Disposition
+
+```text
+TEMPORARY_DIAGNOSTIC_RUNTIME_REACHABILITY=0
+DIAGNOSTIC_ROUTE_PRESENT_IN_RUNTIME_SOURCE=NO
+DIAGNOSTIC_GATE_PRESENT_IN_RUNTIME_SOURCE=NO
+DIAGNOSTIC_CANDIDATE_REUSABLE_AS_MAINNET_PAID_CANDIDATE=NO
+MAINNET_CANDIDATE_SOURCE_CLEAN=YES
+SELECTED_CDP_KEY_PRODUCTION_APPROVAL_ELIGIBLE=YES
+```
+
+The next open item is unchanged in kind from before this teardown: explicit
+human recording of ADR-0055 gate authorization for `siteborne-x402-facilitator`,
+which this teardown does not itself constitute and does not attempt to
+constitute.
