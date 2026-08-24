@@ -582,3 +582,248 @@ temporary diagnostic candidate — a `wrangler versions upload` that would creat
 one new Worker version (0% traffic, undeployed) carrying this diagnostic route
 plus the gate set to `'true'`. That upload has not occurred. The live
 `/supported` call itself has not occurred.
+
+---
+
+## Amendment 3 — Live diagnostic qualification: authentication and Base
+
+mainnet support proven for `siteborne-x402-facilitator`
+
+Dated 2026-08-24. This amendment records the single authorized live invocation
+of the temporary diagnostic candidate against Coinbase's real CDP x402
+supported-networks endpoint, using the production `CDP_API_KEY_ID` /
+`CDP_API_KEY_SECRET` Cloudflare secrets bound to `siteborne-x402-facilitator`.
+Every step below is command → actual output → authoritative read-back, run in
+that order with no pre-written results.
+
+### Diagnostic candidate identity
+
+```text
+DIAGNOSTIC_CANDIDATE_VERSION_ID=dd466fc8-8305-4cef-bf04-9a3c8a9658ad
+DIAGNOSTIC_CANDIDATE_CREATED_AT=2026-08-24T13:45:55.879Z
+AUTHORIZED_SOURCE_HEAD=40b05e01291f1a0d33cd4f8118a308c87ccfecf0
+```
+
+(Uploaded and identity-reconciled in the prior turn; unchanged here.)
+
+### Temporary deployment and read-back
+
+```bash
+wrangler versions deploy \
+  f4f20676-bbd0-4717-8e90-9cc2c3c9b2ce@100 \
+  dd466fc8-8305-4cef-bf04-9a3c8a9658ad@0 \
+  --name siteborne-utility-edge \
+  --message "SUN-1219B: temporary 100/0 diagnostic candidate qualification" -y
+```
+
+`wrangler deployments status` read-back confirmed exactly:
+
+```text
+(100%) f4f20676-bbd0-4717-8e90-9cc2c3c9b2ce
+(0%)   dd466fc8-8305-4cef-bf04-9a3c8a9658ad
+```
+
+`ZERO_TRAFFIC_DIAGNOSTIC_DEPLOYMENT_VERIFIED=YES`.
+
+### Ordinary routing proof (no override)
+
+`GET /health` (ray `a302d6cc9dd37be1`) and `GET /ready` (ray `a302d6d37db20f57`)
+both attributed via `wrangler tail --format json` to
+`scriptVersion.id=f4f20676-bbd0-4717-8e90-9cc2c3c9b2ce`, `outcome=ok`,
+`status=200`.
+
+`ORDINARY_ROUTING_DURING_DIAGNOSTIC=KNOWN_GOOD`.
+
+### Candidate attribution proof
+
+`GET /health` with
+`Cloudflare-Workers-Version-Overrides: siteborne-utility-edge="dd466fc8-8305-4cef-bf04-9a3c8a9658ad"`
+(ray `a302d7506af9b628`) attributed to
+`scriptVersion.id=dd466fc8-8305-4cef-bf04-9a3c8a9658ad`, `outcome=ok`,
+`status=200`, `exceptions=[]`.
+
+`DIAGNOSTIC_CANDIDATE_OVERRIDE_ATTRIBUTION=PASS`.
+
+### The one authorized live diagnostic invocation
+
+```bash
+curl -H 'Cloudflare-Workers-Version-Overrides: siteborne-utility-edge="dd466fc8-8305-4cef-bf04-9a3c8a9658ad"' \
+  https://siteborne-utility-edge.siteborneutilitynetwork.workers.dev/diagnostics/cdp-x402-supported
+```
+
+Ray `a302d7ae49f0b561`. HTTP `200`. Response headers contained only standard
+Cloudflare/security headers (`content-type`, `x-content-type-options`,
+`x-frame-options`, `referrer-policy`, `permissions-policy`, `nel`, `report-to`,
+`cf-ray`, `alt-svc`) — no `Authorization` header, no JWT, no credential material
+of any kind.
+
+Redacted response body, verbatim and complete:
+
+```json
+{ "ok": true, "authentication_succeeded": true, "base_mainnet_supported": true }
+```
+
+`wrangler tail` telemetry for this ray:
+`scriptVersion.id=dd466fc8-8305-4cef-bf04-9a3c8a9658ad`, `outcome=ok`,
+`status=200`, `exceptions=[]`, `cpuTime=15ms`, `wallTime=128ms`.
+
+**Result classification** (per the authorization's literal rule):
+`authentication_succeeded=true` AND `base_mainnet_supported=true` →
+
+```text
+CDP_X402_AUTHENTICATION_PROVEN=YES
+BASE_MAINNET_X402_SUPPORT_PROVEN=YES
+SELECTED_CDP_KEY_VALIDATION=PASS
+```
+
+This is the first genuine, live, tool-backed confirmation in the SUN-1219 chain
+that the `siteborne-x402-facilitator` CDP credential (1) authenticates
+successfully against Coinbase's real CDP platform, and (2) that facilitator
+advertises support for Base mainnet (`eip155:8453`) with the `upto` scheme that
+`verify_agent_output.v2/CDP` requires. It does **not** prove settlement, verify,
+or account-lookup capability — those operations were never invoked and remain
+unproven.
+
+### CDP request accounting
+
+```text
+DIAGNOSTIC_ROUTE_INVOCATIONS=1
+LIVE_CDP_SUPPORTED_CHECKS=1 (as observed at the SITEBORNE diagnostic-route
+  boundary — exactly one inbound request reached
+  GET /diagnostics/cdp-x402-supported, and exactly one call into
+  checkCdpSupportsNetwork(...) followed from it in source).
+```
+
+Whether the CDP SDK's internal HTTP client issued exactly one outbound request
+to Coinbase, or performed an internal retry, is **not independently observable**
+from this vantage point — `wrangler tail` shows the inbound Worker
+request/response pair and CPU/wall time, not the Worker's own sub-fetches to
+`api.cdp.coinbase.com`. The total wall time (128ms) is consistent with a single
+round trip and inconsistent with a multi-second retry-with-backoff sequence, but
+this is a plausibility inference, not a proof of exactly-one-outbound-request.
+No source change was made to instrument this further, per the authorization's
+explicit instruction not to widen scope.
+
+```text
+SELLER_ACCOUNT_LOOKUPS=0
+VERIFY_CALLS=0
+SETTLE_CALLS=0
+```
+
+These are proven `0` structurally — the diagnostic route's only import from
+CDP-related modules is `createCdpFacilitatorClient` and
+`checkCdpSupportsNetwork`, and `checkCdpSupportsNetwork` only calls
+`facilitator.getSupported()`. There is no code path in the diagnostic route
+capable of invoking `verify`, `settle`, or `CdpClient.evm.getAccount(...)`.
+
+### Secret boundary
+
+```text
+CDP_SECRET_VALUES_EXPOSED=NO
+CDP_KEY_ID_EXPOSED=NO
+JWT_EXPOSED=NO
+AUTHORIZATION_HEADER_EXPOSED=NO
+```
+
+Confirmed by direct inspection of the captured response headers and body above
+(Amendment reproduces the literal, complete body — nothing was elided because
+nothing sensitive was present in it).
+
+### Ordinary routing recheck and mandatory restoration
+
+`GET /health` without override (ray `a302d84959db0d70`) — sent before
+restoration — attributed to known-good `f4f20676-bbd0-4717-8e90-9cc2c3c9b2ce`
+via response inspection (production `/health` continued answering normally
+throughout; full tail correlation for this specific ray was superseded by the
+post-restoration correlation below, which independently proves the same
+invariant).
+
+Restoration executed:
+
+```bash
+wrangler versions deploy f4f20676-bbd0-4717-8e90-9cc2c3c9b2ce@100 \
+  --name siteborne-utility-edge \
+  --message "SUN-1219B: restore known-good-only after diagnostic qualification" -y
+```
+
+`wrangler deployments status` read-back confirmed exactly one deployed version:
+`(100%) f4f20676-bbd0-4717-8e90-9cc2c3c9b2ce`. The diagnostic candidate is no
+longer part of the active deployment.
+
+`SUN1219B_DIAGNOSTIC_RESTORATION=PASS`.
+
+### Post-restoration attribution
+
+Ordinary `GET /health` (ray `a302d906dd3090ea`) and a **stale** candidate
+override `GET /health` (ray `a302d9076db7e1d2`, still carrying the
+`Cloudflare-Workers-Version-Overrides` header for `dd466fc8...`) both attributed
+via tail to `scriptVersion.id=f4f20676-bbd0-4717-8e90-9cc2c3c9b2ce`, confirming
+the override no longer executes the removed candidate.
+
+`POST_DIAGNOSTIC_ATTRIBUTION=PASS`.
+
+### Final production containment
+
+```text
+CURRENT_PRODUCTION_VERSION=f4f20676-bbd0-4717-8e90-9cc2c3c9b2ce
+CURRENT_PRODUCTION_TRAFFIC=100%
+
+GET /diagnostics/cdp-x402-supported (ordinary, no override) → 404
+12/12 paid REST routes → 404 (GET and POST checked on all 7 grouped
+  endpoints covering all 12 documented route/method pairs)
+
+pnpm production:preflight → PASS
+```
+
+`SUN1219B_POST_DIAGNOSTIC_PREFLIGHT=PASS`.
+
+### Candidate-attributed telemetry summary
+
+```text
+Candidate-attributed events captured: 2
+  (1 attribution /health request + 1 diagnostic invocation)
+Status distribution: {200: 2}
+Outcomes: {ok: 2}
+Exceptions: 0
+UNHANDLED_EXCEPTIONS=0
+REQUEST_RUNTIME_EVAL_FAILURES=0
+CPU max: 15ms
+Wall max: 128ms
+```
+
+### Mutation accounting
+
+```text
+WORKER_VERSIONS_CREATED=0   (candidate already existed from prior turn)
+DEPLOYMENTS=2                (temporary 100/0 + mandatory restoration)
+MAX_DIAGNOSTIC_CANDIDATE_NORMAL_TRAFFIC_PERCENT=0
+FINAL_DIAGNOSTIC_CANDIDATE_NORMAL_TRAFFIC_PERCENT=0
+SECRET_ROTATIONS=0
+NEW_SECRET_VALUES=0
+ADR0055_GATES_SET=0
+DIAGNOSTIC_ROUTE_INVOCATIONS=1
+SELLER_ACCOUNT_LOOKUPS=0
+VERIFY_CALLS=0
+SETTLE_CALLS=0
+REAL_PAYMENT_MATERIAL_SENT=NO
+PAYMENT_SIGNATURES=0
+SERVICE_EXECUTIONS=0
+BOUND_SIGNER_EXECUTIONS=0
+SETTLEMENTS=0
+TRANSACTIONS=0
+REAL_ECONOMIC_EFFECTS=0
+```
+
+### Result
+
+```text
+SUN1219B_LIVE_DIAGNOSTIC=PASS
+SELECTED_CDP_KEY_VALIDATION=PASS
+SELECTED_CDP_KEY_PRODUCTION_APPROVAL_ELIGIBLE=YES
+```
+
+This amendment is evidence only. It does not itself set any ADR-0055 gate, does
+not approve `siteborne-x402-facilitator` for production, and does not create a
+mainnet paid candidate — those remain separate, explicitly authorized future
+actions. This report file is not committed as part of this amendment unless
+separately authorized.
