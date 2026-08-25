@@ -588,3 +588,69 @@ restored to `f4f20676-bbd0-4717-8e90-9cc2c3c9b2ce @ 100%` immediately after,
 verified by authoritative read-back and post-restoration attribution. No
 payment signature, payment payload, funding action, settlement, or
 transaction of any kind occurred at any point in this checkpoint.
+
+## 23. Temporary diagnostic teardown (SUN-1220E Phase 2)
+
+With the live-failure evidence above committed
+(`1a89af24620bb7fd9011b7e6d448fd5805c11781`), the temporary instrumentation
+introduced by `4c9e6ccac7e0166fbde961b81b6c8daf405a25c7` was surgically
+removed using that commit's own diff as authority — this document's history
+was left untouched. Removed:
+
+- `apps/edge-api/src/control-plane/routes/production-cdp-buyer-signer-capability-diagnostic-route.ts` (route, deleted)
+- `apps/edge-api/src/control-plane/routes/production-cdp-buyer-signer-capability-diagnostic-route.test.ts` (tests, deleted)
+- `scripts/test-cdp-buyer-signer-capability-diagnostic-reintroduction-caught.mts` (mutation-proof script, deleted)
+- `CDP_BUYER_SIGNER_CAPABILITY_DIAGNOSTIC_ENABLED` gate declaration in `apps/edge-api/src/control-plane/config/env.ts` (hunk reverted)
+- the route mount (`app.get('/diagnostics/cdp-buyer-signer-capability', ...)`) and its import in `apps/edge-api/src/index.ts` (hunk reverted)
+- the corresponding Phase-0 404 scenario in `scripts/test-worker-runtime.mts` (hunk reverted)
+
+Normal production CDP/x402 code (`@coinbase/cdp-sdk`, `fromCdpEvmAccount`,
+`cdp.evm.getAccount`, the real x402 signer path) was not touched. A
+repository-wide search confirmed no remaining reference to the removed
+route, gate, or file names outside this report.
+
+Full regression after removal:
+
+```
+pnpm lint                      PASS
+pnpm turbo run typecheck --filter=@siteborne/edge-api --force   PASS (fresh, non-cached)
+pnpm test                      2171 passed | 35 skipped  (was 2192 passed pre-removal; -21 matches the deleted diagnostic test file exactly)
+pnpm test:worker-runtime       88/88 scenarios passed (was 89; -1 matches the deleted Phase-0 scenario)
+pnpm production:preflight      PASS
+pnpm secrets:scan              PASS (no leaks, git history + working tree)
+pnpm pricing:check             PASS
+pnpm contracts:baseline:verify PASS
+pnpm contracts:compat:check    PASS
+pnpm contracts:release:verify  PASS
+```
+
+Worker-runtime Phase 8 (states A–D) re-confirmed the full 12-route truth
+table with the diagnostic gone: all four gate combinations produce the
+correct 404/503 pattern with zero reachable fixture/bypass markers.
+
+```
+TEMPORARY_SIGNER_DIAGNOSTIC_RUNTIME_REACHABILITY = 0
+DIAGNOSTIC_ROUTE_PRESENT_IN_RUNTIME_SOURCE        = NO
+DIAGNOSTIC_GATE_PRESENT_IN_RUNTIME_SOURCE         = NO
+PRODUCTION_SYNTHETIC_PAYMENT_EVIDENCE_REACHABILITY = 0
+TWELVE_ROUTE_TRUTH_TABLE                          = PASS
+```
+
+Preserved without modification:
+
+```
+LIVE_SIGNER_CAPABILITY_ATTEMPT_RESULT     = FAIL
+CURRENT_CDP_CREDENTIAL_CAN_SIGN_FOR_BUYER = UNPROVEN
+SIGN_TYPED_DATA_FAILURE_ROOT_CAUSE        = UNRESOLVED
+```
+
+The historical candidate `e1b0902e-a454-46e7-8dd7-2af5578396cb` remains
+immutable historical evidence only (Section 15's upload, Section 18's live
+run) and is not reused for any further signing attempt — no Worker version,
+deployment, or CDP call of any kind occurred during this teardown.
+
+```
+WORKER_VERSIONS_CREATED_DURING_TEARDOWN = 0
+DEPLOYMENTS_DURING_TEARDOWN             = 0
+LIVE_CDP_CALLS_DURING_TEARDOWN          = 0
+```

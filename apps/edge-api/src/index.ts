@@ -26,7 +26,6 @@ import { QueueDispatchHandler } from './control-plane/queue/dispatch';
 import { AuditLogger } from './control-plane/audit/events';
 import { productionServiceExecutorUnavailable } from './control-plane/routes/production-paid-services';
 import { verifyAgentOutputV2CdpProductionRoute } from './control-plane/routes/production-verify-v2-cdp-route';
-import { cdpBuyerSignerCapabilityDiagnosticRoute } from './control-plane/routes/production-cdp-buyer-signer-capability-diagnostic-route';
 import type { Env } from './control-plane/config/env';
 
 export type { ControlPlaneConfig };
@@ -87,15 +86,6 @@ app.route('/services', serviceMetadataRoute);
 app.route('/schemas', schemasRoute);
 app.route('/benchmarks', benchmarksRoute);
 app.route('/', openapiRoute);
-
-/**
- * SUN-1220D — TEMPORARY_VALIDATION_INSTRUMENTATION. Gated by
- * `CDP_BUYER_SIGNER_CAPABILITY_DIAGNOSTIC_ENABLED` alone; absent/unset
- * (the default everywhere, including current production) -> 404. See
- * `docs/reports/SUN-1220D-cdp-buyer-signer-capability-diagnostic.md`.
- * Must be removed once the bounded live proof is complete.
- */
-app.get('/diagnostics/cdp-buyer-signer-capability', cdpBuyerSignerCapabilityDiagnosticRoute);
 
 /**
  * SUN-1206: route-family flags retain their historical 404 mounting contract,
