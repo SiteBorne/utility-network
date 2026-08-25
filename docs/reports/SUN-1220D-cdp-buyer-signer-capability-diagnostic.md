@@ -247,3 +247,344 @@ This code must later be uploaded (candidate, non-deploying), proven
 live in one bounded non-economic signature run, restored, evidence
 committed, then removed — matching the SUN-1220C provenance-diagnostic
 lifecycle exactly. It must not remain in final mainnet paid source.
+
+## 15. Candidate upload (non-deploying)
+
+Authorized scope: exactly ONE non-deploying immutable Worker version
+upload containing the committed source at
+`4c9e6ccac7e0166fbde961b81b6c8daf405a25c7`, with the single new var
+`CDP_BUYER_SIGNER_CAPABILITY_DIAGNOSTIC_ENABLED=true`. No deployment,
+traffic shift, version override, live diagnostic invocation, or live
+CDP/signing call was authorized or performed.
+
+### Freeze identities (immediately pre-upload)
+
+```
+AUTHORIZED_SOURCE_HEAD=4c9e6ccac7e0166fbde961b81b6c8daf405a25c7
+GIT_TREE_SHA=c0e047746133e35852bb2c59aa845fabf31ad279
+WRANGLER_CONFIG_SHA256=10328cd55ae007d10c2a775c15a31ab8a7fe7acff12fbe17ecc9f5a3983e0387
+LOCKFILE_SHA256=b95d04c58768f6e047edc5717cc03ccd82865240083767984683eda7eb1d923d
+DRY_RUN_BUNDLE_SHA256=7e551779e8c67128c53e6b5e34cbf705148c447b5c859c5e20adfa95a7b287da
+```
+
+`DRY_RUN_BUNDLE_SHA256` is a composite hash (sha256 of the sorted
+per-file sha256 hashes of the `--dry-run --outdir` bundle), not a
+digest Cloudflare itself exposes for the uploaded artifact. Candidate
+identity therefore rests on the unbroken freeze -> dry-run -> upload
+chain documented here, not on an independently verified uploaded-bundle
+byte digest.
+
+`git status --short` was clean immediately before the real upload —
+`CANDIDATE_FREEZE_INVALIDATED=NO`.
+
+### Dry run (`wrangler versions upload --dry-run --var CDP_BUYER_SIGNER_CAPABILITY_DIAGNOSTIC_ENABLED:true`)
+
+Confirmed: gate present; `PAID_ROUTES_ENABLED`,
+`VERIFY_V2_CDP_ROUTE_ENABLED`, `NEVERMINED_ROUTES_ENABLED` absent; all
+four ADR-0055 production gates absent; base vars
+(`PCC_VERSION`, `ENVIRONMENT`, `LOG_LEVEL`, `AGENT_CARD_SIGNING_KEY_ID`,
+`NVM_ENVIRONMENT`, `SELLER_WALLET_ADDRESS`) and all bindings
+(`CATALOG`, `JOBS`, `EVENTS`, `DB`, `BROWSER`, `AI`) preserved.
+`compatibility_date=2026-08-05`, `nodejs_compat` present,
+`preview_urls=false` — all confirmed from the committed `wrangler.toml`
+(not overridden by the dry run). `SIGNER_DIAGNOSTIC_CANDIDATE_DRY_RUN=PASS`.
+
+### Real upload (exactly one)
+
+```
+$ wrangler versions upload --name siteborne-utility-edge \
+    --message "SUN-1220D temporary CDP signer-capability diagnostic candidate" \
+    --var CDP_BUYER_SIGNER_CAPABILITY_DIAGNOSTIC_ENABLED:true
+Uploaded siteborne-utility-edge (3.20 sec)
+Worker Version ID: e1b0902e-a454-46e7-8dd7-2af5578396cb
+```
+
+Result unambiguous — no retry performed.
+
+```
+SIGNER_DIAGNOSTIC_CANDIDATE_VERSION_ID=e1b0902e-a454-46e7-8dd7-2af5578396cb
+SIGNER_DIAGNOSTIC_CANDIDATE_CREATED_AT=2026-08-25T02:01:13.824Z
+```
+
+### Authoritative post-upload read-back
+
+`wrangler versions view e1b0902e-a454-46e7-8dd7-2af5578396cb` confirmed:
+
+- `CDP_BUYER_SIGNER_CAPABILITY_DIAGNOSTIC_ENABLED = "true"`
+- `PAID_ROUTES_ENABLED`, `VERIFY_V2_CDP_ROUTE_ENABLED`,
+  `NEVERMINED_ROUTES_ENABLED` — absent
+- All four ADR-0055 production gates — absent
+- All 6 expected secret names bound (names only, no values read):
+  `AGENT_CARD_SIGNING_PRIVATE_KEY`, `CDP_API_KEY_ID`,
+  `CDP_API_KEY_SECRET`, `NVM_API_KEY`, `PAID_RECEIPT_SIGNING_KEY_ID`,
+  `PAID_RECEIPT_SIGNING_PRIVATE_KEY` — `EXPECTED_SECRET_NAMES_PRESENT=6/6`
+- Base vars and bindings preserved
+
+```
+CANDIDATE_SOURCE_IDENTITY=PASS
+CANDIDATE_CONFIG_IDENTITY=PASS
+CANDIDATE_SECRET_BINDING_IDENTITY=PASS
+```
+
+`wrangler deployments status` confirmed the active deployment is
+unchanged: only `f4f20676-bbd0-4717-8e90-9cc2c3c9b2ce @ 100%` —
+`SIGNER_DIAGNOSTIC_CANDIDATE_IN_ACTIVE_DEPLOYMENT=NO`,
+`SIGNER_DIAGNOSTIC_CANDIDATE_NORMAL_TRAFFIC_PERCENT=0`.
+
+### Preview containment
+
+`preview_urls=false` confirmed in committed `wrangler.toml`, unmodified
+this checkpoint — `SIGNER_DIAGNOSTIC_PREVIEW_CONTAINMENT=PASS`.
+
+### Post-upload production containment (read-only)
+
+Ordinary (no override): `GET /health` -> 200;
+`GET /diagnostics/cdp-buyer-signer-capability` -> 404; 12/12 paid REST
+routes -> 404; `pnpm production:preflight` -> PASS.
+
+```
+POSTUPLOAD_PRODUCTION_PREFLIGHT=PASS
+```
+
+**No live CDP or signing call of any kind occurred this checkpoint.**
+`LIVE_CDP_CALLS=0`, `LIVE_CDP_GET_ACCOUNT_CALLS=0`,
+`LIVE_SIGN_TYPED_DATA_CALLS=0`, `LIVE_SIGNATURES_CREATED=0`,
+`PAYMENT_SIGNATURES_CREATED=0`. The candidate exists, undeployed, at
+0% traffic, eligible for a future separately-authorized one-call
+non-economic signer-capability qualification. It is not reusable as
+the real SUN-1220 paid-E2E candidate.
+
+## 16. Reconciliation before the live run
+
+A later continuation of this checkpoint began with `wrangler deployments
+status` already showing a 100%/0% split (`f4f20676-bbd0-4717-8e90-9cc2c3c9b2ce`
+/ `e1b0902e-a454-46e7-8dd7-2af5578396cb`, created 2026-08-25T02:06:39Z) that
+this conversation had not created and that this document (through Section 15)
+does not record. Per this checkpoint's own evidence-integrity rule ("if a
+mutation result is ambiguous, do not repeat it — reconcile authoritative state
+first") and the standing `SITEBORNE_RELEASE_AUTHORIZATION_AUTHORITY=v1` rule
+(only this conversation's own record is authoritative), the operator chose to
+restore to known-good-only and restart the bounded live sequence from a clean,
+freshly verified baseline rather than reuse the unexplained deployment.
+
+```
+$ wrangler versions deploy f4f20676-bbd0-4717-8e90-9cc2c3c9b2ce@100 --yes
+SUCCESS  Deployed siteborne-utility-edge version f4f20676-bbd0-4717-8e90-9cc2c3c9b2ce at 100%
+```
+
+```
+UNRECONCILED_PREEXISTING_DEPLOYMENT_DETECTED     = YES
+PREEXISTING_DEPLOYMENT_TREATED_AS_AUTHORIZED_EXECUTION = NO
+PREEXISTING_DIAGNOSTIC_INVOCATION_STATUS         = UNPROVEN
+FAIL_CLOSED_RESTORATION_EXECUTED                 = YES
+```
+
+Whether the unexplained deployment had already been used to invoke the live
+diagnostic is not established either way by any evidence available to this
+conversation, and this document does not assert a conclusion in either
+direction.
+
+Read-back confirmed a single version, `f4f20676-bbd0-4717-8e90-9cc2c3c9b2ce @ 100%`,
+before any further action. Ordinary `GET /health` / `GET /ready` returned 200
+with body `{"status":"ok",...}`. `git rev-parse HEAD` = 4c9e6ccac7e0166fbde
+961b81b6c8daf405a25c7 (matches `AUTHORIZED_SOURCE_HEAD`). Candidate metadata
+re-read via `wrangler versions view e1b0902e-...` confirmed only
+`CDP_BUYER_SIGNER_CAPABILITY_DIAGNOSTIC_ENABLED=true`, no
+`PAID_ROUTES_ENABLED`/`VERIFY_V2_CDP_ROUTE_ENABLED`/`NEVERMINED_ROUTES_ENABLED`,
+and no ADR-0055 gate — unchanged since Section 15's original upload.
+
+## 17. Attribution method used
+
+The Observability-scoped API tokens from SUN-1210 checkpoints P3/P4 had
+already been deleted (as that report's own cleanup section records), and this
+checkpoint's Wrangler OAuth token carries no Analytics/Observability-query
+scope (confirmed against `wrangler whoami`'s printed scope list). Rather than
+provision a new scoped credential, plain `wrangler tail siteborne-utility-edge
+--format json` was used as the live attribution channel: each tail event
+carries `scriptVersion.id`, `outcome`, `cpuTime`, `wallTime`, `exceptions`, and
+the full request (including `cf-ray`), which is sufficient to authoritatively
+match every HTTP response by Ray ID to the Worker version that served it,
+without creating any new credential.
+
+## 18. Bounded live run — clean sequence
+
+Exactly one temporary deployment was created:
+
+```
+$ wrangler versions deploy f4f20676-bbd0-4717-8e90-9cc2c3c9b2ce@100 e1b0902e-a454-46e7-8dd7-2af5578396cb@0 --yes
+SUCCESS  Deployed ... f4f20676... at 100% and e1b0902e... at 0%
+```
+
+Read-back: `(100%) f4f20676-bbd0-4717-8e90-9cc2c3c9b2ce`, `(0%)
+e1b0902e-a454-46e7-8dd7-2af5578396cb`. `SIGNER_DIAGNOSTIC_CANDIDATE_NORMAL_TRAFFIC_PERCENT=0`.
+
+Under one continuous `wrangler tail` session, five requests were sent and
+authoritatively attributed:
+
+| Request | HTTP | Ray ID | `scriptVersion.id` | outcome | cpu ms | wall ms |
+| --- | ---: | --- | --- | --- | ---: | ---: |
+| ordinary `GET /health` | 200 | `a30722872a575205` | `f4f20676...` (known-good) | ok | 1 | 2 |
+| ordinary `GET /ready` | 200 | `a3072287994e8cd2` | `f4f20676...` (known-good) | ok | 9 | 9 |
+| candidate-override `GET /health` | 200 | `a307229d987190d8` | `e1b0902e...` (candidate) | ok | 11 | 12 |
+| candidate-override `GET /diagnostics/cdp-buyer-signer-capability` | 503 | `a30722b49e54160a` | `e1b0902e...` (candidate) | ok | 73 | 155 |
+| ordinary `GET /health` (pre-restore recheck) | 200 | `a30722cc1f1074ee` | `f4f20676...` (known-good) | ok | 4 | 4 |
+
+```
+ORDINARY_ROUTING_DURING_SIGNER_DIAGNOSTIC = KNOWN_GOOD
+SIGNER_DIAGNOSTIC_CANDIDATE_ATTRIBUTION   = PASS
+```
+
+### Exact redacted diagnostic response (the only live invocation)
+
+```json
+{"ok":false,"buyer_found":true,"account_kind":"server_account","typed_data_signing_succeeded":false,"signature_recovered_to_buyer":false,"credential_signing_authorized":false,"error":"diagnostic signing capability check failed"}
+```
+
+No raw signature appears in this body, in any tail event's `logs`/`exceptions`
+array (both empty for this Ray ID), or in this document. `outcome=ok` and
+`exceptions=[]` for this Ray ID confirm the Worker itself did not crash — the
+`503`/`ok:false` came from the route's own sanitized `catch` branch around
+`account.signTypedData(...)`, matching Section 14's "handled sanitized
+diagnostic failure" case, not a Worker-runtime failure.
+
+## 19. Result classification
+
+`buyer_found=true` and `account_kind="server_account"` confirm the read-only
+lookup call succeeded (as SUN-1220C already proved). `typed_data_signing_succeeded=false`
+means the `account.signTypedData(...)` call itself threw, caught by the
+route's own `catch` block before any signature ever existed — the *attempt*
+failed, not a recovery mismatch (Section 9's "recovered address" branch was
+never reached). The route's `catch` block intentionally discards the
+underlying SDK/provider error before responding, so this one sanitized
+failure is evidence that the call did not succeed; it is not yet evidence of
+*why* — a credential-permission denial, an SDK/provider-side validation
+rejection of the typed-data shape, an adapter-layer defect, or a transient
+provider condition would all produce the same observable shape. Converting
+"the observed call failed" into "the credential fundamentally lacks signing
+permission" is not supported by this evidence alone and is deferred to a
+dedicated root-cause investigation (SUN-1220E) before any second live
+attempt.
+
+```
+LIVE_SIGNER_CAPABILITY_ATTEMPT_RESULT  = FAIL
+CURRENT_CDP_CREDENTIAL_CAN_SIGN_FOR_BUYER = UNPROVEN
+SIGN_TYPED_DATA_FAILURE_ROOT_CAUSE     = UNRESOLVED
+CDP_SERVER_ACCOUNT_SIGNING_CAPABILITY  = FAIL_UNDIAGNOSED
+OFFICIAL_SIGNER_ADAPTER_EXECUTION_PROVEN = NO
+```
+
+`OFFICIAL_SIGNER_ADAPTER_EXECUTION_PROVEN=NO` for two independent reasons:
+the underlying call failed, and — noted here for evidence-integrity honesty —
+the route's own source (Section "5. Approved design" above) calls
+`account.signTypedData(...)` directly rather than literally constructing
+`fromCdpEvmAccount(account)` first; the route's doc comment argues this is a
+structurally-equivalent call to the same method the wrapper would invoke, but
+the wrapper itself was never literally exercised.
+
+This checkpoint does not investigate *why* the live sign call failed (no
+retry was authorized or performed); the sanitized error message does not
+distinguish CDP-side authorization/policy denial from a transient fault. That
+root-cause question is out of this checkpoint's bounded scope.
+
+## 20. Mandatory restoration and final containment
+
+```
+$ wrangler versions deploy f4f20676-bbd0-4717-8e90-9cc2c3c9b2ce@100 --yes
+SUCCESS  Deployed siteborne-utility-edge version f4f20676-bbd0-4717-8e90-9cc2c3c9b2ce at 100%
+```
+
+Read-back: single version, `f4f20676-bbd0-4717-8e90-9cc2c3c9b2ce @ 100%`.
+`SUN1220D_SIGNER_DIAGNOSTIC_RESTORATION=PASS`.
+
+Post-restoration, under the same tail session: ordinary `GET /health` (Ray
+`a3072524dd847c0e`) and a stale candidate-override `GET /health` (Ray
+`a3072531f84170fe`) **both** attributed to `f4f20676-bbd0-4717-8e90-9cc2c3c9b2ce`,
+`outcome=ok` — proving the override header is inert once the candidate is no
+longer part of the active deployment (matches Cloudflare's documented
+version-override contract, and SUN-1210 checkpoint P4's prior observation).
+
+```
+POST_SIGNER_DIAGNOSTIC_ATTRIBUTION = PASS
+```
+
+Final containment (ordinary production, no override):
+
+```
+GET /diagnostics/cdp-buyer-signer-capability -> 404
+GET /v1/company/evidence-graph            -> 404
+GET /v1/web/context                       -> 404
+GET /v1/document/evidence-json            -> 404
+GET /v1/verify/agent-output               -> 404
+GET /v2/company/evidence-graph            -> 404
+GET /v2/web/context                       -> 404
+GET /v2/document/evidence-json            -> 404
+GET /v2/verify/agent-output               -> 404
+GET /v2/nevermined/company/evidence-graph -> 404
+GET /v2/nevermined/web/context            -> 404
+GET /v2/nevermined/document/evidence-json -> 404
+GET /v2/nevermined/verify/agent-output    -> 404
+```
+
+(12/12 paid routes confirmed 404 with a well-formed `Content-Type:
+application/json` request; an initial content-type-less probe returned `415`
+from the global content-type middleware, which runs before routing — a
+request-format artifact, not a route-availability signal.)
+
+```
+$ pnpm production:preflight
+PREFLIGHT RESULT: PASS
+```
+
+```
+FINAL_PRODUCTION_VERSION      = f4f20676-bbd0-4717-8e90-9cc2c3c9b2ce
+FINAL_PRODUCTION_TRAFFIC      = 100%
+SUN1220D_POST_DIAGNOSTIC_PREFLIGHT = PASS
+```
+
+## 21. Mutation and call accounting
+
+```
+WORKER_VERSIONS_CREATED = 0   (candidate already existed from Section 15's prior upload)
+DEPLOYMENTS = 3   (reconciliation restore + temporary 100/0 + mandatory restoration)
+CANDIDATE_NORMAL_TRAFFIC_PERCENT = 0 (throughout)
+DIAGNOSTIC_ROUTE_INVOCATIONS = 1
+LIVE_CDP_GET_ACCOUNT_CALLS = INFERRED_1 (buyer_found=true, account_kind=server_account; not independently observed via a provider-side log)
+LIVE_SIGN_TYPED_DATA_CALLS = INFERRED_1 (attempted once; threw, caught by the route's own handler; no retry)
+NON_ECONOMIC_DIAGNOSTIC_SIGNATURES_CREATED = 0  (the call threw before any signature value existed)
+PAYMENT_SIGNATURES_CREATED = 0
+CREATE_PAYMENT_PAYLOAD_CALLS = 0
+BUYER_FUNDING_ACTIONS = 0
+LIVE_PAID_REQUESTS = 0
+SERVICE_EXECUTIONS = 0
+SETTLEMENTS = 0
+TRANSACTIONS = 0
+REAL_ECONOMIC_EFFECTS = 0
+```
+
+The extra reconciliation deployment (Section 16) was itself a restoration to
+the pre-existing known-good version at 100% with no candidate present — it
+changed no candidate config, created no Worker version, and shifted no
+candidate traffic; it is counted here for full mutation-accounting honesty
+even though it falls outside the three deployments the original directive
+anticipated.
+
+## 22. Explicit statement
+
+**Exactly one live, non-economic EIP-712 typed-data signing attempt was made
+against the real `siteborne-x402-facilitator` CDP credential and the real
+controlled buyer account, and it failed** (the underlying `signTypedData`
+call threw; no signature was ever produced, returned, logged, or persisted).
+The read-only account lookup succeeded, confirming the credential can still
+resolve the buyer as a `server_account`. This checkpoint proves, with live
+evidence, that **this one signing attempt did not succeed under the observed
+conditions** — it does **not** yet prove that the currently bound production
+CDP credential fundamentally lacks signing authority for this buyer, since
+the route's sanitized error handling discarded the underlying failure detail
+needed to distinguish credential/permission denial from a provider-side
+validation rejection, an adapter defect, or a transient condition. That
+distinction is left `UNRESOLVED` pending a dedicated, read-only root-cause
+investigation before any second live attempt is considered. Production was
+restored to `f4f20676-bbd0-4717-8e90-9cc2c3c9b2ce @ 100%` immediately after,
+verified by authoritative read-back and post-restoration attribution. No
+payment signature, payment payload, funding action, settlement, or
+transaction of any kind occurred at any point in this checkpoint.
