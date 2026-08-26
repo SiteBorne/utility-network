@@ -62,6 +62,15 @@ export function resolveProductionAuthorizationInput(
 
 export interface ResolvedPaymentAsset {
   address: string;
+  /** EIP-712 domain name (must match the token's own domain separator) --
+   * required by `@x402/evm`'s `ExactEvmScheme.createPaymentPayload`
+   * (`signEIP3009Authorization`) before it will ever call
+   * `signTypedData`. Already computed by the pinned `getDefaultAsset`
+   * call below (SUN-1220K/L); previously discarded by this type. */
+  name: string;
+  /** EIP-712 domain version (must match the token's own domain
+   * separator) -- see `name`'s doc comment. */
+  version: string;
   decimals: number;
 }
 

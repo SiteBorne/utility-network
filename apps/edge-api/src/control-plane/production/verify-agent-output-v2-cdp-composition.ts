@@ -204,13 +204,24 @@ export async function buildVerifyAgentOutputV2CdpProductionRouteConfig(
 
   const executor: ServiceExecutor = buildVerifyAgentOutputV2ProductionExecutor(signer, registry);
 
+  // SUN-1220L: the official pinned x402 exact/EIP-3009 signing path
+  // (`ExactEvmScheme.createPaymentPayload` -> `signEIP3009Authorization`)
+  // requires `paymentRequirements.extra.name`/`.version` (the asset's own
+  // EIP-712 domain name/version) before it will ever call
+  // `signTypedData` -- both already computed by `resolvePaymentAsset`'s
+  // own pinned `getDefaultAsset(network)` call, previously discarded here
+  // (only `.address` was read). Sourced from the official library, never
+  // hardcoded (SUN-1220K root cause / remediation design).
+  const asset = resolvePaymentAsset(network);
+
   return {
     serviceId: 'verify_agent_output.v2',
     scheme: 'exact',
     pricingKey: 'verify_agent_output_standard',
     rail: 'cdp',
     network,
-    asset: resolvePaymentAsset(network).address,
+    asset: asset.address,
+    paymentRequirementExtra: { name: asset.name, version: asset.version },
     payTo: env.SELLER_WALLET_ADDRESS,
     path: '/v2/verify/agent-output',
     inputSchema: BUNDLED_SERVICE_INPUT_SCHEMAS['verify_agent_output.v2'] as Record<string, unknown>,
