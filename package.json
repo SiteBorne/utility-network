@@ -32,6 +32,7 @@
     "d1:test": "tsx scripts/d1-verify.ts",
     "nevermined:recover": "tsx scripts/nevermined-recover.ts",
     "cdp:signer-capability-check": "tsx scripts/cdp-buyer-signer-capability-check.ts",
+    "first-paid-e2e": "tsx scripts/first-paid-e2e.ts",
     "control-plane:test": "vitest run apps/edge-api/tests/d1-integration.test.ts",
     "control-plane:check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm control-plane:test",
     "python:install": "cd services/modal-worker && python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'",
