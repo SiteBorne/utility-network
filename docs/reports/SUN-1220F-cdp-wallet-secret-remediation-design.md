@@ -1,9 +1,8 @@
 # SUN-1220F — CDP Wallet-Secret remediation design (read-only / design only)
 
-Date: 2026-08-25
-Classification: design-only. Zero source changes, zero secret provisioning,
-zero Worker versions, zero deployments, zero live CDP calls, zero signing,
-zero funding, zero payment.
+Date: 2026-08-25 Classification: design-only. Zero source changes, zero secret
+provisioning, zero Worker versions, zero deployments, zero live CDP calls, zero
+signing, zero funding, zero payment.
 
 ## 0. Starting state (carried forward, re-verified this checkpoint)
 
@@ -20,9 +19,19 @@ CURRENT_PRODUCTION_VERSION             = f4f20676-bbd0-4717-8e90-9cc2c3c9b2ce @ 
 
 ## §1 — Phase 1 freeze (completed before this design work)
 
-- `git rev-parse HEAD` before evidence commit: `d4f759210d722eb2dc2e15dbce0ae8b1b5a0f6ce` (matched expected).
-- Full text of `docs/reports/SUN-1220E-cdp-sign-typed-data-root-cause.md` read; confirmed literal preservation of `ROOT_CAUSE_PROVEN=YES`, `FAILED_PIPELINE_STAGE=local_validation`, `SIGN_TYPED_DATA_FAILURE_ROOT_CAUSE=MISSING_CDP_WALLET_SECRET`, `CURRENT_CDP_CREDENTIAL_CAN_SIGN_FOR_BUYER=UNPROVEN`, `REMOTE_API_KEY_SIGNING_AUTHORIZATION` left honestly `UNPROVEN` (not asserted as denial).
-- Report explains exactly the required chain: `signTypedData` → `getAuthHeaders` → `requiresWalletAuth` match on `POST /v2/evm/accounts/{address}/sign/typed-data` → missing `walletSecret` → `UserInputValidationError` thrown **before** any network request.
+- `git rev-parse HEAD` before evidence commit:
+  `d4f759210d722eb2dc2e15dbce0ae8b1b5a0f6ce` (matched expected).
+- Full text of `docs/reports/SUN-1220E-cdp-sign-typed-data-root-cause.md` read;
+  confirmed literal preservation of `ROOT_CAUSE_PROVEN=YES`,
+  `FAILED_PIPELINE_STAGE=local_validation`,
+  `SIGN_TYPED_DATA_FAILURE_ROOT_CAUSE=MISSING_CDP_WALLET_SECRET`,
+  `CURRENT_CDP_CREDENTIAL_CAN_SIGN_FOR_BUYER=UNPROVEN`,
+  `REMOTE_API_KEY_SIGNING_AUTHORIZATION` left honestly `UNPROVEN` (not asserted
+  as denial).
+- Report explains exactly the required chain: `signTypedData` → `getAuthHeaders`
+  → `requiresWalletAuth` match on
+  `POST /v2/evm/accounts/{address}/sign/typed-data` → missing `walletSecret` →
+  `UserInputValidationError` thrown **before** any network request.
 
 Secret-safety scan of the report:
 
@@ -84,21 +93,19 @@ SUN1220E_ROOT_CAUSE_EVIDENCE_COMMIT_SHA = a866f5837f856f308cc4fbd7517159f6ece5c9
 
 ### §3(Phase 2) — `walletSecret` trace
 
-Read directly from
-`node_modules/.../@coinbase/cdp-sdk/src/auth/utils/http.ts` and
-`.../src/auth/utils/jwt.ts` (installed, pinned version `1.55.0`, matching
+Read directly from `node_modules/.../@coinbase/cdp-sdk/src/auth/utils/http.ts`
+and `.../src/auth/utils/jwt.ts` (installed, pinned version `1.55.0`, matching
 `package.json`):
 
-- `getAuthHeaders(options)`: always requires `apiKeyId`/`apiKeySecret`
-  first (throws `UserInputValidationError` for any non-public operation if
-  absent) and always sends `Authorization: Bearer <apiKey JWT>`.
-  **Only after** that JWT is generated does it call
-  `requiresWalletAuth(requestMethod, requestPath)`; if true and
-  `options.walletSecret` is falsy, it throws the exact error observed in
-  SUN-1220D: `"Wallet Secret not configured. Please set the
-  CDP_WALLET_SECRET environment variable..."`.
-- `requiresWalletAuth(method, path)` — literal regex/string match, no
-  network call:
+- `getAuthHeaders(options)`: always requires `apiKeyId`/`apiKeySecret` first
+  (throws `UserInputValidationError` for any non-public operation if absent) and
+  always sends `Authorization: Bearer <apiKey JWT>`. **Only after** that JWT is
+  generated does it call `requiresWalletAuth(requestMethod, requestPath)`; if
+  true and `options.walletSecret` is falsy, it throws the exact error observed
+  in SUN-1220D:
+  `"Wallet Secret not configured. Please set the CDP_WALLET_SECRET environment variable..."`.
+- `requiresWalletAuth(method, path)` — literal regex/string match, no network
+  call:
   ```
   (/\/(evm|solana)\/accounts/.test(path) ||
    path.includes("/spend-permissions") ||
@@ -112,12 +119,12 @@ Read directly from
   && (method === "POST" || method === "DELETE" || method === "PUT")
   ```
 - `generateWalletJwt({ walletSecret, requestMethod, requestHost, requestPath, requestData })`
-  (in `jwt.ts`): builds one ES256 JWT whose only claims are `uris:
-  ["METHOD host+path"]` and, if there's a body, `reqHash` (a hash of the
-  sorted request body). It imports `walletSecret` as a base64 DER PKCS8
-  EC private key. **No account address, wallet ID, or network identifier
-  ever appears as an input or claim.** The resulting `X-Wallet-Auth`
-  header is attached alongside (not instead of) the API-key bearer JWT.
+  (in `jwt.ts`): builds one ES256 JWT whose only claims are
+  `uris: ["METHOD host+path"]` and, if there's a body, `reqHash` (a hash of the
+  sorted request body). It imports `walletSecret` as a base64 DER PKCS8 EC
+  private key. **No account address, wallet ID, or network identifier ever
+  appears as an input or claim.** The resulting `X-Wallet-Auth` header is
+  attached alongside (not instead of) the API-key bearer JWT.
 
 This directly answers the trace:
 
@@ -146,12 +153,11 @@ X_WALLET_AUTH_PURPOSE =
   authenticates the request to do so).
 ```
 
-`CDP_WALLET_SECRET_MODEL=project` (not `wallet`/`account`) is the honest
-label here: the SDK's own mechanics use exactly one secret value per
-`CdpClient` construction, applied identically to every account and every
-network the same API-key identity can reach — there is no per-wallet or
-per-network variant of this secret anywhere in the installed SDK's auth
-code.
+`CDP_WALLET_SECRET_MODEL=project` (not `wallet`/`account`) is the honest label
+here: the SDK's own mechanics use exactly one secret value per `CdpClient`
+construction, applied identically to every account and every network the same
+API-key identity can reach — there is no per-wallet or per-network variant of
+this secret anywhere in the installed SDK's auth code.
 
 ### §4 — API key vs. Wallet Secret
 
@@ -170,46 +176,47 @@ API_KEY_AND_WALLET_SECRET_BOTH_REQUIRED_FOR_SIGNING = YES
 ```
 
 Evidence: in `getAuthHeaders`, the `requiresWalletAuth` check and the
-`X-Wallet-Auth` header assignment both live **inside** the
-`if (hasCredentials)` block — i.e. only reachable after the API-key JWT
-was already generated. A `walletSecret` supplied without `apiKeyId`/
-`apiKeySecret` would never even reach that check (the function throws for
-missing API-key credentials before it looks at `walletSecret` at all, for
-any non-public path). Neither secret is a substitute for the other; the
-SDK source proves both are simultaneously mandatory for `signTypedData`.
+`X-Wallet-Auth` header assignment both live **inside** the `if (hasCredentials)`
+block — i.e. only reachable after the API-key JWT was already generated. A
+`walletSecret` supplied without `apiKeyId`/ `apiKeySecret` would never even
+reach that check (the function throws for missing API-key credentials before it
+looks at `walletSecret` at all, for any non-public path). Neither secret is a
+substitute for the other; the SDK source proves both are simultaneously
+mandatory for `signTypedData`.
 
 ### §5 — Does an authoritative Wallet Secret already exist?
 
 ```
 CDP_WALLET_SECRET_ALREADY_BOUND_TO_WORKER = NO
 ```
-Confirmed by: (a) `wrangler secret list` returning exactly 6 names, none
-of them `CDP_WALLET_SECRET` (names-only, no values read — see
-`production:preflight` output above); (b) `production-payment.ts`'s own
-`SUN-1200 checkpoint E` comment documenting its deliberate removal; (c)
-`env.ts`'s `CDP_WALLET_SECRET?: string` field being declared but never
-read anywhere in production source (`grep` found only the declaration and
-two doc-comment mentions — zero live usages).
+
+Confirmed by: (a) `wrangler secret list` returning exactly 6 names, none of them
+`CDP_WALLET_SECRET` (names-only, no values read — see `production:preflight`
+output above); (b) `production-payment.ts`'s own `SUN-1200 checkpoint E` comment
+documenting its deliberate removal; (c) `env.ts`'s `CDP_WALLET_SECRET?: string`
+field being declared but never read anywhere in production source (`grep` found
+only the declaration and two doc-comment mentions — zero live usages).
 
 ```
 CDP_WALLET_SECRET_EXISTS_IN_CDP_PROJECT = UNPROVEN
 ```
-This cannot be determined without either viewing Coinbase Portal state
-that this session has no authenticated access to, or generating/rotating
-a value (a mutating, unauthorized action). Per this checkpoint's own rule,
-that branch stops here at `UNPROVEN` rather than being inferred from
-"not bound to the Worker" (a Worker-binding absence proves nothing about
-whether a Wallet Secret was ever generated for the underlying CDP
-Project — Coinbase does not expose a "does a Wallet Secret exist" read
-endpoint distinct from attempting to use or regenerate one).
+
+This cannot be determined without either viewing Coinbase Portal state that this
+session has no authenticated access to, or generating/rotating a value (a
+mutating, unauthorized action). Per this checkpoint's own rule, that branch
+stops here at `UNPROVEN` rather than being inferred from "not bound to the
+Worker" (a Worker-binding absence proves nothing about whether a Wallet Secret
+was ever generated for the underlying CDP Project — Coinbase does not expose a
+"does a Wallet Secret exist" read endpoint distinct from attempting to use or
+regenerate one).
 
 ### §6 — Acquisition path
 
-Based on Coinbase's publicly documented CDP Wallet Secret product design
-(shown once at creation time in the Portal, never re-displayable
-afterward; only a regenerate/rotate action is offered for an existing
-project) — this is external-product-behavior knowledge, not something the
-installed SDK's own source proves, and is flagged as such:
+Based on Coinbase's publicly documented CDP Wallet Secret product design (shown
+once at creation time in the Portal, never re-displayable afterward; only a
+regenerate/rotate action is offered for an existing project) — this is
+external-product-behavior knowledge, not something the installed SDK's own
+source proves, and is flagged as such:
 
 ```
 CDP_WALLET_SECRET_ACQUISITION_MODEL = B
@@ -242,17 +249,17 @@ Current production CDP call sites (exhaustive; confirmed by
 `grep -rn "new CdpClient\|createCdpFacilitatorClient"` across
 `apps/edge-api/src`, non-test files only):
 
-1. `createCdpFacilitatorClient` (from `@coinbase/cdp-sdk/x402`), used once
-   in `verify-agent-output-v2-cdp-composition.ts` for `.verify()`/
-   `.settle()`. Its own upstream type (`CdpFacilitatorClientArgs`) has
-   **no `walletSecret` parameter at all** — structurally cannot receive
-   one, with or without this checkpoint's changes.
-2. `buildProductionCdpAccountLookupClientFactory` (in
-   `production-payment.ts`) → `new CdpClient({apiKeyId, apiKeySecret})`,
-   used for the read-only seller `evm.getAccount(...)` lookup. Its
-   parameter type is `Pick<Env, 'CDP_API_KEY_ID' | 'CDP_API_KEY_SECRET'>`
-   — structurally cannot forward a `walletSecret` today even though the
-   underlying `CdpClient` constructor would accept one.
+1. `createCdpFacilitatorClient` (from `@coinbase/cdp-sdk/x402`), used once in
+   `verify-agent-output-v2-cdp-composition.ts` for `.verify()`/ `.settle()`. Its
+   own upstream type (`CdpFacilitatorClientArgs`) has **no `walletSecret`
+   parameter at all** — structurally cannot receive one, with or without this
+   checkpoint's changes.
+2. `buildProductionCdpAccountLookupClientFactory` (in `production-payment.ts`) →
+   `new CdpClient({apiKeyId, apiKeySecret})`, used for the read-only seller
+   `evm.getAccount(...)` lookup. Its parameter type is
+   `Pick<Env, 'CDP_API_KEY_ID' | 'CDP_API_KEY_SECRET'>` — structurally cannot
+   forward a `walletSecret` today even though the underlying `CdpClient`
+   constructor would accept one.
 
 ```
 APPROACH_A (widen buildProductionCdpAccountLookupClientFactory's Pick<>
@@ -304,12 +311,12 @@ PROPOSED_ENV_BINDING = CDP_WALLET_SECRET
 ```
 
 **This field already exists** — `env.ts` line 26 already declares
-`CDP_WALLET_SECRET?: string`, added at SUN-1200 checkpoint E specifically
-"so a genuinely future wallet-write use case can still supply it without a
-further `Env` change" (its own doc comment). It is declared but has zero
-live usages anywhere in production source today (confirmed by grep). No
-`Env`-type change is needed for this remediation — only a new factory
-function that actually reads it, gated as in §7 Approach B.
+`CDP_WALLET_SECRET?: string`, added at SUN-1200 checkpoint E specifically "so a
+genuinely future wallet-write use case can still supply it without a further
+`Env` change" (its own doc comment). It is declared but has zero live usages
+anywhere in production source today (confirmed by grep). No `Env`-type change is
+needed for this remediation — only a new factory function that actually reads
+it, gated as in §7 Approach B.
 
 ```
 PROPOSED_ENV_TYPE = CDP_WALLET_SECRET?: string   (already present, unchanged)
@@ -324,9 +331,10 @@ MISSING_WALLET_SECRET_SIGNING_BEHAVIOR =
 
 READ_ONLY_PATHS_REQUIRE_WALLET_SECRET = NO
 ```
+
 (Directly proven in §3(Phase 2): `requiresWalletAuth` only ever matches
-`POST`/`DELETE`/`PUT`; `GET` is categorically excluded by the SDK's own
-method check, with no exception.)
+`POST`/`DELETE`/`PUT`; `GET` is categorically excluded by the SDK's own method
+check, with no exception.)
 
 ### §9 — Production reachability design
 
@@ -363,37 +371,38 @@ RECOMMENDED_SIGNING_EXECUTION_LOCATION = C, with B as the precedented fallback
 
 PERMANENT_BUYER_SIGNER_IN_PRODUCTION_WORKER_REQUIRED = NO
 ```
-(True regardless of which of C/B is chosen for the one-time qualification
-step -- SITEBORNE's permanent production Worker is the seller/service
-side and has no legitimate reason to ever hold a standing buyer-signing
-capability.)
+
+(True regardless of which of C/B is chosen for the one-time qualification step
+-- SITEBORNE's permanent production Worker is the seller/service side and has no
+legitimate reason to ever hold a standing buyer-signing capability.)
 
 ### §10 — Critical product-boundary check
 
 ```
 CDP_WALLET_SECRET_PERMANENT_PRODUCTION_REQUIREMENT = NO
 ```
+
 The production service's two real CDP call sites (facilitator
-`.verify()`/`.settle()`, and the read-only seller `evm.getAccount(...)`
-lookup) are both proven in §3(Phase 2)/§7 to never require `walletSecret`
-— one structurally cannot accept it, the other is a `GET`. The controlled
-buyer (`0x516F...cB99`) exists solely to qualify the first paid E2E as a
-test counterparty; SITEBORNE-the-service never signs payments as a buyer
-in its permanent product role. `CDP_WALLET_SECRET` should be designed and
-provisioned as **temporary qualification infrastructure only** (matching
-the §9 recommendation above), not as a standing production requirement or
-a seventh permanently-bound Worker secret.
+`.verify()`/`.settle()`, and the read-only seller `evm.getAccount(...)` lookup)
+are both proven in §3(Phase 2)/§7 to never require `walletSecret` — one
+structurally cannot accept it, the other is a `GET`. The controlled buyer
+(`0x516F...cB99`) exists solely to qualify the first paid E2E as a test
+counterparty; SITEBORNE-the-service never signs payments as a buyer in its
+permanent product role. `CDP_WALLET_SECRET` should be designed and provisioned
+as **temporary qualification infrastructure only** (matching the §9
+recommendation above), not as a standing production requirement or a seventh
+permanently-bound Worker secret.
 
 ---
 
 ## §11 — Secure provisioning design (not executed)
 
-Re-evaluating the already-proven SITEBORNE workflow (documented and
-quoted directly from `wrangler versions upload --help` in
-`docs/reports/SUN-1219B-...md`, §3–4): `--secrets-file` "applies
-additively with secrets from previous deployments — omitted secrets will
-not be deleted," accepting a local, operator-authored JSON/.env file this
-session never needs to read or echo.
+Re-evaluating the already-proven SITEBORNE workflow (documented and quoted
+directly from `wrangler versions upload --help` in
+`docs/reports/SUN-1219B-...md`, §3–4): `--secrets-file` "applies additively with
+secrets from previous deployments — omitted secrets will not be deleted,"
+accepting a local, operator-authored JSON/.env file this session never needs to
+read or echo.
 
 ```
 SAFE_WALLET_SECRET_PROVISIONING_PATH =
@@ -421,20 +430,20 @@ NEW_IMMUTABLE_WORKER_VERSION_REQUIRED = YES if B is chosen; NO if C is chosen
 ## §12 — Secret preservation semantics
 
 Already authoritatively proven (quoted directly from the pinned CLI's own
-`--help` text in SUN-1219B, re-affirmed here without needing to re-derive
-it):
+`--help` text in SUN-1219B, re-affirmed here without needing to re-derive it):
 
 ```
 EXISTING_SECRET_VALUES_NEED_TO_BE_READ   = NO
 ATOMIC_SEVENTH_SECRET_ADDITION_SUPPORTED = YES
 ```
-A secrets-file containing only `CDP_WALLET_SECRET` would leave the six
-existing secrets (`AGENT_CARD_SIGNING_PRIVATE_KEY`, `CDP_API_KEY_ID`,
+
+A secrets-file containing only `CDP_WALLET_SECRET` would leave the six existing
+secrets (`AGENT_CARD_SIGNING_PRIVATE_KEY`, `CDP_API_KEY_ID`,
 `CDP_API_KEY_SECRET`, `NVM_API_KEY`, `PAID_RECEIPT_SIGNING_PRIVATE_KEY`,
-`PAID_RECEIPT_SIGNING_KEY_ID`) untouched and preserved on the new version,
-per `versions upload --secrets-file`'s own documented additive semantics.
-Nothing was mutated to re-confirm this — it is the same CLI behavior
-already quoted verbatim from official `--help` output in SUN-1219B.
+`PAID_RECEIPT_SIGNING_KEY_ID`) untouched and preserved on the new version, per
+`versions upload --secrets-file`'s own documented additive semantics. Nothing
+was mutated to re-confirm this — it is the same CLI behavior already quoted
+verbatim from official `--help` output in SUN-1219B.
 
 ## §13 — Remediation implementation design (not implemented)
 
@@ -442,45 +451,43 @@ Smallest change set, assuming Approach B / execution location B:
 
 1. No `Env` change (`CDP_WALLET_SECRET?: string` already exists).
 2. New function in `production-payment.ts`, naming to match the existing
-   convention: `buildProductionCdpSigningClientFactory(bindings:
-   Pick<Env, 'CDP_API_KEY_ID' | 'CDP_API_KEY_SECRET' |
-   'CDP_WALLET_SECRET'>)`, guarding
-   `if (!bindings.CDP_WALLET_SECRET) throw ...` before constructing
+   convention:
+   `buildProductionCdpSigningClientFactory(bindings: Pick<Env, 'CDP_API_KEY_ID' | 'CDP_API_KEY_SECRET' | 'CDP_WALLET_SECRET'>)`,
+   guarding `if (!bindings.CDP_WALLET_SECRET) throw ...` before constructing
    `new CdpClient({ apiKeyId, apiKeySecret, walletSecret })`.
 3. `buildProductionCdpAccountLookupClientFactory` and
    `createCdpFacilitatorClient` usage: unchanged, zero diff.
 4. A future temporary, env-flag-gated diagnostic route (same shape as
-   SUN-1220D's, same `CDP_BUYER_SIGNER_CAPABILITY_DIAGNOSTIC_ENABLED`-style
-   gate or a freshly named successor) would import and call the new
-   signing factory instead of constructing `CdpClient` inline.
-5. No permanent production route ever calls the new factory; teardown
-   removes the diagnostic route, its gate, and (if desired) the factory
-   itself together, exactly as SUN-1220D's teardown already proved clean.
+   SUN-1220D's, same `CDP_BUYER_SIGNER_CAPABILITY_DIAGNOSTIC_ENABLED`-style gate
+   or a freshly named successor) would import and call the new signing factory
+   instead of constructing `CdpClient` inline.
+5. No permanent production route ever calls the new factory; teardown removes
+   the diagnostic route, its gate, and (if desired) the factory itself together,
+   exactly as SUN-1220D's teardown already proved clean.
 
 If execution location C is chosen instead, none of items 2–5 touch this
-repository at all — the signing factory would live in a local script
-under (for example) `scripts/`, not in `apps/edge-api/src`.
+repository at all — the signing factory would live in a local script under (for
+example) `scripts/`, not in `apps/edge-api/src`.
 
 **Not implemented this checkpoint**, per explicit instruction.
 
 ## §14 — Test design (not implemented)
 
-Enumerated coverage a future implementation checkpoint should add, one
-test per bullet in the request's §14 list (A–P): ordinary read-only
-client construction unaffected by `walletSecret`'s absence; new signing
-client fails closed (throws before any CDP SDK call) when
-`CDP_WALLET_SECRET` is absent; new signing client forwards `walletSecret`
-to the real SDK constructor only; the lookup and facilitator factories'
-own type signatures/tests continue to prove they cannot receive
-`walletSecret`; no log line, thrown-error message, or HTTP response body
-anywhere ever contains the raw secret value; no report/test snapshot
-contains it; no default or fallback value exists for the binding; no test
-double for it is reachable from a production import path; the twelve-paid
-routes truth table stays unaffected by the new factory's mere existence;
-and (mirroring SUN-1220D's own mutation-proof pattern) a mutation proof
-that would catch either (i) the new factory value leaking into logs/
-errors, or (ii) a future diagnostic route + gate surviving teardown into
-a later commit. No code for any of this was written this checkpoint.
+Enumerated coverage a future implementation checkpoint should add, one test per
+bullet in the request's §14 list (A–P): ordinary read-only client construction
+unaffected by `walletSecret`'s absence; new signing client fails closed (throws
+before any CDP SDK call) when `CDP_WALLET_SECRET` is absent; new signing client
+forwards `walletSecret` to the real SDK constructor only; the lookup and
+facilitator factories' own type signatures/tests continue to prove they cannot
+receive `walletSecret`; no log line, thrown-error message, or HTTP response body
+anywhere ever contains the raw secret value; no report/test snapshot contains
+it; no default or fallback value exists for the binding; no test double for it
+is reachable from a production import path; the twelve-paid routes truth table
+stays unaffected by the new factory's mere existence; and (mirroring SUN-1220D's
+own mutation-proof pattern) a mutation proof that would catch either (i) the new
+factory value leaking into logs/ errors, or (ii) a future diagnostic route +
+gate surviving teardown into a later commit. No code for any of this was written
+this checkpoint.
 
 ## §15 / §16 / §17 — Sequencing, honesty guardrails, funding gate
 
@@ -490,11 +497,12 @@ Carried forward verbatim, not re-authored:
 WALLET_SECRET_REMEDIATION_EXPECTED_TO_CLEAR_LOCAL_VALIDATION = YES
 WALLET_SECRET_REMEDIATION_GUARANTEES_REMOTE_SIGNING_SUCCESS  = NO
 ```
+
 Even once `CDP_WALLET_SECRET` is correctly wired and bound,
-`REMOTE_API_KEY_SIGNING_AUTHORIZATION` stays `UNPROVEN` until exactly one
-future bounded, non-economic `signTypedData` call actually succeeds (or
-returns an explicit, unambiguous remote-authorization error) — this
-checkpoint changes nothing about that bar.
+`REMOTE_API_KEY_SIGNING_AUTHORIZATION` stays `UNPROVEN` until exactly one future
+bounded, non-economic `signTypedData` call actually succeeds (or returns an
+explicit, unambiguous remote-authorization error) — this checkpoint changes
+nothing about that bar.
 
 ```
 CURRENT_BUYER_USDC   = 0.01326
@@ -502,8 +510,9 @@ SERVICE_PRICE_USD    = 0.019
 SHORTFALL_USDC       = 0.00574
 BUYER_FUNDING_ACTIONS = 0
 ```
-No funding action was taken, proposed for execution, or brought any
-closer to authorization by this design checkpoint.
+
+No funding action was taken, proposed for execution, or brought any closer to
+authorization by this design checkpoint.
 
 ## §18 — Mutation accounting
 
@@ -524,6 +533,7 @@ SETTLEMENTS = 0
 TRANSACTIONS = 0
 REAL_ECONOMIC_EFFECTS = 0
 ```
-(One documentation file, `docs/reports/SUN-1220E-...md`, was committed —
-that mutation was explicitly authorized by §3 of this same checkpoint and
-is accounted for above it, not counted against "source files changed.")
+
+(One documentation file, `docs/reports/SUN-1220E-...md`, was committed — that
+mutation was explicitly authorized by §3 of this same checkpoint and is
+accounted for above it, not counted against "source files changed.")
