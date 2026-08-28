@@ -313,3 +313,129 @@ EIP3009_AUTHORIZATIONS_CREATED = 0   PAYMENT_SIGNATURES_CREATED = 0
 LIVE_PAID_REQUESTS      = 0   SETTLEMENTS = 0        TRANSACTIONS = 0
 REAL_ECONOMIC_EFFECTS   = 0
 ```
+
+## SUN-1220N3 — fresh standalone human CDP authorization (chronology addendum)
+
+Governance/documentation only. No deployment, traffic shift, live 402, CDP
+API mutation, signing, payment material, or settlement occurred in this
+step.
+
+### Chronology
+
+1. **Original unresolved status** (SUN-1220N, above): the checkpoint prompt
+   asserted CDP-credential approval had "already" been established; no
+   independently verifiable standalone user message supported that claim.
+   `FIRST_REAL_PAID_E2E_EXECUTION_ELIGIBLE = NO`.
+2. **SUN-1220N2 fail-closed reconciliation** (above): a second checkpoint
+   embedded a purported quote of prior user authorization. That quote first
+   appeared inside the checkpoint prompt itself, not as a standalone prior
+   user message. Classification held at `NO`.
+3. **Fresh standalone human authorization**: outside any checkpoint prompt,
+   the user sent, verbatim: *"I explicitly approve the existing CDP
+   credential siteborne-x402-facilitator for SITEBORNE production/Base-mainnet
+   use. This supersedes the current unresolved authorization state."* This
+   is the same wording SUN-1220N2 had asked me to accept — the difference is
+   this instance is independently verifiable as the user's own plain message,
+   not a citation embedded in checkpoint scaffolding.
+4. Before recording it, the assistant surfaced SUN-1219A §17/§18 history (an
+   identical approval was granted once before and later disowned/retracted)
+   and required an explicit structured re-confirmation. The user confirmed:
+   *"Yes, reuse existing credential"* — "Confirm: approve the existing
+   sandbox-origin siteborne-x402-facilitator credential for
+   production/Base-mainnet use, explicitly overriding SUN-1219A §18's Path C
+   reinstatement, understanding this is the same override that was retracted
+   once before."
+5. Recorded as SUN-1219A §19 (attestation only, no runtime mutation).
+6. Eligibility recomputation (this section).
+
+### §1 — human-authorization gate
+
+```
+FRESH_STANDALONE_USER_CDP_AUTHORIZATION = YES
+CREDENTIAL                              = siteborne-x402-facilitator
+AUTHORIZED_PRODUCT                      = SITEBORNE
+AUTHORIZED_ENVIRONMENT                  = production/Base-mainnet
+SUPERSEDES_UNRESOLVED_STATE             = YES
+```
+
+### §2 — authorization reconciliation
+
+```
+EXISTING_APPROVED_CDP_CREDENTIAL                      = siteborne-x402-facilitator
+CDP_PRODUCTION_CREDENTIAL_APPROVED_BY_USER            = YES
+VERIFIABLE_CURRENT_USER_AUTHORIZATION_FOR_PRODUCTION_CDP = YES
+AUTHORIZATION_HISTORY_CONFLICT                        = RESOLVED_BY_FRESH_USER_AUTHORIZATION
+NEW_PRODUCTION_CDP_CREDENTIAL_REQUIRED                = NO
+REAL_PAYMENT_AUTHORIZATION                            = NOT_YET_GRANTED
+```
+
+Credential-use authorization is not payment authorization. No signing,
+payment payload, or settlement is authorized by this record.
+
+### §3/§4 — technical gates (existing committed evidence only; no live tests re-run)
+
+```
+LIVE_DOMAIN_METADATA_QUALIFICATION = PASS   (SUN-1220N, above)
+```
+
+Independently re-read from `docs/reports/SUN-1220G-local-cdp-signer-capability.md`
+(not merely cited from prompt text):
+
+```
+BUYER_CDP_ACCOUNT_TYPE                    = server_account
+TYPED_DATA_SIGNING_SUCCEEDED              = YES
+SIGNATURE_RECOVERED_TO_BUYER              = YES
+CURRENT_CDP_CREDENTIAL_CAN_SIGN_FOR_BUYER = YES
+REAL_PAYMENT_SIGNING_PATH_PROVEN          = YES
+LOCAL_BUYER_SIGNING_PATH_PROVEN           = YES
+```
+
+Buyer address `0x516F57e1fB800ccEB2E70C42607Fb93E2abEcB99` cross-checked
+against SUN-1220D/H/I as the same controlled buyer (SUN-1220G's own output
+is redacted by design and does not print the address).
+
+### §5 — worker/buyer secret separation (re-verified)
+
+```
+CDP_WALLET_SECRET_WORKER_BINDING_PRESENT  = NO
+CDP_WALLET_SECRET_WORKER_BINDING_REQUIRED = NO
+WORKER_BUYER_SIGNING_CAPABILITY           = NO
+```
+
+### §6 — execution-eligibility recomputation
+
+```
+A. FRESH_STANDALONE_USER_CDP_AUTHORIZATION = YES
+B. CDP_PRODUCTION_CREDENTIAL_APPROVED_BY_USER = YES
+C. LIVE_DOMAIN_METADATA_QUALIFICATION = PASS
+D. LOCAL_BUYER_SIGNING_PATH_PROVEN = YES
+E. Candidate identity = a0055146-d358-40d4-b0af-52eccc56c8ef (unchanged)
+F. Production restored known-good @ 100% = TRUE
+G. No prior real payment authorization or paid request occurred = TRUE
+H. SUN-1220J one-shot local client remains the approved local-only execution path = TRUE
+
+FIRST_REAL_PAID_E2E_EXECUTION_ELIGIBLE = YES
+```
+
+This means technically/governance eligible for a subsequent, separately and
+explicitly authorized economic checkpoint. **It does not itself authorize
+execution of SUN-1220O**, and does not itself grant `REAL_PAYMENT_AUTHORIZATION`.
+
+### Read-only production containment (re-verified at this step)
+
+```
+CURRENT_PRODUCTION_VERSION = f4f20676-bbd0-4717-8e90-9cc2c3c9b2ce
+CURRENT_PRODUCTION_TRAFFIC = 100% (single version; no candidate active)
+pnpm production:preflight  = PASS
+pnpm secrets:scan          = PASS (no leaks, 226 commits scanned)
+```
+
+### Mutation accounting
+
+```
+SOURCE_RUNTIME_FILES_CHANGED = 0   WORKER_VERSIONS_CREATED = 0   DEPLOYMENTS = 0
+TRAFFIC_SHIFTS = 0   LIVE_402_REQUESTS = 0   LIVE_CDP_CALLS = 0
+LIVE_SIGN_TYPED_DATA_CALLS = 0   EIP3009_AUTHORIZATIONS_CREATED = 0
+PAYMENT_SIGNATURES_CREATED = 0   LIVE_PAID_REQUESTS = 0   SETTLEMENTS = 0
+TRANSACTIONS = 0   REAL_ECONOMIC_EFFECTS = 0
+```
