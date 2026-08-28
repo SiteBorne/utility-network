@@ -241,3 +241,75 @@ SUN-1219A's previously-established finding as authoritative and reports
 requires either the user producing verifiable evidence of the credential's
 production approval, or a dedicated read-only CDP Portal verification
 checkpoint.
+
+## 9. SUN-1220N2 — authorization history reconciliation (fail-closed)
+
+A follow-up checkpoint (SUN-1220N2) attempted to reconcile the note in §8
+above by asserting the existence of a specific, quoted user authorization
+statement ("This supersedes the current authorization record. I explicitly
+approve the existing CDP credential `siteborne-x402-facilitator`...") as
+something "previously supplied by the user." That exact statement does not
+appear anywhere earlier in this conversation as a standalone user message —
+it appeared for the first time embedded inside that checkpoint's own pasted
+instruction text, attributed to the user after the fact. This was pointed
+out to the user directly, who then issued a corrected checkpoint (also
+SUN-1220N2) explicitly acknowledging the gap and directing fail-closed
+governance: assistant-authored or checkpoint-authored authorization text is
+not accepted as a substitute for a fresh, standalone user authorization, and
+historical summaries/memory are not sufficient to flip an irreversible
+economic gate.
+
+```
+SUN1220N_ORIGINAL_EVIDENCE_COMMIT_SHA           = 47ebf8b78f5c9dcc9faebf5bbed59d35685e8f82
+AUTHORIZATION_HISTORY_CONFLICT                  = YES
+VERIFIABLE_CURRENT_USER_AUTHORIZATION_FOR_PRODUCTION_CDP = NO
+NEW_PRODUCTION_CDP_CREDENTIAL_REQUIRED          = UNDETERMINED (authorization
+                                                    status unresolved, not a
+                                                    technical-capability gap)
+CDP_BASE_MAINNET_SUPPORT_PREVIOUSLY_PROVEN      = UNPROVEN (no independently
+                                                    verified live CDP Portal
+                                                    check has been performed
+                                                    in this conversation)
+LOCAL_BUYER_SIGNING_PATH_PREVIOUSLY_PROVEN      = UNPROVEN (same basis)
+LIVE_DOMAIN_METADATA_QUALIFICATION              = PASS
+TECHNICAL_QUALIFICATION_STATUS                  = PASS
+ECONOMIC_AUTHORIZATION_STATUS                   = NOT_AUTHORIZED
+```
+
+### Read-only production containment (re-verified at reconciliation time)
+
+```
+CURRENT_PRODUCTION_VERSION  = f4f20676-bbd0-4717-8e90-9cc2c3c9b2ce
+CURRENT_PRODUCTION_TRAFFIC  = 100% (single version; no candidate active)
+GET /health                 = 200
+POST /v2/verify/agent-output (no payload, no version override) = 415
+                               (rejected before economics; consistent with
+                               production:preflight's route-unavailability
+                               check, which is the authoritative structural
+                               check and reports 12/12 PASS)
+pnpm production:preflight   = PASS
+pnpm secrets:scan           = PASS (no leaks, 2 scans / 224 commits)
+```
+
+### Result
+
+```
+ORIGINAL_ELIGIBILITY_CLASSIFICATION  = NO
+CURRENT_ELIGIBILITY_CLASSIFICATION   = NO
+FIRST_REAL_PAID_E2E_EXECUTION_ELIGIBLE = NO
+```
+
+Unchanged. A future eligibility flip requires a fresh, explicit,
+standalone user message authorizing the existing CDP credential for
+SITEBORNE production/Base-mainnet use — not a citation to text embedded in
+a checkpoint prompt.
+
+### Mutation accounting
+
+```
+WORKER_VERSIONS_CREATED = 0   DEPLOYMENTS = 0        TRAFFIC_SHIFTS = 0
+LIVE_402_REQUESTS       = 0   LIVE_CDP_CALLS = 0     LIVE_SIGN_TYPED_DATA_CALLS = 0
+EIP3009_AUTHORIZATIONS_CREATED = 0   PAYMENT_SIGNATURES_CREATED = 0
+LIVE_PAID_REQUESTS      = 0   SETTLEMENTS = 0        TRANSACTIONS = 0
+REAL_ECONOMIC_EFFECTS   = 0
+```
