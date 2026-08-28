@@ -50,6 +50,18 @@
  * (§17: "Do NOT modify ... production composition unless an implementation
  * blocker proves necessary. If permanent Worker changes appear necessary:
  * STOP and reclassify.") explicitly defers to a separate checkpoint.
+ *
+ * UPDATE (post SUN-1220L/M/N): the deferred Worker-side fix described above
+ * has since landed in source (SUN-1220L, commit 2d1961a) and been uploaded
+ * as a non-deploying, 0%-traffic candidate (SUN-1220M, version
+ * `a0055146-d358-40d4-b0af-52eccc56c8ef`), and that candidate's live 402
+ * challenge has been independently confirmed to carry the correct
+ * `extra.name`/`extra.version` (SUN-1220N). `CANDIDATE_VERSION_ID` below was
+ * updated from the original historical candidate
+ * (`9a18898a-f08b-4543-8e00-8bccf2dfc52a`, which remains immutable and
+ * unfixed — do not point this file back at it) to the new, fixed candidate
+ * under a fresh, explicit, standalone human authorization for exactly one
+ * real paid transaction. No other constant in this file was changed.
  */
 import { describe, expect, it, vi } from 'vitest';
 import { CdpClient } from '@coinbase/cdp-sdk';
@@ -79,9 +91,15 @@ const WORKER_SCRIPT_NAME = 'siteborne-utility-edge';
 const WORKER_ORIGIN = `https://${WORKER_SCRIPT_NAME}.siteborneutilitynetwork.workers.dev`;
 const TARGET_PATH = '/v2/verify/agent-output';
 const TARGET_URL = `${WORKER_ORIGIN}${TARGET_PATH}`;
-const CANDIDATE_VERSION_ID = '9a18898a-f08b-4543-8e00-8bccf2dfc52a';
+const CANDIDATE_VERSION_ID = 'a0055146-d358-40d4-b0af-52eccc56c8ef';
 const VERSION_OVERRIDE_HEADER = 'Cloudflare-Workers-Version-Overrides';
-const VERSION_OVERRIDE_HEADER_VALUE = `${WORKER_SCRIPT_NAME}=${CANDIDATE_VERSION_ID}`;
+// SUN-1220O1: value MUST be the quoted RFC-8941 structured-field-value shape
+// `<script-name>="<version-id>"` — independently confirmed as the only
+// format ever proven live (SUN-1210 P/P2/P3/P4, SUN-1211 Q, SUN-1219C,
+// SUN-1220N: 8/8 occurrences quoted, 0/8 unquoted). An unquoted value is
+// silently dropped by Cloudflare's parser and falls through to ordinary
+// 100%-traffic routing — see docs/reports/SUN-1220O-first-real-paid-e2e.md.
+const VERSION_OVERRIDE_HEADER_VALUE = `${WORKER_SCRIPT_NAME}="${CANDIDATE_VERSION_ID}"`;
 
 const EXPECTED_NETWORK = 'eip155:8453';
 const EXPECTED_ASSET = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
@@ -1071,6 +1089,34 @@ describe('SUN-1220J first-paid-e2e local client (unit, always run)', () => {
     // No exported function anywhere in this module takes an endpoint,
     // amount, payTo, network, or buyer argument.
     expect(Object.getOwnPropertyNames(globalThis)).not.toContain('__SUN_1220J_CLI_OVERRIDE__');
+  });
+
+  it('S/T. the unpaid and paid requests carry the identical, exact proven Cloudflare-Workers-Version-Overrides value (SUN-1220O1)', async () => {
+    // The proven shape is a quoted RFC-8941 structured-field-value member —
+    // `<script-name>="<version-id>"` — independently confirmed by grepping
+    // every prior live proof (SUN-1210 P/P2/P3/P4, SUN-1211 Q, SUN-1219C,
+    // SUN-1220N): 8/8 occurrences quoted, 0/8 unquoted. An unquoted value is
+    // silently dropped by Cloudflare's parser and falls through to ordinary
+    // 100%-traffic routing (SUN-1220O attempt 1's root cause).
+    const fetchImpl = twoStepFetch(
+      validChallenge(),
+      jsonResponse(200, { result_class: 'success' })
+    );
+    const deps = baseDeps({ fetchImpl });
+    await runFirstPaidE2E(deps);
+    const calls = (fetchImpl as ReturnType<typeof vi.fn>).mock.calls;
+    expect(calls).toHaveLength(2);
+    const expectedHeaderValue = `${WORKER_SCRIPT_NAME}="${CANDIDATE_VERSION_ID}"`;
+    expect(expectedHeaderValue).toBe(
+      'siteborne-utility-edge="a0055146-d358-40d4-b0af-52eccc56c8ef"'
+    );
+    for (const call of calls) {
+      const headers = (call[1] as RequestInit).headers as Record<string, string>;
+      expect(headers[VERSION_OVERRIDE_HEADER]).toBe(expectedHeaderValue);
+    }
+    // F: the override value can never coincidentally equal the known-good
+    // production version — the frozen candidate id is a distinct constant.
+    expect(CANDIDATE_VERSION_ID).not.toBe('f4f20676-bbd0-4717-8e90-9cc2c3c9b2ce');
   });
 
   it('the current live candidate is expected to fail closed at CHALLENGE_VALIDATED (CRITICAL FINDING regression proof)', async () => {
