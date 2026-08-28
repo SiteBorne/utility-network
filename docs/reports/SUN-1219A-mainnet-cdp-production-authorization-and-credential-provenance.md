@@ -533,3 +533,86 @@ SECRETS_SCAN=PASS (no leaks)
 Until a human explicitly resolves this discrepancy, the governing state is Path
 C, unapproved existing credentials, zero gates authorized, and SUN-1219B does
 not open.
+
+---
+
+## 19. Second reversal — Path C overridden again, this time with §18 disclosed beforehand
+
+Date: 2026-08-28 (SUN-1220N2 authorization-reconciliation thread).
+
+This checkpoint chain (SUN-1220N/N2) independently reconstructed the same
+question §17/§18 already answered once, and initially declined a plain-chat
+statement — *"I explicitly approve the existing CDP credential
+siteborne-x402-facilitator for SITEBORNE production/Base-mainnet use. This
+supersedes the current unresolved authorization state."* — as insufficient on
+its own, because it was textually near-identical to the §17 statement §18
+later disowned. Before recording anything, the operator was shown §17/§18
+verbatim and asked directly, via a structured multiple-choice confirmation
+(not free text), whether to override Path C again with that history in view.
+Three options were offered: reuse the existing credential (explicitly
+described as "the same override that was retracted once before"), keep Path
+C, or pause to check their external record first. The operator selected:
+
+```text
+"Yes, reuse existing credential"
+```
+
+This is recorded as informed, deliberate confirmation — made with §18's
+correction already disclosed in the same turn, through a UI path distinct
+from free-form chat text, addressing directly the question of whether to
+override Path C knowing it was reversed once before. No reasoning beyond the
+selection was supplied by the operator; none is invented here.
+
+```text
+EXISTING_CDP_CREDENTIALS_PRODUCTION_APPROVED=YES (as of this addendum,
+  superseding §18's correction)
+PRODUCTION_CDP_CREDENTIALS_APPROVED_GATE_AUTHORIZED=YES (attestation only)
+ATTESTED_CREDENTIAL_PAIR=CDP_API_KEY_ID / CDP_API_KEY_SECRET (same
+  sandbox-origin pair as §17, unchanged)
+FRESH_PRODUCTION_CREDENTIAL_PROVISIONING=NOT REQUIRED (Path C superseded again)
+```
+
+**What this addendum does not do**, same as §17: it does not set
+`PRODUCTION_CDP_CREDENTIALS_APPROVED=true` (or any other gate) in any Worker
+version, `wrangler.toml`, or secret — no runtime or config mutation occurred
+in this turn, and none of SUN-1220N/N2's read-only commands touched
+Cloudflare state. It also does not, by itself, establish
+`CDP_BASE_MAINNET_SUPPORT_PREVIOUSLY_PROVEN`: SUN-1220G (2026-08-25) proved
+this credential pair can produce a valid EIP-712 signature that recovers to
+the buyer address (`TYPED_DATA_SIGNING_SUCCEEDED=YES`,
+`SIGNATURE_RECOVERED_TO_BUYER=YES`) — a cryptographic capability independent
+of network — but no report in this repository has independently verified
+Base-mainnet-specific capability (RPC reachability, funded balance, or a
+mainnet-scoped API-key permission check) against the CDP Portal.
+
+```text
+CDP_BASE_MAINNET_SUPPORT_PREVIOUSLY_PROVEN=PARTIAL (signing proven per
+  SUN-1220G; mainnet-specific network capability not independently verified)
+MAINNET_CANDIDATE_CREATION_ELIGIBLE=YES (attestation now on record for all
+  four ADR-0055 gates)
+FIRST_REAL_PAID_E2E_EXECUTION_ELIGIBLE=NO (unchanged — setting the four
+  gates into a real 0%-traffic candidate and reaching a genuine unpaid 402
+  against Base mainnet is unperformed work, requiring its own bounded
+  checkpoint per §17's original scope; a signed/settled payment is separate
+  again and requires its own explicit go-ahead at execution time)
+NEXT_CHECKPOINT_SCOPE=create and freeze a new immutable Worker candidate
+  with all four ADR-0055 gates set, prove the unpaid 402 boundary against
+  Base mainnet with at most one live read-only CDP call, send no valid
+  payment material, restore known-good — same scope §17 described for
+  SUN-1219B, not yet executed.
+```
+
+Confirmed unchanged by this addendum (fresh read-only verification at
+addendum time):
+
+```text
+WORKER_VERSIONS_CREATED=0
+DEPLOYMENTS=0
+TRAFFIC_SHIFTS=0
+LIVE_CDP_CALLS=0
+LIVE_BASE_MAINNET_CALLS=0
+REAL_PAYMENT_MATERIAL_SENT=NO
+SETTLEMENTS=0
+TRANSACTIONS=0
+REAL_ECONOMIC_EFFECTS=0
+```
