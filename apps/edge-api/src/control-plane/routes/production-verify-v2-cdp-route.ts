@@ -60,6 +60,7 @@ import type { Env } from '../config/env';
 import { productionServiceExecutorUnavailable } from './production-paid-services';
 import { createX402ServiceRoute } from './x402-service';
 import { buildVerifyAgentOutputV2CdpProductionRouteConfig } from '../production/verify-agent-output-v2-cdp-composition';
+import { isVerifyAgentOutputV2CdpRouteFlagEnabled } from '../config/production-payment';
 import { outputValidatorsById } from '../../generated/output-validators.generated.js';
 
 // SUN-1200 checkpoint F (P0-A) registered these build-time-precompiled
@@ -94,16 +95,17 @@ let cachedDb: Env['DB'] | undefined;
 export async function verifyAgentOutputV2CdpProductionRoute(
   c: Context<{ Bindings: Env }>
 ): Promise<Response> {
-  // SUN-1218 checkpoint X: two-level gate. The global master switch is
-  // checked first, unconditionally -- setting it back to false makes
-  // this route 404 immediately, regardless of the route-specific gate's
-  // value (the emergency kill switch is preserved exactly). The
-  // route-specific gate is checked second; both must be the exact
-  // literal 'true' before any dependency construction is attempted.
-  if (c.env?.PAID_ROUTES_ENABLED !== 'true') {
-    return c.notFound();
-  }
-  if (c.env?.VERIFY_V2_CDP_ROUTE_ENABLED !== 'true') {
+  // SUN-1218 checkpoint X: two-level gate. The global master switch and
+  // the route-specific gate must both be the exact literal 'true' before
+  // any dependency construction is attempted -- setting the master
+  // switch back to false makes this route 404 immediately regardless of
+  // the route-specific gate's value (the emergency kill switch is
+  // preserved exactly). SUN-1220P2: extracted to
+  // `isVerifyAgentOutputV2CdpRouteFlagEnabled` (byte-identical
+  // comparison, same order, same short-circuit) so the public discovery
+  // overlay can reuse the exact same question instead of maintaining an
+  // independently-drifting second copy.
+  if (!c.env || !isVerifyAgentOutputV2CdpRouteFlagEnabled(c.env)) {
     return c.notFound();
   }
 

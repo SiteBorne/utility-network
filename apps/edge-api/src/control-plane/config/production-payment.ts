@@ -164,6 +164,78 @@ export type ProductionCdpProviderBindings = Pick<
 >;
 
 /**
+ * SUN-1220P2 — the route-specific two-flag gate `verify-agent-output-v2-
+ * cdp-route.ts` already checks inline (`PAID_ROUTES_ENABLED` AND
+ * `VERIFY_V2_CDP_ROUTE_ENABLED`, both the exact literal `'true'`).
+ * Extracted here as the single reusable definition so the public
+ * discovery overlay (`catalog.ts`, `a2a.ts`) can ask the identical
+ * question the real route activation asks, rather than maintaining a
+ * second, independently-drifting copy of the same two comparisons. The
+ * route module itself now calls this too (SUN-1220P2) -- behavior is
+ * byte-identical, only the comparison's home moved.
+ */
+export function isVerifyAgentOutputV2CdpRouteFlagEnabled(
+  env: Pick<Env, 'PAID_ROUTES_ENABLED' | 'VERIFY_V2_CDP_ROUTE_ENABLED'>
+): boolean {
+  return env.PAID_ROUTES_ENABLED === 'true' && env.VERIFY_V2_CDP_ROUTE_ENABLED === 'true';
+}
+
+/** Non-network, non-secret-value inputs `resolveVerifyAgentOutputV2CdpEffectiveDiscoveryStatus`
+ * needs beyond the two route flags and the four ADR-0055 gates -- exactly
+ * the presence checks `buildVerifyAgentOutputV2CdpProductionRouteConfig`
+ * performs synchronously, before it ever attempts to construct a signer
+ * or a CDP client. */
+export type VerifyAgentOutputV2CdpDiscoveryEnv = Pick<
+  Env,
+  | 'PAID_ROUTES_ENABLED'
+  | 'VERIFY_V2_CDP_ROUTE_ENABLED'
+  | 'PAYMENT_ENVIRONMENT'
+  | 'PRODUCTION_ENABLED'
+  | 'HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP'
+  | 'PRODUCTION_CDP_CREDENTIALS_APPROVED'
+  | 'PAID_RECEIPT_SIGNING_PRIVATE_KEY'
+  | 'PAID_RECEIPT_SIGNING_KEY_ID'
+  | 'SELLER_WALLET_ADDRESS'
+  | 'CDP_API_KEY_ID'
+  | 'CDP_API_KEY_SECRET'
+>;
+
+/**
+ * SUN-1220P2 — version-local effective public-discovery availability for
+ * `verify_agent_output.v2` / CDP. Deliberately narrower than "will the
+ * next real request definitely succeed": it reuses every synchronous,
+ * non-network gate/presence check the real route activation path
+ * (`production-verify-v2-cdp-route.ts` →
+ * `buildVerifyAgentOutputV2CdpProductionRouteConfig`) already performs
+ * before it ever constructs a signer or a CDP client -- the two route
+ * flags, all four ADR-0055 gates (`isProductionPaymentAuthorized`, not
+ * re-implemented), the receipt-signing key material's presence, and the
+ * CDP/seller binding presence (`checkProductionBindingsPresent`, not
+ * re-implemented). It deliberately does NOT attempt a live CDP account
+ * lookup (`resolveProductionCdpEvidenceProvider`'s seller-identity
+ * check) -- that is a real network call to an external service, and
+ * this function may run on every public, unauthenticated `/catalog`/
+ * agent-card request; making discovery pay for a live CDP round trip
+ * per visitor would be both wasteful and a new, unreviewed live-call
+ * surface neither SUN-1220P nor SUN-1220P1 authorized. A signing-key or
+ * CDP-credential misconfiguration that only a live call could catch
+ * still fails closed at actual execution time exactly as before --
+ * runtime route activation remains the sole authority for whether a
+ * request actually succeeds; this function only governs what discovery
+ * is permitted to *claim* about that. */
+export function resolveVerifyAgentOutputV2CdpEffectiveDiscoveryStatus(
+  env: VerifyAgentOutputV2CdpDiscoveryEnv,
+  hasDb: boolean
+): boolean {
+  if (!hasDb) return false;
+  if (!isVerifyAgentOutputV2CdpRouteFlagEnabled(env)) return false;
+  if (!isProductionPaymentAuthorized(resolveProductionAuthorizationInput(env))) return false;
+  if (!env.PAID_RECEIPT_SIGNING_PRIVATE_KEY || !env.PAID_RECEIPT_SIGNING_KEY_ID) return false;
+  if (!checkProductionBindingsPresent(env).ok) return false;
+  return true;
+}
+
+/**
  * SUN-1200 checkpoint C — seller-identity architecture decision.
  *
  * Three options were on the table: (A) require the seller to be a

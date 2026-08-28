@@ -123,7 +123,9 @@ function originAllowed(request: Request, allowedOrigins: readonly string[]): boo
  */
 export async function createSiteborneA2aHonoApp(options: CreateSiteborneA2aOptions = {}) {
   const identity = options.signingIdentity ?? (await createLocalA2aSigningIdentity());
-  const signedCard = await identity.sign(buildUnsignedSiteborneAgentCard());
+  const signedCard = await identity.sign(
+    buildUnsignedSiteborneAgentCard(options.effectiveProductionStatusByServiceId)
+  );
   await identity.verify(signedCard);
   const app = new Hono();
   const allowedHosts = options.allowedHosts ?? DEFAULT_ALLOWED_HOSTS;

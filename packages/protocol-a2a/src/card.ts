@@ -3,6 +3,7 @@ import {
   BAZAAR_PAYMENT_POLICY,
   REGISTRY_SERVICES,
   resolveServiceRoute,
+  type SiteborneServiceId,
 } from '@siteborne/protocol-x402';
 import {
   A2A_PROTOCOL_VERSION,
@@ -29,7 +30,16 @@ function buildSkill(serviceId: (typeof SITEBORNE_SERVICE_IDS)[number]): AgentSki
   };
 }
 
-function buildX402ExtensionParams(): Record<string, unknown> {
+/** SUN-1220P2 -- top-level `productionEnabled` remains the pre-existing
+ * literal `false`: it has always meant "at least one service is
+ * production-active" only in the sense of a blanket disclosure, and no
+ * checkpoint before this one proved any service truthfully active; a
+ * single service becoming truthfully active does not change what this
+ * blanket top-level flag has always conservatively asserted. Only the
+ * per-service `productionEnabled` (§11 of SUN-1220P1) is overlaid. */
+function buildX402ExtensionParams(
+  effectiveProductionStatusByServiceId?: Partial<Record<SiteborneServiceId, boolean>>
+): Record<string, unknown> {
   return {
     x402Version: 2,
     paymentRequiredForUsefulExecution: true,
@@ -45,7 +55,7 @@ function buildX402ExtensionParams(): Record<string, unknown> {
         inputSchemaUri: service.input_schema_uri,
         outputSchemaUri: service.output_schema_uri,
         declaredLimitations: [...service.declared_limitations],
-        productionEnabled: false,
+        productionEnabled: effectiveProductionStatusByServiceId?.[serviceId] ?? false,
       };
     }),
   };
@@ -56,7 +66,9 @@ function buildX402ExtensionParams(): Record<string, unknown> {
  * registry and x402 payment-policy sources. Signing is a separate boundary so
  * no private key material can enter this credential-independent package API.
  */
-export function buildUnsignedSiteborneAgentCard(): AgentCard {
+export function buildUnsignedSiteborneAgentCard(
+  effectiveProductionStatusByServiceId?: Partial<Record<SiteborneServiceId, boolean>>
+): AgentCard {
   return {
     name: 'SITEBORNE Utility Network',
     description:
@@ -85,7 +97,7 @@ export function buildUnsignedSiteborneAgentCard(): AgentCard {
           description:
             'SITEBORNE binding from A2A skill selection to existing x402 paid-service resources.',
           required: false,
-          params: buildX402ExtensionParams(),
+          params: buildX402ExtensionParams(effectiveProductionStatusByServiceId),
         },
       ],
     },

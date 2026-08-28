@@ -2,8 +2,63 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { validateServiceError } from '@siteborne/contracts';
 import type { ServicesRepository } from '../../control-plane/repositories/interfaces';
+import type { Env } from '../config/env';
+import {
+  resolveVerifyAgentOutputV2CdpEffectiveDiscoveryStatus,
+  type VerifyAgentOutputV2CdpDiscoveryEnv,
+} from '../config/production-payment';
 
-export const catalogRoute = new Hono();
+/** SUN-1220P2 -- the one service this checkpoint's discovery overlay
+ * applies to. Every other row is served exactly as D1 has it, unchanged
+ * (`OTHER_11_PAID_ROUTES_DISCOVERY_CHANGED_TO_ACTIVE=NO`). */
+const OVERLAY_SERVICE_ID = 'verify_agent_output.v2';
+
+interface DiscoveryServiceLike {
+  service_id: string;
+  production_enabled: boolean;
+  production_ready: boolean;
+  protocol_status: 'preproduction' | 'production';
+}
+
+/** Applies the version-local runtime-gate overlay to the one static D1
+ * row this checkpoint governs. The shared D1 row (seeded
+ * `production_enabled=false`/`protocol_status='preproduction'`, see
+ * `paid-services.ts`'s `seedServices`, and never written by this
+ * checkpoint or any caller today -- `updateProductionEnabled` has zero
+ * runtime callers) is never itself written; this function instead fully
+ * DETERMINES the served `production_enabled`/`production_ready`/
+ * `protocol_status` for this one service from the identical
+ * version-local gates that unlock real execution
+ * (`isVerifyAgentOutputV2CdpRouteFlagEnabled` + the four ADR-0055 gates
+ * + required-binding presence -- see
+ * `resolveVerifyAgentOutputV2CdpEffectiveDiscoveryStatus`'s own doc
+ * comment), in BOTH directions -- not merely raising a false floor.
+ * Deliberately not "OR with the static D1 value": SUN-1220P1 §7 proved a
+ * direct D1 write to `true` would falsely activate a gated-off
+ * known-good version, and an OR-shaped overlay would reopen exactly
+ * that hole the moment the static value ever drifted from its seeded
+ * `false` for any reason -- overriding in both directions instead means
+ * a stale/drifted D1 value can never leak through as "active" on a
+ * version whose runtime gates are off. Every other service's row is
+ * returned completely untouched. */
+function overlayEffectiveDiscoveryStatus<T extends DiscoveryServiceLike>(
+  service: T,
+  env: VerifyAgentOutputV2CdpDiscoveryEnv | undefined,
+  hasDb: boolean
+): T {
+  if (service.service_id !== OVERLAY_SERVICE_ID) return service;
+  const effectivelyActive = env
+    ? resolveVerifyAgentOutputV2CdpEffectiveDiscoveryStatus(env, hasDb)
+    : false;
+  return {
+    ...service,
+    production_enabled: effectivelyActive,
+    production_ready: effectivelyActive,
+    protocol_status: effectivelyActive ? 'production' : 'preproduction',
+  };
+}
+
+export const catalogRoute = new Hono<{ Bindings: Env }>();
 
 const ServiceCatalogEntrySchema = z.object({
   service_id: z.string(),
@@ -40,18 +95,25 @@ catalogRoute.get('/', async (c) => {
     );
   }
 
-  const services = result.value.map((s) => ({
-    service_id: s.service_id,
-    version: s.version,
-    title: s.title,
-    description: s.description,
-    price_usd: s.price_usd,
-    production_enabled: s.production_enabled,
-    production_ready: s.production_ready,
-    protocol_status: s.protocol_status,
-    input_schema_ref: `/schemas/${s.service_id}/input`,
-    output_schema_ref: `/schemas/${s.service_id}/output`,
-  }));
+  const hasDb = Boolean(c.env?.DB);
+  const services = result.value.map((s) =>
+    overlayEffectiveDiscoveryStatus(
+      {
+        service_id: s.service_id,
+        version: s.version,
+        title: s.title,
+        description: s.description,
+        price_usd: s.price_usd,
+        production_enabled: s.production_enabled,
+        production_ready: s.production_ready,
+        protocol_status: s.protocol_status,
+        input_schema_ref: `/schemas/${s.service_id}/input`,
+        output_schema_ref: `/schemas/${s.service_id}/output`,
+      },
+      c.env,
+      hasDb
+    )
+  );
 
   const response = {
     services,
@@ -63,7 +125,7 @@ catalogRoute.get('/', async (c) => {
   return c.json(CatalogResponseSchema.parse(response));
 });
 
-export const serviceMetadataRoute = new Hono();
+export const serviceMetadataRoute = new Hono<{ Bindings: Env }>();
 
 const ServiceMetadataResponseSchema = z.object({
   service_id: z.string(),
@@ -113,7 +175,7 @@ serviceMetadataRoute.get('/:service_id', async (c) => {
     );
   }
 
-  const service = result.value;
+  const service = overlayEffectiveDiscoveryStatus(result.value, c.env, Boolean(c.env?.DB));
   const response = {
     service_id: service.service_id,
     version: service.version,

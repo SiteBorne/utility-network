@@ -50,4 +50,16 @@ export interface CreateSiteborneA2aOptions {
    * material and injects it here; this package itself never reads secrets
    * or environment variables. */
   signingIdentity?: SiteborneA2aSigningIdentity;
+  /** SUN-1220P2 -- version-local effective public-discovery availability,
+   * keyed by service id. Omitted entirely (every caller before this
+   * checkpoint, and every caller that doesn't explicitly opt in) keeps
+   * the card's prior byte-identical behavior: every service's
+   * `productionEnabled` stays the hardcoded `false` it always was. A
+   * real caller (edge-api) computes this from the exact same
+   * version-local ADR-0055/route-flag gates that already govern real
+   * execution (`resolveVerifyAgentOutputV2CdpEffectiveDiscoveryStatus`)
+   * and injects the result here -- this credential-independent package
+   * never reads `env` or D1 itself, preserving the same dependency
+   * direction as `signingIdentity`. */
+  effectiveProductionStatusByServiceId?: Partial<Record<SiteborneServiceId, boolean>>;
 }
