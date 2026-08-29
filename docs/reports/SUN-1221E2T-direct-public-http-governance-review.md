@@ -420,4 +420,150 @@ WEB_CONTEXT_V2_CDP_ROUTE_ENABLED="true"
 
 ## §22/§23 — upload + read-back
 
-(recorded below, after commit)
+`SUN1221E2T_IMPLEMENTATION_COMMIT_SHA=2343f2a...` (resolve short SHA via `git log`)
+
+Single upload, same 13 `--var` flags as §21, no corrective second upload:
+
+```
+$ wrangler versions upload --message "SUN-1221E2T: direct-public-http terms review recorded (verify_agent_output.v2 + web_context_verified.v2)" \
+    --var AGENT_CARD_SIGNING_KEY_ID:"siteborne-agent-card-2026-08" \
+    --var ENVIRONMENT:"production" \
+    --var HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP:"true" \
+    --var LOG_LEVEL:"info" \
+    --var NVM_ENVIRONMENT:"sandbox" \
+    --var PAID_ROUTES_ENABLED:"true" \
+    --var PAYMENT_ENVIRONMENT:"production" \
+    --var PCC_VERSION:"1.0.0" \
+    --var PRODUCTION_CDP_CREDENTIALS_APPROVED:"true" \
+    --var PRODUCTION_ENABLED:"true" \
+    --var SELLER_WALLET_ADDRESS:"0x7f44a2dd237938F18632d4CcA40f4c690295E6E1" \
+    --var VERIFY_V2_CDP_ROUTE_ENABLED:"true" \
+    --var WEB_CONTEXT_V2_CDP_ROUTE_ENABLED:"true"
+
+Uploaded siteborne-utility-edge (3.64 sec)
+Worker Version ID: 3742ef22-c6f6-4641-b569-2cb554ac9a22
+```
+
+```
+TERMS_APPROVED_CANDIDATE_VERSION_ID=3742ef22-c6f6-4641-b569-2cb554ac9a22
+TERMS_APPROVED_CANDIDATE_CREATED_AT=2026-08-29T21:41:43.143Z
+WORKER_VERSION_UPLOADS=1
+```
+
+Authoritative read-back (`wrangler versions view 3742ef22-...`):
+
+- Message matches this checkpoint exactly
+- All 13 qualification vars present with exact values (verified above)
+- 6/6 required Worker secrets present: `AGENT_CARD_SIGNING_PRIVATE_KEY`,
+  `CDP_API_KEY_ID`, `CDP_API_KEY_SECRET`, `NVM_API_KEY`,
+  `PAID_RECEIPT_SIGNING_KEY_ID`, `PAID_RECEIPT_SIGNING_PRIVATE_KEY`
+- `CDP_WALLET_SECRET` absent (confirmed by its absence from the secret list)
+
+`TERMS_APPROVED_CANDIDATE_CONFIG_READBACK=PASS`
+
+`wrangler deployments status` immediately after upload still shows only
+`de70bf98-f304-4d7f-b189-4ae2401041a0 @ 100%` -- the new candidate is not part
+of the active deployment.
+
+`TERMS_APPROVED_CANDIDATE_IN_ACTIVE_DEPLOYMENT=NO`
+
+## §24 — final production containment
+
+```
+ACTIVE_DEPLOYMENT_VERSION_COUNT=1
+FINAL_PRODUCTION_VERSION=de70bf98-f304-4d7f-b189-4ae2401041a0
+FINAL_PRODUCTION_TRAFFIC=100%
+```
+
+`pnpm production:preflight` → `PREFLIGHT RESULT: PASS`
+`FINAL_PRODUCTION_PREFLIGHT=PASS`
+
+## §25 — zero economic actions
+
+```
+LIVE_CANDIDATE_REQUESTS=0
+LIVE_402_REQUESTS=0
+BUYER_BALANCE_QUERIES=0
+SIGN_TYPED_DATA_CALLS=0
+EIP3009_AUTHORIZATIONS_CREATED=0
+PAYMENT_SIGNATURES_CREATED=0
+PAID_REQUESTS=0
+SETTLEMENTS=0
+TRANSACTIONS=0
+REAL_ECONOMIC_EFFECT_USDC=0
+CURRENT_REAL_PAYMENT_AUTHORIZATION=NONE
+```
+
+(The one real network fetch in §11 was against `https://example.com/` inside
+an isolated, ephemeral, test-only `wrangler dev --local` worker with no D1
+binding to the real database and no real CDP credentials wired -- not the
+qualified candidate, not the live production Worker, and not the paid route.)
+
+## §26 — E3 eligibility
+
+```
+fresh human direct-public-http approval:    YES (§0)
+review recorded truthfully:                 YES (§5, disclaims per-site ToS review)
+terms guard passes canonical capability:    YES (§10)
+real workerd canonical request result:      SUCCESS, past policy_blocked (§11)
+no newly discovered deterministic blocker:  YES (§11 found none downstream)
+security suite:                             PASS (§12)
+payment ordering unchanged:                 YES (§13)
+economics unchanged:                        YES (§14)
+MCP/discovery:                              PASS (§15)
+candidate integrity (new candidate):        PASS (§22/§23)
+production unchanged:                       YES (§24)
+zero economic actions:                      YES (§25)
+
+SUN1221E3_REAL_PAID_RETRY_ELIGIBLE=YES
+```
+
+## §27 — final stop packet
+
+```
+SUN1221E2T_TERMS_REVIEW=PASS
+FRESH_DIRECT_PUBLIC_HTTP_OPERATOR_APPROVAL=YES
+SUN1221E2R_EVIDENCE_COMMIT_SHA=a75562084c47fb07fd17a8533eefc5e7650a70fa
+SUN1221E2D_IMPLEMENTATION_COMMIT_SHA=ae85ae50b2f49ac6eb40c18594f105e5aef49efd
+SUN1221E2D_EVIDENCE_COMMIT_SHA=8810975 (short, resolves within this repo's history)
+SUN1221E2T_IMPLEMENTATION_COMMIT_SHA=2343f2a (short -- see git log for full)
+GLOBAL_TERMS_REVIEW_CONTRACT_UNAMBIGUOUS=YES
+CAPABILITY=direct-public-http
+REVIEW_STATUS=verified
+REVIEW_AUTHORITY=operator (not legal/attorney/external ToS review)
+DIRECT_PUBLIC_HTTP_APPROVAL_SCOPE_MATCHES_RUNTIME_POLICY=YES
+UNREVIEWED_DIRECT_PUBLIC_HTTP_BLOCKED_TEST=PASS
+DIRECT_PUBLIC_HTTP_REVIEW_TDD_RED=YES
+DIRECT_PUBLIC_HTTP_TERMS_GATE=PASS
+WORKER_RUNTIME_TERMS_GATE_PASSED=YES
+WORKER_RUNTIME_CANONICAL_FETCH=SUCCESS
+WORKER_RUNTIME_CANONICAL_FAILURE_REASON=(none)
+DNS_REBINDING_PROTECTION=PASS
+MCP_CROSS_SURFACE_COHERENCE=PASS
+WEB_CONTEXT_ECONOMICS_CHANGED=NO
+VERIFY_ECONOMICS_CHANGED=NO
+TERMS_GOVERNANCE_MUTATION_PROOF=PASS
+TESTS=2364 passed, 38 skipped, 0 failed
+WORKER_RUNTIME=92/92 default; 95/95 with live-network phase opted in
+NEW_CANDIDATE_REQUIRED=YES
+WORKER_VERSION_UPLOADS=1
+TERMS_APPROVED_CANDIDATE_VERSION_ID=3742ef22-c6f6-4641-b569-2cb554ac9a22
+TERMS_APPROVED_CANDIDATE_CONFIG_READBACK=PASS
+TERMS_APPROVED_CANDIDATE_IN_ACTIVE_DEPLOYMENT=NO
+FINAL_PRODUCTION_VERSION=de70bf98-f304-4d7f-b189-4ae2401041a0
+FINAL_PRODUCTION_TRAFFIC=100%
+FINAL_PRODUCTION_PREFLIGHT=PASS
+LIVE_402_REQUESTS=0
+BUYER_BALANCE_QUERIES=0
+SIGN_TYPED_DATA_CALLS=0
+PAYMENT_SIGNATURES_CREATED=0
+PAID_REQUESTS=0
+SETTLEMENTS=0
+TRANSACTIONS=0
+REAL_ECONOMIC_EFFECT_USDC=0
+CURRENT_REAL_PAYMENT_AUTHORIZATION=NONE
+SUN1221E3_REAL_PAID_RETRY_ELIGIBLE=YES
+```
+
+STOP. No deployment. No live candidate invocation. No 402. No payment
+material. No E3. No F. No promotion performed in this checkpoint.
