@@ -22,6 +22,7 @@ import {
   type PaymentEvidenceMode,
   type PaymentEvidenceProvider,
   type ProductionAuthorizationInput,
+  type SiteborneServiceId,
 } from '@siteborne/protocol-x402';
 import { CdpPaymentEvidenceProvider } from '../evidence/cdp-provider';
 import type { Env } from './env';
@@ -234,6 +235,68 @@ export function resolveVerifyAgentOutputV2CdpEffectiveDiscoveryStatus(
   if (!checkProductionBindingsPresent(env).ok) return false;
   return true;
 }
+
+/** SUN-1221C — mirrors `isVerifyAgentOutputV2CdpRouteFlagEnabled` exactly
+ * for `web_context_verified.v2` / CDP. Independent of the verify route's
+ * own flag: either service can be active while the other is not
+ * (SUN-1221B §20). */
+export function isWebContextV2CdpRouteFlagEnabled(
+  env: Pick<Env, 'PAID_ROUTES_ENABLED' | 'WEB_CONTEXT_V2_CDP_ROUTE_ENABLED'>
+): boolean {
+  return env.PAID_ROUTES_ENABLED === 'true' && env.WEB_CONTEXT_V2_CDP_ROUTE_ENABLED === 'true';
+}
+
+/** Mirrors `VerifyAgentOutputV2CdpDiscoveryEnv` exactly, substituting the
+ * web-context route flag. */
+export type WebContextV2CdpDiscoveryEnv = Pick<
+  Env,
+  | 'PAID_ROUTES_ENABLED'
+  | 'WEB_CONTEXT_V2_CDP_ROUTE_ENABLED'
+  | 'PAYMENT_ENVIRONMENT'
+  | 'PRODUCTION_ENABLED'
+  | 'HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP'
+  | 'PRODUCTION_CDP_CREDENTIALS_APPROVED'
+  | 'PAID_RECEIPT_SIGNING_PRIVATE_KEY'
+  | 'PAID_RECEIPT_SIGNING_KEY_ID'
+  | 'SELLER_WALLET_ADDRESS'
+  | 'CDP_API_KEY_ID'
+  | 'CDP_API_KEY_SECRET'
+>;
+
+/** Mirrors `resolveVerifyAgentOutputV2CdpEffectiveDiscoveryStatus` exactly
+ * -- see that function's own doc comment for the full reasoning (fails
+ * closed on missing DB/flags/ADR-0055 authorization/signing-key
+ * presence/CDP binding presence; deliberately never attempts a live CDP
+ * account lookup from a public discovery request). */
+export function resolveWebContextV2CdpEffectiveDiscoveryStatus(
+  env: WebContextV2CdpDiscoveryEnv,
+  hasDb: boolean
+): boolean {
+  if (!hasDb) return false;
+  if (!isWebContextV2CdpRouteFlagEnabled(env)) return false;
+  if (!isProductionPaymentAuthorized(resolveProductionAuthorizationInput(env))) return false;
+  if (!env.PAID_RECEIPT_SIGNING_PRIVATE_KEY || !env.PAID_RECEIPT_SIGNING_KEY_ID) return false;
+  if (!checkProductionBindingsPresent(env).ok) return false;
+  return true;
+}
+
+/** SUN-1221C — a small, additive per-service discovery-resolver registry
+ * (SUN-1221CD §22: "prefer generic... rather than adding another chain
+ * of hardcoded single-service special cases"). Each existing per-service
+ * resolver above is reused verbatim, not reimplemented -- this is purely
+ * an enumeration layer for `catalog.ts`/`readiness.ts` to iterate over
+ * without hardcoding a growing if/else chain as more services are added.
+ * `Partial` because only paid services with a real production
+ * composition have an entry; every other `SiteborneServiceId` is simply
+ * absent (never truthfully claimable as active). */
+export type EffectiveDiscoveryEnv = VerifyAgentOutputV2CdpDiscoveryEnv & WebContextV2CdpDiscoveryEnv;
+
+export const EFFECTIVE_DISCOVERY_RESOLVERS: Partial<
+  Record<SiteborneServiceId, (env: EffectiveDiscoveryEnv, hasDb: boolean) => boolean>
+> = {
+  'verify_agent_output.v2': resolveVerifyAgentOutputV2CdpEffectiveDiscoveryStatus,
+  'web_context_verified.v2': resolveWebContextV2CdpEffectiveDiscoveryStatus,
+};
 
 /**
  * SUN-1200 checkpoint C — seller-identity architecture decision.

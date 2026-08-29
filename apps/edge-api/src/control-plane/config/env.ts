@@ -67,6 +67,16 @@ export interface Env {
    * today) means the route is not reachable, matching every other
    * paid-route gate's fail-closed convention. */
   VERIFY_V2_CDP_ROUTE_ENABLED?: string;
+  /** SUN-1221C — the route-specific activation gate for
+   * `web_context_verified.v2` / CDP, mirroring
+   * `VERIFY_V2_CDP_ROUTE_ENABLED` exactly: required IN ADDITION TO
+   * `PAID_ROUTES_ENABLED` (both must be the exact literal `'true'`).
+   * Independent of `VERIFY_V2_CDP_ROUTE_ENABLED` -- either service can be
+   * active while the other is not (SUN-1221B §20 /
+   * FIRST_SERVICE_DOES_NOT_DEPEND_ON_SECOND_SERVICE_FLAG). Absent/unset
+   * means the route is not reachable, matching every other paid-route
+   * gate's fail-closed convention. */
+  WEB_CONTEXT_V2_CDP_ROUTE_ENABLED?: string;
   /** Additive Nevermined route-family gate. Checkpoint 2 still has no
    * authenticated sandbox provider, so setting this alone fails closed. */
   NEVERMINED_ROUTES_ENABLED?: string;

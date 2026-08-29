@@ -18,18 +18,28 @@ import {
  *
  * Exact status of each guarantee:
  * - URL and IP-literal validation: implemented and tested (this file).
- * - Injected DNS-answer validation: not implemented — `validateUrl` inspects
- *   the literal hostname in the URL; it does not resolve DNS and cannot
- *   reject a hostname whose *resolved* address is prohibited. There is no
- *   injected resolver in this codebase to test against. Documented as a gap,
- *   not claimed as covered.
+ * - Injected DNS-answer validation: implemented and tested — SEE
+ *   `dns-rebinding.test.ts` — `resolveSafeAddress`
+ *   (`../http/safe-dns-resolve.ts`) resolves a hostname via a fixed,
+ *   trusted DoH endpoint and fails closed on any prohibited or mixed
+ *   answer; `validateUrl` itself is unchanged (still literal-hostname-only
+ *   by design — the resolved-address check lives one layer up).
  * - Redirect revalidation: implemented and tested — `SecureHttpClient.fetch`
- *   re-runs `validateUrl` against every `Location` target before following it.
- * - Connection pinning / rebinding protection: not implemented. `fetch()` is
- *   supplied by the runtime; nothing in this package binds the TCP connection
- *   to the address that was validated, so a DNS answer that changes between
- *   validation and connection (classic TOCTOU rebinding) is not defended
- *   against. blocked_external / scaffolded only — not proven here.
+ *   re-runs `validateUrl` against every `Location` target before following
+ *   it, and (as of SUN-1221C) each hop's actual connection now also goes
+ *   through the DNS-safe/IP-pinned path once `SafeSocketHttpClient` is the
+ *   injected `httpClient` — no change to the redirect loop itself was
+ *   required.
+ * - Connection pinning / rebinding protection: implemented and tested — SEE
+ *   `dns-rebinding.test.ts` — `SafeSocketHttpClient`
+ *   (`../http/socket-http-client.ts`) connects via `cloudflare:sockets`
+ *   `connect()` using the exact DoH-validated literal IP as the socket
+ *   address (never the original hostname), so a second, independent DNS
+ *   resolution at connect time is structurally impossible; TLS separately
+ *   pins `expectedServerHostname` to the real hostname so certificate
+ *   validation is unaffected. Proven via a spy on the injected `connect()`
+ *   call's arguments, not merely on an earlier validation function's
+ *   return value.
  */
 describe('SSRF — URL and IP-literal validation (implemented, tested)', () => {
   const cases: Array<[string, string]> = [

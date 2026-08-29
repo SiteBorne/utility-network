@@ -26,6 +26,7 @@ import { QueueDispatchHandler } from './control-plane/queue/dispatch';
 import { AuditLogger } from './control-plane/audit/events';
 import { productionServiceExecutorUnavailable } from './control-plane/routes/production-paid-services';
 import { verifyAgentOutputV2CdpProductionRoute } from './control-plane/routes/production-verify-v2-cdp-route';
+import { webContextVerifiedV2CdpProductionRoute } from './control-plane/routes/production-web-context-v2-cdp-route';
 import type { Env } from './control-plane/config/env';
 
 export type { ControlPlaneConfig };
@@ -146,6 +147,20 @@ app.all('/v2/nevermined/*', (c) => {
  * to the pre-SUN-1216 behavior.
  */
 app.post('/v2/verify/agent-output', verifyAgentOutputV2CdpProductionRoute);
+
+/**
+ * SUN-1221C — the second real, bundle-reachable production paid-service
+ * composition (`web_context_verified.v2` / CDP), mirroring
+ * `verify_agent_output.v2`'s exact SUN-1216 registration pattern above:
+ * registered for exactly `POST`, mounted before the generic `/v2/*`
+ * wildcard below so Hono matches this route first for this one path
+ * only. Every other method on this path, and every other of the (now)
+ * 10 remaining paid routes, falls through unchanged to the wildcard
+ * handlers that follow. Gated independently by `PAID_ROUTES_ENABLED` AND
+ * `WEB_CONTEXT_V2_CDP_ROUTE_ENABLED` -- unrelated to
+ * `VERIFY_V2_CDP_ROUTE_ENABLED`; default-absent on either -> 404.
+ */
+app.post('/v2/web/context', webContextVerifiedV2CdpProductionRoute);
 
 // SUN-1218 checkpoint X: see the `/v1/*` wildcard's own doc comment
 // above -- same correction, same reasoning, unconditional 404.

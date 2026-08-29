@@ -3,9 +3,10 @@ import type { Context } from 'hono';
 import type { Env } from '../control-plane/config/env';
 import { resolveAgentCardSigningIdentity } from '../control-plane/config/agent-card-signing';
 import {
-  resolveVerifyAgentOutputV2CdpEffectiveDiscoveryStatus,
-  type VerifyAgentOutputV2CdpDiscoveryEnv,
+  EFFECTIVE_DISCOVERY_RESOLVERS,
+  type EffectiveDiscoveryEnv,
 } from '../control-plane/config/production-payment';
+import type { SiteborneServiceId } from '@siteborne/protocol-x402';
 
 const A2A_ALLOWED_HOSTS = [
   'utility.siteborne.net',
@@ -20,7 +21,7 @@ let cachedA2aAppPromise: ReturnType<typeof createSiteborneA2aHonoApp> | undefine
 let cachedA2aAppCacheKey: string | undefined;
 
 type A2aAppEnv = Pick<Env, 'AGENT_CARD_SIGNING_PRIVATE_KEY' | 'AGENT_CARD_SIGNING_KEY_ID' | 'DB'> &
-  VerifyAgentOutputV2CdpDiscoveryEnv;
+  EffectiveDiscoveryEnv;
 
 /** `context.env` is optional in Hono's generic `Context` typing (every
  * other route in this file's neighborhood -- e.g.
@@ -28,9 +29,9 @@ type A2aAppEnv = Pick<Env, 'AGENT_CARD_SIGNING_PRIVATE_KEY' | 'AGENT_CARD_SIGNIN
  * the same reason). `Env`'s three CDP/D1 binding fields are declared
  * required (never `?`), so a structurally valid fallback needs explicit
  * empty values for exactly those -- everything else in `A2aAppEnv` is
- * already optional and correctly resolves to "false" through
- * `resolveVerifyAgentOutputV2CdpEffectiveDiscoveryStatus`'s gate checks
- * when absent, unchanged from this file's behavior before SUN-1220P2. */
+ * already optional and correctly resolves to "false" through each
+ * registered resolver's own gate checks when absent, unchanged from this
+ * file's behavior before SUN-1220P2. */
 const EMPTY_A2A_APP_ENV: A2aAppEnv = {
   SELLER_WALLET_ADDRESS: '',
   CDP_API_KEY_ID: '',
@@ -49,26 +50,33 @@ const EMPTY_A2A_APP_ENV: A2aAppEnv = {
  * `resolveAgentCardSigningIdentity` throws rather than silently choosing
  * either path.
  *
- * SUN-1220P2: also computes `verify_agent_output.v2`'s version-local
+ * SUN-1220P2: also computes every registered service's version-local
  * effective discovery status from the exact same gates that govern real
- * execution (`resolveVerifyAgentOutputV2CdpEffectiveDiscoveryStatus`) and
- * injects it into the card. Within one running Worker version/isolate,
- * `env` is static, so this is still computed once and cached -- but the
- * cache key now also covers that computed boolean (not only the signing
+ * execution (`EFFECTIVE_DISCOVERY_RESOLVERS`) and injects the resulting
+ * map into the card -- `packages/protocol-a2a/src/card.ts`'s own
+ * `effectiveProductionStatusByServiceId` param was already typed
+ * `Partial<Record<SiteborneServiceId, boolean>>` from SUN-1220P2, so
+ * SUN-1221C's addition of a second registered service (`web_context_
+ * verified.v2`) required zero change there -- only this call site's map
+ * gained a second key. Within one running Worker version/isolate, `env`
+ * is static, so this is still computed once and cached -- but the cache
+ * key now also covers every computed boolean (not only the signing
  * fields) so a changed input can never serve a stale card: real
  * deployments never change `env` mid-isolate, but tests exercising
  * multiple env states against the same imported `app` singleton would
  * otherwise observe the first-built card forever.
  */
 function resolveA2aApp(env: A2aAppEnv): ReturnType<typeof createSiteborneA2aHonoApp> {
-  const verifyAgentOutputV2Active = resolveVerifyAgentOutputV2CdpEffectiveDiscoveryStatus(
-    env,
-    Boolean(env.DB)
-  );
+  const hasDb = Boolean(env.DB);
+  const effectiveProductionStatusByServiceId: Partial<Record<SiteborneServiceId, boolean>> = {};
+  for (const [serviceId, resolve] of Object.entries(EFFECTIVE_DISCOVERY_RESOLVERS)) {
+    if (!resolve) continue;
+    effectiveProductionStatusByServiceId[serviceId as SiteborneServiceId] = resolve(env, hasDb);
+  }
   const cacheKey = JSON.stringify([
     env.AGENT_CARD_SIGNING_PRIVATE_KEY ?? '',
     env.AGENT_CARD_SIGNING_KEY_ID ?? '',
-    verifyAgentOutputV2Active,
+    effectiveProductionStatusByServiceId,
   ]);
   if (!cachedA2aAppPromise || cachedA2aAppCacheKey !== cacheKey) {
     cachedA2aAppCacheKey = cacheKey;
@@ -86,9 +94,7 @@ function resolveA2aApp(env: A2aAppEnv): ReturnType<typeof createSiteborneA2aHono
         allowedHosts: A2A_ALLOWED_HOSTS,
         allowedOrigins: A2A_ALLOWED_HOSTS,
         ...(signingIdentity ? { signingIdentity } : {}),
-        effectiveProductionStatusByServiceId: {
-          'verify_agent_output.v2': verifyAgentOutputV2Active,
-        },
+        effectiveProductionStatusByServiceId,
       };
       return createSiteborneA2aHonoApp(options);
     })();

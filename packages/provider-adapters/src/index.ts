@@ -61,6 +61,8 @@ export * from './http/client';
 export * from './http/redirect-policy';
 export * from './http/response-bounds';
 export * from './http/encoding';
+export * from './http/safe-dns-resolve';
+export * from './http/socket-http-client';
 export * from './sec/identifiers';
 export * from './sec/submissions';
 export * from './sec/company-facts';

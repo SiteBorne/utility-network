@@ -62,10 +62,10 @@ interface Mutation {
 
 const MUTATIONS: Mutation[] = [
   {
-    name: '1. remove candidate runtime overlay from catalog (always return the static row unchanged)',
+    name: '1. remove candidate runtime overlay from catalog (always return the static row unchanged) -- SUN-1221C: targets the EFFECTIVE_DISCOVERY_RESOLVERS registry lookup, not the removed single-service constant',
     target: CATALOG,
-    from: 'if (service.service_id !== OVERLAY_SERVICE_ID) return service;',
-    to: 'return service; // MUTATED: overlay disabled unconditionally',
+    from: 'const resolver = EFFECTIVE_DISCOVERY_RESOLVERS[service.service_id as SiteborneServiceId];',
+    to: 'const resolver = undefined; // MUTATED: overlay disabled unconditionally',
     testRel: DISCOVERY_TEST_REL,
   },
   {
@@ -111,10 +111,10 @@ const MUTATIONS: Mutation[] = [
     testRel: DISCOVERY_TEST_REL,
   },
   {
-    name: '8. mark another paid service active (overlay guard matches every service, not just verify_agent_output.v2)',
+    name: '8. mark another paid service active (SUN-1221C: catalog.ts generalized from a single hardcoded OVERLAY_SERVICE_ID to the EFFECTIVE_DISCOVERY_RESOLVERS registry -- this mutation now targets that lookup, forcing it to resolve for every service regardless of registration)',
     target: CATALOG,
-    from: 'if (service.service_id !== OVERLAY_SERVICE_ID) return service;',
-    to: 'if (false) return service; // MUTATED: overlay guard matches every service',
+    from: 'const resolver = EFFECTIVE_DISCOVERY_RESOLVERS[service.service_id as SiteborneServiceId];\n  if (!resolver) return service;',
+    to: 'const resolver = EFFECTIVE_DISCOVERY_RESOLVERS[service.service_id as SiteborneServiceId] ?? EFFECTIVE_DISCOVERY_RESOLVERS[\'verify_agent_output.v2\']; // MUTATED: every unregistered service falls back to verify\'s resolver',
     testRel: DISCOVERY_TEST_REL,
   },
   {

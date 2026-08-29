@@ -41,6 +41,18 @@ export default defineConfig({
       '@siteborne/protocol-x402': path.resolve(__dirname, 'packages/protocol-x402/src'),
       '@siteborne/protocol-mcp': path.resolve(__dirname, 'packages/protocol-mcp/src'),
       '@siteborne/protocol-a2a': path.resolve(__dirname, 'packages/protocol-a2a/src'),
+      // SUN-1221C: `cloudflare:sockets` is a real Workers-runtime built-in
+      // with no npm package -- unresolvable under plain Node/vitest.
+      // Aliased to a throw-on-use shim so importing
+      // `web-context-v2-cdp-composition.ts` doesn't crash at module-load
+      // time; see that shim's own doc comment for why a throw, not a
+      // working fake, is correct here. Wrangler/esbuild's real production
+      // bundling never consults this config and resolves the real
+      // platform module natively.
+      'cloudflare:sockets': path.resolve(
+        __dirname,
+        'apps/edge-api/tests/support/cloudflare-sockets-shim.ts'
+      ),
     },
     typecheck: {
       tsconfig: 'tsconfig.base.json',
