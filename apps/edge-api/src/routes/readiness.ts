@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { validateReadinessResponse } from '@siteborne/contracts';
-import { EFFECTIVE_DISCOVERY_RESOLVERS } from '../control-plane/config/production-payment';
+import { resolveEffectiveProductionStatusByServiceId } from '../control-plane/config/production-payment';
 import type { Env } from '../control-plane/config/env';
 
 export const readinessRoute = new Hono<{ Bindings: Env }>();
@@ -24,11 +24,9 @@ export const readinessRoute = new Hono<{ Bindings: Env }>();
 readinessRoute.get('/', (c) => {
   const hasDb = Boolean(c.env?.DB);
   const env = c.env;
-  const productionServicesEnabled = env
-    ? Object.values(EFFECTIVE_DISCOVERY_RESOLVERS)
-        .filter((resolve): resolve is NonNullable<typeof resolve> => resolve !== undefined)
-        .some((resolve) => resolve(env, hasDb))
-    : false;
+  const productionServicesEnabled = Object.values(
+    resolveEffectiveProductionStatusByServiceId(env, hasDb)
+  ).some(Boolean);
 
   const response = {
     status: 'not_ready' as const,

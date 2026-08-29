@@ -102,14 +102,14 @@ const healthOutputSchema = z
     protocol_version: z.literal(MCP_PROTOCOL_VERSION),
     tools: z.literal(6),
     production_ready: z.literal(false),
-    production_enabled: z.literal(false),
+    production_enabled: z.boolean(),
     external_publication: z.literal('blocked_external'),
     services: z.record(
       z.string(),
       z.object({
-        implementation: z.literal('local_fixture_verified'),
-        production: z.literal('production_disabled'),
-        external: z.literal('not_live'),
+        implementation: z.enum(['local_fixture_verified', 'real_executor']),
+        production: z.enum(['production_disabled', 'production_enabled']),
+        external: z.enum(['not_live', 'configured']),
       })
     ),
   })
@@ -343,14 +343,14 @@ export function createSiteborneMcpServer(options: CreateSiteborneMcpOptions = {}
         production_enabled: options.health?.production_enabled ?? false,
         external_publication: 'blocked_external' as const,
         services: Object.fromEntries(
-          Object.values(MCP_SERVICE_TOOLS).map((serviceId) => [
-            serviceId,
-            {
+          Object.values(MCP_SERVICE_TOOLS).map((serviceId) => {
+            const defaultStatus = {
               implementation: 'local_fixture_verified' as const,
               production: 'production_disabled' as const,
               external: 'not_live' as const,
-            },
-          ])
+            };
+            return [serviceId, options.health?.services?.[serviceId] ?? defaultStatus];
+          })
         ),
       };
       return {

@@ -64,8 +64,8 @@ const MUTATIONS: Mutation[] = [
   {
     name: '1. remove candidate runtime overlay from catalog (always return the static row unchanged) -- SUN-1221C: targets the EFFECTIVE_DISCOVERY_RESOLVERS registry lookup, not the removed single-service constant',
     target: CATALOG,
-    from: 'const resolver = EFFECTIVE_DISCOVERY_RESOLVERS[service.service_id as SiteborneServiceId];',
-    to: 'const resolver = undefined; // MUTATED: overlay disabled unconditionally',
+    from: 'if (!effectiveStatus.hasProductionExecutor) return service;',
+    to: 'if (true) return service; // MUTATED: overlay disabled unconditionally',
     testRel: DISCOVERY_TEST_REL,
   },
   {
@@ -112,9 +112,9 @@ const MUTATIONS: Mutation[] = [
   },
   {
     name: '8. mark another paid service active (SUN-1221C: catalog.ts generalized from a single hardcoded OVERLAY_SERVICE_ID to the EFFECTIVE_DISCOVERY_RESOLVERS registry -- this mutation now targets that lookup, forcing it to resolve for every service regardless of registration)',
-    target: CATALOG,
-    from: 'const resolver = EFFECTIVE_DISCOVERY_RESOLVERS[service.service_id as SiteborneServiceId];\n  if (!resolver) return service;',
-    to: 'const resolver = EFFECTIVE_DISCOVERY_RESOLVERS[service.service_id as SiteborneServiceId] ?? EFFECTIVE_DISCOVERY_RESOLVERS[\'verify_agent_output.v2\']; // MUTATED: every unregistered service falls back to verify\'s resolver',
+    target: PRODUCTION_PAYMENT,
+    from: 'const resolver = EFFECTIVE_DISCOVERY_RESOLVERS[serviceId];',
+    to: "const resolver = EFFECTIVE_DISCOVERY_RESOLVERS[serviceId] ?? EFFECTIVE_DISCOVERY_RESOLVERS['verify_agent_output.v2']; // MUTATED: every unregistered service falls back to verify's resolver",
     testRel: DISCOVERY_TEST_REL,
   },
   {
@@ -128,8 +128,7 @@ const MUTATIONS: Mutation[] = [
     name: '10. introduce a D1 write inside the discovery GET handler',
     target: CATALOG,
     from: "catalogRoute.get('/', async (c) => {\n  const repo = c.get('servicesRepo') as ServicesRepository;\n  const result = await repo.getAll();",
-    to:
-      "catalogRoute.get('/', async (c) => {\n  const repo = c.get('servicesRepo') as ServicesRepository;\n  if ('updateProductionEnabled' in repo) {\n    // MUTATED: stray write during a discovery GET\n    await (repo as unknown as { updateProductionEnabled: (id: string, enabled: boolean) => Promise<unknown> }).updateProductionEnabled('verify_agent_output.v2', true);\n  }\n  const result = await repo.getAll();",
+    to: "catalogRoute.get('/', async (c) => {\n  const repo = c.get('servicesRepo') as ServicesRepository;\n  if ('updateProductionEnabled' in repo) {\n    // MUTATED: stray write during a discovery GET\n    await (repo as unknown as { updateProductionEnabled: (id: string, enabled: boolean) => Promise<unknown> }).updateProductionEnabled('verify_agent_output.v2', true);\n  }\n  const result = await repo.getAll();",
     testRel: DISCOVERY_TEST_REL,
   },
 ];
@@ -181,7 +180,9 @@ function main(): void {
 
   const uncaught = results.filter((r) => !r.caught && !r.detail.startsWith('SKIPPED'));
   const skipped = results.filter((r) => r.detail.startsWith('SKIPPED'));
-  console.log(`\n[discovery-mutation-proof] ${results.length - uncaught.length - skipped.length}/${results.length} caught, ${skipped.length} skipped, ${uncaught.length} NOT CAUGHT`);
+  console.log(
+    `\n[discovery-mutation-proof] ${results.length - uncaught.length - skipped.length}/${results.length} caught, ${skipped.length} skipped, ${uncaught.length} NOT CAUGHT`
+  );
 
   if (uncaught.length > 0 || !finalDiscovery.passed || !finalCard.passed) {
     console.error('[discovery-mutation-proof] FAIL');

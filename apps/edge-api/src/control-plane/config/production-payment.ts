@@ -289,7 +289,8 @@ export function resolveWebContextV2CdpEffectiveDiscoveryStatus(
  * `Partial` because only paid services with a real production
  * composition have an entry; every other `SiteborneServiceId` is simply
  * absent (never truthfully claimable as active). */
-export type EffectiveDiscoveryEnv = VerifyAgentOutputV2CdpDiscoveryEnv & WebContextV2CdpDiscoveryEnv;
+export type EffectiveDiscoveryEnv = VerifyAgentOutputV2CdpDiscoveryEnv &
+  WebContextV2CdpDiscoveryEnv;
 
 export const EFFECTIVE_DISCOVERY_RESOLVERS: Partial<
   Record<SiteborneServiceId, (env: EffectiveDiscoveryEnv, hasDb: boolean) => boolean>
@@ -297,6 +298,53 @@ export const EFFECTIVE_DISCOVERY_RESOLVERS: Partial<
   'verify_agent_output.v2': resolveVerifyAgentOutputV2CdpEffectiveDiscoveryStatus,
   'web_context_verified.v2': resolveWebContextV2CdpEffectiveDiscoveryStatus,
 };
+
+/** The single surface-neutral runtime status consumed by every public
+ * production-discovery serializer. `hasProductionExecutor` describes whether
+ * the production Worker has a governed composition for the service;
+ * `productionEnabled` is the exact version-local resolver result; and
+ * `externalConfigured` deliberately means that the resolver's synchronous
+ * dependency-presence checks passed, not that a public discovery request made
+ * a live provider call. */
+export interface EffectiveServiceRuntimeStatus {
+  hasProductionExecutor: boolean;
+  productionEnabled: boolean;
+  externalConfigured: boolean;
+}
+
+export function resolveEffectiveServiceRuntimeStatus(
+  serviceId: SiteborneServiceId,
+  env: EffectiveDiscoveryEnv | undefined,
+  hasDb: boolean
+): EffectiveServiceRuntimeStatus {
+  const resolver = EFFECTIVE_DISCOVERY_RESOLVERS[serviceId];
+  const hasProductionExecutor = resolver !== undefined;
+  const productionEnabled = Boolean(env && resolver?.(env, hasDb));
+  return {
+    hasProductionExecutor,
+    productionEnabled,
+    // No live network probe is permitted on an unauthenticated discovery
+    // request. Today every registered resolver includes all synchronous
+    // external credential/dependency presence checks, so configured external
+    // readiness is exactly the effective-production result.
+    externalConfigured: productionEnabled,
+  };
+}
+
+export function resolveEffectiveProductionStatusByServiceId(
+  env: EffectiveDiscoveryEnv | undefined,
+  hasDb: boolean
+): Partial<Record<SiteborneServiceId, boolean>> {
+  const result: Partial<Record<SiteborneServiceId, boolean>> = {};
+  for (const serviceId of Object.keys(EFFECTIVE_DISCOVERY_RESOLVERS) as SiteborneServiceId[]) {
+    result[serviceId] = resolveEffectiveServiceRuntimeStatus(
+      serviceId,
+      env,
+      hasDb
+    ).productionEnabled;
+  }
+  return result;
+}
 
 /**
  * SUN-1200 checkpoint C — seller-identity architecture decision.

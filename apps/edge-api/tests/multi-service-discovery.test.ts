@@ -8,7 +8,8 @@
  * MULTI-service dimension that single-service file's own tests, by
  * construction, never exercised.
  */
-import { describe, it, expect, beforeEach } from 'vitest';
+import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import type { D1Database } from '@cloudflare/workers-types';
 import app from '../src/index';
 
@@ -54,6 +55,11 @@ const OTHER_ROW = {
 const ALL_ROWS = [VERIFY_V2_ROW, WEB_CONTEXT_V2_ROW, OTHER_ROW];
 
 let d1Writes = 0;
+const mcpClients: Client[] = [];
+
+afterEach(async () => {
+  await Promise.all(mcpClients.splice(0).map((client) => client.close()));
+});
 
 function createFakeD1(): D1Database {
   const prepare = (sql: string) => ({
@@ -142,10 +148,47 @@ async function getCardServices(db: D1Database, extraEnv: Record<string, string> 
   );
   const body = (await res.json()) as {
     capabilities: {
-      extensions: Array<{ params: { services: Array<{ serviceId: string; productionEnabled: boolean }> } }>;
+      extensions: Array<{
+        params: { services: Array<{ serviceId: string; productionEnabled: boolean }> };
+      }>;
     };
   };
   return body.capabilities.extensions[0].params.services;
+}
+
+interface McpServiceHealth {
+  implementation: 'local_fixture_verified' | 'real_executor';
+  production: 'production_disabled' | 'production_enabled';
+  external: 'not_live' | 'configured';
+}
+
+async function getMcpHealth(db: D1Database, extraEnv: Record<string, string> = {}) {
+  const client = new Client(
+    { name: 'sun1221e1-mcp-coherence-test', version: '1.0.0' },
+    { versionNegotiation: { mode: { pin: '2026-07-28' } } }
+  );
+  const transport = new StreamableHTTPClientTransport(new URL('http://test.local/mcp'), {
+    fetch: async (input, init) => {
+      const headers = new Headers(init?.headers);
+      headers.set('Host', 'test.local');
+      return app.fetch(new Request(input, { ...init, headers }), {
+        DB: db,
+        ...extraEnv,
+      } as never);
+    },
+  });
+  await client.connect(transport);
+  mcpClients.push(client);
+  const result = await client.callTool({
+    name: 'siteborne_get_service_health',
+    arguments: {},
+  });
+  expect(result.isError, JSON.stringify(result.content)).not.toBe(true);
+  return result.structuredContent as {
+    production_ready: boolean;
+    production_enabled: boolean;
+    services: Record<string, McpServiceHealth>;
+  };
 }
 
 describe('SUN-1221C — multi-service /catalog truthfulness', () => {
@@ -224,16 +267,16 @@ describe('SUN-1221C — agent-card truthfully reflects both services independent
     expect(services.find((s) => s.serviceId === 'verify_agent_output.v2')?.productionEnabled).toBe(
       true
     );
-    expect(
-      services.find((s) => s.serviceId === 'web_context_verified.v2')?.productionEnabled
-    ).toBe(true);
+    expect(services.find((s) => s.serviceId === 'web_context_verified.v2')?.productionEnabled).toBe(
+      true
+    );
   });
 
   it('only web_context_verified.v2 shows true when only its flag is on', async () => {
     const services = await getCardServices(createFakeD1(), ONLY_WEB_CONTEXT_ENV);
-    expect(
-      services.find((s) => s.serviceId === 'web_context_verified.v2')?.productionEnabled
-    ).toBe(true);
+    expect(services.find((s) => s.serviceId === 'web_context_verified.v2')?.productionEnabled).toBe(
+      true
+    );
     expect(services.find((s) => s.serviceId === 'verify_agent_output.v2')?.productionEnabled).toBe(
       false
     );
@@ -261,11 +304,10 @@ describe('SUN-1221C — cross-surface coherence for web_context_verified.v2 (cat
         (s) => s.serviceId === 'web_context_verified.v2'
       )?.productionEnabled;
 
-      const detailRes = await app.request(
-        '/services/web_context_verified.v2',
-        {},
-        { DB: db, ...env } as never
-      );
+      const detailRes = await app.request('/services/web_context_verified.v2', {}, {
+        DB: db,
+        ...env,
+      } as never);
       const detail = (await detailRes.json()) as { production_enabled: boolean };
 
       const readyBody = await getReady(db, env);
@@ -279,6 +321,133 @@ describe('SUN-1221C — cross-surface coherence for web_context_verified.v2 (cat
       if (catalogActive) {
         expect(readyBody.production_services_enabled, `combo=${JSON.stringify(combo)}`).toBe(true);
       }
+    }
+  });
+});
+
+describe('SUN-1221E1 — MCP production-discovery coherence', () => {
+  it('reports the real verify executor and effective production state when only verify is active', async () => {
+    const health = await getMcpHealth(createFakeD1(), ONLY_VERIFY_ENV);
+    expect(health.services['verify_agent_output.v2']).toEqual({
+      implementation: 'real_executor',
+      production: 'production_enabled',
+      external: 'configured',
+    });
+    expect(health.production_enabled).toBe(true);
+  });
+
+  it('reports the real web-context executor and effective production state when both services are active', async () => {
+    const health = await getMcpHealth(createFakeD1(), BOTH_ACTIVE_ENV);
+    expect(health.services['web_context_verified.v2']).toEqual({
+      implementation: 'real_executor',
+      production: 'production_enabled',
+      external: 'configured',
+    });
+    expect(health.production_enabled).toBe(true);
+  });
+
+  it('keeps web-context production-disabled when its route-specific gate is off', async () => {
+    const health = await getMcpHealth(createFakeD1(), ONLY_VERIFY_ENV);
+    expect(health.services['web_context_verified.v2']).toEqual({
+      implementation: 'real_executor',
+      production: 'production_disabled',
+      external: 'not_live',
+    });
+  });
+
+  it('keeps both services production-disabled when a governing production authorization gate is off', async () => {
+    const health = await getMcpHealth(createFakeD1(), {
+      ...BOTH_ACTIVE_ENV,
+      PRODUCTION_CDP_CREDENTIALS_APPROVED: 'false',
+    });
+    expect(health.services['verify_agent_output.v2'].production).toBe('production_disabled');
+    expect(health.services['web_context_verified.v2'].production).toBe('production_disabled');
+    expect(health.production_enabled).toBe(false);
+  });
+
+  it('tracks the production-authorization gate transition instead of treating route flags as sufficient', async () => {
+    const active = await getMcpHealth(createFakeD1(), BOTH_ACTIVE_ENV);
+    const gateOff = await getMcpHealth(createFakeD1(), {
+      ...BOTH_ACTIVE_ENV,
+      HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP: 'false',
+    });
+
+    expect(active.services['verify_agent_output.v2'].production).toBe('production_enabled');
+    expect(active.services['web_context_verified.v2'].production).toBe('production_enabled');
+    expect(gateOff.services['verify_agent_output.v2'].production).toBe('production_disabled');
+    expect(gateOff.services['web_context_verified.v2'].production).toBe('production_disabled');
+  });
+
+  it.each([
+    ['both inactive', KNOWN_GOOD_EQUIVALENT_ENV, false, false],
+    ['verify only', ONLY_VERIFY_ENV, true, false],
+    ['web-context only', ONLY_WEB_CONTEXT_ENV, false, true],
+    ['both active', BOTH_ACTIVE_ENV, true, true],
+    [
+      'route flags on but production authorization off',
+      { ...BOTH_ACTIVE_ENV, PRODUCTION_ENABLED: 'false' },
+      false,
+      false,
+    ],
+  ])(
+    '%s: catalog, service detail, agent card, readiness, and MCP agree',
+    async (_name, extraEnv, verifyActive, webActive) => {
+      const db = createFakeD1();
+      const { body: catalogBody } = await getCatalog(db, extraEnv as Record<string, string>);
+      const cardServices = await getCardServices(db, extraEnv as Record<string, string>);
+      const ready = await getReady(db, extraEnv as Record<string, string>);
+      const mcp = await getMcpHealth(db, extraEnv as Record<string, string>);
+
+      for (const [serviceId, expectedActive] of [
+        ['verify_agent_output.v2', verifyActive],
+        ['web_context_verified.v2', webActive],
+      ] as const) {
+        const catalogActive = findService(catalogBody, serviceId).production_enabled;
+        const cardActive = cardServices.find(
+          (service) => service.serviceId === serviceId
+        )?.productionEnabled;
+        const detailResponse = await app.request(`/services/${serviceId}`, {}, {
+          DB: db,
+          ...(extraEnv as Record<string, string>),
+        } as never);
+        const detail = (await detailResponse.json()) as { production_enabled: boolean };
+        const mcpActive = mcp.services[serviceId].production === 'production_enabled';
+
+        expect(catalogActive).toBe(expectedActive);
+        expect(cardActive).toBe(expectedActive);
+        expect(detail.production_enabled).toBe(expectedActive);
+        expect(mcpActive).toBe(expectedActive);
+      }
+
+      expect(ready.production_services_enabled).toBe(verifyActive || webActive);
+      expect(mcp.production_enabled).toBe(verifyActive || webActive);
+      expect(mcp.production_ready).toBe(false);
+    }
+  );
+
+  it('does not advertise either represented unsupported service as production-active', async () => {
+    const health = await getMcpHealth(createFakeD1(), BOTH_ACTIVE_ENV);
+    for (const serviceId of ['company_evidence_graph.v2', 'document_evidence_json.v2']) {
+      expect(health.services[serviceId]).toEqual({
+        implementation: 'local_fixture_verified',
+        production: 'production_disabled',
+        external: 'not_live',
+      });
+    }
+  });
+
+  it('does not let Nevermined activation inputs alter the CDP service-health projection', async () => {
+    const health = await getMcpHealth(createFakeD1(), {
+      ...KNOWN_GOOD_EQUIVALENT_ENV,
+      NEVERMINED_ROUTES_ENABLED: 'true',
+      NVM_ENVIRONMENT: 'sandbox',
+      NVM_API_KEY: 'test-nevermined-key',
+    });
+
+    expect(health.production_enabled).toBe(false);
+    for (const serviceId of Object.keys(health.services)) {
+      expect(health.services[serviceId].production).toBe('production_disabled');
+      expect(health.services[serviceId].external).toBe('not_live');
     }
   });
 });

@@ -23,10 +23,7 @@ import { fileURLToPath } from 'node:url';
 const REPO_ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const PNPM = process.env.PNPM_EXECUTABLE ?? 'pnpm';
 
-const SAFE_DNS_RESOLVE = join(
-  REPO_ROOT,
-  'packages/provider-adapters/src/http/safe-dns-resolve.ts'
-);
+const SAFE_DNS_RESOLVE = join(REPO_ROOT, 'packages/provider-adapters/src/http/safe-dns-resolve.ts');
 const SOCKET_HTTP_CLIENT = join(
   REPO_ROOT,
   'packages/provider-adapters/src/http/socket-http-client.ts'
@@ -182,22 +179,22 @@ const MUTATIONS: Mutation[] = [
   {
     name: '15. catalog.ts: discovery overlay registry lookup bypassed (always overlays, or never overlays)',
     target: CATALOG,
-    from: 'const resolver = EFFECTIVE_DISCOVERY_RESOLVERS[service.service_id as SiteborneServiceId];\n  if (!resolver) return service;',
-    to: 'const resolver = EFFECTIVE_DISCOVERY_RESOLVERS[service.service_id as SiteborneServiceId];\n  if (true) return service; // MUTATED: overlay never applies to anything',
+    from: 'if (!effectiveStatus.hasProductionExecutor) return service;',
+    to: 'if (true) return service; // MUTATED: overlay never applies to anything',
     testRel: MULTI_SERVICE_DISCOVERY_TEST,
   },
   {
     name: '16. readiness.ts: OR-across-services degraded to AND (both must be active, not just one)',
     target: READINESS,
-    from: '.some((resolve) => resolve(env, hasDb))',
-    to: '.every((resolve) => resolve(env, hasDb)) // MUTATED: AND instead of OR',
+    from: ').some(Boolean);',
+    to: ').every(Boolean); // MUTATED: AND instead of OR',
     testRel: READINESS_TEST,
   },
   {
     name: '17. readiness.ts: filter drops all resolvers (production_services_enabled always false)',
     target: READINESS,
-    from: '.filter((resolve): resolve is NonNullable<typeof resolve> => resolve !== undefined)',
-    to: '.filter((): boolean => false) // MUTATED: drops every resolver',
+    from: 'resolveEffectiveProductionStatusByServiceId(env, hasDb)',
+    to: '{} // MUTATED: drops every resolver result',
     testRel: MULTI_SERVICE_DISCOVERY_TEST,
   },
   {

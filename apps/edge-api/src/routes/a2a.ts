@@ -3,10 +3,9 @@ import type { Context } from 'hono';
 import type { Env } from '../control-plane/config/env';
 import { resolveAgentCardSigningIdentity } from '../control-plane/config/agent-card-signing';
 import {
-  EFFECTIVE_DISCOVERY_RESOLVERS,
+  resolveEffectiveProductionStatusByServiceId,
   type EffectiveDiscoveryEnv,
 } from '../control-plane/config/production-payment';
-import type { SiteborneServiceId } from '@siteborne/protocol-x402';
 
 const A2A_ALLOWED_HOSTS = [
   'utility.siteborne.net',
@@ -68,11 +67,10 @@ const EMPTY_A2A_APP_ENV: A2aAppEnv = {
  */
 function resolveA2aApp(env: A2aAppEnv): ReturnType<typeof createSiteborneA2aHonoApp> {
   const hasDb = Boolean(env.DB);
-  const effectiveProductionStatusByServiceId: Partial<Record<SiteborneServiceId, boolean>> = {};
-  for (const [serviceId, resolve] of Object.entries(EFFECTIVE_DISCOVERY_RESOLVERS)) {
-    if (!resolve) continue;
-    effectiveProductionStatusByServiceId[serviceId as SiteborneServiceId] = resolve(env, hasDb);
-  }
+  const effectiveProductionStatusByServiceId = resolveEffectiveProductionStatusByServiceId(
+    env,
+    hasDb
+  );
   const cacheKey = JSON.stringify([
     env.AGENT_CARD_SIGNING_PRIVATE_KEY ?? '',
     env.AGENT_CARD_SIGNING_KEY_ID ?? '',

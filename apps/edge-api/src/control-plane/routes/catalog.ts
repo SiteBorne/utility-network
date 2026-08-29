@@ -4,7 +4,7 @@ import { validateServiceError } from '@siteborne/contracts';
 import type { ServicesRepository } from '../../control-plane/repositories/interfaces';
 import type { Env } from '../config/env';
 import {
-  EFFECTIVE_DISCOVERY_RESOLVERS,
+  resolveEffectiveServiceRuntimeStatus,
   type EffectiveDiscoveryEnv,
 } from '../config/production-payment';
 import type { SiteborneServiceId } from '@siteborne/protocol-x402';
@@ -46,9 +46,13 @@ function overlayEffectiveDiscoveryStatus<T extends DiscoveryServiceLike>(
   env: EffectiveDiscoveryEnv | undefined,
   hasDb: boolean
 ): T {
-  const resolver = EFFECTIVE_DISCOVERY_RESOLVERS[service.service_id as SiteborneServiceId];
-  if (!resolver) return service;
-  const effectivelyActive = env ? resolver(env, hasDb) : false;
+  const effectiveStatus = resolveEffectiveServiceRuntimeStatus(
+    service.service_id as SiteborneServiceId,
+    env,
+    hasDb
+  );
+  if (!effectiveStatus.hasProductionExecutor) return service;
+  const effectivelyActive = effectiveStatus.productionEnabled;
   return {
     ...service,
     production_enabled: effectivelyActive,

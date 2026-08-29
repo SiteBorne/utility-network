@@ -1505,6 +1505,92 @@ async function runPhase8() {
 }
 
 // ---------------------------------------------------------------------
+// Phase 9 (SUN-1221E1): official MCP protocol through the REAL production
+// entrypoint under the exact two-service candidate-equivalent gate shape.
+// Only the credential-presence boundary is substituted with local throwaway
+// values; no service tool, payment path, external provider, or live network
+// dependency is invoked. This is the workerd-level counterpart to the
+// cross-surface Vitest matrix.
+// ---------------------------------------------------------------------
+async function runPhase9() {
+  await withDevServer(
+    {
+      dbName: 'siteborne-utility',
+      vars: {
+        ENVIRONMENT: 'production',
+        PAID_ROUTES_ENABLED: 'true',
+        VERIFY_V2_CDP_ROUTE_ENABLED: 'true',
+        WEB_CONTEXT_V2_CDP_ROUTE_ENABLED: 'true',
+        PAYMENT_ENVIRONMENT: 'production',
+        PRODUCTION_ENABLED: 'true',
+        HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP: 'true',
+        PRODUCTION_CDP_CREDENTIALS_APPROVED: 'true',
+        PAID_RECEIPT_SIGNING_PRIVATE_KEY: generateLocalTestSigningKeyHex(),
+        PAID_RECEIPT_SIGNING_KEY_ID: 'kid_sun1221e1local012345678',
+        SELLER_WALLET_ADDRESS: '0x7f44a2dd237938F18632d4CcA40f4c690295E6E1',
+        CDP_API_KEY_ID: 'sun1221e1-local-key-id',
+        CDP_API_KEY_SECRET: 'sun1221e1-local-key-secret',
+      },
+    },
+    async (base, getLog) => {
+      record(
+        'PHASE 9 (SUN-1221E1, real entrypoint): candidate-equivalent worker boots under real workerd',
+        true
+      );
+
+      const response = await fetch(`${base}/mcp`, {
+        method: 'POST',
+        headers: mcpHeaders('tools/call', 'siteborne_get_service_health'),
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 12211,
+          method: 'tools/call',
+          params: {
+            name: 'siteborne_get_service_health',
+            arguments: {},
+            _meta: mcpMeta(),
+          },
+        }),
+      });
+      const body = (await response.json().catch(() => ({}))) as any;
+      const health = body?.result?.structuredContent;
+      record(
+        'PHASE 9: official MCP health call succeeds with aggregate production enabled',
+        response.status === 200 && health?.production_enabled === true,
+        `status=${response.status} production_enabled=${String(health?.production_enabled)}`
+      );
+
+      const verify = health?.services?.['verify_agent_output.v2'];
+      const web = health?.services?.['web_context_verified.v2'];
+      record(
+        'PHASE 9: MCP reports both governed real executors active/configured under candidate-equivalent gates',
+        verify?.implementation === 'real_executor' &&
+          verify?.production === 'production_enabled' &&
+          verify?.external === 'configured' &&
+          web?.implementation === 'real_executor' &&
+          web?.production === 'production_enabled' &&
+          web?.external === 'configured',
+        `verify=${JSON.stringify(verify)} web=${JSON.stringify(web)}`
+      );
+
+      const unsupported = ['company_evidence_graph.v2', 'document_evidence_json.v2'];
+      const unsupportedInactive = unsupported.every((serviceId) => {
+        const status = health?.services?.[serviceId];
+        return status?.production === 'production_disabled' && status?.external === 'not_live';
+      });
+      const hasProviderTraffic = /api\.sandbox\.nevermined\.app|api\.cdp\.coinbase\.com/i.test(
+        getLog()
+      );
+      record(
+        'PHASE 9: represented unsupported services stay inactive and MCP health performs zero provider work',
+        unsupportedInactive && !hasProviderTraffic,
+        `unsupportedInactive=${unsupportedInactive} providerTraffic=${hasProviderTraffic}`
+      );
+    }
+  );
+}
+
+// ---------------------------------------------------------------------
 // Bundle isolation proof (§7 / S3): the REAL production wrangler.toml's
 // dry-run bundle must never contain the test-only entrypoint's source
 // chunk.
@@ -1685,6 +1771,7 @@ async function main() {
     await runPhase6();
     await runPhase7();
     await runPhase8();
+    await runPhase9();
     await runBundleIsolationCheck();
   } catch (err) {
     record('harness execution', false, String(err));

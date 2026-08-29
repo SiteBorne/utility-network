@@ -1,8 +1,14 @@
-import { createSiteborneMcpHonoApp, type CreateSiteborneMcpOptions } from '@siteborne/protocol-mcp';
+import {
+  createSiteborneMcpHonoApp,
+  MCP_SERVICE_TOOLS,
+  type CreateSiteborneMcpOptions,
+  type McpServiceHealthStatus,
+} from '@siteborne/protocol-mcp';
 import { PREPRODUCTION_NETWORK } from '@siteborne/protocol-x402';
 import { getDefaultAsset } from '@x402/evm';
 import type { Context } from 'hono';
 import type { Env } from '../control-plane/config/env';
+import { resolveEffectiveServiceRuntimeStatus } from '../control-plane/config/production-payment';
 
 const MCP_ALLOWED_HOSTS = [
   'utility.siteborne.net',
@@ -65,8 +71,23 @@ export async function mcpRoute(context: Context<{ Bindings: Env }>): Promise<Res
     );
   }
 
+  const hasDb = Boolean(context.env?.DB);
+  const services: Record<string, McpServiceHealthStatus> = {};
+  for (const serviceId of Object.values(MCP_SERVICE_TOOLS)) {
+    const status = resolveEffectiveServiceRuntimeStatus(serviceId, context.env, hasDb);
+    const serialized: McpServiceHealthStatus = {
+      implementation: status.hasProductionExecutor ? 'real_executor' : 'local_fixture_verified',
+      production: status.productionEnabled ? 'production_enabled' : 'production_disabled',
+      external: status.externalConfigured ? 'configured' : 'not_live',
+    };
+    services[serviceId] = serialized;
+  }
+  const productionEnabled = Object.values(services).some(
+    (service) => service?.production === 'production_enabled'
+  );
+
   const options: CreateSiteborneMcpOptions = {
-    health: { production_ready: false, production_enabled: false },
+    health: { production_ready: false, production_enabled: productionEnabled, services },
     allowedHosts: [...MCP_ALLOWED_HOSTS],
     allowedOrigins: [...MCP_ALLOWED_HOSTS],
   };

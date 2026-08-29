@@ -33,7 +33,14 @@ export interface McpQuoteConfiguration {
 
 export interface McpHealthConfiguration {
   production_ready: false;
-  production_enabled: false;
+  production_enabled: boolean;
+  services?: Partial<Record<SiteborneServiceId, McpServiceHealthStatus>>;
+}
+
+export interface McpServiceHealthStatus {
+  implementation: 'local_fixture_verified' | 'real_executor';
+  production: 'production_disabled' | 'production_enabled';
+  external: 'not_live' | 'configured';
 }
 
 export interface CreateSiteborneMcpOptions {

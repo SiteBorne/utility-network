@@ -4,14 +4,14 @@ The MCP server name is `net.siteborne/utility`, version `0.1.0`. Its tool
 inventory is immutable for SUN-0800A checkpoint 1: exactly four paid utility
 tools plus quote and health.
 
-| Tool                               | Contract boundary                                     | Local behavior                                                                                                    |
-| ---------------------------------- | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `siteborne_company_evidence_graph` | `company_evidence_graph.v1` frozen input/output       | Calls the injected paid-service boundary; closed default returns `payment_required`                               |
-| `siteborne_web_context_verified`   | `web_context_verified.v1` frozen input/output         | Calls the injected paid-service boundary; closed default returns `payment_required`                               |
-| `siteborne_document_evidence_json` | `document_evidence_json.v1` frozen input/output       | Calls the injected paid-service boundary; closed default returns `payment_required`                               |
-| `siteborne_verify_agent_output`    | `verify_agent_output.v1` frozen input/output          | Calls the injected paid-service boundary; closed default returns `payment_required`                               |
-| `siteborne_get_quote`              | Canonical pricing and x402 quote/requirement builders | Returns an exact charge or an `upto` authorization ceiling; never claims an actual `upto` charge before execution |
-| `siteborne_get_service_health`     | Local protocol and production-state boundary          | Reports local readiness, all four service states, external publication blocked, and production false              |
+| Tool                               | Contract boundary                                     | Local behavior                                                                                                                                |
+| ---------------------------------- | ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `siteborne_company_evidence_graph` | `company_evidence_graph.v1` frozen input/output       | Calls the injected paid-service boundary; closed default returns `payment_required`                                                           |
+| `siteborne_web_context_verified`   | `web_context_verified.v1` frozen input/output         | Calls the injected paid-service boundary; closed default returns `payment_required`                                                           |
+| `siteborne_document_evidence_json` | `document_evidence_json.v1` frozen input/output       | Calls the injected paid-service boundary; closed default returns `payment_required`                                                           |
+| `siteborne_verify_agent_output`    | `verify_agent_output.v1` frozen input/output          | Calls the injected paid-service boundary; closed default returns `payment_required`                                                           |
+| `siteborne_get_quote`              | Canonical pricing and x402 quote/requirement builders | Returns an exact charge or an `upto` authorization ceiling; never claims an actual `upto` charge before execution                             |
+| `siteborne_get_service_health`     | Local protocol and production-state boundary          | Reports protocol readiness and each service's effective version-local production state from the same governed resolver used by REST discovery |
 
 ## Frozen service schemas
 
@@ -46,16 +46,23 @@ a payment.
 
 ## Health semantics
 
-`siteborne_get_service_health` always reports:
+`siteborne_get_service_health` reports:
 
 - `status: ready_local`;
 - MCP protocol `2026-07-28`;
 - six tools;
-- each local service as fixture-verified, production-disabled, and not
-  externally live;
+- `implementation: real_executor` only for services with a governed Worker
+  production composition; the older `local_fixture_verified` value remains for
+  services without one;
+- `production: production_enabled` only when that service's version-local route,
+  production-authorization, binding, signing, and credential-presence gates all
+  pass; otherwise `production_disabled`;
+- `external: configured` when those synchronous external-dependency presence
+  gates pass, without performing a live provider call from discovery;
 - `external_publication: blocked_external`;
 - `production_ready: false`;
-- `production_enabled: false`.
+- `production_enabled: true` when at least one governed production service is
+  effectively active, otherwise `false`.
 
 Callers must not interpret local MCP health as deployment, registry publication,
 customer use, revenue, or production readiness.
