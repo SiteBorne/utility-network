@@ -14,11 +14,13 @@ import {
 } from './support';
 
 /**
- * Optional live gates. Each is disabled by default (`RUN_LIVE_*` unset) and,
- * because every shipped manifest's terms review is `pending_review`, even a
- * forced-on run performs zero network requests and reports `policy_blocked`
- * — TermsGuard is checked before any HTTP call regardless of the gate's
- * enabled state. No credentials are used anywhere in this file.
+ * Optional live gates. Each is disabled by default (`RUN_LIVE_*` unset). For
+ * 5 of the 6 providers here, every shipped manifest's terms review is still
+ * `pending_review`, so even a forced-on run performs zero network requests
+ * and reports `policy_blocked` — TermsGuard is checked before any HTTP call
+ * regardless of the gate's enabled state. `direct-public-http` is the
+ * exception since SUN-1221E2T (see `skipForcedExecutionProof` below). No
+ * credentials are used anywhere in this file.
  */
 interface LiveGate {
   envVar: string;
@@ -27,6 +29,21 @@ interface LiveGate {
     clock: ReturnType<typeof fakeClock>;
     httpClient: ReturnType<typeof unreachableHttpClient>;
   }) => Promise<{ resultClass: string }>;
+  /**
+   * SUN-1221E2T: `direct-public-http` now has an operator-recorded terms
+   * review (see terms-guard.ts), so it no longer gets policy_blocked before
+   * any network access. Unlike the other adapters here, PublicHttpAdapter's
+   * socket layer (`cloudflare:sockets` via SecureHttpClient) does not go
+   * through the injected `httpClient` fake at all -- `unreachableHttpClient`
+   * never protected it from a real connection attempt; only the terms guard
+   * did. Forcing execution here without RUN_LIVE_PUBLIC_HTTP=1 would attempt
+   * a genuine real socket connection in a plain test environment (no
+   * `cloudflare:sockets` runtime), which is not the property this test
+   * suite exists to prove. Set true to skip the forced-execution branch for
+   * this gate; its real-network proof lives instead in
+   * `scripts/test-worker-runtime.mts` PHASE 10, under real workerd.
+   */
+  skipForcedExecutionProof?: boolean;
 }
 
 const GATES: LiveGate[] = [
@@ -137,6 +154,7 @@ const GATES: LiveGate[] = [
       });
       return adapter.execute({ url: 'https://example.com/' }, context);
     },
+    skipForcedExecutionProof: true,
   },
 ];
 
@@ -161,19 +179,27 @@ for (const gate of GATES) {
       }
     );
 
-    it('default (gate unset): reports "skipped", performs zero network calls, and is policy_blocked if forced to execute', async () => {
-      expect(process.env[gate.envVar]).not.toBe('1');
+    if (gate.skipForcedExecutionProof) {
+      it('default (gate unset): reports "skipped" and is not exercised by this suite (real-network proof lives in worker-runtime PHASE 10 under real workerd)', () => {
+        expect(process.env[gate.envVar]).not.toBe('1');
+      });
+    } else {
+      it('default (gate unset): reports "skipped", performs zero network calls, and is policy_blocked if forced to execute', async () => {
+        expect(process.env[gate.envVar]).not.toBe('1');
 
-      const clock = fakeClock();
-      const httpClient = unreachableHttpClient();
-      const result = await gate.run({ clock, httpClient });
+        const clock = fakeClock();
+        const httpClient = unreachableHttpClient();
+        const result = await gate.run({ clock, httpClient });
 
-      // Because every shipped manifest's terms_review_status is pending_review
-      // and no review has been recorded in the global TermsGuard, execution in
-      // 'live' mode is policy_blocked before any network access — this is the
-      // expected outcome documented in section 9 of the completion plan.
-      expect(result.resultClass).toBe('policy_blocked');
-      expect(httpClient.callCount).toBe(0);
-    });
+        // Because this manifest's terms_review_status is pending_review and no
+        // review has been recorded in the global TermsGuard, execution in
+        // 'live' mode is policy_blocked before any network access — this is
+        // the expected outcome documented in section 9 of the completion
+        // plan. (direct-public-http is excluded from this proof — see
+        // skipForcedExecutionProof above.)
+        expect(result.resultClass).toBe('policy_blocked');
+        expect(httpClient.callCount).toBe(0);
+      });
+    }
   });
 }

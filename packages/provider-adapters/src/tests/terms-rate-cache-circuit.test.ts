@@ -121,13 +121,19 @@ describe('TermsGuard', () => {
     );
   });
 
-  it('no provider is production_verified: the shipped global guard has no recorded reviews', () => {
+  it('no provider except the deliberately-reviewed direct-public-http is production_verified', () => {
+    // SUN-1221E2T recorded exactly one operator-approved review, scoped to
+    // direct-public-http alone (see direct-public-http-terms-review.test.ts
+    // and docs/reports/SUN-1221E2T-direct-public-http-governance-review.md).
+    // Every other provider must remain unreviewed until deliberately
+    // reviewed -- this narrowed invariant is the regression guard for that.
     expect(globalTermsGuard.getReview('sec-edgar')).toBeUndefined();
     expect(globalTermsGuard.getReview('openalex')).toBeUndefined();
     expect(globalTermsGuard.getReview('crossref')).toBeUndefined();
     expect(globalTermsGuard.getReview('github-public')).toBeUndefined();
     expect(globalTermsGuard.getReview('federal-register')).toBeUndefined();
-    expect(globalTermsGuard.getReview('direct-public-http')).toBeUndefined();
+    expect(globalTermsGuard.getReview('direct-public-http')).toBeDefined();
+    expect(globalTermsGuard.getReview('direct-public-http')?.status).toBe('verified');
   });
 
   it('raw resale remains disabled on every shipped manifest capability check', () => {

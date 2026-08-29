@@ -65,10 +65,14 @@ export const DIRECT_PUBLIC_HTTP_MANIFEST: ProviderManifest = {
   account_sharing_allowed: false,
   quota_multiplication_allowed: false,
   credentials_required: false,
+  // SUN-1221E2T: operator risk-acceptance recorded in globalTermsGuard
+  // (see DIRECT_PUBLIC_HTTP_TERMS_REVIEW in policy/terms-guard.ts). This is
+  // NOT a claim that RFC 9110, or any specific target site's terms, grants
+  // legal permission -- see that review's notes for the exact scope.
   terms_uri: 'https://www.rfc-editor.org/rfc/rfc9110',
   terms_hash: null,
-  terms_review_status: 'pending_review',
-  reviewed_at: null,
+  terms_review_status: 'verified',
+  reviewed_at: '2026-08-29T00:00:00.000Z',
   rate_policy: {
     strategy: 'token_bucket',
     maximum_concurrency: 5,

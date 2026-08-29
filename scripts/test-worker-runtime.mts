@@ -1599,38 +1599,26 @@ async function runPhase9() {
 // `https://example.com/` target used throughout this whole release
 // train. Requires real internet egress from wherever this runs.
 //
-// Root cause, PROVEN (not guessed) by this exact reproduction:
-// `globalTermsGuard` (`packages/provider-adapters/src/policy/
-// terms-guard.ts`) is a module-level singleton whose `reviews` Map
-// starts empty and has zero `recordReview(...)` callers anywhere in the
-// non-test codebase (confirmed by direct repository-wide search,
-// SUN-1221E2D §9) -- every real adapter that calls
-// `globalTermsGuard.checkAccess(manifest, 'live')`, `direct-public-http`
-// included, therefore ALWAYS throws `PolicyBlockedError` ("has no terms
-// review record") for `execution_mode: 'live'`, unconditionally, with
-// 100% reproducibility -- never a transient network/DNS/socket
-// condition. `verify_agent_output.v2` (SUN-1220's already-live, already-
-// real-paid first service) never touches this guard at all -- its
-// executor verifies buyer-supplied `candidate_output` deterministically,
-// no external HTTP fetch -- which is exactly why THAT service's real
-// payment succeeded while web_context_verified.v2's necessarily cannot,
-// yet, regardless of how many times it's retried.
+// History: SUN-1221E2D proved (not guessed) that `globalTermsGuard`
+// (`packages/provider-adapters/src/policy/terms-guard.ts`) was a
+// module-level singleton whose `reviews` Map started empty, with zero
+// `recordReview(...)` callers anywhere in the non-test codebase --
+// every real adapter calling `globalTermsGuard.checkAccess(manifest,
+// 'live')`, `direct-public-http` included, therefore ALWAYS threw
+// `PolicyBlockedError` for `execution_mode: 'live'`, unconditionally --
+// a genuine terms-of-service/compliance gap, not a code defect or
+// network flakiness.
 //
-// This is a genuine terms-of-service/compliance decision (has SITEBORNE
-// actually reviewed `direct-public-http`'s terms -- effectively "may we
-// automatically fetch arbitrary buyer-specified public URLs" -- per
-// RFC 9110, the manifest's own declared `terms_uri`), not a code defect.
-// SUN-1221E2D's own debugging law ("do NOT alter executor behavior
-// merely to make it succeed") forbids fabricating a `recordReview(...)`
-// call with an invented "verified" status to make this pass -- that is
-// exactly the kind of unilateral, unauthorized policy decision this
-// checkpoint's evidence-only mandate exists to prevent. This phase
-// therefore asserts the CURRENT, real, structural limitation as a named,
-// permanent regression proof: it will fail loudly (informatively) the
-// moment anyone changes this behavior, whether by a genuine terms
-// review being recorded or by an unauthorized bypass -- either way,
-// this phase forces that change to be visible and deliberate, never
-// silent.
+// SUN-1221E2T recorded the human decision this required: an explicit
+// operator risk-acceptance review for `direct-public-http`, scoped
+// narrowly to bounded fetching of buyer-supplied public HTTP/HTTPS URLs
+// under SITEBORNE's existing SSRF/DNS-rebinding/redirect/size/timeout
+// controls (`DIRECT_PUBLIC_HTTP_TERMS_REVIEW` in
+// `packages/provider-adapters/src/policy/terms-guard.ts`) -- explicitly
+// NOT a claim that any specific target site's own terms were reviewed.
+// With that review recorded, `direct-public-http` now passes the terms
+// gate and this phase proves the real socket fetch reaches actual
+// network execution end-to-end.
 // ---------------------------------------------------------------------
 async function runPhase10() {
   const configPath = join(REPO_ROOT, 'wrangler.worker-runtime-test.toml');
@@ -1657,13 +1645,15 @@ async function runPhase10() {
     } catch {
       /* leave {} */
     }
-    // SUN-1221E2D §9's proven, current, real limitation (see this
-    // function's own header comment) -- documented here as a named
-    // regression proof, not silently tolerated.
+    // SUN-1221E2T: the operator-approved direct-public-http review is now
+    // recorded, so the real socket fetch must pass the terms gate and
+    // reach genuine network execution -- proven end-to-end, real settle
+    // included, same success-shape assertion as PHASE 6 (2)'s verify/CDP
+    // equivalent.
     record(
-      'PHASE 10 (2): web-context-production real socket fetch to https://example.com/ is currently, deterministically policy_blocked (globalTermsGuard has no direct-public-http review recorded anywhere -- SUN-1221E2D root cause, not network flakiness)',
-      result.status === 502 && String(parsed.message).includes('did not succeed (policy_blocked)'),
-      `status=${result.status} message=${String(parsed.message)}`
+      'PHASE 10 (2): web-context-production real socket fetch to https://example.com/ passes the terms gate and succeeds through the real production composition (SUN-1221E2T)',
+      result.status === 200 && parsed.result_class === 'success' && typeof parsed.receipt_id === 'string',
+      `status=${result.status} result_class=${parsed.result_class} receipt_id_present=${typeof parsed.receipt_id === 'string'}`
     );
   });
 }

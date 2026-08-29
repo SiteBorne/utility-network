@@ -112,4 +112,38 @@ export class TermsGuard {
   }
 }
 
-export const globalTermsGuard = new TermsGuard();
+/**
+ * SUN-1221E2T: operator-recorded review for the `direct-public-http`
+ * capability (bounded fetching of buyer-supplied public HTTP/HTTPS URLs,
+ * used by web_context_verified.v2).
+ *
+ * This is explicitly an operational risk-acceptance decision by the
+ * SITEBORNE operator, not a review of any specific third-party website's
+ * Terms of Service (there is no single reviewable ToS document for
+ * arbitrary buyer-supplied URLs -- every target site has its own, unreviewed
+ * terms). It does not authorize bypassing authentication, access controls,
+ * technical restrictions, or other applicable legal/contractual
+ * restrictions. Recorded verbatim from the operator's own words (chat,
+ * 2026-08-29), scoped narrowly to this one capability only -- see
+ * docs/reports/SUN-1221E2T-direct-public-http-governance-review.md.
+ */
+export const DIRECT_PUBLIC_HTTP_TERMS_REVIEW: TermsReview = {
+  providerId: 'direct-public-http',
+  termsUri: 'https://www.rfc-editor.org/rfc/rfc9110',
+  termsHash: null,
+  reviewedAt: '2026-08-29T00:00:00.000Z',
+  status: 'verified',
+  reviewer: 'operator (SITEBORNE, recorded via chat 2026-08-29)',
+  notes:
+    'Approved for bounded fetching of buyer-supplied public HTTP/HTTPS URLs under ' +
+    "SITEBORNE's existing security controls, including private/internal-address " +
+    'blocking, DNS-rebinding protection, redirect revalidation, timeout and ' +
+    'response-size limits, credential-bearing URL prohibition, and sanitized ' +
+    'logging. This approval is an operational risk-acceptance decision for the ' +
+    'SITEBORNE capability. It does not represent that any specific third-party ' +
+    "website's Terms of Service were reviewed or approved, and does not authorize " +
+    'bypassing authentication, access controls, technical restrictions, or other ' +
+    'applicable legal/contractual restrictions.',
+};
+
+export const globalTermsGuard = new TermsGuard([DIRECT_PUBLIC_HTTP_TERMS_REVIEW]);
