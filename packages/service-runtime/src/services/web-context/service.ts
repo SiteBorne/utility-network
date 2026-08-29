@@ -210,9 +210,29 @@ export class WebContextVerifiedService
       keyRegistry: this.deps.keyRegistry,
     });
 
+    // SUN-1221E2D — SUN-1221E2R's forensic reconciliation of the real
+    // HTTP 502 (SUN-1221E2) found the verification mesh can still
+    // `decision: 'pass'` even when `direct-public-http` itself failed
+    // (there's nothing deterministic to check against zero claims/
+    // evidence) -- the OLD condition below (`signed.verdict.decision !==
+    // 'pass'` alone) then left `failure: undefined` entirely, so the
+    // composition boundary's public 502 body fell back to the bare
+    // `result_class=...` string with no reason at all. `httpFetchFailed`
+    // closes that gap without touching the OTHER, already-correct
+    // failure case (content-based verification failure with a fully
+    // successful fetch, e.g. the quarantine test above) -- that case's
+    // `message`/`details` shape is preserved byte-for-byte.
+    const httpFetchFailed = resultClass !== 'success';
+    const verdictFailed = signed.verdict.decision !== 'pass';
+    const httpDiagnosticDetails = httpFetchFailed
+      ? {
+          diagnostic_reason_code: result.error?.code ?? result.resultClass,
+          diagnostic_stage: 'direct_public_http_fetch' as const,
+        }
+      : undefined;
+
     return {
-      result_class:
-        signed.verdict.decision === 'pass' ? resultClass : 'internal_verification_failed',
+      result_class: !verdictFailed && !httpFetchFailed ? resultClass : 'internal_verification_failed',
       service_id: context.service_id,
       service_version: context.service_id.endsWith('.v2') ? 'v2' : 'v1',
       contract_release: context.contract_release,
@@ -220,7 +240,7 @@ export class WebContextVerifiedService
       job_id: draft.job_id,
       input_hash: inputHash,
       output:
-        signed.verdict.decision === 'pass'
+        !verdictFailed && !httpFetchFailed
           ? signed.document.extensions['net.siteborne.web-context.v1']
           : undefined,
       output_hash: signed.outputHash,
@@ -245,14 +265,35 @@ export class WebContextVerifiedService
         output_bytes: JSON.stringify(signed.document).length,
       },
       failure:
-        signed.verdict.decision === 'pass'
+        !verdictFailed && !httpFetchFailed
           ? undefined
-          : {
-              code: 'verification_failed',
-              message: `verification mesh decision was "${signed.verdict.decision}"`,
-              retryable: false,
-              details: signed.verdict.verification.deterministic_failures,
-            },
+          : verdictFailed
+            ? {
+                code: 'verification_failed',
+                message: `verification mesh decision was "${signed.verdict.decision}"`,
+                retryable: false,
+                // Existing, byte-for-byte-unchanged shape (a bare array)
+                // when the fetch itself succeeded -- only merges in the
+                // new diagnostic fields when the fetch ALSO failed, never
+                // silently reshaping the case every pre-existing caller
+                // already relies on.
+                details: httpDiagnosticDetails
+                  ? {
+                      deterministic_failures: signed.verdict.verification.deterministic_failures,
+                      ...httpDiagnosticDetails,
+                    }
+                  : signed.verdict.verification.deterministic_failures,
+              }
+            : {
+                // verdictFailed === false here, httpFetchFailed === true
+                // -- the exact gap this checkpoint closes: the mesh had
+                // nothing to fail on, but the underlying fetch never
+                // produced anything to verify in the first place.
+                code: 'verification_failed',
+                message: `direct-public-http did not succeed (${result.resultClass}) for ${input.target_url}`,
+                retryable: false,
+                details: httpDiagnosticDetails,
+              },
     };
   }
 }

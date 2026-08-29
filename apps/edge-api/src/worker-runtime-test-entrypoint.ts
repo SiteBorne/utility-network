@@ -54,6 +54,7 @@ import {
 import { NeverminedPaymentEvidenceProvider } from './control-plane/evidence/nevermined-provider';
 import { createX402ServiceRoute } from './control-plane/routes/x402-service';
 import { buildVerifyAgentOutputV2CdpProductionRouteConfig } from './control-plane/production/verify-agent-output-v2-cdp-composition';
+import { buildWebContextV2CdpProductionRouteConfig } from './control-plane/production/web-context-v2-cdp-composition';
 import { D1ServicesRepository } from './control-plane/repositories/d1/services';
 import { mcpRoute } from './routes/mcp';
 import type { Env } from './control-plane/config/env';
@@ -288,6 +289,77 @@ app.all('/v2/verify-production/*', async (c) => {
   const url = new URL(c.req.raw.url);
   url.pathname = url.pathname.replace('/v2/verify-production/', '/v2/verify/');
   return cachedVerifyProductionApp.request(new Request(url, c.req.raw));
+});
+
+let cachedWebContextProductionApp: Hono | undefined;
+let cachedWebContextProductionDb: D1Database | undefined;
+
+/** SUN-1221E2D §9 -- the ONE local, real-`workerd`, real-`cloudflare:sockets`
+ * reproduction attempt this checkpoint's debugging law permits: the exact
+ * REAL production composition (`buildWebContextV2CdpProductionRouteConfig`,
+ * no `connectFnOverride` -- the real `cloudflare:sockets` `connect`) making
+ * one real outbound fetch to the same canonical `https://example.com/`
+ * target this whole release train has used throughout, entirely local
+ * (never the deployed candidate/production Worker). Same fixture-evidence-
+ * override pattern as `/v2/verify-production/*` above -- only the payment
+ * evidence is fixture; the HTTP fetch itself is 100% real. */
+app.all('/v2/web-context-production/*', async (c) => {
+  if (!c.env.DB) {
+    return c.json({ error: 'configuration_error', message: 'no D1 binding configured' }, 500);
+  }
+  if (!cachedWebContextProductionApp || cachedWebContextProductionDb !== c.env.DB) {
+    if (!cachedTestSigningKeyHex) {
+      cachedTestSigningKeyHex = await testSigningPrivateKeyHex();
+    }
+    const servicesRepo = new D1ServicesRepository(c.env.DB);
+    const entry = REGISTRY_SERVICES['web_context_verified.v2'];
+    await servicesRepo
+      .create({
+        service_id: 'web_context_verified.v2',
+        version: entry.service_version,
+        title: entry.title,
+        description: entry.description,
+        input_schema: entry.input_schema_uri,
+        output_schema: entry.output_schema_uri,
+        price_usd: entry.maximum_price.amount,
+        production_enabled: false,
+        production_ready: false,
+        protocol_status: 'preproduction',
+      })
+      .catch(() => {
+        /* idempotent: already seeded in this isolated D1 instance. */
+      });
+
+    const config = await buildWebContextV2CdpProductionRouteConfig(
+      {
+        PAID_RECEIPT_SIGNING_PRIVATE_KEY: cachedTestSigningKeyHex,
+        PAID_RECEIPT_SIGNING_KEY_ID: TEST_SIGNING_KEY_ID,
+        SELLER_WALLET_ADDRESS: c.env.SELLER_WALLET_ADDRESS,
+        CDP_API_KEY_ID: c.env.CDP_API_KEY_ID,
+        CDP_API_KEY_SECRET: c.env.CDP_API_KEY_SECRET,
+        PAYMENT_ENVIRONMENT: c.env.PAYMENT_ENVIRONMENT,
+        PRODUCTION_ENABLED: c.env.PRODUCTION_ENABLED,
+        HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP: c.env.HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP,
+        PRODUCTION_CDP_CREDENTIALS_APPROVED: c.env.PRODUCTION_CDP_CREDENTIALS_APPROVED,
+      },
+      c.env.DB,
+      { evidenceMode: 'fixture' }
+      // connectFnOverride deliberately omitted -- defaults to the real
+      // `cloudflare:sockets` `connect`, the real seam SUN-1221E2's HTTP
+      // 502 actually failed in.
+    );
+    if ('unavailable' in config) {
+      return c.json({ error: 'configuration_error', message: config.reason }, 500);
+    }
+
+    const subApp = new Hono();
+    createX402ServiceRoute(subApp, config);
+    cachedWebContextProductionApp = subApp;
+    cachedWebContextProductionDb = c.env.DB;
+  }
+  const url = new URL(c.req.raw.url);
+  url.pathname = url.pathname.replace('/v2/web-context-production/', '/v2/web/');
+  return cachedWebContextProductionApp.request(new Request(url, c.req.raw));
 });
 
 app.all('/v1/*', async (c) => {

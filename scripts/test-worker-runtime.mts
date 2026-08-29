@@ -1591,6 +1591,84 @@ async function runPhase9() {
 }
 
 // ---------------------------------------------------------------------
+// PHASE 10 (SUN-1221E2D §9): the ONE local, real-`workerd`, real-
+// `cloudflare:sockets` reproduction of SUN-1221E2's real HTTP 502 this
+// checkpoint's debugging law permits -- the REAL production composition
+// (`buildWebContextV2CdpProductionRouteConfig`, real `connect`, no
+// override) making one genuine outbound fetch to the canonical
+// `https://example.com/` target used throughout this whole release
+// train. Requires real internet egress from wherever this runs.
+//
+// Root cause, PROVEN (not guessed) by this exact reproduction:
+// `globalTermsGuard` (`packages/provider-adapters/src/policy/
+// terms-guard.ts`) is a module-level singleton whose `reviews` Map
+// starts empty and has zero `recordReview(...)` callers anywhere in the
+// non-test codebase (confirmed by direct repository-wide search,
+// SUN-1221E2D §9) -- every real adapter that calls
+// `globalTermsGuard.checkAccess(manifest, 'live')`, `direct-public-http`
+// included, therefore ALWAYS throws `PolicyBlockedError` ("has no terms
+// review record") for `execution_mode: 'live'`, unconditionally, with
+// 100% reproducibility -- never a transient network/DNS/socket
+// condition. `verify_agent_output.v2` (SUN-1220's already-live, already-
+// real-paid first service) never touches this guard at all -- its
+// executor verifies buyer-supplied `candidate_output` deterministically,
+// no external HTTP fetch -- which is exactly why THAT service's real
+// payment succeeded while web_context_verified.v2's necessarily cannot,
+// yet, regardless of how many times it's retried.
+//
+// This is a genuine terms-of-service/compliance decision (has SITEBORNE
+// actually reviewed `direct-public-http`'s terms -- effectively "may we
+// automatically fetch arbitrary buyer-specified public URLs" -- per
+// RFC 9110, the manifest's own declared `terms_uri`), not a code defect.
+// SUN-1221E2D's own debugging law ("do NOT alter executor behavior
+// merely to make it succeed") forbids fabricating a `recordReview(...)`
+// call with an invented "verified" status to make this pass -- that is
+// exactly the kind of unilateral, unauthorized policy decision this
+// checkpoint's evidence-only mandate exists to prevent. This phase
+// therefore asserts the CURRENT, real, structural limitation as a named,
+// permanent regression proof: it will fail loudly (informatively) the
+// moment anyone changes this behavior, whether by a genuine terms
+// review being recorded or by an unauthorized bypass -- either way,
+// this phase forces that change to be visible and deliberate, never
+// silent.
+// ---------------------------------------------------------------------
+async function runPhase10() {
+  const configPath = join(REPO_ROOT, 'wrangler.worker-runtime-test.toml');
+  await withDevServer({ configPath, dbName: 'siteborne-worker-runtime-test' }, async (base) => {
+    record(
+      'PHASE 10 (test-only entrypoint, web-context v2/CDP PRODUCTION composition, real socket): worker boots under real workerd',
+      true
+    );
+
+    const path = '/v2/web-context-production/context';
+    const body = { target_url: 'https://example.com/', retrieval_mode: 'direct' };
+
+    const challenge = await get402(base, path, body);
+    record(
+      'PHASE 10 (1): web-context-production unsigned request -> real 402 with canonical production price',
+      challenge.accepts?.[0]?.amount === '9000',
+      `expected=9000 actual=${challenge.accepts?.[0]?.amount}`
+    );
+
+    const result = await payAndFetch(base, path, body, challenge);
+    let parsed: any = {};
+    try {
+      parsed = JSON.parse(result.body);
+    } catch {
+      /* leave {} */
+    }
+    // SUN-1221E2D §9's proven, current, real limitation (see this
+    // function's own header comment) -- documented here as a named
+    // regression proof, not silently tolerated.
+    record(
+      'PHASE 10 (2): web-context-production real socket fetch to https://example.com/ is currently, deterministically policy_blocked (globalTermsGuard has no direct-public-http review recorded anywhere -- SUN-1221E2D root cause, not network flakiness)',
+      result.status === 502 && String(parsed.message).includes('did not succeed (policy_blocked)'),
+      `status=${result.status} message=${String(parsed.message)}`
+    );
+  });
+}
+
+// ---------------------------------------------------------------------
 // Bundle isolation proof (§7 / S3): the REAL production wrangler.toml's
 // dry-run bundle must never contain the test-only entrypoint's source
 // chunk.
@@ -1772,6 +1850,21 @@ async function main() {
     await runPhase7();
     await runPhase8();
     await runPhase9();
+    // SUN-1221E2D §9 -- PHASE 10 makes one real outbound internet fetch
+    // (to https://example.com/) through the real `cloudflare:sockets`
+    // seam, unlike every other phase in this file (deliberately zero
+    // real network access per this file's own header doc). Gated behind
+    // an explicit opt-in so the default `pnpm test:worker-runtime` run
+    // (CI included) stays exactly as network-isolated as it always was;
+    // run with `RUN_WORKER_RUNTIME_LIVE_NETWORK_PHASE=true` to exercise
+    // it on demand.
+    if (process.env.RUN_WORKER_RUNTIME_LIVE_NETWORK_PHASE === 'true') {
+      await runPhase10();
+    } else {
+      console.log(
+        '[test:worker-runtime] PHASE 10 skipped (set RUN_WORKER_RUNTIME_LIVE_NETWORK_PHASE=true to run it -- it makes one real outbound internet fetch)'
+      );
+    }
     await runBundleIsolationCheck();
   } catch (err) {
     record('harness execution', false, String(err));

@@ -105,12 +105,29 @@ export class SafeSocketHttpClient implements InjectedHttpClient {
     const port = url.port ? parseInt(url.port, 10) : url.protocol === 'https:' ? 443 : 80;
     const isHttps = url.protocol === 'https:';
 
-    let socket = this.config.connect(
-      { hostname: connectIp, port },
-      { secureTransport: isHttps ? 'starttls' : 'off', allowHalfOpen: false }
-    );
-    if (isHttps) {
-      socket = socket.startTls({ expectedServerHostname: hostname });
+    let socket: SocketLike;
+    try {
+      socket = this.config.connect(
+        { hostname: connectIp, port },
+        { secureTransport: isHttps ? 'starttls' : 'off', allowHalfOpen: false }
+      );
+      if (isHttps) {
+        socket = socket.startTls({ expectedServerHostname: hostname });
+      }
+    } catch (err) {
+      // SUN-1221E2D — `connect()`/`startTls()` call straight into the real
+      // `cloudflare:sockets` platform with no prior wrapping anywhere in
+      // this codebase; whatever raw, unclassified error the platform
+      // throws here used to propagate all the way to
+      // `toAdapterResult`'s generic-`Error` fallback indistinguishable
+      // from every other failure class. Tagged with a stable, parseable
+      // prefix `errors.ts`'s `classifyGenericAdapterErrorReason` now
+      // recognizes; the original is preserved verbatim via `cause`,
+      // never discarded.
+      throw new Error(
+        `WEBCTX_UPSTREAM_CONNECTION_FAILED: ${err instanceof Error ? err.message : String(err)}`,
+        { cause: err }
+      );
     }
 
     await this.writeRequest(socket, url, hostname, init.headers);
@@ -148,9 +165,26 @@ export class SafeSocketHttpClient implements InjectedHttpClient {
     const writer = socket.writable.getWriter();
     try {
       await writer.write(new TextEncoder().encode(requestText));
-    } finally {
-      await writer.close();
+    } catch (err) {
+      // SUN-1221E2D — same reasoning as the connect/TLS wrap above: a raw
+      // platform write failure (e.g. the connection was reset while
+      // sending the request) used to propagate completely unwrapped. The
+      // secondary `close()` failure that closing an already-failed
+      // writer usually produces is deliberately swallowed here so it
+      // never masks the real, original write failure -- a masked reason
+      // is itself a silent branch (SUN-1221E2D §0).
+      try {
+        await writer.close();
+      } catch {
+        // secondary failure closing an already-failed writer; the
+        // original write error below already tells the real story.
+      }
+      throw new Error(
+        `WEBCTX_REQUEST_WRITE_FAILED: ${err instanceof Error ? err.message : String(err)}`,
+        { cause: err }
+      );
     }
+    await writer.close();
   }
 
   private async readResponse(readable: ReadableStream<Uint8Array>): Promise<{

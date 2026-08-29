@@ -45,6 +45,24 @@ export function jsonHttpClient(body: unknown, init: { status?: number } = {}): C
   };
 }
 
+/** SUN-1221E2D — an `InjectedHttpClient` whose `fetch()` always rejects
+ * with the given message, simulating a raw transport-layer failure (the
+ * same shape `SafeSocketHttpClient` propagates in production) so tests
+ * can prove diagnostic reason codes reach `WebContextVerifiedService`'s
+ * final `failure.details` without needing a real socket. */
+export function failingHttpClient(errorMessage: string): CountingHttpClient {
+  let calls = 0;
+  return {
+    async fetch() {
+      calls++;
+      throw new Error(errorMessage);
+    },
+    get callCount() {
+      return calls;
+    },
+  };
+}
+
 export function textHttpClient(
   body: string,
   mediaType = 'text/html',

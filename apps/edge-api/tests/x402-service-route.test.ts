@@ -752,4 +752,84 @@ describe('x402 HTTP vertical slice (SUN-0700A checkpoint 5)', () => {
       );
     });
   });
+
+  describe('SUN-1221E2D — executor failures surface a sanitized diagnostic audit event, never new detail in the public 502 body', () => {
+    it('writes a service_execution_diagnostic audit_events row correlated by job_id, without adding to the public response', async () => {
+      const diagnosticApp = new Hono();
+      createX402ServiceRoute(diagnosticApp, {
+        serviceId: 'web_context_verified.v1',
+        scheme: 'exact',
+        pricingKey: 'web_context_verified_direct',
+        network: 'eip155:84532',
+        asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+        paymentRequirementExtra: { name: 'USDC', version: '2' },
+        path: '/v1/web/context-diagnostic',
+        inputSchema: { type: 'object' },
+        inputValidator: compileTestInputValidator({ type: 'object' }),
+        contractRelease: '1.0.0',
+        inputSchemaHash: 'sha256:' + '1'.repeat(64),
+        outputSchemaHash: 'sha256:' + '2'.repeat(64),
+        pccDependency: '1.0.0',
+        db,
+        clock: () => clockValue,
+        evidenceMode: 'fixture',
+        // Mirrors exactly the shape SUN-1221E2D's real WebContextVerifiedService
+        // fix now returns for an HTTP-layer failure the verification
+        // mesh didn't itself reject (SUN-1221E2, the real HTTP 502).
+        executor: async () => ({
+          result: {
+            result_class: 'internal_verification_failed',
+            failure: {
+              code: 'verification_failed',
+              message: 'direct-public-http did not succeed (permanent_failure) for https://unreachable.example/',
+              details: {
+                diagnostic_reason_code: 'WEBCTX_DNS_RESOLUTION_FAILED',
+                diagnostic_stage: 'direct_public_http_fetch',
+              },
+            },
+          },
+        }),
+      });
+
+      const challenge = await get402(diagnosticApp, '/v1/web/context-diagnostic', { probe: true });
+      const res = await payAndRetry(diagnosticApp, '/v1/web/context-diagnostic', { probe: true }, challenge);
+
+      expect(res.status).toBe(502);
+      const body = (await res.json()) as Record<string, unknown>;
+      // The public 502 body carries only the pre-existing generic
+      // message -- no diagnostic_reason_code, no diagnostic_stage, no
+      // `details` key of any kind (SUN-1221E2D §7's "no public schema
+      // change" rule).
+      expect(body).not.toHaveProperty('details');
+      expect(JSON.stringify(body)).not.toContain('WEBCTX_DNS_RESOLUTION_FAILED');
+
+      const rows = await db
+        .prepare(`SELECT * FROM audit_events WHERE event_type = 'service_execution_diagnostic'`)
+        .all();
+      expect(rows.results).toHaveLength(1);
+      const details = JSON.parse((rows.results[0] as { details: string }).details);
+      expect(details).toMatchObject({
+        diagnostic_reason_code: 'WEBCTX_DNS_RESOLUTION_FAILED',
+        diagnostic_stage: 'direct_public_http_fetch',
+        result_class: 'internal_verification_failed',
+      });
+      expect(details.job_id).toBeTruthy();
+      expect(details.request_id).toBeTruthy();
+      // Never payment material of any kind.
+      expect(JSON.stringify(details)).not.toMatch(/signature|authorization|private_key|nonce/i);
+    });
+
+    it('does not write a diagnostic audit event on a normal successful execution (no regression)', async () => {
+      const before = await db
+        .prepare(`SELECT COUNT(*) as n FROM audit_events WHERE event_type = 'service_execution_diagnostic'`)
+        .first<{ n: number }>();
+      const challenge = await get402(app, '/v1/company/evidence-graph', COMPANY_INPUT);
+      const res = await payAndRetry(app, '/v1/company/evidence-graph', COMPANY_INPUT, challenge);
+      expect(res.status).toBe(200);
+      const after = await db
+        .prepare(`SELECT COUNT(*) as n FROM audit_events WHERE event_type = 'service_execution_diagnostic'`)
+        .first<{ n: number }>();
+      expect(after!.n).toBe(before!.n);
+    });
+  });
 });

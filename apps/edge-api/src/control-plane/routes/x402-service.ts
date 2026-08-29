@@ -110,7 +110,11 @@ export interface ExecutorOutcome {
     receipt_id?: string;
     receipt?: unknown;
     verification?: unknown;
-    failure?: { code: string; message: string };
+    // `details` widened (SUN-1221E2D) to carry the sanitized diagnostic
+    // fields `WebContextVerifiedService` (and any other real executor)
+    // may now attach on a non-success result -- internal-only, never
+    // read into the public `jsonError` response below.
+    failure?: { code: string; message: string; details?: unknown };
   };
   /** Required when the route's scheme is `upto`: the atomic-unit actual
    * amount to charge, computed by the caller from the service's real
@@ -1434,6 +1438,21 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
     ) {
       await transition(jobId, 'EXECUTING', 'QUARANTINED', 'EXECUTION_FAILED');
       await transition(jobId, 'QUARANTINED', 'REJECTED', 'QUARANTINE_POLICY');
+      // SUN-1221E2D §6 — a sanitized, internal-only correlation event:
+      // SUN-1221E2's real HTTP 502 left nothing queryable anywhere
+      // (D1 or otherwise) beyond the generic public message. This never
+      // changes the public response body (`jsonError` below is
+      // unmodified, still passed only `message` — no `details` argument)
+      // — it exists solely so the NEXT real failure like this one is
+      // diagnostically decisive from D1 alone, the same audit_events
+      // table every other step of this exact request already writes to.
+      const failureDetails = outcome.result.failure?.details;
+      await audit('service_execution_diagnostic', {
+        job_id: jobId,
+        request_id: requestId,
+        result_class: outcome.result.result_class,
+        ...(failureDetails && typeof failureDetails === 'object' ? failureDetails : {}),
+      });
       return jsonError(
         c,
         502,
