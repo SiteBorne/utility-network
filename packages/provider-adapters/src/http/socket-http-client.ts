@@ -199,7 +199,7 @@ export class SafeSocketHttpClient implements InjectedHttpClient {
     try {
       let headerEnd = -1;
       while (headerEnd === -1) {
-        const { done, value } = await reader.read();
+        const { done, value } = await readOrThrow(reader);
         if (done) throw new Error('Connection closed before response headers completed');
         buffered = concat(buffered, value);
         if (buffered.length > this.maxResponseBytes) {
@@ -254,7 +254,7 @@ export class SafeSocketHttpClient implements InjectedHttpClient {
   ): Promise<Uint8Array> {
     let buffered = initial;
     while (buffered.length < targetLength) {
-      const { done, value } = await reader.read();
+      const { done, value } = await readOrThrow(reader);
       if (done) break;
       buffered = concat(buffered, value);
       if (buffered.length > this.maxResponseBytes) {
@@ -270,7 +270,7 @@ export class SafeSocketHttpClient implements InjectedHttpClient {
   ): Promise<Uint8Array> {
     let buffered = initial;
     while (true) {
-      const { done, value } = await reader.read();
+      const { done, value } = await readOrThrow(reader);
       if (done) break;
       buffered = concat(buffered, value);
       if (buffered.length > this.maxResponseBytes) {
@@ -290,7 +290,7 @@ export class SafeSocketHttpClient implements InjectedHttpClient {
 
     const ensure = async (minBytes: number): Promise<void> => {
       while (buffered.length < minBytes) {
-        const { done, value } = await reader.read();
+        const { done, value } = await readOrThrow(reader);
         if (done) throw new Error('Connection closed mid-chunk');
         buffered = concat(buffered, value);
       }
@@ -337,6 +337,34 @@ function isIpLiteral(hostname: string): boolean {
 
 function stripBrackets(hostname: string): string {
   return hostname.startsWith('[') && hostname.endsWith(']') ? hostname.slice(1, -1) : hostname;
+}
+
+/**
+ * SUN-1221E3P — the response-*reading* phase's `reader.read()` calls
+ * (header loop, `readUntil`, `readUntilClose`, `readChunkedBody`'s
+ * `ensure()`) were the one raw `cloudflare:sockets` platform call in this
+ * file E2D's connect/TLS and request-write tagging didn't cover — a raw
+ * read rejection (e.g. a TCP reset mid-response) fell straight through to
+ * `toAdapterResult`'s generic `WEBCTX_UPSTREAM_PROTOCOL_ERROR` fallback,
+ * indistinguishable from a genuine parser bug. This wraps every read call
+ * site through one shared helper (never two rules that could drift
+ * apart), tagging only a *raw* rejection from the platform read itself —
+ * never one of this file's own deliberate `throw new Error(...)` calls,
+ * which only ever happen strictly *after* a read already succeeded and
+ * therefore never pass through here. Diagnostic-tagging only: no retry,
+ * no timeout change, no buffer-limit change, no parsing-behavior change —
+ * a read that already succeeds today succeeds identically after this.
+ */
+async function readOrThrow(
+  reader: ReadableStreamDefaultReader<Uint8Array>
+): Promise<ReadableStreamReadResult<Uint8Array>> {
+  try {
+    return await reader.read();
+  } catch (err) {
+    throw new Error(`WEBCTX_RESPONSE_READ_FAILED: ${err instanceof Error ? err.message : String(err)}`, {
+      cause: err,
+    });
+  }
 }
 
 function concat(a: Uint8Array, b: Uint8Array): Uint8Array {

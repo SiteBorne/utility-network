@@ -41,6 +41,8 @@ describe('SUN-1221E2D — toAdapterResult recovers a specific WEBCTX_* reason co
     // SUN-1221E2D's own new instrumentation (socket-http-client.ts transport wrap)
     { message: 'WEBCTX_UPSTREAM_CONNECTION_FAILED: connection refused', expectedReason: 'WEBCTX_UPSTREAM_CONNECTION_FAILED' },
     { message: 'WEBCTX_REQUEST_WRITE_FAILED: socket closed', expectedReason: 'WEBCTX_REQUEST_WRITE_FAILED' },
+    // SUN-1221E3P's own new instrumentation (readOrThrow response-read wrap)
+    { message: 'WEBCTX_RESPONSE_READ_FAILED: platform read reset mid-response', expectedReason: 'WEBCTX_RESPONSE_READ_FAILED' },
     // AbortController-driven timeout (client.ts's own 30s bound)
     { message: 'The operation was aborted', name: 'AbortError', expectedReason: 'WEBCTX_TIMEOUT' },
   ];

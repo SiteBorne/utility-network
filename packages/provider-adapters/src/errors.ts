@@ -90,10 +90,11 @@ export class PartialResultError extends AdapterError {
  * response-size bounds, decompression, JSON parsing) and
  * `socket-http-client.ts` (`SafeSocketHttpClient` — DNS resolution via
  * the fixed trusted resolver, malformed HTTP/1.1 protocol framing, and
- * this checkpoint's own new transport-stage wrap — see that file's
- * `WEBCTX_UPSTREAM_CONNECTION_FAILED` / `WEBCTX_REQUEST_WRITE_FAILED`
- * prefixes). Order matters: more specific patterns are listed before the
- * broader ones they could otherwise be shadowed by.
+ * this checkpoint's own new transport-stage wraps — see that file's
+ * `WEBCTX_UPSTREAM_CONNECTION_FAILED` / `WEBCTX_REQUEST_WRITE_FAILED` /
+ * `WEBCTX_RESPONSE_READ_FAILED` prefixes). Order matters: more specific
+ * patterns are listed before the broader ones they could otherwise be
+ * shadowed by.
  *
  * Deliberately NOT exhaustive of every conceivable platform error string
  * (the debugging law this checkpoint operates under forbids guessing
@@ -106,6 +107,7 @@ export class PartialResultError extends AdapterError {
 const WEBCTX_DIAGNOSTIC_REASON_PATTERNS: ReadonlyArray<{ pattern: RegExp; reason: string }> = [
   { pattern: /^WEBCTX_UPSTREAM_CONNECTION_FAILED:/, reason: 'WEBCTX_UPSTREAM_CONNECTION_FAILED' },
   { pattern: /^WEBCTX_REQUEST_WRITE_FAILED:/, reason: 'WEBCTX_REQUEST_WRITE_FAILED' },
+  { pattern: /^WEBCTX_RESPONSE_READ_FAILED:/, reason: 'WEBCTX_RESPONSE_READ_FAILED' },
   { pattern: /^DNS resolution failed safety policy/, reason: 'WEBCTX_DNS_RESOLUTION_FAILED' },
   { pattern: /^URL validation failed/, reason: 'WEBCTX_URL_VALIDATION_FAILED' },
   { pattern: /^Redirect without Location header/, reason: 'WEBCTX_REDIRECT_POLICY_BLOCKED' },
