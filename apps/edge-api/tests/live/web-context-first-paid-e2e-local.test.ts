@@ -12,6 +12,18 @@
  * `915be949-b46f-464b-a4d6-17b74539ce55`, quote_id
  * `qte_1cdda6b84605101e2787ef9d`, amount 9000 atomic, matching exactly).
  *
+ * SUN-1221E3 correction: `CANDIDATE_VERSION_ID` below was left pointing at
+ * the retired SUN-1221E2 candidate (`915be949-...`) after SUN-1221E2T1
+ * uploaded a new candidate (`54d87b77-...`) carrying the TermsGuard
+ * tri-state fix. Cloudflare no longer resolves a `Cloudflare-Workers-
+ * Version-Overrides` header for a version ID that has aged out of the
+ * retained-versions window, so every request — on both the custom domain
+ * and `workers.dev` — returned HTTP 404 instead of 402, with zero payment
+ * material ever created (confirmed by side-by-side curl against both the
+ * stale and current candidate IDs on both origins). Updated to the current
+ * SUN-1221E3 candidate; this is a routing-constant-only fix, no Worker
+ * runtime, candidate source, economics, or payment-semantics change.
+ *
  * `WORKER_ORIGIN` uses the custom domain (`utility.siteborne.net`), not
  * `workers.dev` — the `/mcp` route enforces a Host allowlist
  * (`MCP_ALLOWED_HOSTS` in `apps/edge-api/src/routes/mcp.ts`) that only the
@@ -49,7 +61,7 @@ const WORKER_SCRIPT_NAME = 'siteborne-utility-edge';
 const WORKER_ORIGIN = 'https://utility.siteborne.net';
 const TARGET_PATH = '/v2/web/context';
 const TARGET_URL = `${WORKER_ORIGIN}${TARGET_PATH}`;
-const CANDIDATE_VERSION_ID = '915be949-b46f-464b-a4d6-17b74539ce55';
+const CANDIDATE_VERSION_ID = '54d87b77-e3fd-44da-a012-a817c23f1953';
 const VERSION_OVERRIDE_HEADER = 'Cloudflare-Workers-Version-Overrides';
 const VERSION_OVERRIDE_HEADER_VALUE = `${WORKER_SCRIPT_NAME}="${CANDIDATE_VERSION_ID}"`;
 
@@ -668,7 +680,7 @@ describe('SUN-1221E2 web-context first-paid-e2e local client (unit, always run)'
     await runFirstPaidE2E(deps);
     const calls = (fetchImpl as ReturnType<typeof vi.fn>).mock.calls;
     expect(calls).toHaveLength(2);
-    const expectedHeaderValue = 'siteborne-utility-edge="915be949-b46f-464b-a4d6-17b74539ce55"';
+    const expectedHeaderValue = 'siteborne-utility-edge="54d87b77-e3fd-44da-a012-a817c23f1953"';
     for (const call of calls) {
       const headers = (call[1] as RequestInit).headers as Record<string, string>;
       expect(headers[VERSION_OVERRIDE_HEADER]).toBe(expectedHeaderValue);
