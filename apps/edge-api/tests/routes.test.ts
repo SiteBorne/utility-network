@@ -155,7 +155,12 @@ describe('Health and Readiness Routes', () => {
     expect(body.status).toBe('not_ready');
     expect(body.phase).toBe('foundation');
     expect(body.production_services_enabled).toBe(false);
-    expect(body.blocked_external).toContain('cloudflare_account_configuration');
+    // SUN-1220Q1/Q2: `cloudflare_account_configuration` was proven stale
+    // (this repository's own production:preflight passes and a real
+    // paid route has settled a live payment) and removed from
+    // blocked_external. `ionos_dns_migration` has no evidence source in
+    // this repository to check and is carried forward unchanged.
+    expect(body.blocked_external).toContain('ionos_dns_migration');
     expect(body.reason).toBeDefined();
   });
 });
