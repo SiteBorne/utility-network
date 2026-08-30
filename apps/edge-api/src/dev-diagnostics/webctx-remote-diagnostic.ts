@@ -11,6 +11,36 @@
  *     apps/edge-api/src/dev-diagnostics/webctx-remote-diagnostic.ts \
  *     --var DIAGNOSTIC_SEAM_ENABLED:true --port <port>
  *
+ * SUN-1221E5Q4: the plain invocation above (auto-discovering the
+ * repo-root `wrangler.toml` because this file lives under the repo
+ * tree) reliably returns HTTP 525 with the handler never reached --
+ * NOT a defect in this file or its imports. Bisection proved two
+ * independent `wrangler dev --remote`-only config interactions, neither
+ * present in real production deploys:
+ *   - `routes` (the zone-scoped MCP-registry-auth Worker Route in the
+ *     root `wrangler.toml`) is BY ITSELF sufficient to reproduce the
+ *     exact 525 signature, even against a zero-import static-200
+ *     handler with none of this file's own imports involved.
+ *   - `[queues]` producers are BY THEMSELVES sufficient to reproduce a
+ *     separate HTTP 503 / error 1105, matching wrangler's own explicit
+ *     "Queues are not yet supported in wrangler dev remote mode."
+ * This file reads no D1/KV/Queues/Browser/AI binding anywhere, so for
+ * remote-preview diagnostic sessions use an override config that omits
+ * `routes` and `[queues]` (and, for simplicity, the other real-resource
+ * bindings this file never touches) instead of the repo-root
+ * `wrangler.toml`, e.g.:
+ *
+ *   pnpm exec wrangler dev --remote \
+ *     apps/edge-api/src/dev-diagnostics/webctx-remote-diagnostic.ts \
+ *     --config <routes-and-queues-free-override>.toml \
+ *     --var DIAGNOSTIC_SEAM_ENABLED:true --port <port>
+ *
+ * See docs/reports/SUN-1221E5Q4-remote-bundle-delta-debugging.md for the
+ * full bisection evidence. Real production deploys are unaffected --
+ * this is exclusively a `wrangler dev --remote` preview-tooling
+ * interaction with a legitimate, working production `routes` entry, not
+ * a bug in that entry or in any SITEBORNE source.
+ *
  * which runs the bundle on Cloudflare's real network (confirmed empirically,
  * SUN-1221E5Q design-approval evidence: "Starting remote preview...", a real
  * multi-MB upload) but binds only to http://localhost:<port> on the
