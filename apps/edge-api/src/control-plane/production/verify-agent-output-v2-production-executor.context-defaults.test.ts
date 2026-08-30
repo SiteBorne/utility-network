@@ -31,6 +31,19 @@
  * independently pass the same non-nullable-expression check, and the
  * exhaustive walk's exemption list grew from one file to two, not to a
  * wildcard.
+ *
+ * SUN-1221E5Q added `dev-diagnostics/webctx-remote-diagnostic.ts`, a THIRD
+ * `buildServiceContext` caller -- but not a third production-reachable one.
+ * It is categorically the same kind of exclusion `paid-services.ts` and
+ * `scripts/` already get below ("never part of the real bundle"), proven
+ * independently by that file's own non-reachability suite
+ * (`dev-diagnostics-webctx-remote.test.ts`: nothing under `apps/edge-api/src`
+ * imports it, and the real production app 404s on its route). It is never
+ * bundled, never deployed, never reachable except via a one-off
+ * `wrangler dev --remote` CLI invocation pointed at it directly -- so it is
+ * excluded from this walk below rather than added to `AUDITED_PATHS`, and
+ * this exhaustive walk's exemption list grew from two directories to three,
+ * still not a wildcard.
  */
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -52,9 +65,10 @@ const WEB_CONTEXT_EXECUTOR_PATH = fileURLToPath(
  * the one known, audited call site calls `buildServiceContext(` with an
  * object literal that omits `clock`, `artifact_store`, or `audit` --
  * except files under `paid-services.ts`'s own fixture module, test
- * files, and scripts, which are never part of the real bundle (proven
- * separately by the bundle-isolation checks in
- * scripts/test-worker-runtime.mts). */
+ * files, scripts, and `dev-diagnostics/`, which are never part of the real
+ * bundle (proven separately by the bundle-isolation checks in
+ * scripts/test-worker-runtime.mts, and, for `dev-diagnostics/` specifically,
+ * by `dev-diagnostics-webctx-remote.test.ts`). */
 function walk(dir: string): string[] {
   const out: string[] = [];
   for (const entry of readdirSync(dir)) {
@@ -126,7 +140,10 @@ describe('SUN-1216 residual adjudication: buildServiceContext fixture-default re
   it('no OTHER production-reachable source file (excluding paid-services.ts, tests, and scripts) calls buildServiceContext with clock/artifact_store/audit omitted', () => {
     const srcRoot = dirname(dirname(dirname(EXECUTOR_PATH))); // apps/edge-api/src
     const files = walk(srcRoot).filter(
-      (f) => !f.includes('/routes/paid-services.ts') && !f.includes('/scripts/')
+      (f) =>
+        !f.includes('/routes/paid-services.ts') &&
+        !f.includes('/scripts/') &&
+        !f.includes('/dev-diagnostics/')
     );
     const AUDITED_PATHS = new Set([EXECUTOR_PATH, WEB_CONTEXT_EXECUTOR_PATH]);
     const offenders: string[] = [];

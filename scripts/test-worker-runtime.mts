@@ -1675,6 +1675,22 @@ async function runBundleIsolationCheck() {
       !containsTestEntrypoint && !containsMarker,
       `containsTestEntrypointChunk=${containsTestEntrypoint} containsMarker=${containsMarker}`
     );
+    // SUN-1221E5Q: the dev-only Cloudflare-network reproduction seam
+    // (`apps/edge-api/src/dev-diagnostics/webctx-remote-diagnostic.ts`) is
+    // never imported by the real entrypoint (proven at the source-import
+    // level by `dev-diagnostics-webctx-remote.test.ts`) -- re-proven here
+    // at the strongest level available: the actual compiled bundle this
+    // real `wrangler.toml` would deploy contains neither its gate variable
+    // name nor its route path, so there is no way for that seam to reach
+    // production even if some future change accidentally imported it
+    // without also wiring the gate/route through.
+    const containsDiagnosticSeamGate = bundle.includes('DIAGNOSTIC_SEAM_ENABLED');
+    const containsDiagnosticSeamRoute = bundle.includes('__diag/webctx-remote');
+    record(
+      'bundle isolation: real wrangler.toml dry-run bundle does NOT contain the SUN-1221E5Q dev-only diagnostic seam',
+      !containsDiagnosticSeamGate && !containsDiagnosticSeamRoute,
+      `containsDiagnosticSeamGate=${containsDiagnosticSeamGate} containsDiagnosticSeamRoute=${containsDiagnosticSeamRoute}`
+    );
     // SUN-1204 checkpoint J: the two new deterministic Nevermined client
     // factories live only inside the same test-only entrypoint file, so
     // their absence is already implied by the check above -- re-asserted
