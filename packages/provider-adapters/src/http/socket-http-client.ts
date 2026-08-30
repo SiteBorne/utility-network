@@ -133,7 +133,24 @@ export class SafeSocketHttpClient implements InjectedHttpClient {
     await this.writeRequest(socket, url, hostname, init.headers);
     const { status, statusText, responseHeaders, body } = await this.readResponse(socket.readable);
 
-    return new Response(body, { status, statusText, headers: responseHeaders });
+    try {
+      return new Response(body, { status, statusText, headers: responseHeaders });
+    } catch (err) {
+      // SUN-1221E4P §14/§6 — found via the 1xx-interim-response
+      // characterization test: the platform's `Response` constructor
+      // rejects an informational (1xx) status with an unwrapped
+      // `RangeError`. This parser has no loop to discard a 1xx interim
+      // response and keep reading for the real final status line (a real,
+      // separately-tracked defect, deliberately NOT fixed here per this
+      // checkpoint's evidence law) -- but the resulting construction
+      // failure was, until now, an untagged generic error. Diagnostic-
+      // tagging only: a response whose status already constructs
+      // successfully is completely unaffected.
+      throw new Error(
+        `WEBCTX_HTTP_INVALID_RESPONSE_STATUS: ${err instanceof Error ? err.message : String(err)} (status=${status})`,
+        { cause: err }
+      );
+    }
   }
 
   private async resolveOrThrow(hostname: string): Promise<string> {
@@ -200,7 +217,16 @@ export class SafeSocketHttpClient implements InjectedHttpClient {
       let headerEnd = -1;
       while (headerEnd === -1) {
         const { done, value } = await readOrThrow(reader);
-        if (done) throw new Error('Connection closed before response headers completed');
+        // SUN-1221E4P — a clean `done: true` here is the remote peer
+        // closing the connection *before* `\r\n\r\n` ever arrived. This is
+        // NOT a raw platform read rejection (that's `readOrThrow`'s own
+        // `WEBCTX_RESPONSE_READ_FAILED` tag above, proven absent in E4's
+        // real diagnostic trail) -- it is this parser's own deliberate
+        // reaction to a successful-but-incomplete read. Previously an
+        // untagged message, falling straight through to the generic
+        // `WEBCTX_UPSTREAM_PROTOCOL_ERROR` bucket alongside every other
+        // unclassified failure.
+        if (done) throw new Error('WEBCTX_HTTP_PREMATURE_EOF: connection closed before response headers completed');
         buffered = concat(buffered, value);
         if (buffered.length > this.maxResponseBytes) {
           throw new Error('Response headers exceed maximum size');
@@ -291,7 +317,10 @@ export class SafeSocketHttpClient implements InjectedHttpClient {
     const ensure = async (minBytes: number): Promise<void> => {
       while (buffered.length < minBytes) {
         const { done, value } = await readOrThrow(reader);
-        if (done) throw new Error('Connection closed mid-chunk');
+        // SUN-1221E4P — same reasoning as the header-loop wrap above: a
+        // clean `done: true` before the announced chunk size is satisfied,
+        // distinct from a raw read rejection.
+        if (done) throw new Error('WEBCTX_HTTP_PREMATURE_EOF: connection closed mid-chunk');
         buffered = concat(buffered, value);
       }
     };

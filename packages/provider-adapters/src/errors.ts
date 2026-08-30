@@ -92,7 +92,8 @@ export class PartialResultError extends AdapterError {
  * the fixed trusted resolver, malformed HTTP/1.1 protocol framing, and
  * this checkpoint's own new transport-stage wraps — see that file's
  * `WEBCTX_UPSTREAM_CONNECTION_FAILED` / `WEBCTX_REQUEST_WRITE_FAILED` /
- * `WEBCTX_RESPONSE_READ_FAILED` prefixes). Order matters: more specific
+ * `WEBCTX_RESPONSE_READ_FAILED` / `WEBCTX_HTTP_PREMATURE_EOF` prefixes).
+ * Order matters: more specific
  * patterns are listed before the broader ones they could otherwise be
  * shadowed by.
  *
@@ -108,6 +109,8 @@ const WEBCTX_DIAGNOSTIC_REASON_PATTERNS: ReadonlyArray<{ pattern: RegExp; reason
   { pattern: /^WEBCTX_UPSTREAM_CONNECTION_FAILED:/, reason: 'WEBCTX_UPSTREAM_CONNECTION_FAILED' },
   { pattern: /^WEBCTX_REQUEST_WRITE_FAILED:/, reason: 'WEBCTX_REQUEST_WRITE_FAILED' },
   { pattern: /^WEBCTX_RESPONSE_READ_FAILED:/, reason: 'WEBCTX_RESPONSE_READ_FAILED' },
+  { pattern: /^WEBCTX_HTTP_PREMATURE_EOF:/, reason: 'WEBCTX_HTTP_PREMATURE_EOF' },
+  { pattern: /^WEBCTX_HTTP_INVALID_RESPONSE_STATUS:/, reason: 'WEBCTX_HTTP_INVALID_RESPONSE_STATUS' },
   { pattern: /^DNS resolution failed safety policy/, reason: 'WEBCTX_DNS_RESOLUTION_FAILED' },
   { pattern: /^URL validation failed/, reason: 'WEBCTX_URL_VALIDATION_FAILED' },
   { pattern: /^Redirect without Location header/, reason: 'WEBCTX_REDIRECT_POLICY_BLOCKED' },

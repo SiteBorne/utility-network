@@ -43,6 +43,10 @@ describe('SUN-1221E2D — toAdapterResult recovers a specific WEBCTX_* reason co
     { message: 'WEBCTX_REQUEST_WRITE_FAILED: socket closed', expectedReason: 'WEBCTX_REQUEST_WRITE_FAILED' },
     // SUN-1221E3P's own new instrumentation (readOrThrow response-read wrap)
     { message: 'WEBCTX_RESPONSE_READ_FAILED: platform read reset mid-response', expectedReason: 'WEBCTX_RESPONSE_READ_FAILED' },
+    // SUN-1221E4P's own new instrumentation (clean done:true before headers/chunk complete)
+    { message: 'WEBCTX_HTTP_PREMATURE_EOF: connection closed before response headers completed', expectedReason: 'WEBCTX_HTTP_PREMATURE_EOF' },
+    { message: 'WEBCTX_HTTP_PREMATURE_EOF: connection closed mid-chunk', expectedReason: 'WEBCTX_HTTP_PREMATURE_EOF' },
+    { message: 'WEBCTX_HTTP_INVALID_RESPONSE_STATUS: init["status"] must be in the range of 200 to 599, inclusive. (status=103)', expectedReason: 'WEBCTX_HTTP_INVALID_RESPONSE_STATUS' },
     // AbortController-driven timeout (client.ts's own 30s bound)
     { message: 'The operation was aborted', name: 'AbortError', expectedReason: 'WEBCTX_TIMEOUT' },
   ];

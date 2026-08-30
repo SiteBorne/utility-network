@@ -169,3 +169,48 @@ describe('SUN-1221E3P §12 — TCP/TLS read fragmentation matrix (chunked Transf
     await expectIdenticalToUnfragmented(RESPONSE_B, offsets.sort((a, b) => a - b));
   });
 });
+
+describe('SUN-1221E4P §14 — known HTTP/1.1 1xx interim-response defect (CHARACTERIZATION ONLY, NOT a fix)', () => {
+  /**
+   * The parser's header loop takes the FIRST CRLFCRLF it finds as THE
+   * response's headers, with no loop to discard a 1xx interim response
+   * (e.g. `100 Continue`, `103 Early Hints`) and keep reading for the real
+   * final status line. This is a genuine, real defect in RFC 9110 §15.2
+   * terms.
+   *
+   * Actual observed behavior (this test, run against unmodified parsing
+   * logic) turned out worse than a silent misread: the platform's own
+   * `Response` constructor *rejects* an informational (1xx) status with a
+   * `RangeError` ("init[\"status\"] must be in the range of 200 to 599"),
+   * thrown by `fetch()` completely unwrapped -- itself a fifth,
+   * previously-unnamed generic-collapse branch (SUN-1221E4P §6), distinct
+   * from the 1xx-skipping defect itself. Tagging *that* RangeError with
+   * its own diagnostic reason is a safe, purely-additive, no-behavior-
+   * change instrumentation move exactly like this checkpoint's other tags
+   * -- so it is applied below (`WEBCTX_HTTP_INVALID_RESPONSE_STATUS`).
+   * The underlying 1xx-skipping defect itself is left unfixed, per this
+   * section's rule.
+   *
+   * SUN-1221E4P §14 requires the 1xx-skipping defect be *observed*, not
+   * fixed here: nothing in this codebase's request path ever sends
+   * `Expect: 100-continue` (the `writeRequest` header set is fixed and
+   * GET-only, no body) -- but some servers/CDNs send `103 Early Hints`
+   * unprompted even for a plain GET, so this branch is not structurally
+   * unreachable the way the 100-Continue case is. Nothing in the E3/E4
+   * diagnostic evidence (audit trail, tail capture, generic
+   * `WEBCTX_UPSTREAM_PROTOCOL_ERROR` at `direct_public_http_fetch`, no
+   * captured raw response bytes) proves this is what actually happened.
+   * `E4_CAUSED_BY_INTERIM_1XX=NOT_PROVEN` per that checkpoint's own rule:
+   * "do not fix it in E4P unless evidence ... actually links the
+   * production failure mode to that behavior." Tagging it does make a
+   * future real attempt diagnostically decisive on this specific branch.
+   */
+  it('CHARACTERIZES (does not assert correct behavior): a 1xx interim response currently throws a RangeError from the platform Response constructor, now tagged WEBCTX_HTTP_INVALID_RESPONSE_STATUS', async () => {
+    const withInterim = new TextEncoder().encode(
+      `HTTP/1.1 103 Early Hints${CRLF}${CRLF}` + `HTTP/1.1 200 OK${CRLF}Content-Length: 5${CRLF}${CRLF}hello`
+    );
+    await expect(fetchViaFragmentedSocket(withInterim, [])).rejects.toMatchObject({
+      message: expect.stringMatching(/^WEBCTX_HTTP_INVALID_RESPONSE_STATUS:/),
+    });
+  });
+});
