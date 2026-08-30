@@ -35,6 +35,19 @@
  * routing-constant-only fix — no Worker runtime, candidate source,
  * economics, or payment-semantics change.
  *
+ * SUN-1221E5 correction: SUN-1221E4's real paid submission also ended
+ * ambiguous (HTTP 502), independently reconciled to the same
+ * `WEBCTX_UPSTREAM_PROTOCOL_ERROR` class — zero on-chain effect, zero
+ * settlement, buyer balance unchanged, prior E4 authorization expired/
+ * retired unused. SUN-1221E4P hardened the generic-collapse bucket into
+ * distinct branch-specific diagnostics (`WEBCTX_HTTP_PREMATURE_EOF`,
+ * `WEBCTX_HTTP_INVALID_RESPONSE_STATUS`, alongside the existing
+ * `WEBCTX_RESPONSE_READ_FAILED`) with zero behavior change to any
+ * successful path, proven via 7/7 mutation-proof and full regression, and
+ * uploaded a new candidate (`090a4bc4-...`). `CANDIDATE_VERSION_ID` below is
+ * updated to that candidate; again a routing-constant-only fix — no Worker
+ * runtime, candidate source, economics, or payment-semantics change.
+ *
  * `WORKER_ORIGIN` uses the custom domain (`utility.siteborne.net`), not
  * `workers.dev` — the `/mcp` route enforces a Host allowlist
  * (`MCP_ALLOWED_HOSTS` in `apps/edge-api/src/routes/mcp.ts`) that only the
@@ -72,7 +85,7 @@ const WORKER_SCRIPT_NAME = 'siteborne-utility-edge';
 const WORKER_ORIGIN = 'https://utility.siteborne.net';
 const TARGET_PATH = '/v2/web/context';
 const TARGET_URL = `${WORKER_ORIGIN}${TARGET_PATH}`;
-const CANDIDATE_VERSION_ID = 'a088632e-b93c-4953-b0fc-411a2005e57c';
+const CANDIDATE_VERSION_ID = '090a4bc4-64e4-4152-8ce9-d41977238162';
 const VERSION_OVERRIDE_HEADER = 'Cloudflare-Workers-Version-Overrides';
 const VERSION_OVERRIDE_HEADER_VALUE = `${WORKER_SCRIPT_NAME}="${CANDIDATE_VERSION_ID}"`;
 
