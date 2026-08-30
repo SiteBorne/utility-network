@@ -17,7 +17,7 @@
  * (zero behavior change, SUN-1221E2D §7).
  */
 import { describe, it, expect } from 'vitest';
-import { toAdapterResult, classifyGenericAdapterErrorReason } from '../errors';
+import { toAdapterResult, classifyGenericAdapterErrorReason, deriveEofBranchId } from '../errors';
 
 describe('SUN-1221E2D — toAdapterResult recovers a specific WEBCTX_* reason code from generic Errors', () => {
   const cases: Array<{ message: string; name?: string; expectedReason: string }> = [
@@ -89,5 +89,62 @@ describe('SUN-1221E2D — toAdapterResult recovers a specific WEBCTX_* reason co
     const { resultClass, error } = toAdapterResult('a plain string throw');
     expect(resultClass).toBe('permanent_failure');
     expect(error.code).toBe('UNKNOWN_ERROR');
+  });
+});
+
+// SUN-1221E5Q6A — `deriveEofBranchId` is a closed, two-value classifier
+// distinguishing socket-http-client.ts's two WEBCTX_HTTP_PREMATURE_EOF
+// throw sites. These tests are also this checkpoint's mutation-proof
+// coverage: a mutant that swaps the two IDs, drops either branch, widens
+// the guard past WEBCTX_HTTP_PREMATURE_EOF, or leaks raw message text
+// for an unrelated code fails at least one of these.
+describe('SUN-1221E5Q6A — deriveEofBranchId classifies the two known premature-EOF throw sites', () => {
+  it('classifies the header-parse-loop message as HEADER_PARSE_EOF', () => {
+    const error = new Error('WEBCTX_HTTP_PREMATURE_EOF: connection closed before response headers completed');
+    expect(deriveEofBranchId(error)).toBe('HEADER_PARSE_EOF');
+  });
+
+  it('classifies the chunked-body-read message as CHUNKED_BODY_EOF', () => {
+    const error = new Error('WEBCTX_HTTP_PREMATURE_EOF: connection closed mid-chunk');
+    expect(deriveEofBranchId(error)).toBe('CHUNKED_BODY_EOF');
+  });
+
+  it('does not classify (returns undefined) for a different WEBCTX_* reason code', () => {
+    const error = new Error('WEBCTX_UPSTREAM_CONNECTION_FAILED: connection refused');
+    expect(deriveEofBranchId(error)).toBeUndefined();
+  });
+
+  it('does not classify a genuinely unrecognized message, even one containing "mid-chunk" by coincidence, unless it actually classifies as WEBCTX_HTTP_PREMATURE_EOF', () => {
+    // Guards against a mutant that checks the suffix substring without
+    // first requiring the WEBCTX_HTTP_PREMATURE_EOF prefix classification.
+    const error = new Error('some unrelated platform error that happens to mention mid-chunk');
+    expect(deriveEofBranchId(error)).toBeUndefined();
+  });
+
+  it('toAdapterResult sets error.eof_branch_id only for the two known premature-EOF messages', () => {
+    const header = toAdapterResult(
+      new Error('WEBCTX_HTTP_PREMATURE_EOF: connection closed before response headers completed')
+    );
+    expect(header.error.eof_branch_id).toBe('HEADER_PARSE_EOF');
+    expect(header.error.code).toBe('WEBCTX_HTTP_PREMATURE_EOF');
+    // resultClass and message stay exactly as before this checkpoint.
+    expect(header.resultClass).toBe('permanent_failure');
+    expect(header.error.message).toBe(
+      'WEBCTX_HTTP_PREMATURE_EOF: connection closed before response headers completed'
+    );
+
+    const chunk = toAdapterResult(new Error('WEBCTX_HTTP_PREMATURE_EOF: connection closed mid-chunk'));
+    expect(chunk.error.eof_branch_id).toBe('CHUNKED_BODY_EOF');
+  });
+
+  it('toAdapterResult never sets error.eof_branch_id for an unrelated failure (no accidental exposure)', () => {
+    const { error } = toAdapterResult(new Error('Malformed status line: garbage'));
+    expect(error.eof_branch_id).toBeUndefined();
+  });
+
+  it('toAdapterResult never sets error.eof_branch_id for an AdapterError subclass', async () => {
+    const { PolicyBlockedError } = await import('../errors');
+    const { error } = toAdapterResult(new PolicyBlockedError('blocked by policy'));
+    expect((error as { eof_branch_id?: unknown }).eof_branch_id).toBeUndefined();
   });
 });

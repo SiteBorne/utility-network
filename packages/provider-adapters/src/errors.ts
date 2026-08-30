@@ -140,9 +140,37 @@ export function classifyGenericAdapterErrorReason(error: Error): string {
   return 'WEBCTX_UPSTREAM_PROTOCOL_ERROR';
 }
 
+/** SUN-1221E5Q6A — closed, two-value enum distinguishing WHICH of
+ * `socket-http-client.ts`'s two `WEBCTX_HTTP_PREMATURE_EOF` throw sites
+ * (`readResponse`'s header-parse loop vs. `readChunkedBody`'s `ensure()`)
+ * produced a given premature-EOF error. Not a general-purpose error
+ * taxonomy — exactly these two values, or `undefined`. */
+export type EofBranchId = 'HEADER_PARSE_EOF' | 'CHUNKED_BODY_EOF';
+
+/** Exported for direct, isolated unit testing (SUN-1221E5Q6A). Derives
+ * `EofBranchId` purely from the two exact, source-verified message
+ * suffixes those two throw sites use (SUN-1221E4P's own instrumentation)
+ * — deliberately NOT a passthrough of arbitrary error text: any message
+ * classified as `WEBCTX_HTTP_PREMATURE_EOF` that doesn't match either
+ * known suffix (e.g. a future third throw site) fails closed to
+ * `undefined` rather than guessing. Never called for, and never returns
+ * a value for, any other reason code. */
+export function deriveEofBranchId(error: Error): EofBranchId | undefined {
+  if (classifyGenericAdapterErrorReason(error) !== 'WEBCTX_HTTP_PREMATURE_EOF') return undefined;
+  if (/before response headers completed/.test(error.message)) return 'HEADER_PARSE_EOF';
+  if (/mid-chunk/.test(error.message)) return 'CHUNKED_BODY_EOF';
+  return undefined;
+}
+
 export function toAdapterResult(error: unknown): {
   resultClass: string;
-  error: { code: string; message: string; details?: unknown; retryAfterMs?: number };
+  error: {
+    code: string;
+    message: string;
+    details?: unknown;
+    retryAfterMs?: number;
+    eof_branch_id?: EofBranchId;
+  };
 } {
   if (error instanceof AdapterError) {
     return {
@@ -156,6 +184,8 @@ export function toAdapterResult(error: unknown): {
     };
   }
   if (error instanceof Error) {
+    const code = classifyGenericAdapterErrorReason(error);
+    const eofBranchId = deriveEofBranchId(error);
     return {
       // `resultClass` stays exactly 'permanent_failure' — SUN-1221E2D §7
       // (EXECUTOR_BEHAVIOR_CHANGED=NO): only `error.code` gains
@@ -163,8 +193,12 @@ export function toAdapterResult(error: unknown): {
       // difference.
       resultClass: 'permanent_failure',
       error: {
-        code: classifyGenericAdapterErrorReason(error),
+        code,
         message: error.message,
+        // SUN-1221E5Q6A: additive-only. Present ONLY for the two known
+        // premature-EOF branches, absent for every other code — never a
+        // raw-message passthrough (ARBITRARY_ADAPTER_ERROR_MESSAGE_EXPOSED=NO).
+        ...(eofBranchId ? { eof_branch_id: eofBranchId } : {}),
       },
     };
   }

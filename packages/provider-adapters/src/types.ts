@@ -162,6 +162,11 @@ export const AdapterResultSchema = z.object({
       message: z.string(),
       details: z.unknown().optional(),
       retry_after_ms: z.number().int().nonnegative().optional(),
+      // SUN-1221E5Q6A — additive-only, closed two-value enum (see
+      // provider-adapters/src/errors.ts's `EofBranchId`). Present only
+      // for the two known WEBCTX_HTTP_PREMATURE_EOF throw sites, absent
+      // for every other error, never a raw-message passthrough.
+      eof_branch_id: z.enum(['HEADER_PARSE_EOF', 'CHUNKED_BODY_EOF']).optional(),
     })
     .optional(),
   cache_status: CacheStatusSchema,

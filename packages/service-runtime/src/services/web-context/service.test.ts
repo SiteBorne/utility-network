@@ -257,4 +257,122 @@ describe('WebContextVerifiedService', () => {
       expect(result.failure).toBeUndefined();
     });
   });
+
+  // SUN-1221E5Q6A — Q6's read-only source analysis proved
+  // `socket-http-client.ts` throws two distinguishable messages for its
+  // two WEBCTX_HTTP_PREMATURE_EOF sites, and that `toAdapterResult`
+  // (errors.ts) already preserves the full message in `result.error`,
+  // but this service's own failure-detail construction (the code these
+  // tests exercise) dropped that distinction before it ever reached
+  // `failure.details`. These tests prove the additive `eof_branch_id`
+  // field now survives, without changing any existing field.
+  describe('SUN-1221E5Q6A — premature-EOF branch survives into failure.details as a closed enum', () => {
+    it('tags a header-parse premature EOF with eof_branch_id=HEADER_PARSE_EOF', async () => {
+      const context = await buildTestServiceContext('web_context_verified.v1');
+      const httpClient = failingHttpClient(
+        'WEBCTX_HTTP_PREMATURE_EOF: connection closed before response headers completed'
+      );
+      const service = new WebContextVerifiedService({
+        httpClient,
+        publicHttp: new PublicHttpAdapter(
+          httpClient,
+          context.clock,
+          context.artifact_store,
+          noopAdapterAudit
+        ),
+        signer,
+        keyRegistry: registry,
+      });
+
+      const result = await service.execute(
+        { target_url: 'https://unreachable.example/', retrieval_mode: 'direct' },
+        context
+      );
+
+      // Existing fields stay byte-for-byte unchanged.
+      expect(result.result_class).toBe('internal_verification_failed');
+      expect(result.failure?.details).toMatchObject({
+        diagnostic_reason_code: 'WEBCTX_HTTP_PREMATURE_EOF',
+        diagnostic_stage: 'direct_public_http_fetch',
+        eof_branch_id: 'HEADER_PARSE_EOF',
+      });
+    });
+
+    it('tags a chunked-body premature EOF with eof_branch_id=CHUNKED_BODY_EOF', async () => {
+      const context = await buildTestServiceContext('web_context_verified.v1');
+      const httpClient = failingHttpClient('WEBCTX_HTTP_PREMATURE_EOF: connection closed mid-chunk');
+      const service = new WebContextVerifiedService({
+        httpClient,
+        publicHttp: new PublicHttpAdapter(
+          httpClient,
+          context.clock,
+          context.artifact_store,
+          noopAdapterAudit
+        ),
+        signer,
+        keyRegistry: registry,
+      });
+
+      const result = await service.execute(
+        { target_url: 'https://unreachable.example/', retrieval_mode: 'direct' },
+        context
+      );
+
+      expect(result.failure?.details).toMatchObject({
+        diagnostic_reason_code: 'WEBCTX_HTTP_PREMATURE_EOF',
+        eof_branch_id: 'CHUNKED_BODY_EOF',
+      });
+    });
+
+    it('does NOT add eof_branch_id for an unrelated transport failure (no raw-message leakage)', async () => {
+      const context = await buildTestServiceContext('web_context_verified.v1');
+      const httpClient = failingHttpClient('DNS resolution failed safety policy: prohibited_or_mixed_dns_answer');
+      const service = new WebContextVerifiedService({
+        httpClient,
+        publicHttp: new PublicHttpAdapter(
+          httpClient,
+          context.clock,
+          context.artifact_store,
+          noopAdapterAudit
+        ),
+        signer,
+        keyRegistry: registry,
+      });
+
+      const result = await service.execute(
+        { target_url: 'https://unreachable.example/', retrieval_mode: 'direct' },
+        context
+      );
+
+      expect(result.failure?.details).toMatchObject({ diagnostic_reason_code: 'WEBCTX_DNS_RESOLUTION_FAILED' });
+      expect(
+        (result.failure?.details as { eof_branch_id?: unknown } | undefined)?.eof_branch_id
+      ).toBeUndefined();
+    });
+
+    it('does NOT add eof_branch_id for a genuinely unrecognized transport failure', async () => {
+      const context = await buildTestServiceContext('web_context_verified.v1');
+      const httpClient = failingHttpClient('some completely novel platform error never seen before');
+      const service = new WebContextVerifiedService({
+        httpClient,
+        publicHttp: new PublicHttpAdapter(
+          httpClient,
+          context.clock,
+          context.artifact_store,
+          noopAdapterAudit
+        ),
+        signer,
+        keyRegistry: registry,
+      });
+
+      const result = await service.execute(
+        { target_url: 'https://unreachable.example/', retrieval_mode: 'direct' },
+        context
+      );
+
+      expect(
+        (result.failure?.details as { eof_branch_id?: unknown } | undefined)?.eof_branch_id
+      ).toBeUndefined();
+    });
+  });
 });

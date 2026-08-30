@@ -371,6 +371,9 @@ app.get('/__diag/webctx-remote', async (c) => {
     failureMessage?: string;
     diagnosticReasonCode?: string;
     diagnosticStage?: string;
+    // SUN-1221E5Q6A — closed two-value enum, only set when
+    // diagnosticReasonCode is WEBCTX_HTTP_PREMATURE_EOF.
+    eofBranchId?: string;
     limitation?: string;
     threw: boolean;
     // Presence of a receipt_id/verification block is only possible once
@@ -400,6 +403,7 @@ app.get('/__diag/webctx-remote', async (c) => {
         ?.diagnostic_reason_code,
       diagnosticStage: (executed.failure?.details as { diagnostic_stage?: string } | undefined)
         ?.diagnostic_stage,
+      eofBranchId: (executed.failure?.details as { eof_branch_id?: string } | undefined)?.eof_branch_id,
       limitation: executed.limitations?.[0],
       threw: false,
       serviceExecuteReachedVerifyAndSign: Boolean(executed.receipt_id && executed.verification),
@@ -428,13 +432,19 @@ app.get('/__diag/webctx-remote', async (c) => {
     failure_code: outcome.failureCode,
     diagnostic_reason_code: outcome.diagnosticReasonCode,
     diagnostic_stage: outcome.diagnosticStage,
+    // SUN-1221E5Q6A — closed two-value enum (HEADER_PARSE_EOF |
+    // CHUNKED_BODY_EOF), only present when diagnostic_reason_code is
+    // WEBCTX_HTTP_PREMATURE_EOF; absent otherwise. Not a raw error-
+    // message passthrough — see errors.ts's `deriveEofBranchId`.
+    eof_branch_id: outcome.eofBranchId,
     limitation: outcome.limitation,
     result_class: outcome.resultClass,
     error_detail: outcome.failureMessage ?? outcome.limitation,
     elapsed_ms: elapsedMs,
     note:
-      'error_detail/diagnostic_reason_code/diagnostic_stage are sanitized adapter-classified ' +
-      'fields (SUN-1221E2D/E4P discipline) — never response body/headers/credentials. ' +
+      'error_detail/diagnostic_reason_code/diagnostic_stage/eof_branch_id are sanitized ' +
+      'adapter-classified fields (SUN-1221E2D/E4P/E5Q6A discipline) — never response ' +
+      'body/headers/credentials, never a raw adapter error-message passthrough. ' +
       'SUN-1221E5Q5: previously always undefined on failure (extraction-path defect fixed this ' +
       'checkpoint, dev-diagnostic-seam-only, see SUN-1221E5Q5 report). This route never touches ' +
       'payment orchestration, settlement, or receipt persistence; it signs only an in-memory ' +

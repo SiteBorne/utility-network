@@ -228,6 +228,11 @@ export class WebContextVerifiedService
       ? {
           diagnostic_reason_code: result.error?.code ?? result.resultClass,
           diagnostic_stage: 'direct_public_http_fetch' as const,
+          // SUN-1221E5Q6A — additive-only. Only present when
+          // diagnostic_reason_code is WEBCTX_HTTP_PREMATURE_EOF; narrows
+          // which of the two known throw sites produced it. Never a raw
+          // error-message passthrough (that field stays unexposed here).
+          ...(result.error?.eof_branch_id ? { eof_branch_id: result.error.eof_branch_id } : {}),
         }
       : undefined;
 
