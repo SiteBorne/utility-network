@@ -87,7 +87,13 @@
  * by construction, not by discipline.
  */
 import { Hono } from 'hono';
-import { generateTestKeypair, KeyRegistry, type Signer } from '@siteborne/verification';
+import {
+  generateTestKeypair,
+  KeyRegistry,
+  setPrecompiledOutputValidators,
+  type Signer,
+} from '@siteborne/verification';
+import { outputValidatorsById } from '../generated/output-validators.generated.js';
 import {
   buildServiceContext,
   DEFAULT_SERVICE_BUDGET,
@@ -97,27 +103,68 @@ import {
   type ServiceAuditEventSink,
 } from '@siteborne/service-runtime';
 import { PublicHttpAdapter } from '@siteborne/provider-adapters';
-import type { ArtifactStore, AuditEventSink, InjectedClock } from '@siteborne/provider-adapters';
+import type {
+  ArtifactStore,
+  AuditEventSink,
+  InjectedClock,
+  ConnectFn,
+  SocketLike,
+} from '@siteborne/provider-adapters';
 import { buildWebContextV2SafeHttpClient } from '../control-plane/production/web-context-v2-cdp-composition';
+import { connect as realCloudflareConnect } from '../cloudflare-sockets-ambient';
+
+// SUN-1221E5Q5 §3/§9 — the real, proven root cause of this checkpoint's
+// `internal_verification_failed`/`EvalError: Code generation from strings
+// disallowed for this context`: `WebContextVerifiedService.execute()`'s
+// unconditional post-finalization schema check (verify-and-sign.ts) prefers
+// `getPrecompiledOutputValidator(schemaId)` but falls through to
+// `getAjv().getSchema(schemaId)` -- runtime AJV compilation via
+// `new Function(...)` -- whenever nothing has registered a precompiled
+// validator for that schema id yet. Every real production route module
+// (`production-web-context-v2-cdp-route.ts`,
+// `production-verify-v2-cdp-route.ts`, `paid-services.ts`) calls
+// `setPrecompiledOutputValidators(outputValidatorsById)` as a module-load
+// side effect, so real production traffic (proven clean by
+// `scripts/test-worker-runtime.mts`'s own PHASE 1/2 EvalError guards, and
+// by SUN-1201 checkpoint G's identical earlier fix) never falls through to
+// AJV. This file deliberately never imports those route modules (the whole
+// point of this diagnostic seam is bypassing the real x402/payment
+// composition) -- so it never got that side effect either, until now.
+// Registering the SAME shared, already-production-tested validators here
+// (never inventing new ones) is dev-diagnostic-seam-only, idempotent, and
+// side-effect-free on every other call site (exactly the property
+// `production-web-context-v2-cdp-route.ts`'s own doc comment already
+// documents for calling this more than once). RED/GREEN proof: see
+// docs/reports/SUN-1221E5Q5-remote-diagnostic-pretransport-forensics.md.
+setPrecompiledOutputValidators(outputValidatorsById);
 
 /** The one and only diagnostic target for this seam — a source-level
  * constant, never accepted from the request (no query string, body,
  * header, or redirect override). SUN-1221E5Q "Target rule". The executor
  * may still follow redirects, but only per its normal production
  * SSRF/revalidation behavior — nothing about that path is touched here. */
-const FIXED_DIAGNOSTIC_TARGET = 'https://example.com/';
+export const FIXED_DIAGNOSTIC_TARGET = 'https://example.com/';
 
 /** `^kid_[a-z0-9]{24}$` (see `production-signer.ts`) — an unmistakably
  * diagnostic id within that required charset; not a production key id and
  * never will collide with one (`buildProductionSigner`'s real ids are
  * provisioned key material, never this literal string). */
-const DIAGNOSTIC_KEY_ID = 'kid_diagnosticwebctxe5qnonpr';
+export const DIAGNOSTIC_KEY_ID = 'kid_diagnosticwebctxe5qnonpr';
 
 interface DiagnosticEnv {
   DIAGNOSTIC_SEAM_ENABLED?: string;
 }
 
-function realClock(): InjectedClock {
+// SUN-1221E5Q5 §8 — every builder below is exported (in addition to being
+// used by the route handler further down) solely so
+// `webctx-remote-diagnostic.construction.test.ts` can exercise the EXACT
+// diagnostic-seam construction pattern (ephemeral signer, stub audit/
+// artifact-store, execution_mode: 'live') against a fake, non-network
+// `InjectedHttpClient` -- no real socket, no `wrangler dev`, fully
+// deterministic. Exporting more symbols from a file that is never imported
+// by any production composition/route/entrypoint changes nothing about
+// this file's reachability or bundling (see the file-level doc comment).
+export function realClock(): InjectedClock {
   const unsupported = (method: string) => (): never => {
     throw new Error(`real_clock_cannot_${method}: this is real platform time, not a fixture clock`);
   };
@@ -132,14 +179,14 @@ function realClock(): InjectedClock {
   };
 }
 
-function unreachableArtifactStore(): ArtifactStore {
+export function unreachableArtifactStore(): ArtifactStore {
   const fail = (method: string) => (): never => {
     throw new Error(`unreachable_artifact_store: diagnostic seam never persists artifacts (${method})`);
   };
   return { put: fail('put'), getMetadata: fail('getMetadata'), getContent: fail('getContent'), exists: fail('exists') };
 }
 
-function discardedAuditSink(): AuditEventSink {
+export function discardedAuditSink(): AuditEventSink {
   return {
     async log() {
       /* diagnostic seam: never persisted */
@@ -153,7 +200,7 @@ function discardedAuditSink(): AuditEventSink {
   };
 }
 
-function requestScopedAuditSink(): ServiceAuditEventSink {
+export function requestScopedAuditSink(): ServiceAuditEventSink {
   const events: Array<{ type: string; details: Record<string, unknown>; correlation_id?: string; timestamp: number }> = [];
   return {
     emit(event) {
@@ -172,7 +219,7 @@ function requestScopedAuditSink(): ServiceAuditEventSink {
  * mistake this for a real production receipt signature even if the PCC
  * document were inspected out of context. Private key bytes never leave
  * this function. */
-async function buildEphemeralDiagnosticSigner(): Promise<{ signer: Signer; registry: KeyRegistry }> {
+export async function buildEphemeralDiagnosticSigner(): Promise<{ signer: Signer; registry: KeyRegistry }> {
   const keypair = await generateTestKeypair(DIAGNOSTIC_KEY_ID);
 
   const registry = new KeyRegistry();
@@ -187,6 +234,65 @@ async function buildEphemeralDiagnosticSigner(): Promise<{ signer: Signer; regis
   });
 
   return { signer: { keyId: keypair.keyId, privateKey: keypair.privateKey }, registry };
+}
+
+/**
+ * SUN-1221E5Q5 §4/§5 — dev-only boundary telemetry. Each event carries only
+ * a stage name, a boolean, and an elapsed-ms number (plus, for the one
+ * connect event, a safe hostname/port pair copied from the fixed diagnostic
+ * target constant — never from the response). No response body, no
+ * headers, no secrets: DEV_TRACE_SECRET_REACHABILITY=0 by construction,
+ * the same way `DIAGNOSTIC_SEAM_ENABLED` is unreachable outside this file
+ * by construction rather than by discipline.
+ */
+interface DiagStageEvent {
+  stage: string;
+  success: boolean;
+  elapsed_ms: number;
+  detail?: { hostname: string; port: number };
+}
+
+function createStageTrace(startedAtMs: number) {
+  const events: DiagStageEvent[] = [];
+  return {
+    record(stage: string, success: boolean, detail?: DiagStageEvent['detail']) {
+      events.push({ stage, success, elapsed_ms: Date.now() - startedAtMs, detail });
+    },
+    events,
+  };
+}
+
+/**
+ * SUN-1221E5Q5 §5 — wraps the REAL `cloudflare:sockets` `connect` (the same
+ * one `buildWebContextV2SafeHttpClient` defaults to and production uses) so
+ * this diagnostic seam can prove, not infer, whether `SafeSocketHttpClient`
+ * ever reached the socket boundary. Never substitutes a fake socket for the
+ * live remote test — every call is forwarded to the real platform
+ * `connect()` and its real return value (or thrown error) is passed through
+ * unchanged. This is the "decisive first boundary" the checkpoint calls
+ * for: everything upstream of `connect()` (URL validation, TermsGuard, DoH
+ * resolution) is proven instead by the already-real `diagnostic_reason_code`
+ * this file now correctly surfaces from the service result (see the
+ * `/__diag/webctx-remote` handler below) rather than by adding a second,
+ * parallel wrapper around the DoH client that `buildWebContextV2SafeHttpClient`
+ * does not expose as an injectable parameter.
+ */
+function wrapConnectForDiagnostics(
+  trace: ReturnType<typeof createStageTrace>,
+  real: ConnectFn
+): ConnectFn {
+  return (address, options) => {
+    trace.record('socket_connect_called', true, { hostname: address.hostname, port: address.port });
+    let socket: SocketLike;
+    try {
+      socket = real(address, options);
+    } catch (err) {
+      trace.record('socket_connect_returned', false, { hostname: address.hostname, port: address.port });
+      throw err;
+    }
+    trace.record('socket_connect_returned', true, { hostname: address.hostname, port: address.port });
+    return socket;
+  };
 }
 
 const app = new Hono<{ Bindings: DiagnosticEnv }>();
@@ -213,7 +319,11 @@ app.get('/__diag/webctx-remote', async (c) => {
   }
 
   const startedAtMs = Date.now();
-  const httpClient = buildWebContextV2SafeHttpClient();
+  const trace = createStageTrace(startedAtMs);
+  trace.record('diag_handler_entered', true);
+
+  const wrappedConnect = wrapConnectForDiagnostics(trace, realCloudflareConnect);
+  const httpClient = buildWebContextV2SafeHttpClient(wrappedConnect);
   const clock = realClock();
   const { signer, registry: keyRegistry } = await buildEphemeralDiagnosticSigner();
 
@@ -240,8 +350,40 @@ app.get('/__diag/webctx-remote', async (c) => {
     outputSchemaHash: 'sha256:' + '4'.repeat(64),
     implementationStatus: 'local_fixture_verified',
   });
+  trace.record('executor_constructed', true);
 
-  let outcome: { resultClass: string; errorCode?: string; errorMessage?: string };
+  // SUN-1221E5Q5 §3/§9 — the previous version of this handler read
+  // `executed.output?.limitations?.[0]`, but `WebContextVerifiedService`
+  // (packages/service-runtime/src/services/web-context/service.ts) only
+  // ever populates `output` when the result is a genuine success --
+  // ANY failure (including the one this diagnostic exists to observe)
+  // returns `output: undefined`, discarding that extraction path
+  // entirely. The real diagnostic detail was always present as a SIBLING
+  // field: the top-level `limitations` array, and — with more precision
+  // — `failure.code` / `failure.details.diagnostic_reason_code` /
+  // `failure.details.diagnostic_stage` (populated by the same file's
+  // `httpDiagnosticDetails`). This was a dev-diagnostic-seam defect only:
+  // no shared production code reads `output.limitations` this way, and
+  // no production caller of `WebContextVerifiedService` was affected.
+  let outcome: {
+    resultClass: string;
+    failureCode?: string;
+    failureMessage?: string;
+    diagnosticReasonCode?: string;
+    diagnosticStage?: string;
+    limitation?: string;
+    threw: boolean;
+    // Presence of a receipt_id/verification block is only possible once
+    // `WebContextVerifiedService.execute()` has run all the way through
+    // `buildDraftDocument` + `verifyAndSign` (service.ts calls
+    // `verifyAndSign` unconditionally, success or failure) — so their
+    // presence is direct, real proof this execution reached and
+    // completed that stage, distinct from `dispatcher.ts`'s
+    // `closedFailure` wrapper (unknown_service / execution_timeout /
+    // internal_error), which never sets either field.
+    serviceExecuteReachedVerifyAndSign: boolean;
+  };
+  trace.record('service_execute_entered', true);
   try {
     const executed = await executeLocalService(
       registry,
@@ -249,30 +391,54 @@ app.get('/__diag/webctx-remote', async (c) => {
       { target_url: FIXED_DIAGNOSTIC_TARGET, retrieval_mode: 'direct' },
       context
     );
-    const output = executed.output as { limitations?: string[] } | undefined;
+    trace.record('service_execute_returned', true);
     outcome = {
       resultClass: executed.result_class,
-      errorMessage: output?.limitations?.[0],
+      failureCode: executed.failure?.code,
+      failureMessage: executed.failure?.message,
+      diagnosticReasonCode: (executed.failure?.details as { diagnostic_reason_code?: string } | undefined)
+        ?.diagnostic_reason_code,
+      diagnosticStage: (executed.failure?.details as { diagnostic_stage?: string } | undefined)
+        ?.diagnostic_stage,
+      limitation: executed.limitations?.[0],
+      threw: false,
+      serviceExecuteReachedVerifyAndSign: Boolean(executed.receipt_id && executed.verification),
     };
   } catch (err) {
+    trace.record('service_execute_returned', false);
     outcome = {
       resultClass: 'threw',
-      errorMessage: err instanceof Error ? err.message : String(err),
+      failureMessage: err instanceof Error ? err.message : String(err),
+      threw: true,
+      serviceExecuteReachedVerifyAndSign: false,
     };
   }
 
   const elapsedMs = Date.now() - startedAtMs;
+  const connectCalled = trace.events.some((e) => e.stage === 'socket_connect_called');
+  const connectReturned = trace.events.some((e) => e.stage === 'socket_connect_returned' && e.success);
 
   return c.json({
-    diagnostic: 'SUN-1221E5Q webctx-remote-diagnostic',
+    diagnostic: 'SUN-1221E5Q5 webctx-remote-diagnostic',
     target: FIXED_DIAGNOSTIC_TARGET,
+    stage_trace: trace.events,
+    safe_socket_connect_called: connectCalled,
+    safe_socket_connect_returned: connectReturned,
+    service_execute_reached_verify_and_sign: outcome.serviceExecuteReachedVerifyAndSign,
+    failure_code: outcome.failureCode,
+    diagnostic_reason_code: outcome.diagnosticReasonCode,
+    diagnostic_stage: outcome.diagnosticStage,
+    limitation: outcome.limitation,
     result_class: outcome.resultClass,
-    error_detail: outcome.errorMessage,
+    error_detail: outcome.failureMessage ?? outcome.limitation,
     elapsed_ms: elapsedMs,
     note:
-      'error_detail is the sanitized adapter-classified message (SUN-1221E2D/E4P discipline) — ' +
-      'never response body/headers/credentials. This route never touches payment orchestration, ' +
-      'settlement, or receipt persistence; it signs only an in-memory diagnostic self-check.',
+      'error_detail/diagnostic_reason_code/diagnostic_stage are sanitized adapter-classified ' +
+      'fields (SUN-1221E2D/E4P discipline) — never response body/headers/credentials. ' +
+      'SUN-1221E5Q5: previously always undefined on failure (extraction-path defect fixed this ' +
+      'checkpoint, dev-diagnostic-seam-only, see SUN-1221E5Q5 report). This route never touches ' +
+      'payment orchestration, settlement, or receipt persistence; it signs only an in-memory ' +
+      'diagnostic self-check.',
   });
 });
 
