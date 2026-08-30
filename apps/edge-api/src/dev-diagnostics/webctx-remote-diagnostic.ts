@@ -161,6 +161,22 @@ async function buildEphemeralDiagnosticSigner(): Promise<{ signer: Signer; regis
 
 const app = new Hono<{ Bindings: DiagnosticEnv }>();
 
+/**
+ * SUN-1221E5Q2 §4 — inert reachability probe. Touches nothing but the Hono
+ * router and the same gate variable: no SafeSocket, no DNS, no outbound TLS,
+ * no TermsGuard, no PCC signing. Exists solely to distinguish "the remote
+ * preview transport itself is broken" from "the SafeSocket diagnostic path
+ * is broken", per the 525 forensics checkpoint. Same gate, same
+ * never-imported-by-production file; adds no new reachable surface beyond
+ * what `/__diag/webctx-remote` already establishes.
+ */
+app.get('/__diag/health', (c) => {
+  if (c.env?.DIAGNOSTIC_SEAM_ENABLED !== 'true') {
+    return c.notFound();
+  }
+  return c.json({ diagnostic: 'SUN-1221E5Q2 inert-health', ok: true, ts: Date.now() });
+});
+
 app.get('/__diag/webctx-remote', async (c) => {
   if (c.env?.DIAGNOSTIC_SEAM_ENABLED !== 'true') {
     return c.notFound();
