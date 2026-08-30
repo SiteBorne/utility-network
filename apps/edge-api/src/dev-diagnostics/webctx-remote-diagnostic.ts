@@ -771,4 +771,127 @@ app.get('/__diag/webctx-remote-control', async (c) => {
   });
 });
 
+/**
+ * SUN-1221E5Q6C — ONE hostname-address control, spent to test the
+ * `cloudflare/workerd#6903` hypothesis: `startTls({ expectedServerHostname })`
+ * is reportedly ignored (no `server_name` extension sent) on the real edge
+ * specifically when `connect()`'s own address is an IP literal, because
+ * RFC 6066 forbids IP literals in SNI and the edge does not fall back to
+ * `expectedServerHostname` to fill it in. `socket-http-client.ts:110-115`
+ * connects by a pre-resolved, pre-validated IP literal
+ * (`{ hostname: connectIp, port }`) then calls
+ * `startTls({ expectedServerHostname: hostname })` where `hostname` is the
+ * ORIGINAL request host — i.e. `CONNECT_ADDRESS_EQUALS_TLS_NAME=NO`, the
+ * exact shape #6903 reports as broken.
+ *
+ * Changes EXACTLY ONE variable vs. that real sequence: `connect()`'s own
+ * `hostname` argument is the fixed diagnostic target's literal hostname
+ * instead of a pre-resolved IP, so `CONNECT_ADDRESS_EQUALS_TLS_NAME=YES`
+ * here. `secureTransport`, `startTls`'s `expectedServerHostname`,
+ * `allowHalfOpen` (`false`, matching production — SUN-1221E5Q6B already
+ * proved this flag doesn't discriminate the failure), the write-then-
+ * close-before-read ordering, and the request bytes are all otherwise
+ * identical to `socket-http-client.ts`'s real sequence. Hand-rolled here
+ * (never through `SafeSocketHttpClient` or any shared production module)
+ * for the same reason the Q6B control route is: this route makes NO
+ * repository defect claim and NO fix, only a single discriminating data
+ * point against the real Cloudflare edge.
+ *
+ * `HOSTNAME` below is the SAME hardcoded, non-user-controlled, source-level
+ * constant discipline as `FIXED_DIAGNOSTIC_TARGET` — no query string, body,
+ * header, or redirect can influence it. This intentionally bypasses
+ * SITEBORNE's IP-pinning for this one literal diagnostic comparison only;
+ * it is not, and must never become, a production code path (see this
+ * file's top-level doc comment — never imported by production, never
+ * bundled, gated behind the same `DIAGNOSTIC_SEAM_ENABLED` var only set on
+ * an ephemeral `wrangler dev --remote` CLI invocation).
+ */
+app.get('/__diag/webctx-remote-hostname-control', async (c) => {
+  if (c.env?.DIAGNOSTIC_SEAM_ENABLED !== 'true') {
+    return c.notFound();
+  }
+
+  const startedAtMs = Date.now();
+  const CR = 13;
+  const LF = 10;
+  const findCrlfCrlf = (buf: Uint8Array): number => {
+    for (let i = 0; i + 3 < buf.length; i++) {
+      if (buf[i] === CR && buf[i + 1] === LF && buf[i + 2] === CR && buf[i + 3] === LF) return i;
+    }
+    return -1;
+  };
+
+  const HOSTNAME = 'example.com';
+  let socket = realCloudflareConnect(
+    // The ONE variable under test: connect address identity. `HOSTNAME`
+    // here vs. a pre-resolved IP literal in socket-http-client.ts:110-111.
+    { hostname: HOSTNAME, port: 443 },
+    // Matches production exactly otherwise, including `allowHalfOpen:
+    // false` (already ruled out as discriminating by SUN-1221E5Q6B).
+    { secureTransport: 'starttls', allowHalfOpen: false }
+  );
+  socket = socket.startTls({ expectedServerHostname: HOSTNAME });
+
+  const writer = socket.writable.getWriter();
+  const requestText =
+    `GET / HTTP/1.1\r\nhost: ${HOSTNAME}\r\nconnection: close\r\n` +
+    `accept-encoding: identity\r\n\r\n`;
+  await writer.write(new TextEncoder().encode(requestText));
+  await writer.close();
+
+  const reader = socket.readable.getReader();
+  let running = new Uint8Array(0);
+  let firstByteObserved = false;
+  let headerTerminatorSeen = false;
+  let statusLine = '';
+  let eofObserved = false;
+  for (let i = 0; i < 64; i++) {
+    const { done, value } = await reader.read();
+    if (done) {
+      eofObserved = true;
+      break;
+    }
+    if (value.length > 0) firstByteObserved = true;
+    const merged = new Uint8Array(running.length + value.length);
+    merged.set(running, 0);
+    merged.set(value, running.length);
+    running = merged;
+    if (!statusLine) {
+      for (let j = 0; j + 1 < running.length; j++) {
+        if (running[j] === CR && running[j + 1] === LF) {
+          statusLine = new TextDecoder().decode(running.slice(0, j));
+          break;
+        }
+      }
+    }
+    if (findCrlfCrlf(running) !== -1) {
+      headerTerminatorSeen = true;
+      break;
+    }
+  }
+  reader.releaseLock();
+
+  return c.json({
+    diagnostic: 'SUN-1221E5Q6C webctx-remote-diagnostic-hostname-control',
+    note:
+      'ONE variable changed vs. the real SafeSocketHttpClient sequence: connect() is given the ' +
+      'fixed hostname directly instead of a pre-resolved/validated IP literal — everything else ' +
+      '(secureTransport=starttls, startTls expectedServerHostname, allowHalfOpen=false, ' +
+      'write-then-close-before-read ordering, request text, target) is identical to ' +
+      'socket-http-client.ts. Tests the cloudflare/workerd#6903 hypothesis (expectedServerHostname ' +
+      'is reportedly ignored on the real edge when connect() itself is an IP literal, because RFC ' +
+      '6066 forbids IP literals in SNI). Makes no repository defect claim and no fix by itself — a ' +
+      'single discriminating data point. This is a hardcoded, non-user-controlled diagnostic-only ' +
+      'target; never a production code path. Response body discarded; only byte counts/booleans ' +
+      'and the status line are returned. Never touches payment orchestration, settlement, or ' +
+      'receipt persistence.',
+    total_response_bytes: running.length,
+    first_response_byte_observed: firstByteObserved,
+    status_line: statusLine || null,
+    header_terminator_seen: headerTerminatorSeen,
+    eof_observed: eofObserved,
+    elapsed_ms: Date.now() - startedAtMs,
+  });
+});
+
 export default app;
