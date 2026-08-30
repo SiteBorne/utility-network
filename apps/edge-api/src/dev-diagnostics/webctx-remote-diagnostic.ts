@@ -894,4 +894,242 @@ app.get('/__diag/webctx-remote-hostname-control', async (c) => {
   });
 });
 
+/**
+ * SUN-1221E5Q6D — ONE writer-termination control, spent to test whether
+ * `socket-http-client.ts:204`'s unconditional `await writer.close()`
+ * BEFORE `readResponse` ever begins (`writeRequest` is awaited in full
+ * before `readResponse` is called, `fetch()` lines 133-134) is itself what
+ * tears the connection down before the remote response arrives.
+ * `SUN-1221E5Q6B` already isolated `allowHalfOpen` alone (`true` vs.
+ * `false`, keeping this same close-before-read ordering) and it did NOT
+ * change the outcome — `ZERO_RESPONSE_BYTES` either way. This is a
+ * genuinely different single-variable change: `writer.releaseLock()`
+ * instead of `writer.close()`, so the writable side of the stream is never
+ * closed (half or otherwise) before the read loop begins. Everything else
+ * — connect address identity (matches Q6B's real-edge-resolved hostname
+ * connect, not Q6C's deliberately-different comparison), `secureTransport:
+ * 'starttls'`, `startTls`'s `expectedServerHostname`, `allowHalfOpen:
+ * false` (matching production; Q6B already ruled this out as
+ * discriminating on its own), request bytes, and target — is identical to
+ * `socket-http-client.ts`'s real sequence. Hand-rolled here (never through
+ * `SafeSocketHttpClient` or any shared production module) for the same
+ * reason every other control route in this file is: no repository defect
+ * claim, no fix, one discriminating data point against the real Cloudflare
+ * edge. The socket is explicitly closed in a `finally` after the bounded
+ * read loop completes or errors, since `releaseLock()` alone never tears
+ * the connection down the way `writer.close()` did.
+ */
+app.get('/__diag/webctx-remote-writer-release-control', async (c) => {
+  if (c.env?.DIAGNOSTIC_SEAM_ENABLED !== 'true') {
+    return c.notFound();
+  }
+
+  const startedAtMs = Date.now();
+  const CR = 13;
+  const LF = 10;
+  const findCrlfCrlf = (buf: Uint8Array): number => {
+    for (let i = 0; i + 3 < buf.length; i++) {
+      if (buf[i] === CR && buf[i + 1] === LF && buf[i + 2] === CR && buf[i + 3] === LF) return i;
+    }
+    return -1;
+  };
+
+  const HOSTNAME = 'example.com';
+  let socket = realCloudflareConnect(
+    { hostname: HOSTNAME, port: 443 },
+    { secureTransport: 'starttls', allowHalfOpen: false }
+  );
+  socket = socket.startTls({ expectedServerHostname: HOSTNAME });
+
+  const writer = socket.writable.getWriter();
+  const requestText =
+    `GET / HTTP/1.1\r\nhost: ${HOSTNAME}\r\nconnection: close\r\n` +
+    `accept-encoding: identity\r\n\r\n`;
+  await writer.write(new TextEncoder().encode(requestText));
+  // The ONE variable under test: releaseLock instead of close. The
+  // writable side is never closed before the read loop starts.
+  writer.releaseLock();
+
+  let running = new Uint8Array(0);
+  let firstByteObserved = false;
+  let headerTerminatorSeen = false;
+  let statusLine = '';
+  let eofObserved = false;
+  try {
+    const reader = socket.readable.getReader();
+    try {
+      for (let i = 0; i < 64; i++) {
+        const { done, value } = await reader.read();
+        if (done) {
+          eofObserved = true;
+          break;
+        }
+        if (value.length > 0) firstByteObserved = true;
+        const merged = new Uint8Array(running.length + value.length);
+        merged.set(running, 0);
+        merged.set(value, running.length);
+        running = merged;
+        if (!statusLine) {
+          for (let j = 0; j + 1 < running.length; j++) {
+            if (running[j] === CR && running[j + 1] === LF) {
+              statusLine = new TextDecoder().decode(running.slice(0, j));
+              break;
+            }
+          }
+        }
+        if (findCrlfCrlf(running) !== -1) {
+          headerTerminatorSeen = true;
+          break;
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+  } finally {
+    await socket.close().catch(() => {
+      // best-effort cleanup only; never masks the read-loop result above.
+    });
+  }
+
+  return c.json({
+    diagnostic: 'SUN-1221E5Q6D webctx-remote-diagnostic-writer-release-control',
+    note:
+      'ONE variable changed vs. the real SafeSocketHttpClient sequence: writer.releaseLock() ' +
+      'instead of writer.close() before the read loop begins — the writable side of the stream ' +
+      'is never closed pre-read. secureTransport=starttls, startTls expectedServerHostname, ' +
+      'allowHalfOpen=false, request text, and target are otherwise identical. Explicit ' +
+      'socket.close() runs in a finally after the bounded read loop, since releaseLock() alone ' +
+      'does not tear the connection down. Makes no repository defect claim and no fix by itself ' +
+      '— a single discriminating data point. Response body discarded; only byte counts/booleans ' +
+      'and the status line are returned. Never touches payment orchestration, settlement, or ' +
+      'receipt persistence.',
+    total_response_bytes: running.length,
+    first_response_byte_observed: firstByteObserved,
+    status_line: statusLine || null,
+    header_terminator_seen: headerTerminatorSeen,
+    eof_observed: eofObserved,
+    elapsed_ms: Date.now() - startedAtMs,
+  });
+});
+
+/**
+ * SUN-1221E5Q6D §19 — ONE upstream-target control, spent only because the
+ * writer-release control above refuted `writer.close()`/`allowHalfOpen` as
+ * the discriminating cause: `total_response_bytes=0`, `eof_observed=true`,
+ * `elapsed_ms=4` — even with the writable side never closed pre-read, the
+ * fixed `example.com` target still produced an immediate zero-byte EOF.
+ * That leaves an unresolved confound: every SITEBORNE diagnostic control so
+ * far has used `example.com` (an IANA reserved test domain) as its fixed
+ * target, while `cloudflare/workerd#6903`'s own reported SUCCESSFUL
+ * `startTls` control uses `api.github.com GET /zen`. This reproduces that
+ * exact shape as literally as practical — same connect-by-hostname
+ * identity, same `secureTransport: 'starttls'`, same `expectedServerHostname`,
+ * same `Connection: close`, a real `User-Agent` (api.github.com's own
+ * documented requirement), and critically the SAME writer.releaseLock()
+ * (never writer.close()) ordering this file's own control above just used —
+ * to determine whether this diagnostic environment's socket/read mechanism
+ * can receive ANY real HTTP response at all, or whether the zero-byte EOF is
+ * structural to this environment regardless of target. `HOSTNAME`/`PATH`
+ * below are the same hardcoded, non-user-controlled, source-level constant
+ * discipline as `FIXED_DIAGNOSTIC_TARGET` — never a production code path,
+ * gated behind the same `DIAGNOSTIC_SEAM_ENABLED` var. Makes no repository
+ * defect claim and no fix; one final discriminating data point per this
+ * checkpoint's remote-call budget.
+ */
+app.get('/__diag/webctx-remote-upstream-target-control', async (c) => {
+  if (c.env?.DIAGNOSTIC_SEAM_ENABLED !== 'true') {
+    return c.notFound();
+  }
+
+  const startedAtMs = Date.now();
+  const CR = 13;
+  const LF = 10;
+  const findCrlfCrlf = (buf: Uint8Array): number => {
+    for (let i = 0; i + 3 < buf.length; i++) {
+      if (buf[i] === CR && buf[i + 1] === LF && buf[i + 2] === CR && buf[i + 3] === LF) return i;
+    }
+    return -1;
+  };
+
+  const HOSTNAME = 'api.github.com';
+  const PATH = '/zen';
+  let socket = realCloudflareConnect(
+    { hostname: HOSTNAME, port: 443 },
+    { secureTransport: 'starttls', allowHalfOpen: false }
+  );
+  socket = socket.startTls({ expectedServerHostname: HOSTNAME });
+
+  const writer = socket.writable.getWriter();
+  const requestText =
+    `GET ${PATH} HTTP/1.1\r\nhost: ${HOSTNAME}\r\nconnection: close\r\n` +
+    `user-agent: SITEBORNE-SUN-1221E5Q6D-diagnostic\r\naccept-encoding: identity\r\n\r\n`;
+  await writer.write(new TextEncoder().encode(requestText));
+  // Matches the writer-release control above, not the close-before-read
+  // baseline: the writable side is never closed before the read loop.
+  writer.releaseLock();
+
+  let running = new Uint8Array(0);
+  let firstByteObserved = false;
+  let headerTerminatorSeen = false;
+  let statusLine = '';
+  let eofObserved = false;
+  try {
+    const reader = socket.readable.getReader();
+    try {
+      for (let i = 0; i < 64; i++) {
+        const { done, value } = await reader.read();
+        if (done) {
+          eofObserved = true;
+          break;
+        }
+        if (value.length > 0) firstByteObserved = true;
+        const merged = new Uint8Array(running.length + value.length);
+        merged.set(running, 0);
+        merged.set(value, running.length);
+        running = merged;
+        if (!statusLine) {
+          for (let j = 0; j + 1 < running.length; j++) {
+            if (running[j] === CR && running[j + 1] === LF) {
+              statusLine = new TextDecoder().decode(running.slice(0, j));
+              break;
+            }
+          }
+        }
+        if (findCrlfCrlf(running) !== -1) {
+          headerTerminatorSeen = true;
+          break;
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+  } finally {
+    await socket.close().catch(() => {
+      // best-effort cleanup only; never masks the read-loop result above.
+    });
+  }
+
+  return c.json({
+    diagnostic: 'SUN-1221E5Q6D webctx-remote-diagnostic-upstream-target-control',
+    note:
+      'Reproduces cloudflare/workerd#6903\'s own reported SUCCESSFUL control shape as literally ' +
+      'as practical: api.github.com GET /zen, connect-by-hostname, secureTransport=starttls, ' +
+      'expectedServerHostname=api.github.com, Connection: close, a real User-Agent, and ' +
+      'writer.releaseLock() (never writer.close()) before the read loop — matching this file\'s ' +
+      'own writer-release control, not the close-before-read baseline. Tests whether this ' +
+      'diagnostic environment\'s socket/read mechanism can receive ANY real HTTP response, or ' +
+      'whether the zero-byte EOF this checkpoint keeps observing is structural regardless of ' +
+      'target. Makes no repository defect claim and no fix by itself. Hardcoded, ' +
+      'non-user-controlled diagnostic-only target; never a production code path. Response body ' +
+      'discarded; only byte counts/booleans and the status line are returned. Never touches ' +
+      'payment orchestration, settlement, or receipt persistence.',
+    total_response_bytes: running.length,
+    first_response_byte_observed: firstByteObserved,
+    status_line: statusLine || null,
+    header_terminator_seen: headerTerminatorSeen,
+    eof_observed: eofObserved,
+    elapsed_ms: Date.now() - startedAtMs,
+  });
+});
+
 export default app;
