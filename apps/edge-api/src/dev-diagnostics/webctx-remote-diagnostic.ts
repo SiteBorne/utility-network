@@ -279,6 +279,7 @@ function createStageTrace(startedAtMs: number) {
  */
 function wrapConnectForDiagnostics(
   trace: ReturnType<typeof createStageTrace>,
+  lifecycle: Q6BLifecycle,
   real: ConnectFn
 ): ConnectFn {
   return (address, options) => {
@@ -291,7 +292,194 @@ function wrapConnectForDiagnostics(
       throw err;
     }
     trace.record('socket_connect_returned', true, { hostname: address.hostname, port: address.port });
-    return socket;
+    return wrapSocketForDiagnostics(socket, 'initial', lifecycle);
+  };
+}
+
+/**
+ * SUN-1221E5Q6B — non-gating socket/stream lifecycle facts, populated
+ * without adding a single new `await` to the sequence
+ * `SafeSocketHttpClient.fetch()` already performs (read-only lifecycle
+ * map, this checkpoint's §1: connect -> [startTls] -> writer.write ->
+ * writer.close -> reader.read* -> reader.releaseLock; `.opened`/`.closed`
+ * are never awaited by that code today, confirmed by direct source
+ * inspection, so this file doesn't start awaiting them either — only
+ * attaches non-consuming `.then()/.catch()` side observers, per this
+ * checkpoint's OBSERVER_EFFECT_RULE).
+ */
+export interface Q6BLifecycle {
+  initialSocketOpenedResolved?: boolean;
+  initialSocketOpenedRejected?: boolean;
+  secureSocketCreated: boolean;
+  secureSocketIsDistinctObject?: boolean;
+  secureSocketOpenedResolved?: boolean;
+  secureSocketOpenedRejected?: boolean;
+  socketClosedResolvedBeforeEof?: boolean;
+  socketClosedRejectedBeforeEof?: boolean;
+  requestWriteResolved?: boolean;
+  explicitLocalSocketCloseBeforeEof?: boolean;
+  firstResponseByteObserved: boolean;
+  statusLineComplete: boolean;
+  headerTerminatorSeen: boolean;
+  totalResponseBytesAtEof?: number;
+  eofObserved: boolean;
+}
+
+export function newQ6BLifecycle(): Q6BLifecycle {
+  return {
+    secureSocketCreated: false,
+    firstResponseByteObserved: false,
+    statusLineComplete: false,
+    headerTerminatorSeen: false,
+    eofObserved: false,
+  };
+}
+
+const Q6B_CR = 13;
+const Q6B_LF = 10;
+
+function q6bFindCrlf(buf: Uint8Array): number {
+  for (let i = 0; i + 1 < buf.length; i++) {
+    if (buf[i] === Q6B_CR && buf[i + 1] === Q6B_LF) return i;
+  }
+  return -1;
+}
+
+function q6bFindCrlfCrlf(buf: Uint8Array): number {
+  for (let i = 0; i + 3 < buf.length; i++) {
+    if (buf[i] === Q6B_CR && buf[i + 1] === Q6B_LF && buf[i + 2] === Q6B_CR && buf[i + 3] === Q6B_LF) return i;
+  }
+  return -1;
+}
+
+/**
+ * A manual pass-through `ReadableStream`: every `pull()` performs exactly
+ * the one `await realReader.read()` the real consumer
+ * (`socket-http-client.ts`'s `readResponse`/`readChunkedBody`) would
+ * itself perform, and forwards `{done, value}` unchanged — never buffers,
+ * withholds, or reorders a chunk the real stream didn't produce, so
+ * `PARSER_STATE_MACHINE_IDENTICAL` and `AWAITED_OPERATION_SEQUENCE_IDENTICAL`
+ * both hold. Records only byte-count/CRLF-position facts, never header or
+ * body content.
+ */
+function wrapReadableForDiagnostics(
+  readable: ReadableStream<Uint8Array>,
+  lifecycle: Q6BLifecycle
+): ReadableStream<Uint8Array> {
+  const realReader = readable.getReader();
+  let running = new Uint8Array(0);
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      const { done, value } = await realReader.read();
+      if (done) {
+        lifecycle.eofObserved = true;
+        lifecycle.totalResponseBytesAtEof = running.length;
+        controller.close();
+        return;
+      }
+      if (value.length > 0) lifecycle.firstResponseByteObserved = true;
+      const merged = new Uint8Array(running.length + value.length);
+      merged.set(running, 0);
+      merged.set(value, running.length);
+      running = merged;
+      if (!lifecycle.statusLineComplete && q6bFindCrlf(running) !== -1) lifecycle.statusLineComplete = true;
+      if (!lifecycle.headerTerminatorSeen && q6bFindCrlfCrlf(running) !== -1) lifecycle.headerTerminatorSeen = true;
+      controller.enqueue(value);
+    },
+    cancel(reason) {
+      return realReader.cancel(reason);
+    },
+  });
+}
+
+/**
+ * A manual pass-through `WritableStream`: `write()`/`close()` forward to
+ * the real writer and are awaited at exactly the point
+ * `socket-http-client.ts`'s `writeRequest` already awaits them — this only
+ * records success AFTER that same await settles, never adding a new one.
+ */
+function wrapWritableForDiagnostics(
+  writable: WritableStream<Uint8Array>,
+  lifecycle: Q6BLifecycle
+): WritableStream<Uint8Array> {
+  const realWriter = writable.getWriter();
+  return new WritableStream<Uint8Array>({
+    async write(chunk) {
+      await realWriter.write(chunk);
+      lifecycle.requestWriteResolved = true;
+    },
+    async close() {
+      await realWriter.close();
+      lifecycle.explicitLocalSocketCloseBeforeEof = !lifecycle.eofObserved;
+    },
+    async abort(reason) {
+      await realWriter.abort(reason);
+    },
+  });
+}
+
+/**
+ * SUN-1221E5Q6B's STARTTLS DISCIPLINE: `readable`/`writable` are LAZY
+ * getters, only constructing (and therefore only calling
+ * `.getReader()`/`.getWriter()` on) the real stream at the exact moment
+ * real code accesses them — for the pre-TLS `'initial'` socket in the
+ * `https:` path that is NEVER (`SafeSocketHttpClient.fetch()` goes
+ * straight from `connect()` to `.startTls()`, confirmed by direct source
+ * inspection, never touching the pre-TLS socket's streams at all), so no
+ * new interaction with the pre-TLS socket is introduced. `startTls()`
+ * itself always returns the REAL secure socket's own distinct wrapper —
+ * never reuses the pre-TLS socket's streams for secure I/O.
+ */
+export function wrapSocketForDiagnostics(
+  socket: SocketLike,
+  label: 'initial' | 'secure',
+  lifecycle: Q6BLifecycle
+): SocketLike {
+  // Non-gating, non-consuming side-effect observers only — `.then()`
+  // returns a NEW derived promise; `socket.opened`/`socket.closed`
+  // themselves are handed back completely unconsumed below, exactly as
+  // `SafeSocketHttpClient` would see the real, unwrapped socket (it never
+  // reads either property today).
+  socket.opened.then(
+    () => {
+      if (label === 'initial') lifecycle.initialSocketOpenedResolved = true;
+      else lifecycle.secureSocketOpenedResolved = true;
+    },
+    () => {
+      if (label === 'initial') lifecycle.initialSocketOpenedRejected = true;
+      else lifecycle.secureSocketOpenedRejected = true;
+    }
+  );
+  socket.closed.then(
+    () => {
+      if (!lifecycle.eofObserved) lifecycle.socketClosedResolvedBeforeEof = true;
+    },
+    () => {
+      if (!lifecycle.eofObserved) lifecycle.socketClosedRejectedBeforeEof = true;
+    }
+  );
+
+  let wrappedReadable: ReadableStream<Uint8Array> | undefined;
+  let wrappedWritable: WritableStream<Uint8Array> | undefined;
+
+  return {
+    get readable(): ReadableStream<Uint8Array> {
+      if (!wrappedReadable) wrappedReadable = wrapReadableForDiagnostics(socket.readable, lifecycle);
+      return wrappedReadable;
+    },
+    get writable(): WritableStream<Uint8Array> {
+      if (!wrappedWritable) wrappedWritable = wrapWritableForDiagnostics(socket.writable, lifecycle);
+      return wrappedWritable;
+    },
+    opened: socket.opened,
+    closed: socket.closed,
+    close: () => socket.close(),
+    startTls: (options) => {
+      const secure = socket.startTls(options);
+      lifecycle.secureSocketCreated = true;
+      lifecycle.secureSocketIsDistinctObject = secure !== socket;
+      return wrapSocketForDiagnostics(secure, 'secure', lifecycle);
+    },
   };
 }
 
@@ -322,7 +510,8 @@ app.get('/__diag/webctx-remote', async (c) => {
   const trace = createStageTrace(startedAtMs);
   trace.record('diag_handler_entered', true);
 
-  const wrappedConnect = wrapConnectForDiagnostics(trace, realCloudflareConnect);
+  const lifecycle = newQ6BLifecycle();
+  const wrappedConnect = wrapConnectForDiagnostics(trace, lifecycle, realCloudflareConnect);
   const httpClient = buildWebContextV2SafeHttpClient(wrappedConnect);
   const clock = realClock();
   const { signer, registry: keyRegistry } = await buildEphemeralDiagnosticSigner();
@@ -441,14 +630,144 @@ app.get('/__diag/webctx-remote', async (c) => {
     result_class: outcome.resultClass,
     error_detail: outcome.failureMessage ?? outcome.limitation,
     elapsed_ms: elapsedMs,
+    // SUN-1221E5Q6B — socket/stream lifecycle facts. Byte counts and
+    // CRLF-position booleans only, never header/body content itself; see
+    // `wrapSocketForDiagnostics`/`wrapReadableForDiagnostics`.
+    socket_lifecycle: {
+      initial_socket_opened_resolved: lifecycle.initialSocketOpenedResolved ?? false,
+      initial_socket_opened_rejected: lifecycle.initialSocketOpenedRejected ?? false,
+      secure_socket_created: lifecycle.secureSocketCreated,
+      secure_socket_is_distinct_object: lifecycle.secureSocketIsDistinctObject ?? false,
+      secure_socket_opened_resolved: lifecycle.secureSocketOpenedResolved ?? false,
+      secure_socket_opened_rejected: lifecycle.secureSocketOpenedRejected ?? false,
+      socket_closed_resolved_before_eof: lifecycle.socketClosedResolvedBeforeEof ?? false,
+      socket_closed_rejected_before_eof: lifecycle.socketClosedRejectedBeforeEof ?? false,
+      request_write_resolved: lifecycle.requestWriteResolved ?? false,
+      explicit_local_socket_close_before_eof: lifecycle.explicitLocalSocketCloseBeforeEof ?? false,
+      remote_first_response_byte_observed: lifecycle.firstResponseByteObserved,
+      remote_status_line_complete: lifecycle.statusLineComplete,
+      remote_header_terminator_seen: lifecycle.headerTerminatorSeen,
+      remote_total_response_bytes: lifecycle.totalResponseBytesAtEof ?? null,
+      remote_eof_observed: lifecycle.eofObserved,
+      header_eof_byte_class:
+        lifecycle.totalResponseBytesAtEof === undefined
+          ? null
+          : lifecycle.totalResponseBytesAtEof === 0
+            ? 'ZERO_RESPONSE_BYTES'
+            : 'PARTIAL_RESPONSE_HEADERS',
+    },
     note:
-      'error_detail/diagnostic_reason_code/diagnostic_stage/eof_branch_id are sanitized ' +
-      'adapter-classified fields (SUN-1221E2D/E4P/E5Q6A discipline) — never response ' +
-      'body/headers/credentials, never a raw adapter error-message passthrough. ' +
-      'SUN-1221E5Q5: previously always undefined on failure (extraction-path defect fixed this ' +
-      'checkpoint, dev-diagnostic-seam-only, see SUN-1221E5Q5 report). This route never touches ' +
-      'payment orchestration, settlement, or receipt persistence; it signs only an in-memory ' +
-      'diagnostic self-check.',
+      'error_detail/diagnostic_reason_code/diagnostic_stage/eof_branch_id/socket_lifecycle are ' +
+      'sanitized adapter-classified fields or byte-count/CRLF-position booleans (SUN-1221E2D/' +
+      'E4P/E5Q6A/E5Q6B discipline) — never response body/headers/credentials, never a raw ' +
+      'adapter error-message passthrough. SUN-1221E5Q5: previously always undefined on failure ' +
+      '(extraction-path defect fixed this checkpoint, dev-diagnostic-seam-only, see SUN-1221E5Q5 ' +
+      'report). This route never touches payment orchestration, settlement, or receipt ' +
+      'persistence; it signs only an in-memory diagnostic self-check.',
+  });
+});
+
+/**
+ * SUN-1221E5Q6B — ONE optional reference control, spent only because the
+ * pre-fix evidence (`ZERO_RESPONSE_BYTES`, `request_write_resolved=true`,
+ * `explicit_local_socket_close_before_eof=true`,
+ * `socket_closed_resolved_before_eof=true`, 6ms elapsed — far faster than
+ * a genuine round trip to `example.com`) all point at exactly ONE
+ * discriminating causal hypothesis: `socket-http-client.ts`'s
+ * `connect(..., { allowHalfOpen: false })` (line 112) coupled with its
+ * unconditional `await writer.close()` BEFORE any read begins
+ * (`writeRequest`, awaited in full before `readResponse` starts) tears
+ * down the readable side of the connection before the remote response has
+ * any chance to arrive — i.e. this client's own write-close, not the
+ * remote peer, produces the "premature EOF".
+ *
+ * Isolates exactly that ONE variable — `allowHalfOpen: true` instead of
+ * `false` — against the real Cloudflare network, keeping every other
+ * variable IDENTICAL to `SafeSocketHttpClient.fetch()`'s real sequence:
+ * same `secureTransport: 'starttls'` mode, same startTls call, same
+ * write-then-close-before-read ordering, same fixed target, same request
+ * text shape. Hand-rolled here (never through `SafeSocketHttpClient` or
+ * any shared production module) specifically so this ONE variable can be
+ * changed without touching, forking, or fixing any shared production
+ * code — this route makes NO repository defect claim and NO fix; it only
+ * answers whether flipping this one flag changes the observed outcome.
+ * Discards the response body entirely; returns only byte counts and
+ * booleans, gated behind the same `DIAGNOSTIC_SEAM_ENABLED` var, same
+ * non-reachability-by-construction as every other diagnostic route in
+ * this file. Bounded read loop (defense against an unexpected hang, not
+ * expected to matter for this bounded, fixed, tiny target page).
+ */
+app.get('/__diag/webctx-remote-control', async (c) => {
+  if (c.env?.DIAGNOSTIC_SEAM_ENABLED !== 'true') {
+    return c.notFound();
+  }
+
+  const startedAtMs = Date.now();
+  const CRLF = '\r\n';
+  const CR = 13;
+  const LF = 10;
+  const findCrlfCrlf = (buf: Uint8Array): number => {
+    for (let i = 0; i + 3 < buf.length; i++) {
+      if (buf[i] === CR && buf[i + 1] === LF && buf[i + 2] === CR && buf[i + 3] === LF) return i;
+    }
+    return -1;
+  };
+
+  let socket = realCloudflareConnect(
+    { hostname: 'example.com', port: 443 },
+    // The ONE variable under test: `true` here vs. `false` in
+    // socket-http-client.ts:112. Everything else below mirrors that
+    // file's real sequence exactly.
+    { secureTransport: 'starttls', allowHalfOpen: true }
+  );
+  socket = socket.startTls({ expectedServerHostname: 'example.com' });
+
+  const writer = socket.writable.getWriter();
+  const requestText =
+    `GET / HTTP/1.1${CRLF}host: example.com${CRLF}connection: close${CRLF}` +
+    `accept-encoding: identity${CRLF}${CRLF}`;
+  await writer.write(new TextEncoder().encode(requestText));
+  // Same close-before-read ordering as production's real writeRequest —
+  // the ONLY thing this control changes is allowHalfOpen above.
+  await writer.close();
+
+  const reader = socket.readable.getReader();
+  let running = new Uint8Array(0);
+  let firstByteObserved = false;
+  let headerTerminatorSeen = false;
+  let eofObserved = false;
+  for (let i = 0; i < 64; i++) {
+    const { done, value } = await reader.read();
+    if (done) {
+      eofObserved = true;
+      break;
+    }
+    if (value.length > 0) firstByteObserved = true;
+    const merged = new Uint8Array(running.length + value.length);
+    merged.set(running, 0);
+    merged.set(value, running.length);
+    running = merged;
+    if (findCrlfCrlf(running) !== -1) {
+      headerTerminatorSeen = true;
+      break;
+    }
+  }
+  reader.releaseLock();
+
+  return c.json({
+    diagnostic: 'SUN-1221E5Q6B webctx-remote-diagnostic-control',
+    note:
+      'ONE variable changed vs. the real SafeSocketHttpClient sequence: allowHalfOpen=true ' +
+      'instead of false (socket-http-client.ts:112). Write-then-close-before-read ordering, ' +
+      'request text, and target are otherwise identical. Makes no repository defect claim and ' +
+      'no fix by itself — a single discriminating data point. Response body is discarded, never ' +
+      'returned; only byte counts/booleans are. Never touches payment orchestration, settlement, ' +
+      'or receipt persistence.',
+    total_response_bytes: running.length,
+    first_response_byte_observed: firstByteObserved,
+    header_terminator_seen: headerTerminatorSeen,
+    eof_observed: eofObserved,
+    elapsed_ms: Date.now() - startedAtMs,
   });
 });
 
