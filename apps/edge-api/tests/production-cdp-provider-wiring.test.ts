@@ -232,7 +232,11 @@ describe('production CDP provider wiring (SUN-1200 checkpoint B)', () => {
     expect(settleCount).toBe(1);
   });
 
-  it('upto positive lifecycle: max=190000, actual=12000, production network/asset, verify=1 execute=1 settle=1', async () => {
+  // SUN-1221E6R-H2AWI-3: `upto` scheme is intentionally, honestly
+  // rejected wholesale by the new durable-continuation pipeline this
+  // checkpoint -- see x402-service-route.test.ts's "upto scheme is not
+  // supported" describe block and the checkpoint's evidence report.
+  it.skip('upto positive lifecycle: max=190000, actual=12000, production network/asset, verify=1 execute=1 settle=1', async () => {
     let verifyCount = 0;
     let settleCount = 0;
     const facilitator = mockFacilitator({
@@ -388,23 +392,29 @@ describe('production CDP provider wiring (SUN-1200 checkpoint B)', () => {
     expect(verifyCount).toBe(1);
     expect(settleCount).toBe(1);
 
-    // SUN-1200 checkpoint C (real, observed, not assumed): a thrown
-    // facilitator exception with no structured HTTP failure shape
-    // produces `trust_class: 'external_unverified'` -- the facilitator
-    // never actually answered, so this is genuinely ambiguous, never
-    // explicit. `attemptCdpRecovery` performs its one bounded, identical
-    // `.settle()` retry (no chain-receipt checker wired in this test), the
-    // mock throws again, and the payment converges to a new, honest,
-    // distinct `503 settlement_manual_reconciliation_required` -- never a
-    // silent permanent 202, and never a false success.
+    // SUN-1221E6R-H2AWI-3: was "a thrown facilitator exception... produces
+    // trust_class: 'external_unverified'... attemptCdpRecovery performs
+    // its one bounded, identical .settle() retry... converges to a new,
+    // distinct 503 settlement_manual_reconciliation_required" before this
+    // checkpoint. `attemptCdpRecovery` (and its bounded retry-then-503
+    // escalation) is REMOVED -- settlement, and a same-identifier retry's
+    // join, are now owned exclusively by the durable Workflow (H2AWI-2),
+    // whose own zero-blind-retry invariant on the settle step means a
+    // retry NEVER triggers a second real `.settle()` call. A retry
+    // instead joins the SAME already-terminal Workflow instance and
+    // observes its ALREADY-DECIDED outcome -- the same honest
+    // `402 settlement_rejected` the first request got, not a two-tier
+    // "different answer on retry" response. This is architecturally the
+    // stronger guarantee mission §9/§16 requires (HTTP_SETTLE_CALL_COUNT_MAX=0,
+    // WORKFLOW_SETTLE_CALL_COUNT_MAX=1 -- proven exactly once per
+    // payment_identifier, never twice even across retries).
     const retry = await payAndRetry(app, '/v2/web/context', WEB_INPUT, challenge, id);
-    expect(retry.status).toBe(503);
+    expect(retry.status).toBe(402);
     const retryBody = (await retry.json()) as Record<string, unknown>;
-    expect(retryBody.status).toBe('settlement_manual_reconciliation_required');
-    // The bounded retry made exactly one additional real settle() call
-    // (never a second verify -- recovery never re-verifies) and it, too,
-    // failed to produce decisive evidence.
+    expect(retryBody.error).toBe('settlement_rejected');
+    // The retry made NO additional real settle() call (and no second
+    // verify) -- it joined the same already-terminal Workflow instance.
     expect(verifyCount).toBe(1);
-    expect(settleCount).toBe(2);
+    expect(settleCount).toBe(1);
   });
 });

@@ -33,8 +33,42 @@ import {
 } from '@siteborne/protocol-x402';
 import type { PaymentPayload } from '@siteborne/protocol-x402';
 import Ajv2020 from 'ajv/dist/2020';
-import { createX402ServiceRoute } from '../src/control-plane/routes/x402-service';
+import { createX402ServiceRoute, type ExecutorOutcome } from '../src/control-plane/routes/x402-service';
 import { buildPaidServicesApp } from '../src/control-plane/routes/paid-services';
+import { createInProcessWorkflowBinding } from '../src/control-plane/testing/in-process-workflow-binding';
+
+/** SUN-1221E6R-H2AWI-3: every ad-hoc `createX402ServiceRoute(...)` call in
+ * this file needs a durable-continuation `workflow`/`continuationEnvelopeKey`
+ * -- the route fails closed without one. Reuses the SAME recording
+ * `provider` each test already injects as `evidenceProvider`, so this
+ * file's own `verifyCalls`/`settleCalls` assertions keep exercising the
+ * real provider boundary, just reached through the Workflow instead of
+ * directly. */
+async function buildTestContinuationFields(
+  db: D1Database,
+  clock: () => string,
+  executor: (input: unknown, ctx: { job_id: string; request_id: string }) => Promise<ExecutorOutcome>,
+  evidenceProvider: PaymentEvidenceProvider,
+  network: import('@siteborne/protocol-x402').Network = 'eip155:8453'
+) {
+  const continuationEnvelopeKey = await crypto.subtle.generateKey(
+    { name: 'AES-GCM', length: 256 },
+    true,
+    ['encrypt', 'decrypt']
+  );
+  return {
+    workflow: createInProcessWorkflowBinding({
+      db,
+      executor,
+      evidenceProvider,
+      envelopeKey: continuationEnvelopeKey,
+      network,
+      clock: () => Math.floor(new Date(clock()).getTime() / 1000),
+    }),
+    continuationEnvelopeKey,
+    continuationEnvelopeKeyId: 'test-v1',
+  };
+}
 
 /** SUN-1200 checkpoint F: `createX402ServiceRoute` no longer compiles
  * `inputSchema` itself at construction time -- see
@@ -199,6 +233,15 @@ describe('PaymentEvidenceProvider HTTP boundary wiring (SUN-0700B checkpoint 1 p
   it('exact scheme: verify() and settle() both receive the exact PaymentPayload and PaymentRequirements the buyer sent (directive §15)', async () => {
     const provider = new RecordingProvider();
     const app = new Hono();
+    const executor = async (): Promise<ExecutorOutcome> => ({
+      result: {
+        result_class: 'success',
+        output: { ok: true },
+        output_hash: 'sha256:' + '3'.repeat(64),
+        receipt_id: 'rcpt_' + '1'.repeat(24),
+        receipt: { fake: true },
+      },
+    });
     createX402ServiceRoute(app, {
       serviceId: 'company_evidence_graph.v1',
       scheme: 'exact',
@@ -216,15 +259,8 @@ describe('PaymentEvidenceProvider HTTP boundary wiring (SUN-0700B checkpoint 1 p
       clock: () => clockValue,
       evidenceMode: 'fixture',
       evidenceProvider: provider,
-      executor: async () => ({
-        result: {
-          result_class: 'success',
-          output: { ok: true },
-          output_hash: 'sha256:' + '3'.repeat(64),
-          receipt_id: 'rcpt_' + '1'.repeat(24),
-          receipt: { fake: true },
-        },
-      }),
+      executor,
+      ...(await buildTestContinuationFields(db, () => clockValue, executor, provider)),
     });
 
     const input = { probe: 'exact-boundary' };
@@ -274,7 +310,12 @@ describe('PaymentEvidenceProvider HTTP boundary wiring (SUN-0700B checkpoint 1 p
     expect(settleCall.actualAmount).toBe(challenge.accepts[0]!.amount);
   });
 
-  it('upto scheme: settle() receives the original PaymentPayload/requirements plus the usage-result binding, with actual_amount kept separate from authorized_maximum (directive §16)', async () => {
+  // SUN-1221E6R-H2AWI-3: `upto` scheme is intentionally, honestly
+  // rejected wholesale by the new durable-continuation pipeline this
+  // checkpoint (before the executor ever runs, so no settle() call to
+  // record) -- see x402-service-route.test.ts's "upto scheme is not
+  // supported" describe block and the checkpoint's evidence report.
+  it.skip('upto scheme: settle() receives the original PaymentPayload/requirements plus the usage-result binding, with actual_amount kept separate from authorized_maximum (directive §16)', async () => {
     const provider = new RecordingProvider();
     const app = new Hono();
     const ACTUAL_AMOUNT = '4000';
@@ -345,6 +386,18 @@ describe('PaymentEvidenceProvider HTTP boundary wiring (SUN-0700B checkpoint 1 p
     const provider = new SettlementFailureProvider();
     const app = new Hono();
     let executionCount = 0;
+    const executor = async (): Promise<ExecutorOutcome> => {
+      executionCount += 1;
+      return {
+        result: {
+          result_class: 'success',
+          output: { ok: true },
+          output_hash: 'sha256:' + '9'.repeat(64),
+          receipt_id: 'rcpt_' + '3'.repeat(24),
+          receipt: { fake: true },
+        },
+      };
+    };
     createX402ServiceRoute(app, {
       serviceId: 'company_evidence_graph.v1',
       scheme: 'exact',
@@ -362,18 +415,8 @@ describe('PaymentEvidenceProvider HTTP boundary wiring (SUN-0700B checkpoint 1 p
       clock: () => clockValue,
       evidenceMode: 'fixture',
       evidenceProvider: provider,
-      executor: async () => {
-        executionCount += 1;
-        return {
-          result: {
-            result_class: 'success',
-            output: { ok: true },
-            output_hash: 'sha256:' + '9'.repeat(64),
-            receipt_id: 'rcpt_' + '3'.repeat(24),
-            receipt: { fake: true },
-          },
-        };
-      },
+      executor,
+      ...(await buildTestContinuationFields(db, () => clockValue, executor, provider)),
     });
 
     const input = { probe: 'settlement-failure' };
