@@ -167,3 +167,29 @@ export async function createOrJoinPaidContinuation(
     }
   }
 }
+
+/**
+ * A client retrying with the SAME `payment_identifier` (mission §16/design
+ * §19: `RETRY_WHILE_WORKFLOW_RUNNING_BEHAVIOR`) must only ever JOIN an
+ * already-durably-created instance -- never create a new one from
+ * whatever (potentially incomplete or re-derived) data the retry request
+ * happens to carry. This is deliberately `get()`-only, with no `create()`
+ * fallback of any kind, so a retry can never accidentally seed a Workflow
+ * instance from synthetic/placeholder settlement data. Returns `null`
+ * when no instance exists yet for this payment (the original request
+ * has not reached the durable handoff point) -- the caller's own
+ * pre-existing recovery/`202` fallback remains the safety net for that
+ * case, unchanged.
+ */
+export async function joinExistingPaidContinuation(
+  workflow: WorkflowBindingLike,
+  paymentIdentifier: string
+): Promise<{ readonly instance: WorkflowInstanceLike; readonly instanceId: string } | null> {
+  const instanceId = await deriveWorkflowInstanceId(paymentIdentifier);
+  try {
+    const instance = await workflow.get(instanceId);
+    return { instance, instanceId };
+  } catch {
+    return null;
+  }
+}

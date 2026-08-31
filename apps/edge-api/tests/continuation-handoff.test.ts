@@ -8,6 +8,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   createOrJoinPaidContinuation,
+  joinExistingPaidContinuation,
   type WorkflowBindingLike,
   type WorkflowInstanceLike,
 } from '../src/control-plane/continuation/handoff';
@@ -160,5 +161,31 @@ describe('createOrJoinPaidContinuation (SUN-1221E6R-H2AWI-3 Task 3.1)', () => {
     if (result.outcome === 'create_failed') {
       expect(result.error).toBeInstanceOf(Error);
     }
+  });
+});
+
+describe('joinExistingPaidContinuation (SUN-1221E6R-H2AWI-3 Task 3.5)', () => {
+  it('joins an already-existing instance, never creating one', async () => {
+    const { binding } = buildFakeWorkflowBinding();
+    const key = await generateKey();
+    const md = metadata('pay_join');
+    const created = await createOrJoinPaidContinuation(
+      { workflow: binding, envelopeKey: key, envelopeKeyId: 'v1' },
+      { paymentIdentifier: 'pay_join', payload: {}, metadata: md, requestId: 'req_1' }
+    );
+    expect(created.outcome).toBe('created');
+
+    const joined = await joinExistingPaidContinuation(binding, 'pay_join');
+    expect(joined).not.toBeNull();
+    if (created.outcome !== 'create_failed') {
+      expect(joined?.instanceId).toBe(created.instanceId);
+      expect(joined?.instance).toBe(created.instance);
+    }
+  });
+
+  it('returns null (never creates) when no instance exists yet for this payment', async () => {
+    const { binding } = buildFakeWorkflowBinding();
+    const joined = await joinExistingPaidContinuation(binding, 'pay_never_created');
+    expect(joined).toBeNull();
   });
 });

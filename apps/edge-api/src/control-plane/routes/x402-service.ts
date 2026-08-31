@@ -34,7 +34,6 @@ import {
   encodeNeverminedPaymentResponseHeaderSafe,
   parseNeverminedDelegationId,
   parseNeverminedPaymentIdentifier,
-  readNeverminedSettlementObservation,
   reconcileNeverminedSettlementForRecovery,
   validateNeverminedAccessToken,
   validateNeverminedPaymentRequired,
@@ -43,8 +42,6 @@ import {
   type NeverminedPaymentResponse,
 } from '@siteborne/protocol-nevermined';
 import type {
-  ExternalSettlementEvidence,
-  ExternalVerificationEvidence,
   Network,
   PaymentAttemptBinding,
   PaymentEvidenceContext,
@@ -72,8 +69,6 @@ import {
   buildPaymentServiceLink,
   buildQuote,
   buildUptoPaymentRequirement,
-  buildUsageResult,
-  canAdvanceToSettled,
   canAdvanceToVerified,
   declareSiteborneePaymentIdentifierSupport,
   decodePaymentSignatureHeaderSafe,
@@ -87,8 +82,6 @@ import {
   resolveServiceMaxPriceUsd,
   usdToAtomicUnits,
   validatePaymentPayloadStructure,
-  verifyPaymentServiceLink,
-  UsageExceedsAuthorizationError,
 } from '@siteborne/protocol-x402';
 import type { D1Database } from '@cloudflare/workers-types';
 import { D1PaymentAttemptRepository } from '../repositories/d1/payment-attempts';
@@ -99,6 +92,21 @@ import { createAuditEvent } from '../audit/events';
 import { createStateEvent } from '../state-machine';
 import type { JobState, TransitionReason } from '../types';
 import type { Job } from '../types';
+// SUN-1221E6R-H2AWI-3 — durable paid-continuation handoff/wait. This
+// route never calls `evidenceProvider.settle()` directly (see the
+// module doc comment above and the dedicated source-scan regression
+// test in x402-service-route.test.ts) — every post-PAYMENT_VERIFIED
+// executor/PCC/settlement/persistence step lives exclusively inside
+// `PaidContinuationWorkflow` (H2AWI-2), reached only through these two
+// H2AWI-1/H2AWI-2-reusing modules.
+import {
+  createOrJoinPaidContinuation,
+  joinExistingPaidContinuation,
+  type WorkflowBindingLike,
+} from '../continuation/handoff';
+import { waitForWorkflowResult, type WorkflowWaitOutcome } from '../continuation/waiter';
+import type { ContinuationEnvelopeMetadata, WorkflowContinuationResult } from '../continuation/types';
+import type { DecryptedContinuationPayload } from '../workflows/paid-continuation-workflow';
 
 export interface ExecutorOutcome {
   /** The exact closed result @siteborne/service-runtime's
@@ -222,6 +230,23 @@ export interface X402ServiceRouteConfig {
   preEconomicBodyValidator?: (
     body: unknown
   ) => { ok: true } | { ok: false; code: string; message: string };
+  /** SUN-1221E6R-H2AWI-3: the Cloudflare Workflows binding for the
+   * durable paid-continuation Workflow (real production wiring — reading
+   * `env.PAID_CONTINUATION_WORKFLOW` and importing the real envelope key
+   * — is H2AWI-4 scope; every caller in THIS checkpoint, including every
+   * real production route composition file, leaves this unset). Absent
+   * (the default everywhere today): the route fails closed the instant a
+   * payment is verified, per this codebase's established
+   * missing-required-config convention — it NEVER falls back to a local
+   * `evidenceProvider.settle()` call, which no longer exists anywhere in
+   * this file. */
+  workflow?: WorkflowBindingLike;
+  /** Paired with `workflow` above — an already-imported AES-256-GCM key
+   * (`sealContinuationEnvelope`'s own boundary: it never reads a secret
+   * binding itself). */
+  continuationEnvelopeKey?: CryptoKey;
+  /** Defaults to `'v1'` when `continuationEnvelopeKey` is supplied. */
+  continuationEnvelopeKeyId?: string;
 }
 
 export const PAYTO_NOT_CONFIGURED = 'siteborne-fixture:payto-not-configured';
@@ -266,46 +291,14 @@ interface PendingNeverminedSettlementDraft {
   authorized_maximum: string;
 }
 
-/** SUN-1200 checkpoint C: the CDP-rail equivalent of
- * `PendingNeverminedSettlementDraft`, written BEFORE a real CDP settle
- * call for the same crash-safety reason. Deliberately does NOT store the
- * signed `PaymentPayload`/`PaymentRequirements` (the buyer's economic
- * authorization) -- a recovery retry uses the SAME payload the buyer's
- * own replay request re-supplies (already hash-validated against the
- * immutable binding by `acquirePaymentAttempt` before this branch is
- * ever reached), never a value read back out of D1.
- *
- * Unlike `PendingNeverminedSettlementDraft` (which stores only
- * `{payer?}`), this stores the FULL `verification_evidence` object --
- * a deliberate, disclosed difference: Nevermined's own recovery path
- * never re-calls `evidenceProvider.settle()` (it reconciles externally
- * via a dedicated delegation lookup instead), so it never needs the
- * exact object `hashPaymentObject` originally hashed. A CDP recovery
- * retry DOES call the real `CdpPaymentEvidenceProvider.settle()` again,
- * whose internal `verification_evidence_hash` computation must match the
- * original `canAdvanceToSettled` gate's accepted hash bit-for-bit -- only
- * possible by re-supplying the identical object, not a re-derived one.
- * `verification_evidence` is the facilitator's own VERIFY response (not
- * the buyer's signed authorization) -- non-secret, safe to persist. */
-interface CdpSettlementPendingDraft {
-  kind: 'cdp_settlement_pending_draft';
-  quote_id: string;
-  requirement_id: string;
-  request_input_hash: string;
-  output: unknown;
-  output_hash: string;
-  receipt_id: string;
-  receipt_hash: string;
-  receipt: unknown;
-  pcc?: unknown;
-  verification_evidence: ExternalVerificationEvidence;
-  verification_evidence_hash: string;
-  actual_amount: string;
-  usage_result_hash?: string;
-  usage_result?: UsageResult;
-  scheme: 'exact' | 'upto';
-  authorized_maximum: string;
-}
+// SUN-1221E6R-H2AWI-3: the CDP-rail equivalent of
+// `PendingNeverminedSettlementDraft` (SUN-1200 checkpoint C's
+// `CdpSettlementPendingDraft`) is REMOVED -- it existed exclusively to
+// support this route's own direct CDP settle call and its recovery
+// retry (`attemptCdpRecovery`, both removed). The Workflow's own
+// pre-settle durable draft (H2AWI-2's `runSettlementStep`, via
+// `PaymentAttemptSettlementRepository.recordSettlementPending`) is a
+// different, narrower, already-frozen mechanism -- not this interface.
 
 export class NeverminedEvidenceProviderNotConfiguredError extends Error {
   constructor() {
@@ -343,57 +336,17 @@ function jsonError(c: Context, status: number, code: string, message: string, de
   );
 }
 
-/**
- * SUN-1200 checkpoint C. The CDP rail cannot reuse Nevermined's
- * `reason === 'provider_rejected'` check -- that literal is a
- * Nevermined-provider-only fallback default
- * (`nevermined-provider.ts`'s `safeReason(validation.reason,
- * 'provider_rejected')`), never produced by the real
- * `CdpPaymentEvidenceProvider`. That provider instead exposes two
- * independent, CDP-appropriate signals on `ExternalSettlementEvidence`:
- *
- *   - `trust_class`: `'external_verified'` means the facilitator
- *     genuinely, definitively answered (either the normal
- *     `response.success` path, or the catch-block's `facilitatorAnswered`
- *     case -- a structured HTTP error with a real `errorReason`).
- *     `'external_unverified'` means it did NOT answer at all
- *     (timeout/transport failure) -- inherently ambiguous, never
- *     explicit.
- *   - `reason`: when `trust_class` is `'external_verified'`, this is
- *     either the facilitator's own real rejection code (a genuine,
- *     explicit "no"), or one of three purely *structural* post-hoc
- *     validation labels the provider itself assigns on top of a
- *     `response.success === true` payload (`settlement_network_mismatch`
- *     / `settlement_amount_mismatch` / `settlement_transaction_missing`)
- *     -- these mean the shape of the answer didn't match what we
- *     expected, not that the facilitator said no, so they stay
- *     ambiguous/recoverable exactly like a malformed response on any
- *     other rail.
- *
- * Explicit, terminal rejection therefore requires a definitively
- * answered facilitator (`external_verified`) with a real rejection
- * reason that is NOT one of those three structural labels. Used
- * identically for the first settle attempt and every bounded recovery
- * retry, so the two can never diverge in how they classify the same
- * evidence shape.
- */
-const CDP_STRUCTURAL_ONLY_SETTLE_REASONS = new Set([
-  'settlement_network_mismatch',
-  'settlement_amount_mismatch',
-  'settlement_transaction_missing',
-]);
-
-function isExplicitCdpSettlementFailure(
-  settleGateReason: string,
-  settlementEvidence: Pick<ExternalSettlementEvidence, 'trust_class' | 'reason'>
-): boolean {
-  return (
-    settleGateReason === 'settlement_not_successful' &&
-    settlementEvidence.trust_class === 'external_verified' &&
-    settlementEvidence.reason !== undefined &&
-    !CDP_STRUCTURAL_ONLY_SETTLE_REASONS.has(settlementEvidence.reason)
-  );
-}
+// SUN-1221E6R-H2AWI-3: `isExplicitCdpSettlementFailure`/
+// `CDP_STRUCTURAL_ONLY_SETTLE_REASONS` (SUN-1200 checkpoint C) are
+// REMOVED, not merely disabled -- they classified the CDP rail's own
+// direct settle-gate rejection into explicit-vs-ambiguous for
+// `attemptCdpRecovery`'s benefit. Both the direct settle call and
+// `attemptCdpRecovery` are gone (see the comment where
+// `attemptCdpRecovery` used to be defined); the equivalent
+// explicit-vs-ambiguous classification for settlement now lives entirely
+// inside `PaidContinuationWorkflow`'s own settlement step (H2AWI-2,
+// `paid-continuation-workflow.ts`'s `runSettlementStep`/
+// `resolveViaReconciliation`).
 
 /**
  * Builds and mounts one paid-service route on `app`. Throws immediately
@@ -993,272 +946,19 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
       return c.json(responseBody, 200);
     }
 
-    /**
-     * SUN-1200 checkpoint C — CDP-rail settlement-recovery convergence.
-     * Reached only for a `duplicate_same` retry on the CDP rail whose
-     * payment attempt is durably `settlement_failed`. Order, per the
-     * frozen recovery policy:
-     *   1. `explicit_rejection` is permanently terminal — reconstruct the
-     *      same 402, no provider call, ever.
-     *   2. `ambiguous` with a candidate transaction reference: read-only
-     *      chain-receipt reconciliation first (no facilitator write) —
-     *      only if `config.cdpChainReceiptChecker` is actually wired
-     *      (it isn't, in this repository, today).
-     *   3. Otherwise: at most ONE bounded, identical `.settle()` retry,
-     *      reusing the exact original `PaymentPayload` (from the current
-     *      replay request, already binding-hash-validated) and the exact
-     *      original `verification_evidence`/`actualAmount` (from the
-     *      durable draft) — never re-verified, never re-executed, never
-     *      recomputed. `exact`/`upto` EVM authorizations are both
-     *      single-use (EIP-3009 / Permit2 nonce enforcement respectively)
-     *      at the smart-contract level, so an identical retry cannot
-     *      produce a second successful on-chain charge.
-     * Returns `null` only when there is nothing this function can do
-     * (wrong rail, no durable draft, an unclassified outcome) — the
-     * caller's pre-existing `202`/`reconstructFromJob` fallback remains
-     * the safety net for those cases, unchanged.
-     */
-    async function attemptCdpRecovery(): Promise<Response | null> {
-      if (rail !== 'cdp') return null;
-      const recovery = await paymentAttempts.getSettlementRecoveryRecord(paymentIdentifier);
-      if (!recovery || recovery.lifecycleStage !== 'settlement_failed') return null;
-
-      const jobResult = await jobsRepo.getByIdempotencyKey(paymentIdentifier);
-      if (!jobResult.ok || !jobResult.value) return null;
-      const job = jobResult.value;
-      const draft = await results.getByJobId<CdpSettlementPendingDraft>(job.id);
-      if (!draft || draft.kind !== 'cdp_settlement_pending_draft') return null;
-
-      if (recovery.settlementOutcomeKind === 'explicit_rejection') {
-        // Permanently terminal (frozen policy, unchanged from the
-        // original first-attempt behavior) — reconstruct, never re-call
-        // the provider.
-        await audit('payment_recovery_explicit_rejection_replay', {
-          payment_identifier: paymentIdentifier,
-        });
-        return jsonError(c, 402, 'settlement_rejected', 'provider_rejected');
-      }
-      if (recovery.settlementOutcomeKind !== 'ambiguous') return null;
-
-      const evidenceContext: PaymentEvidenceContext = {
-        service_id: config.serviceId,
-        service_version: config.serviceId.endsWith('.v2') ? 'v2' : 'v1',
-        scheme: config.scheme,
-        network: config.network,
-        asset: config.asset,
-        payee: stored.quote.payee,
-        quote_id: draft.quote_id,
-        requirement_id: draft.requirement_id,
-        payment_identifier: paymentIdentifier,
-        amount: stored.quote.amount,
-        nowIso,
-        expiresAt: stored.quote.expires_at,
-      };
-
-      async function finalizeCdpRecoverySuccess(
-        settlementEvidence: ExternalSettlementEvidence,
-        draft: CdpSettlementPendingDraft
-      ): Promise<Response> {
-        let link = await buildPaymentServiceLink({
-          link_version: 2,
-          payment_rail: 'cdp',
-          payment_provider: CDP_PAYMENT_PROVIDER,
-          payment_identifier: paymentIdentifier,
-          quote_id: draft.quote_id,
-          requirement_id: draft.requirement_id,
-          service_id: config.serviceId,
-          service_version: config.serviceId.endsWith('.v2') ? 'v2' : 'v1',
-          request_input_hash: draft.request_input_hash,
-          job_id: job.id,
-          service_output_hash: draft.output_hash,
-          verification_receipt_id: draft.receipt_id,
-          verification_receipt_hash: draft.receipt_hash,
-          verification_evidence_hash: draft.verification_evidence_hash,
-          ...(draft.usage_result_hash ? { usage_result_hash: draft.usage_result_hash } : {}),
-        });
-        const settlementEvidenceHash = await hashPaymentObject(settlementEvidence);
-        link = await extendWithSettlement(link, settlementEvidenceHash);
-
-        await paymentAttempts.transitionLifecycleStage(
-          paymentIdentifier,
-          'settled_external',
-          'link_verified'
-        );
-        await paymentAttempts.transitionLifecycleStage(
-          paymentIdentifier,
-          'link_verified',
-          'settled'
-        );
-        await paymentAttempts.markConsumed(paymentIdentifier);
-        await paymentAttempts.incrementCdpSuccessfulSettlementCount(paymentIdentifier);
-        if (job.current_state === 'SETTLING') {
-          await transition(job.id, 'SETTLING', 'DELIVERED', 'SETTLEMENT_COMPLETE');
-        }
-
-        const responseBody = {
-          service_id: config.serviceId,
-          result_class: 'success',
-          output: draft.output,
-          receipt_id: draft.receipt_id,
-          link_id: link.link_id,
-          link_hash: link.link_hash,
-          ...(draft.scheme === 'upto'
-            ? { authorized_maximum: draft.authorized_maximum, actual_amount: draft.actual_amount }
-            : {}),
-        };
-        const settleResponse: SettleResponse = {
-          success: true,
-          transaction: settlementEvidence.transaction_reference ?? 'recovered:unknown',
-          network: config.network,
-          ...(settlementEvidence.payer ? { payer: settlementEvidence.payer } : {}),
-          amount: draft.actual_amount,
-          extra: { link_id: link.link_id, payment_identifier: paymentIdentifier },
-        };
-        await results.finalize(job.id, { status: 200, body: responseBody, settleResponse }, nowIso);
-        await audit('payment_recovered_settled_cdp', {
-          payment_identifier: paymentIdentifier,
-          job_id: job.id,
-        });
-        c.header('PAYMENT-RESPONSE', encodePaymentResponseHeaderSafe(settleResponse));
-        return c.json(responseBody, 200);
-      }
-
-      // Step 1: read-only chain-receipt reconciliation, only if both a
-      // candidate transaction reference and a real checker are present.
-      // No facilitator write occurs in this step.
-      if (recovery.settlementTransactionReference && config.cdpChainReceiptChecker) {
-        const chainResult = await config.cdpChainReceiptChecker(
-          recovery.settlementTransactionReference,
-          config.network
-        );
-        await audit('payment_recovery_chain_check', {
-          payment_identifier: paymentIdentifier,
-          result: chainResult,
-        });
-        if (chainResult === 'SETTLED') {
-          const recorded = await paymentAttempts.recordSettledExternal(
-            paymentIdentifier,
-            recovery.settlementTransactionReference,
-            ['settlement_failed']
-          );
-          if (recorded.status !== 'transitioned') return null;
-          const settlementEvidence: ExternalSettlementEvidence = {
-            x402_version: SUPPORTED_X402_VERSION,
-            scheme: draft.scheme,
-            network: config.network,
-            asset: config.asset,
-            payee: stored.quote.payee,
-            actual_amount: draft.actual_amount,
-            quote_id: draft.quote_id,
-            requirement_id: draft.requirement_id,
-            payment_identifier: paymentIdentifier,
-            success: true,
-            settled_at: nowIso,
-            facilitator_identity: 'cdp:chain-receipt-recovery',
-            raw_evidence_hash: await hashPaymentObject({
-              kind: 'cdp_settlement_recovered_chain_receipt',
-              payment_identifier: paymentIdentifier,
-              transaction_reference: recovery.settlementTransactionReference,
-            }),
-            verification_evidence_hash: draft.verification_evidence_hash,
-            trust_class: 'external_verified',
-            transaction_reference: recovery.settlementTransactionReference,
-          };
-          return finalizeCdpRecoverySuccess(settlementEvidence, draft);
-        }
-        if (chainResult === 'FAILED') {
-          await paymentAttempts.recordCdpSettlementOutcome(
-            paymentIdentifier,
-            'settlement_failed',
-            'explicit_rejection',
-            recovery.settlementTransactionReference
-          );
-          await audit('settlement_failed', {
-            payment_identifier: paymentIdentifier,
-            reason: 'chain_confirmed_failed',
-          });
-          return jsonError(c, 402, 'settlement_rejected', 'chain_confirmed_failed');
-        }
-        // STILL_UNKNOWN falls through to the bounded retry below.
-      }
-
-      // Step 2: no usable transaction hash or inconclusive chain
-      // evidence -- at most ONE bounded, identical settle() retry.
-      if (!payload) return null; // defensive; unreachable on the CDP rail
-      const retrySettlementContext: PaymentSettlementContext = {
-        ...evidenceContext,
-        authorizationContext: { rail: 'cdp' },
-        paymentPayload: payload,
-        paymentRequirements: payload.accepted,
-        ...(draft.usage_result ? { usageResult: draft.usage_result } : {}),
-      };
-      await paymentAttempts.incrementCdpSettleAttemptCount(paymentIdentifier);
-      const retrySettlementEvidence = await evidenceProvider.settle(
-        retrySettlementContext,
-        draft.verification_evidence,
-        draft.actual_amount
-      );
-      const retryGate = canAdvanceToSettled(
-        retrySettlementEvidence,
-        evidenceContext,
-        config.evidenceMode,
-        draft.verification_evidence_hash
-      );
-      await audit('payment_recovery_settle_retry', {
-        payment_identifier: paymentIdentifier,
-        allowed: retryGate.allowed,
-      });
-      if (retryGate.allowed) {
-        const recorded = await paymentAttempts.recordSettledExternal(
-          paymentIdentifier,
-          retrySettlementEvidence.transaction_reference,
-          ['settlement_failed']
-        );
-        if (recorded.status !== 'transitioned') return null;
-        return finalizeCdpRecoverySuccess(retrySettlementEvidence, draft);
-      }
-      const retryIsExplicit = isExplicitCdpSettlementFailure(
-        retryGate.reason,
-        retrySettlementEvidence
-      );
-      if (retryIsExplicit) {
-        await paymentAttempts.recordCdpSettlementOutcome(
-          paymentIdentifier,
-          'settlement_failed',
-          'explicit_rejection',
-          retrySettlementEvidence.transaction_reference
-        );
-        await audit('settlement_failed', {
-          payment_identifier: paymentIdentifier,
-          reason: retryGate.reason,
-        });
-        return jsonError(c, 402, 'settlement_rejected', retryGate.reason);
-      }
-      // Still ambiguous after the one bounded retry -- persist (attempt
-      // count already incremented above; candidate tx reference updated
-      // if the retry happened to return one) and return a truthful,
-      // distinct, recoverable status. Never a silent permanent 202, and
-      // never a false success.
-      if (retrySettlementEvidence.transaction_reference) {
-        await paymentAttempts.recordCdpSettlementOutcome(
-          paymentIdentifier,
-          'settlement_failed',
-          'ambiguous',
-          retrySettlementEvidence.transaction_reference
-        );
-      }
-      await audit('settlement_manual_reconciliation_required', {
-        payment_identifier: paymentIdentifier,
-        reason: retryGate.reason,
-      });
-      return c.json(
-        {
-          status: 'settlement_manual_reconciliation_required',
-          payment_identifier: paymentIdentifier,
-        },
-        503
-      );
-    }
+    // SUN-1221E6R-H2AWI-3: the CDP-rail settlement-recovery function that
+    // used to live here (`attemptCdpRecovery`, SUN-1200 checkpoint C) is
+    // REMOVED, not merely disabled. It existed exclusively to recover an
+    // AMBIGUOUS settlement left by this route's own direct
+    // `evidenceProvider.settle()` call -- a call this file no longer
+    // makes anywhere (proof: the dedicated source-scan regression test in
+    // x402-service-route.test.ts). Settlement, and therefore its
+    // ambiguity-recovery reconciliation, is now owned exclusively by
+    // `PaidContinuationWorkflow` (H2AWI-2's `resolveViaReconciliation`) --
+    // see `driveDurableContinuation` below, reached via the
+    // `duplicate_same` branch a few lines down, which joins the SAME
+    // durable Workflow instance instead of re-deriving recovery state
+    // from a `results`-table draft row this pipeline no longer writes.
 
     if (acquireOutcome.status === 'repository_error') {
       return jsonError(c, 500, 'repository_failure', acquireOutcome.reason);
@@ -1313,14 +1013,29 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
       );
     }
     if (acquireOutcome.status === 'duplicate_same') {
+      // SUN-1221E6R-H2AWI-3 (mission §16/§19, design §5/§19): a retry
+      // carrying the SAME payment_identifier must join the SAME durable
+      // Workflow instance the original request already handed off to --
+      // never re-derive recovery state from a local draft row, never
+      // create a second instance. `driveDurableContinuation('join_only')`
+      // is `get()`-only (see `joinExistingPaidContinuation`'s own doc
+      // comment) -- it returns null, falling through to the pre-existing
+      // recovery/`202` machinery below, unchanged, whenever no durable
+      // instance exists yet (the original request has not reached the
+      // handoff point) or this route was never configured with a
+      // Workflow binding at all.
+      const durableJoin = await driveDurableContinuation('join_only');
+      if (durableJoin) return durableJoin;
       const recovered = await attemptNeverminedRecovery();
       if (recovered) return recovered;
-      const cdpRecovered = await attemptCdpRecovery();
-      if (cdpRecovered) return cdpRecovered;
       const reconstructed = await reconstructFromJob();
       if (reconstructed) return reconstructed;
       // Same legitimate retry, but the original request has not finished
-      // processing yet (directive §13) — never a second execution.
+      // processing yet (directive §13) — never a second execution. This
+      // is the SAME pre-existing `202 processing` response the contract
+      // already had before this checkpoint (SUN-0900B) -- not a new
+      // status code introduced by H2AWI-3, and only ever reached when no
+      // durable Workflow instance is even findable yet.
       return c.json({ status: 'processing', payment_identifier: paymentIdentifier }, 202);
     }
 
@@ -1441,499 +1156,291 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
     // `waitUntil` (protecting it) *before* being awaited (so the normal
     // synchronous response is still the same, single settlement of that
     // one promise — never a second, forked execution).
+    /**
+     * SUN-1221E6R-H2AWI-3 — translates a durable Workflow's terminal
+     * `WorkflowContinuationResult` (H2AWI-1's frozen type) into the
+     * EXISTING, unchanged canonical synchronous HTTP response shape. No
+     * new status code, no new response field, no polling/Location-header
+     * semantics is introduced anywhere in this function — every branch
+     * reuses an error code/status this route's public contract already
+     * had before this checkpoint.
+     *
+     * `'settled'` is the one case that needs richer data than
+     * `WorkflowContinuationResult` itself carries (the full `output`/
+     * `link_id`/`link_hash`/receipt/PAYMENT-RESPONSE body) — exactly the
+     * same rich shape `reconstructFromJob` already reads back from
+     * `x402_service_results` for the pre-existing `duplicate_same`/
+     * `already_consumed` retry paths above. Once the Workflow's own
+     * persist-result/persist-receipt steps are wired to write that same
+     * durable row (H2AWI-4), this is the SAME code path a connected
+     * client's first-ever request and a reconnecting client's retry both
+     * resolve through — one response-construction implementation, never
+     * two competing ones.
+     */
+    async function respondFromWorkflowResult(result: WorkflowContinuationResult): Promise<Response> {
+      switch (result.status) {
+        case 'settled': {
+          const reconstructed = await reconstructFromJob({ requireDelivered: false });
+          if (reconstructed) return reconstructed;
+          return jsonError(
+            c,
+            500,
+            'repository_failure',
+            'durable settlement result missing after a settled Workflow'
+          );
+        }
+        case 'executor_timeout':
+          // Matches the pre-H2AWI-3 contract's THROWN-executor branch
+          // (500 service_execution_failed).
+          return jsonError(
+            c,
+            500,
+            'service_execution_failed',
+            result.error_code ?? 'executor_timeout'
+          );
+        case 'executor_rejected':
+          // Matches the pre-H2AWI-3 contract's resolved-but-unsuccessful
+          // executor branch (502 service_execution_failed).
+          return jsonError(
+            c,
+            502,
+            'service_execution_failed',
+            result.error_code ?? 'executor_rejected'
+          );
+        case 'pcc_failed':
+          return jsonError(c, 500, 'service_execution_failed', result.error_code ?? 'pcc_failed');
+        case 'authorization_expired':
+          // New terminal case introduced by durability (a long-running
+          // Workflow can, in principle, outlive the quoted authorization
+          // window) — reuses the existing `settlement_rejected` error
+          // family rather than inventing a new code, matching the
+          // pre-H2AWI-3 contract's own "every settle-gate failure returns
+          // 402 settlement_rejected" convention (see the two cases below).
+          return jsonError(c, 402, 'settlement_rejected', 'authorization_expired');
+        case 'settlement_rejected':
+        case 'settlement_ambiguous':
+          // The pre-H2AWI-3 contract already funneled BOTH an explicit
+          // settlement rejection and an ambiguous one into the exact same
+          // `402 settlement_rejected` response shape (see the removed
+          // in-request settle-gate code this replaces) — preserved
+          // byte-for-byte here.
+          return jsonError(c, 402, 'settlement_rejected', result.error_code ?? result.status);
+        case 'persistence_failed_after_settlement':
+          // Money is safe (settlement already confirmed); only
+          // bookkeeping failed — matches the pre-H2AWI-3 contract's own
+          // post-settlement repository-failure branches (500
+          // repository_failure).
+          return jsonError(
+            c,
+            500,
+            'repository_failure',
+            result.error_code ?? 'persistence_failed_after_settlement'
+          );
+        case 'workflow_internal_error':
+        default:
+          return jsonError(
+            c,
+            500,
+            'service_execution_failed',
+            result.error_code ?? 'workflow_internal_error'
+          );
+      }
+    }
+
+    /**
+     * Converts the waiter's outcome (SUN-1221E6R-H2AWI-3 Task 3.3) into a
+     * Response. `disconnected` is reached only once the client itself has
+     * already gone away — no connected client ever observes that branch;
+     * the Workflow this request handed off to is entirely unaffected and
+     * keeps running (see `waiter.ts`'s own doc comment) — this function
+     * still must return SOME `Response` because the Workers fetch-handler
+     * contract requires one.
+     */
+    async function translateWaitOutcome(outcome: WorkflowWaitOutcome): Promise<Response> {
+      if (outcome.kind === 'disconnected') {
+        return jsonError(
+          c,
+          500,
+          'repository_failure',
+          'client disconnected before the durable payment continuation completed'
+        );
+      }
+      if (outcome.kind === 'errored') {
+        return jsonError(
+          c,
+          500,
+          'service_execution_failed',
+          outcome.error.message || outcome.error.name
+        );
+      }
+      if (outcome.kind === 'terminated') {
+        return jsonError(c, 500, 'service_execution_failed', 'workflow_terminated');
+      }
+      const result = outcome.output as WorkflowContinuationResult | undefined;
+      if (!result || typeof result.status !== 'string') {
+        return jsonError(
+          c,
+          500,
+          'service_execution_failed',
+          'durable Workflow returned a malformed terminal result'
+        );
+      }
+      return respondFromWorkflowResult(result);
+    }
+
+    /**
+     * SUN-1221E6R-H2AWI-3 — the ONE place this route ever touches the
+     * durable Workflow. `mode: 'create_or_join'` is reached from a
+     * first-seen request immediately after PAYMENT_VERIFIED (design §4's
+     * frozen handoff point); `mode: 'join_only'` is reached from a
+     * `duplicate_same` retry (mission §16/§19) and is deliberately
+     * `get()`-only (`joinExistingPaidContinuation`) — it NEVER creates an
+     * instance from a retry's own (potentially re-derived) data, and
+     * returns `null` (never a Response) whenever there is nothing yet to
+     * join, so the caller's pre-existing recovery/`202` fallback remains
+     * the safety net for that case, unchanged.
+     *
+     * Fails closed (never a local settle fallback -- none exists anywhere
+     * in this file) when `config.workflow`/`config.continuationEnvelopeKey`
+     * are not configured, matching this codebase's established
+     * missing-required-config convention.
+     */
+    async function driveDurableContinuation(mode: 'create_or_join'): Promise<Response>;
+    async function driveDurableContinuation(mode: 'join_only'): Promise<Response | null>;
+    async function driveDurableContinuation(
+      mode: 'create_or_join' | 'join_only'
+    ): Promise<Response | null> {
+      if (mode === 'join_only') {
+        if (!config.workflow) return null;
+        const joined = await joinExistingPaidContinuation(config.workflow, paymentIdentifier);
+        if (!joined) return null;
+        const waitOutcome = await waitForWorkflowResult(joined.instance, {
+          signal: c.req.raw.signal,
+        });
+        return await translateWaitOutcome(waitOutcome);
+      }
+
+      if (!config.workflow || !config.continuationEnvelopeKey) {
+        return jsonError(
+          c,
+          500,
+          'repository_failure',
+          'durable payment continuation is not configured for this route'
+        );
+      }
+
+      const jobRowResult = await jobsRepo.getByIdempotencyKey(paymentIdentifier);
+      const continuationJobId =
+        jobRowResult.ok && jobRowResult.value ? jobRowResult.value.id : jobId;
+
+      const metadata: ContinuationEnvelopeMetadata = {
+        job_id: continuationJobId,
+        payment_identifier: paymentIdentifier,
+        service: config.serviceId,
+        network: config.network,
+        asset: config.asset,
+        pay_to: evidenceContext.payee,
+        amount_atomic: evidenceContext.amount,
+        // `exact`-scheme only reaches this point (see the `upto` gate in
+        // `runProtectedExecutionPipeline`) -- the quote's own expiry is
+        // this route's existing authoritative "how long is this payment
+        // window valid" value (already checked earlier in this handler),
+        // reused here rather than inventing a second expiry concept.
+        valid_before_unix: Math.floor(new Date(stored.quote.expires_at).getTime() / 1000),
+      };
+
+      // Same object-identity discipline the removed in-request settle
+      // call used to have: the exact `payload`/`payload.accepted` this
+      // request already structurally validated, never a re-decoded copy.
+      const settlementContext: PaymentSettlementContext =
+        rail === 'nevermined'
+          ? {
+              ...evidenceContext,
+              authorizationContext: {
+                rail: 'nevermined',
+                accessToken: sigHeader!,
+                paymentRequired: neverminedRequired!,
+                agentId: config.nevermined!.agentId,
+                planId: config.nevermined!.planId,
+                delegationId: neverminedDelegationId!,
+              },
+            }
+          : {
+              ...evidenceContext,
+              authorizationContext: { rail: 'cdp' },
+              paymentPayload: payload!,
+              paymentRequirements: payload!.accepted,
+            };
+
+      const continuationPayload: DecryptedContinuationPayload = {
+        executorInput: body,
+        settlementContext,
+        verificationEvidence,
+        actualAmount: stored.quote.amount,
+      };
+
+      const handoffResult = await createOrJoinPaidContinuation(
+        {
+          workflow: config.workflow,
+          envelopeKey: config.continuationEnvelopeKey,
+          envelopeKeyId: config.continuationEnvelopeKeyId ?? 'v1',
+        },
+        {
+          paymentIdentifier,
+          payload: continuationPayload,
+          metadata,
+          requestId,
+        }
+      );
+
+      if (handoffResult.outcome === 'create_failed') {
+        // Design §21: verify() already succeeded, but no executor
+        // invocation and no settlement occur under any circumstance —
+        // there is no synchronous fallback left in this file to regress
+        // to.
+        await transition(continuationJobId, 'LOCKED', 'REJECTED', 'QUARANTINE_POLICY');
+        return jsonError(
+          c,
+          500,
+          'repository_failure',
+          'failed to create durable payment continuation'
+        );
+      }
+
+      const waitOutcome = await waitForWorkflowResult(handoffResult.instance, {
+        signal: c.req.raw.signal,
+      });
+      return await translateWaitOutcome(waitOutcome);
+    }
+
     async function runProtectedExecutionPipeline(): Promise<Response> {
     await transition(jobId, 'PAYMENT_VERIFIED', 'LOCKED', 'RESOURCE_LOCKED');
-    await transition(jobId, 'LOCKED', 'ROUTED', 'ROUTED_TO_WORKER');
-    await transition(jobId, 'ROUTED', 'EXECUTING', 'EXECUTION_STARTED');
     await audit('service_execution_started', { job_id: jobId });
 
-    let outcome: ExecutorOutcome;
-    try {
-      outcome = await config.executor(body, { job_id: jobId, request_id: requestId });
-    } catch (e) {
-      await transition(jobId, 'EXECUTING', 'QUARANTINED', 'EXECUTION_FAILED');
-      await transition(jobId, 'QUARANTINED', 'REJECTED', 'QUARANTINE_POLICY');
+    if (config.scheme === 'upto') {
+      // SUN-1221E6R-H2AWI-3: the durable continuation Workflow (H2AWI-2,
+      // frozen) computes its settlement context entirely from the
+      // envelope sealed at handoff time — before the executor (which now
+      // runs INSIDE the Workflow) ever produces a post-execution
+      // actualAmountAtomic/resourceMetrics measurement. `upto` scheme's
+      // authorization-exceeded protection depends on exactly that
+      // post-execution measurement, which the frozen H2AWI-1/H2AWI-2
+      // interfaces have no room for. No route in production today uses
+      // `scheme: 'upto'` (both real paid routes are `exact` — verified
+      // this checkpoint), so this fails closed rather than silently
+      // dropping the overage protection a real `upto` route would need;
+      // extending the Workflow to support it is explicitly out of this
+      // checkpoint's scope (see the evidence report).
+      await transition(jobId, 'LOCKED', 'REJECTED', 'QUARANTINE_POLICY');
       return jsonError(
         c,
         500,
         'service_execution_failed',
-        e instanceof Error ? e.message : String(e)
+        'upto-scheme services are not supported by the durable payment continuation pipeline (SUN-1221E6R-H2AWI-3)'
       );
     }
 
-    if (
-      outcome.result.result_class !== 'success' ||
-      !outcome.result.receipt ||
-      !outcome.result.output_hash ||
-      !outcome.result.receipt_id
-    ) {
-      await transition(jobId, 'EXECUTING', 'QUARANTINED', 'EXECUTION_FAILED');
-      await transition(jobId, 'QUARANTINED', 'REJECTED', 'QUARANTINE_POLICY');
-      // SUN-1221E2D §6 — a sanitized, internal-only correlation event:
-      // SUN-1221E2's real HTTP 502 left nothing queryable anywhere
-      // (D1 or otherwise) beyond the generic public message. This never
-      // changes the public response body (`jsonError` below is
-      // unmodified, still passed only `message` — no `details` argument)
-      // — it exists solely so the NEXT real failure like this one is
-      // diagnostically decisive from D1 alone, the same audit_events
-      // table every other step of this exact request already writes to.
-      const failureDetails = outcome.result.failure?.details;
-      await audit('service_execution_diagnostic', {
-        job_id: jobId,
-        request_id: requestId,
-        result_class: outcome.result.result_class,
-        ...(failureDetails && typeof failureDetails === 'object' ? failureDetails : {}),
-      });
-      return jsonError(
-        c,
-        502,
-        'service_execution_failed',
-        outcome.result.failure?.message ?? `result_class=${outcome.result.result_class}`
-      );
-    }
-    await transition(jobId, 'EXECUTING', 'VERIFYING', 'EXECUTION_COMPLETED');
-    await audit('service_execution_completed', {
-      job_id: jobId,
-      result_class: outcome.result.result_class,
-    });
-    // SUN-1200 checkpoint C: unconditional for both rails now -- CDP
-    // previously never took this transition at all (it had no durable
-    // pre-settle write to follow it with), so its lifecycle stayed at
-    // `verified` all the way through settlement, with no recovery
-    // capability. See the durable pre-settle write below.
-    await paymentAttempts.transitionLifecycleStage(paymentIdentifier, 'verified', 'executed');
-
-    const receiptHash = await hashPaymentObject(outcome.result.receipt as Record<string, unknown>);
-
-    let actualAmount = stored.quote.amount;
-    let usageResultHash: string | undefined;
-    // Full object (not just its hash) hoisted out of the `upto` branch so
-    // it can also reach the settlement provider boundary below — a real
-    // facilitator settling an `upto` payment needs the post-execution
-    // usage binding itself, not merely its hash (directive §5, §16).
-    let usageResult: UsageResult | undefined;
-    if (config.scheme === 'upto') {
-      if (!outcome.actualAmountAtomic) {
-        await transition(jobId, 'VERIFYING', 'REJECTED', 'VERIFICATION_FAILED');
-        return jsonError(
-          c,
-          500,
-          'service_execution_failed',
-          'upto executor did not report actualAmountAtomic'
-        );
-      }
-      actualAmount = outcome.actualAmountAtomic;
-      if (BigInt(actualAmount) > BigInt(stored.quote.amount)) {
-        await transition(jobId, 'VERIFYING', 'REJECTED', 'VERIFICATION_FAILED');
-        await audit('payment_verification_failed', {
-          payment_identifier: paymentIdentifier,
-          reason: 'authorization_exceeded',
-        });
-        return jsonError(
-          c,
-          402,
-          'authorization_exceeded',
-          `actual amount ${actualAmount} exceeds authorized maximum ${stored.quote.amount}`
-        );
-      }
-      if (!outcome.resourceMetrics) {
-        await transition(jobId, 'VERIFYING', 'REJECTED', 'VERIFICATION_FAILED');
-        return jsonError(
-          c,
-          500,
-          'service_execution_failed',
-          'upto executor did not report deterministic resourceMetrics'
-        );
-      }
-      try {
-        const builtUsageResult = await buildUsageResult({
-          quote_id: stored.quote.quote_id,
-          requirement_id: stored.requirement_id,
-          payment_identifier: paymentIdentifier,
-          service_id: config.serviceId,
-          service_version: config.serviceId.endsWith('.v2') ? 'v2' : 'v1',
-          request_input_hash: inputHash,
-          service_output_hash: outcome.result.output_hash,
-          verification_receipt_id: outcome.result.receipt_id,
-          verification_receipt_hash: receiptHash,
-          resource_metrics_hash: await hashPaymentObject(outcome.resourceMetrics),
-          pricing_source_version: resolvePricingSourceVersion(),
-          actual_amount: actualAmount,
-          authorized_maximum: stored.quote.amount,
-        });
-        usageResult = builtUsageResult;
-        usageResultHash = builtUsageResult.usage_result_hash;
-      } catch (e) {
-        if (e instanceof UsageExceedsAuthorizationError) {
-          await transition(jobId, 'VERIFYING', 'REJECTED', 'VERIFICATION_FAILED');
-          await audit('payment_verification_failed', {
-            payment_identifier: paymentIdentifier,
-            reason: 'authorization_exceeded',
-          });
-          return jsonError(c, 402, 'authorization_exceeded', e.message);
-        }
-        throw e;
-      }
-    }
-
-    await transition(jobId, 'VERIFYING', 'SETTLING', 'VERIFICATION_PASSED');
-    await audit('payment_settlement_requested', { payment_identifier: paymentIdentifier });
-
-    const verificationEvidenceHash = await hashPaymentObject(verificationEvidence);
-    // Same object-identity discipline as the verify() boundary above —
-    // the exact `payload`/`payload.accepted` already validated, plus the
-    // `upto` usage-result binding when one was computed (directive §5).
-    const settlementContext: PaymentSettlementContext =
-      rail === 'nevermined'
-        ? {
-            ...evidenceContext,
-            authorizationContext: {
-              rail: 'nevermined',
-              // SUN-1221E6R-H2A: same `!` as the other captures on this
-              // object (`neverminedRequired!`, `config.nevermined!`,
-              // `neverminedDelegationId!`) — `sigHeader` was validated
-              // non-empty at the top of this handler, but the H2A
-              // lifecycle-protection wrap moved this read into a nested
-              // closure (`runProtectedExecutionPipeline`), across which
-              // TypeScript no longer carries that earlier narrowing.
-              accessToken: sigHeader!,
-              paymentRequired: neverminedRequired!,
-              agentId: config.nevermined!.agentId,
-              planId: config.nevermined!.planId,
-              delegationId: neverminedDelegationId!,
-            },
-            ...(usageResult ? { usageResult } : {}),
-          }
-        : {
-            ...evidenceContext,
-            authorizationContext: { rail: 'cdp' },
-            paymentPayload: payload!,
-            paymentRequirements: payload!.accepted,
-            ...(usageResult ? { usageResult } : {}),
-          };
-
-    if (rail === 'nevermined') {
-      // Durable persistence of every execution artifact recovery would
-      // need, written BEFORE the real settle call — a crash strictly
-      // during `settlePermissions` (directive crash scenario I) must
-      // never lose the ability to reconstruct the exact response a
-      // normal synchronous success would have produced.
-      const pendingDraft: PendingNeverminedSettlementDraft = {
-        kind: 'nevermined_settlement_pending_draft',
-        quote_id: stored.quote.quote_id,
-        requirement_id: stored.requirement_id,
-        request_input_hash: inputHash,
-        output: outcome.result.output,
-        output_hash: outcome.result.output_hash,
-        receipt_id: outcome.result.receipt_id,
-        receipt_hash: receiptHash,
-        receipt: outcome.result.receipt,
-        ...(outcome.result.verification !== undefined ? { pcc: outcome.result.verification } : {}),
-        verification_evidence: { payer: verificationEvidence.payer },
-        verification_evidence_hash: verificationEvidenceHash,
-        actual_amount: actualAmount,
-        ...(usageResultHash ? { usage_result_hash: usageResultHash } : {}),
-        ...(usageResult ? { usage_result: usageResult } : {}),
-        scheme: config.scheme,
-        authorized_maximum: stored.quote.amount,
-      };
-      await results.createPending(jobId, paymentIdentifier, pendingDraft, nowIso);
-
-      const pending = await paymentAttempts.recordSettlementPending(paymentIdentifier, {
-        neverminedDelegationId,
-        settlementPermissionHash: verificationEvidenceHash,
-        serviceOutputHash: outcome.result.output_hash,
-        serviceReceiptId: outcome.result.receipt_id,
-      });
-      if (pending.status !== 'transitioned') {
-        // Durable persistence itself failed (or a concurrent request
-        // already claimed this transition) — the real facilitator settle
-        // call must never be reached without this write having
-        // committed first (directive requirement, proven by a route
-        // test asserting the settle call count stays 0).
-        await audit('settlement_pending_persist_failed', {
-          payment_identifier: paymentIdentifier,
-          reason: pending.status,
-        });
-        return jsonError(
-          c,
-          500,
-          'repository_failure',
-          'failed to durably record settlement_pending before settlement'
-        );
-      }
-    } else {
-      // SUN-1200 checkpoint C: the CDP-rail equivalent durable pre-settle
-      // write, added this checkpoint (previously CDP had none at all —
-      // the root cause a crash/ambiguity mid-settle could never be
-      // recovered). Same crash-safety guarantee, same "settle must never
-      // be reached without this write having committed first" rule.
-      const cdpPendingDraft: CdpSettlementPendingDraft = {
-        kind: 'cdp_settlement_pending_draft',
-        quote_id: stored.quote.quote_id,
-        requirement_id: stored.requirement_id,
-        request_input_hash: inputHash,
-        output: outcome.result.output,
-        output_hash: outcome.result.output_hash,
-        receipt_id: outcome.result.receipt_id,
-        receipt_hash: receiptHash,
-        receipt: outcome.result.receipt,
-        ...(outcome.result.verification !== undefined ? { pcc: outcome.result.verification } : {}),
-        verification_evidence: verificationEvidence,
-        verification_evidence_hash: verificationEvidenceHash,
-        actual_amount: actualAmount,
-        ...(usageResultHash ? { usage_result_hash: usageResultHash } : {}),
-        ...(usageResult ? { usage_result: usageResult } : {}),
-        scheme: config.scheme,
-        authorized_maximum: stored.quote.amount,
-      };
-      await results.createPending(jobId, paymentIdentifier, cdpPendingDraft, nowIso);
-
-      const pending = await paymentAttempts.recordSettlementPending(paymentIdentifier, {
-        serviceOutputHash: outcome.result.output_hash,
-        serviceReceiptId: outcome.result.receipt_id,
-      });
-      if (pending.status !== 'transitioned') {
-        await audit('settlement_pending_persist_failed', {
-          payment_identifier: paymentIdentifier,
-          reason: pending.status,
-        });
-        return jsonError(
-          c,
-          500,
-          'repository_failure',
-          'failed to durably record settlement_pending before settlement'
-        );
-      }
-    }
-
-    const settlementEvidence = await evidenceProvider.settle(
-      settlementContext,
-      verificationEvidence,
-      actualAmount
-    );
-    const settleGate = canAdvanceToSettled(
-      settlementEvidence,
-      evidenceContext,
-      config.evidenceMode,
-      verificationEvidenceHash
-    );
-    if (!settleGate.allowed) {
-      await transition(jobId, 'SETTLING', 'REFUND_REQUIRED', 'REFUND_INITIATED');
-      // Real-incident-derived rule (SUN-0900B checkpoint 1B, third live
-      // settlement): once `evidenceProvider.settle(...)` has actually been
-      // invoked, a LOCAL inability to positively validate its response is
-      // never proof the settlement failed — the real sandbox transaction
-      // it produced can (and, in the incident this rule was written for,
-      // did) succeed externally regardless of what the local gate thought
-      // of the response shape. Only a settlement Nevermined itself
-      // *positively, explicitly* declared failed (`result.success ===
-      // false`, surfaced here as `settlementEvidence.reason ===
-      // 'provider_rejected'`) may ever go straight to the terminal
-      // `settlement_failed` state. Every other rejection reached after the
-      // real call — an ambiguous/ill-shaped response, a malformed or
-      // absent transaction reference, a provider exception/transport
-      // failure, a verification-hash/structural mismatch discovered only
-      // at this late gate — is AMBIGUOUS: `lifecycle_stage` stays at
-      // `settlement_pending` (already durably persisted above), never
-      // auto-retried, recoverable only through
-      // `attemptNeverminedRecovery`'s read-only external reconciliation.
-      if (rail === 'nevermined') {
-        const isExplicitProviderFailure =
-          settleGate.reason === 'settlement_not_successful' &&
-          settlementEvidence.reason === 'provider_rejected';
-        if (!isExplicitProviderFailure) {
-          await audit('settlement_ambiguous', {
-            payment_identifier: paymentIdentifier,
-            reason: settleGate.reason,
-          });
-          return jsonError(c, 402, 'settlement_rejected', settleGate.reason);
-        }
-        await paymentAttempts.transitionLifecycleStage(
-          paymentIdentifier,
-          'settlement_pending',
-          'settlement_failed'
-        );
-        await audit('settlement_failed', {
-          payment_identifier: paymentIdentifier,
-          reason: settleGate.reason,
-        });
-        return jsonError(c, 402, 'settlement_rejected', settleGate.reason);
-      }
-      // SUN-1200 checkpoint C: see `isExplicitCdpSettlementFailure`'s own
-      // doc comment for why the CDP rail cannot reuse the Nevermined
-      // check above. The CDP rail durably classifies which kind of
-      // failure this was
-      // (`settlement_outcome_kind`), so a later `duplicate_same` retry
-      // (`attemptCdpRecovery`) knows whether recovery may ever be
-      // attempted (`ambiguous` only -- `explicit_rejection` remains
-      // permanently terminal, exactly as before this checkpoint).
-      // External behavior for THIS first attempt is unchanged either
-      // way: both kinds return the same 402 `settlement_rejected`
-      // response.
-      const isExplicitCdpProviderFailure = isExplicitCdpSettlementFailure(
-        settleGate.reason,
-        settlementEvidence
-      );
-      await paymentAttempts.recordCdpSettlementOutcome(
-        paymentIdentifier,
-        'settlement_pending',
-        isExplicitCdpProviderFailure ? 'explicit_rejection' : 'ambiguous',
-        settlementEvidence.transaction_reference
-      );
-      await audit(isExplicitCdpProviderFailure ? 'settlement_failed' : 'settlement_ambiguous', {
-        payment_identifier: paymentIdentifier,
-        reason: settleGate.reason,
-      });
-      return jsonError(c, 402, 'settlement_rejected', settleGate.reason);
-    }
-    // External settlement is only the first half of finalization. The
-    // payment remains unconsumed until the rail-aware PaymentServiceLink is
-    // constructed, independently self-verified, and durably stored.
-    //
-    // SUN-1200 checkpoint C: this write is now unconditional (both
-    // rails) -- CDP settlements now flow through the same
-    // `settlement_pending -> settled_external -> link_verified ->
-    // settled` chain Nevermined already used, instead of a shortcut
-    // direct `verified -> settled` edge, since CDP now has its own
-    // durable pre-settle write too (see above) and can genuinely benefit
-    // from the same crash-safety.
-    {
-      const recorded = await paymentAttempts.recordSettledExternal(
-        paymentIdentifier,
-        settlementEvidence.transaction_reference
-      );
-      if (recorded.status !== 'transitioned') {
-        return jsonError(
-          c,
-          500,
-          'repository_failure',
-          'failed to durably record settled_external before linkage'
-        );
-      }
-    }
-
-    let link = await buildPaymentServiceLink({
-      link_version: 2,
-      payment_rail: rail,
-      payment_provider: rail === 'nevermined' ? NEVERMINED_PAYMENT_PROVIDER : CDP_PAYMENT_PROVIDER,
-      ...(rail === 'nevermined'
-        ? {
-            nevermined_agent_id: config.nevermined!.agentId,
-            nevermined_plan_id: config.nevermined!.planId,
-          }
-        : {}),
-      payment_identifier: paymentIdentifier,
-      quote_id: stored.quote.quote_id,
-      requirement_id: stored.requirement_id,
-      service_id: config.serviceId,
-      service_version: config.serviceId.endsWith('.v2') ? 'v2' : 'v1',
-      request_input_hash: inputHash,
-      job_id: jobId,
-      service_output_hash: outcome.result.output_hash,
-      verification_receipt_id: outcome.result.receipt_id,
-      verification_receipt_hash: receiptHash,
-      verification_evidence_hash: verificationEvidenceHash,
-      ...(usageResultHash ? { usage_result_hash: usageResultHash } : {}),
-    });
-    const settlementEvidenceHash = await hashPaymentObject(settlementEvidence);
-    link = await extendWithSettlement(link, settlementEvidenceHash);
-    const linkVerification = await verifyPaymentServiceLink(link);
-    if (!linkVerification.valid) {
-      await audit('payment_link_verification_failed', {
-        payment_identifier: paymentIdentifier,
-        reason: linkVerification.reason,
-      });
-      return jsonError(c, 500, 'payment_link_invalid', linkVerification.reason);
-    }
-
-    const responseBody = {
-      service_id: config.serviceId,
-      result_class: outcome.result.result_class,
-      output: outcome.result.output,
-      receipt_id: outcome.result.receipt_id,
-      link_id: link.link_id,
-      link_hash: link.link_hash,
-      ...(config.scheme === 'upto'
-        ? { authorized_maximum: stored.quote.amount, actual_amount: actualAmount }
-        : {}),
-    };
-
-    const neverminedObservation =
-      rail === 'nevermined' ? readNeverminedSettlementObservation(settlementEvidence) : null;
-    const settleResponse: SettleResponse | NeverminedPaymentResponse =
-      rail === 'nevermined'
-        ? {
-            success: true,
-            transaction: settlementEvidence.transaction_reference ?? 'fixture:settlement:unknown',
-            network: config.network,
-            ...(settlementEvidence.payer ? { payer: settlementEvidence.payer } : {}),
-            creditsRedeemed: neverminedObservation?.credits_redeemed ?? actualAmount,
-            ...(neverminedObservation?.remaining_balance !== null &&
-            neverminedObservation?.remaining_balance !== undefined
-              ? { remainingBalance: neverminedObservation.remaining_balance }
-              : {}),
-          }
-        : {
-            success: true,
-            transaction: settlementEvidence.transaction_reference ?? 'synthetic-tx:unknown',
-            network: config.network,
-            ...(settlementEvidence.payer ? { payer: settlementEvidence.payer } : {}),
-            amount: actualAmount,
-            extra: { link_id: link.link_id, payment_identifier: paymentIdentifier },
-          };
-
-    const durableEvidence: NonNullable<CachedResult['durableEvidence']> = {
-      ...(usageResult ? { usage_result: usageResult } : {}),
-      ...(outcome.result.verification !== undefined ? { pcc: outcome.result.verification } : {}),
-      receipt: outcome.result.receipt,
-      settlement_evidence: settlementEvidence,
-      payment_service_link: link,
-    };
-
-    // SUN-1200 checkpoint C: both rails now write a pending draft row
-    // before settle (see above), so both finalize the SAME row via
-    // `finalize()` (overwrite) rather than CDP using a fresh `create()`
-    // that would now conflict with its own pending row.
-    await results.finalize(
-      jobId,
-      { status: 200, body: responseBody, settleResponse, durableEvidence },
-      nowIso
-    );
-
-    // SUN-1200 checkpoint C: both rails now take the same
-    // `settled_external -> link_verified -> settled` path (CDP
-    // previously shortcut directly `verified -> settled`, skipping the
-    // two intermediate durable checkpoints entirely).
-    const linkRecorded = await paymentAttempts.transitionLifecycleStage(
-      paymentIdentifier,
-      'settled_external',
-      'link_verified'
-    );
-    if (linkRecorded.status !== 'transitioned') {
-      return jsonError(c, 500, 'repository_failure', 'failed to record link_verified');
-    }
-    await audit('payment_link_verified', { payment_identifier: paymentIdentifier });
-    const settled = await paymentAttempts.transitionLifecycleStage(
-      paymentIdentifier,
-      'link_verified',
-      'settled'
-    );
-    if (settled.status !== 'transitioned') {
-      return jsonError(c, 500, 'repository_failure', 'failed to record settled lifecycle');
-    }
-    await paymentAttempts.markConsumed(paymentIdentifier);
-    await transition(jobId, 'SETTLING', 'DELIVERED', 'SETTLEMENT_COMPLETE');
-    await audit('payment_settled', { payment_identifier: paymentIdentifier });
-    await audit('payment_consumed', { payment_identifier: paymentIdentifier, job_id: jobId });
-
-    c.header(
-      'PAYMENT-RESPONSE',
-      rail === 'nevermined'
-        ? encodeNeverminedPaymentResponseHeaderSafe(settleResponse as NeverminedPaymentResponse)
-        : encodePaymentResponseHeaderSafe(settleResponse as SettleResponse)
-    );
-    return c.json(responseBody, 200);
+    return await driveDurableContinuation('create_or_join');
     } // end runProtectedExecutionPipeline
 
     // Exactly one promise represents this request's post-verification
