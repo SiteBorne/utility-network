@@ -288,6 +288,18 @@ export class FakeSettlementRepository implements PaymentAttemptSettlementReposit
     row.cdpSuccessfulEconomicSettlementCount += 1;
   }
 
+  markConsumedCallCount = 0;
+  consumedPaymentIdentifiers = new Set<string>();
+
+  /** SUN-1221E6R-H2AWI-3 fix: mirrors the real
+   * `D1PaymentAttemptRepository.markConsumed`'s idempotent
+   * (`WHERE consumed_at IS NULL`) semantics closely enough for this
+   * Workflow's own confirmed-settlement call sites. */
+  async markConsumed(paymentIdentifier: string): Promise<void> {
+    this.markConsumedCallCount += 1;
+    this.consumedPaymentIdentifiers.add(paymentIdentifier);
+  }
+
   transitionLifecycleStageCallCount = 0;
 
   /** SUN-1221E6R-H2AWI-3 fix: mirrors the real

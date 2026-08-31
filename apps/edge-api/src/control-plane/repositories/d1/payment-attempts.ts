@@ -363,14 +363,35 @@ export class D1PaymentAttemptRepository implements PaymentAttemptRepository {
     | { status: 'error'; reason: string }
   > {
     try {
+      // SUN-1221E6R-H2AWI-3 fix (discovered via real-D1 integration
+      // testing against the durable-continuation Workflow, H2AWI-2):
+      // H2AWI-2's own `runSettlementStep` calls this method with only
+      // `serviceOutputHash` populated -- its `DecryptedContinuationPayload`
+      // (H2AWI-1, frozen) carries no Nevermined delegation-correlation
+      // field at all. The four correlation columns below were previously
+      // unconditionally overwritten (`= ?` with `?? null`), so ANY caller
+      // that omits one silently WIPES an already-correct value written by
+      // an earlier call (e.g. the initial `acquirePaymentAttempt` binding
+      // write's `nevermined_delegation_id`) -- a real, observed data-
+      // integrity regression, not merely a missing feature: a
+      // `payment_attempts` row could reach a state
+      // `validatePaymentAttemptBinding` then rejects on read-back
+      // (`nevermined_binding_requires_delegation_id`), corrupting the
+      // NEXT request's ability to even classify a replay/conflict.
+      // `COALESCE` makes every one of these four columns write-once-then-
+      // preserve when a caller doesn't supply a value, matching how a
+      // partial-knowledge caller (like this Workflow) should behave by
+      // default -- never silently regress an already-recorded correlation
+      // fact. Callers that DO have a real value (the original in-request
+      // Nevermined path, when re-enabled) still overwrite normally.
       const result = await this.db
         .prepare(
           `UPDATE payment_attempts SET
              lifecycle_stage = 'settlement_pending',
-             nevermined_delegation_id = ?,
-             settlement_permission_hash = ?,
-             service_output_hash = ?,
-             service_receipt_id = ?,
+             nevermined_delegation_id = COALESCE(?, nevermined_delegation_id),
+             settlement_permission_hash = COALESCE(?, settlement_permission_hash),
+             service_output_hash = COALESCE(?, service_output_hash),
+             service_receipt_id = COALESCE(?, service_receipt_id),
              settlement_pending_at = ?
            WHERE payment_identifier = ? AND lifecycle_stage = 'executed'`
         )

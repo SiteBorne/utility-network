@@ -137,6 +137,10 @@ export type PaymentAttemptSettlementRepository = Pick<
   // (see the call site below) -- see that call site's own doc comment
   // for the full incident this closes.
   | 'transitionLifecycleStage'
+  // SUN-1221E6R-H2AWI-3 fix: needed so a Workflow-settled payment's
+  // `payment_attempts.consumed_at` is actually set (see the call sites'
+  // own doc comment for the full incident this closes).
+  | 'markConsumed'
 >;
 
 /** `PaymentEvidenceProvider['settle']` reused exactly, via `Pick<>` —
@@ -351,6 +355,16 @@ async function resolveViaReconciliation(
       reconciliation.settlement_transaction_reference
     );
     await deps.settlement.repository.incrementCdpSuccessfulSettlementCount(paymentIdentifier);
+    // SUN-1221E6R-H2AWI-3 fix (same real-D1 integration-testing discovery
+    // as the verified->executed transition above): the old in-request
+    // pipeline always called `markConsumed` once settlement was
+    // confirmed -- this Workflow had no equivalent call anywhere,
+    // leaving `payment_attempts.consumed_at` permanently NULL for every
+    // Workflow-settled payment. `markConsumed` is itself idempotent
+    // (`WHERE consumed_at IS NULL`), so calling it here in both the
+    // direct-success and reconciliation-confirmed paths is safe under
+    // resume/retry.
+    await deps.settlement.repository.markConsumed(paymentIdentifier);
     return { kind: 'confirmed', transactionReference: reconciliation.settlement_transaction_reference };
   }
   if (reconciliation.outcome === 'not_found') {
@@ -436,6 +450,11 @@ async function runSettlementStep(
   if (settlementEvidence.success) {
     await repo.recordSettledExternal(paymentIdentifier, settlementEvidence.transaction_reference);
     await repo.incrementCdpSuccessfulSettlementCount(paymentIdentifier);
+    // SUN-1221E6R-H2AWI-3 fix: see the reconciliation-confirmed branch's
+    // identical call for the full incident this closes -- this is the
+    // OTHER (direct-success, non-reconciliation) confirmed-settlement
+    // path, which needs the exact same call.
+    await repo.markConsumed(paymentIdentifier);
     return { kind: 'confirmed', transactionReference: settlementEvidence.transaction_reference };
   }
 
