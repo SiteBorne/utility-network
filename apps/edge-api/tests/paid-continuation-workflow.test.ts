@@ -17,6 +17,8 @@ import { runPaidContinuationWorkflow } from '../src/control-plane/workflows/paid
 import { deriveWorkflowInstanceId } from '../src/control-plane/continuation/instance-id';
 import { FakeWorkflowStep } from './support/fake-workflow-step';
 import {
+  buildDecryptedPayload,
+  buildSuccessfulExecutorOutcome,
   buildTestDependencies,
   buildTestMetadata,
   fakeSettleRejected,
@@ -315,6 +317,131 @@ describe('paid-continuation-workflow — result/receipt persistence + terminal t
       status: 'settled',
     });
     expect(deps.jobPersistence.events.length).toBe(eventsAfterFirst); // no new terminal event
+  });
+
+  it('settled-then-result-persistence-failure: settle is never called again; only idempotent persistence retry is allowed (proof #11, point 1/3)', async () => {
+    const metadata = buildTestMetadata();
+    const deps = await buildTestDependencies();
+    deps.resultReceiptPersistence.failResultOnce = true;
+    const input = await sealTestInput(metadata, { key: deps.envelopeKey });
+    const step = new FakeWorkflowStep();
+
+    const result = await runPaidContinuationWorkflow({ payload: input }, step, deps);
+
+    expect(result.status).toBe('persistence_failed_after_settlement');
+    expect(deps.settle).toHaveBeenCalledTimes(1); // settlement already happened, never repeated
+    expect(deps.resultReceiptPersistence.persistReceiptCallCount).toBe(0); // never reached step 6
+
+    // Idempotent persistence retry (simulating a Workflow-level step retry
+    // of the SAME 'persist-result' step.do call, per its declared
+    // retries: 3 policy) succeeds without ever touching settle() again.
+    const retryStep = new FakeWorkflowStep(
+      new Map([
+        ['open-envelope', buildDecryptedPayload(metadata)],
+        ['check-authorization-expiry', { expired: false }],
+        ['invoke-executor', buildSuccessfulExecutorOutcome()],
+        ['generate-pcc', { valid: true, pcc: {} }],
+        ['settle', { kind: 'confirmed', transactionReference: '0xsettledhash' }],
+      ])
+    );
+    const retryInput = await sealTestInput(metadata, { key: deps.envelopeKey });
+    const retryResult = await runPaidContinuationWorkflow({ payload: retryInput }, retryStep, deps);
+
+    expect(retryResult.status).toBe('settled');
+    expect(deps.settle).toHaveBeenCalledTimes(1); // still exactly once, across both attempts
+  });
+
+  it('settled-then-receipt-persistence-failure: settle is never called again; only idempotent persistence retry is allowed (proof #11, point 2/3)', async () => {
+    const metadata = buildTestMetadata();
+    const deps = await buildTestDependencies();
+    deps.resultReceiptPersistence.failReceiptOnce = true;
+    const input = await sealTestInput(metadata, { key: deps.envelopeKey });
+    const step = new FakeWorkflowStep();
+
+    const result = await runPaidContinuationWorkflow({ payload: input }, step, deps);
+
+    expect(result.status).toBe('persistence_failed_after_settlement');
+    expect(deps.settle).toHaveBeenCalledTimes(1);
+    expect(deps.resultReceiptPersistence.persistResultCallCount).toBe(1); // step 5 DID succeed before step 6 failed
+
+    // Retry: steps 0-5 stay memoized (result already durably written);
+    // only step 6 re-runs.
+    const retryStep = new FakeWorkflowStep(
+      new Map([
+        ['open-envelope', buildDecryptedPayload(metadata)],
+        ['check-authorization-expiry', { expired: false }],
+        ['invoke-executor', buildSuccessfulExecutorOutcome()],
+        ['generate-pcc', { valid: true, pcc: {} }],
+        ['settle', { kind: 'confirmed', transactionReference: '0xsettledhash' }],
+        ['persist-result', { status: 'already_written' }],
+      ])
+    );
+    const retryInput = await sealTestInput(metadata, { key: deps.envelopeKey });
+    const retryResult = await runPaidContinuationWorkflow({ payload: retryInput }, retryStep, deps);
+
+    expect(retryResult.status).toBe('settled');
+    expect(deps.settle).toHaveBeenCalledTimes(1); // still exactly once
+    expect(deps.resultReceiptPersistence.persistResultCallCount).toBe(1); // step 5 never re-invoked (stayed memoized)
+  });
+
+  it('settled-then-terminal-state-persistence-failure: settle is never called again; only idempotent persistence retry is allowed (proof #11, point 3/3)', async () => {
+    const metadata = buildTestMetadata();
+    const deps = await buildTestDependencies();
+    deps.jobPersistence.failAppendStateEventForToState = 'DELIVERED'; // receipt write succeeds; only the terminal state-event write fails
+    const input = await sealTestInput(metadata, { key: deps.envelopeKey });
+    const step = new FakeWorkflowStep();
+
+    const result = await runPaidContinuationWorkflow({ payload: input }, step, deps);
+
+    expect(result.status).toBe('persistence_failed_after_settlement');
+    expect(deps.settle).toHaveBeenCalledTimes(1);
+    expect(deps.resultReceiptPersistence.persistReceiptCallCount).toBe(1); // receipt WAS written before the state-event write failed
+    const jobAfterFailure = await deps.jobPersistence.getJob(TEST_JOB_ID);
+    expect(jobAfterFailure?.current_state).not.toBe('DELIVERED'); // never falsely marked terminal
+
+    // Retry: steps 0-5 stay memoized; step 6 re-runs, receipt persistence
+    // is idempotently a no-op (already_written), and the terminal
+    // transition succeeds this time.
+    const retryStep = new FakeWorkflowStep(
+      new Map([
+        ['open-envelope', buildDecryptedPayload(metadata)],
+        ['check-authorization-expiry', { expired: false }],
+        ['invoke-executor', buildSuccessfulExecutorOutcome()],
+        ['generate-pcc', { valid: true, pcc: {} }],
+        ['settle', { kind: 'confirmed', transactionReference: '0xsettledhash' }],
+        ['persist-result', { status: 'already_written' }],
+      ])
+    );
+    const retryInput = await sealTestInput(metadata, { key: deps.envelopeKey });
+    const retryResult = await runPaidContinuationWorkflow({ payload: retryInput }, retryStep, deps);
+
+    expect(retryResult.status).toBe('settled');
+    expect(deps.settle).toHaveBeenCalledTimes(1);
+    expect(deps.resultReceiptPersistence.persistReceiptCallCount).toBe(2); // idempotent re-invocation, still only 1 logical receipt
+    const jobAfterRetry = await deps.jobPersistence.getJob(TEST_JOB_ID);
+    expect(jobAfterRetry?.current_state).toBe('DELIVERED');
+  });
+
+  it('result/receipt/terminal-event idempotency: repeated persistence never creates a second logical record (proof #12)', async () => {
+    const { deps } = await runHappyPath();
+
+    // Directly re-invoke the persistence port with the identical identity
+    // (simulating a duplicate Workflow-level step retry) and confirm the
+    // underlying store still holds exactly one logical result and one
+    // logical receipt.
+    const secondResult = await deps.resultReceiptPersistence.persistResult({
+      jobId: TEST_JOB_ID,
+      paymentIdentifier: 'pay_test_0001',
+    });
+    const secondReceipt = await deps.resultReceiptPersistence.persistReceipt({
+      jobId: TEST_JOB_ID,
+      paymentIdentifier: 'pay_test_0001',
+    });
+
+    expect(secondResult.status).toBe('already_written');
+    expect(secondReceipt.status).toBe('already_written');
+    expect(deps.resultReceiptPersistence.results.size).toBe(1);
+    expect(deps.resultReceiptPersistence.receipts.size).toBe(1);
   });
 });
 

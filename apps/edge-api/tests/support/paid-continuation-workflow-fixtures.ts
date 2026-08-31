@@ -342,6 +342,12 @@ export function fakeSettleRejected(reason = 'insufficient_funds'): ExternalSettl
 export class FakeJobStatePersistence implements JobStatePersistence {
   readonly jobs = new Map<string, JobRecord>();
   readonly events: StateEvent[] = [];
+  /** Set to a target `to_state` (e.g. 'DELIVERED') to fail only the next
+   * appendStateEvent call transitioning TO that specific state — lets a
+   * test simulate the terminal-state write failing specifically, without
+   * also breaking earlier, unrelated state transitions (ROUTED/EXECUTING/
+   * VERIFYING/SETTLING) the same orchestration run performs first. */
+  failAppendStateEventForToState: JobRecord['current_state'] | null = null;
 
   seed(job: JobRecord): void {
     this.jobs.set(job.id, job);
@@ -352,6 +358,10 @@ export class FakeJobStatePersistence implements JobStatePersistence {
   }
 
   async appendStateEvent(event: StateEvent): Promise<void> {
+    if (this.failAppendStateEventForToState && event.to_state === this.failAppendStateEventForToState) {
+      this.failAppendStateEventForToState = null;
+      throw new Error('simulated terminal-state-event persistence failure');
+    }
     this.events.push(event);
   }
 

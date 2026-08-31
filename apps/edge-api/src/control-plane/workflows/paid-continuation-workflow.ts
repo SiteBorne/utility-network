@@ -58,7 +58,7 @@ import type {
 } from '../continuation/types';
 import { openContinuationEnvelope, EnvelopeOpenError } from '../continuation/envelope';
 import { reconcileAmbiguousSettlement } from '../continuation/settlement-reconciliation';
-import { createStateEvent, isTerminal } from '../state-machine';
+import { createStateEvent, isTerminal, getAllowedTransitions } from '../state-machine';
 import type { JobState, TransitionReason, StateEvent } from '../state-machine';
 import type { ServiceExecutor, ExecutorOutcome } from '../routes/x402-service';
 import type { D1PaymentAttemptRepository } from '../repositories/d1/payment-attempts';
@@ -274,6 +274,15 @@ async function transitionJobState(
   if (!job) return; // no job record wired yet (e.g. a unit test not exercising job-state assertions) — never throws for an absent optional record
   if (job.current_state === toState) return; // idempotent no-op — already there
   if (isTerminal(job.current_state)) return; // never attempt to leave a terminal state; safe re-entry
+  if (!getAllowedTransitions(job.current_state).includes(toState)) {
+    // A restart re-running this (unwrapped-by-step.do, so re-attempted on
+    // every orchestration invocation) transition helper after a LATER
+    // step already advanced the job further in a prior attempt — e.g.
+    // steps 0-4 were memoized by the platform and this call is only
+    // reached again because a later step (5/6) is being retried. The job
+    // is already correctly positioned further along; nothing to do.
+    return;
+  }
   const event = createStateEvent(jobId, job.attempt_number, job.current_state, toState, reason, 'SYSTEM');
   await persistence.appendStateEvent(event);
   await persistence.setCurrentState(jobId, toState);
