@@ -48,6 +48,20 @@ export interface Env {
   VOYAGE_API_KEY: string;
   MODAL_TOKEN_ID: string;
   MODAL_TOKEN_SECRET: string;
+  /** SUN-1221E5Q6G — dedicated environment-scoped credentials for the
+   * off-Cloudflare safe-egress executor (`services/webctx-safe-egress`, a
+   * SEPARATE Modal App from the one `MODAL_TOKEN_ID`/`MODAL_TOKEN_SECRET`
+   * above authenticate against). Deliberately distinct names/values from
+   * the OCR app's credentials — `REUSE_EXISTING_MODAL_OCR_CREDENTIALS=NO`
+   * per the human-approved SUN-1221E5Q6F/G architecture. All three
+   * optional: unset until the dedicated Modal App is actually deployed
+   * and these are legitimately provisioned (never fabricated by this
+   * repository) — `isWebContextV2CdpRouteFlagEnabled`-gated production
+   * code paths that need them fail closed (`unavailable: true`) when
+   * absent, exactly like `PAID_RECEIPT_SIGNING_PRIVATE_KEY` above. */
+  MODAL_WEBCTX_ENDPOINT_URL?: string;
+  MODAL_WEBCTX_PROXY_KEY?: string;
+  MODAL_WEBCTX_PROXY_SECRET?: string;
   SENTRY_DSN: string;
   /** SUN-0700A checkpoint 5 (directive §6): explicit, additive config
    * gate for mounting the local paid-service routes at all. Optional and

@@ -106,6 +106,16 @@ export class PartialResultError extends AdapterError {
  * yet" bucket, never a false claim of precision this code can't back up.
  */
 const WEBCTX_DIAGNOSTIC_REASON_PATTERNS: ReadonlyArray<{ pattern: RegExp; reason: string }> = [
+  // SUN-1221E5Q6G — a distinct failure LAYER from everything else in this
+  // table: these two react to `ModalSafeEgressClient` (packages/provider-
+  // adapters/src/http/modal-safe-egress-client.ts) failing to successfully
+  // call the off-Cloudflare executor itself (network/timeout/5xx reaching
+  // Modal, or a wrong/missing proxy-auth credential) -- never a signal
+  // about the buyer's TARGET site, which is what every other WEBCTX_*
+  // code in this table already means. Listed first so they can never be
+  // shadowed by a broader pattern below.
+  { pattern: /^WEBCTX_EXECUTOR_UNAVAILABLE:/, reason: 'WEBCTX_EXECUTOR_UNAVAILABLE' },
+  { pattern: /^WEBCTX_EXECUTOR_AUTH_FAILED:/, reason: 'WEBCTX_EXECUTOR_AUTH_FAILED' },
   { pattern: /^WEBCTX_UPSTREAM_CONNECTION_FAILED:/, reason: 'WEBCTX_UPSTREAM_CONNECTION_FAILED' },
   { pattern: /^WEBCTX_REQUEST_WRITE_FAILED:/, reason: 'WEBCTX_REQUEST_WRITE_FAILED' },
   { pattern: /^WEBCTX_RESPONSE_READ_FAILED:/, reason: 'WEBCTX_RESPONSE_READ_FAILED' },

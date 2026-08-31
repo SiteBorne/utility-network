@@ -1,0 +1,41 @@
+[project]
+name = "siteborne-webctx-safe-egress"
+version = "0.1.0"
+description = "SUN-1221E5Q6G — dedicated off-Cloudflare safe-egress executor for web_context_verified.v2 direct-public-http retrieval. Independently enforces DNS/SSRF/IP-pinning/TLS/redirect security; never imports or depends on services/modal-worker (the unrelated document/OCR app)."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "pydantic>=2.7",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.2",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.4",
+    "mypy>=1.10",
+]
+modal = [
+    "modal>=1.5,<2",
+    "fastapi>=0.110",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "W"]
+# E501: line-length is a formatting nicety, not correctness -- matches
+# services/modal-worker's own documented convention verbatim.
+ignore = ["E501"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]

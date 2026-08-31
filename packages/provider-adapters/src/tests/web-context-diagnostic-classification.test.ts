@@ -148,3 +148,32 @@ describe('SUN-1221E5Q6A — deriveEofBranchId classifies the two known premature
     expect((error as { eof_branch_id?: unknown }).eof_branch_id).toBeUndefined();
   });
 });
+
+// SUN-1221E5Q6G — the two new executor-transport-LAYER codes
+// `ModalSafeEgressClient` throws when it cannot successfully reach/
+// authenticate against the off-Cloudflare executor, distinct from every
+// other WEBCTX_* code in this table (which all describe a failure
+// classifying the buyer's TARGET site, not SITEBORNE's own infrastructure).
+describe('SUN-1221E5Q6G — executor-transport-layer reason codes are distinct from target-site codes', () => {
+  it('classifies WEBCTX_EXECUTOR_UNAVAILABLE distinctly from WEBCTX_UPSTREAM_CONNECTION_FAILED', () => {
+    const executorDown = classifyGenericAdapterErrorReason(
+      new Error('WEBCTX_EXECUTOR_UNAVAILABLE: fetch to modal executor failed: network error')
+    );
+    expect(executorDown).toBe('WEBCTX_EXECUTOR_UNAVAILABLE');
+    expect(executorDown).not.toBe('WEBCTX_UPSTREAM_CONNECTION_FAILED');
+  });
+
+  it('classifies WEBCTX_EXECUTOR_AUTH_FAILED distinctly', () => {
+    const authFailed = classifyGenericAdapterErrorReason(
+      new Error('WEBCTX_EXECUTOR_AUTH_FAILED: executor responded 401')
+    );
+    expect(authFailed).toBe('WEBCTX_EXECUTOR_AUTH_FAILED');
+  });
+
+  it('a target-site failure the executor itself classified (e.g. WEBCTX_HTTP_PREMATURE_EOF) still classifies correctly, never shadowed by the new patterns', () => {
+    const targetFailure = classifyGenericAdapterErrorReason(
+      new Error('WEBCTX_HTTP_PREMATURE_EOF: connection closed before response headers completed')
+    );
+    expect(targetFailure).toBe('WEBCTX_HTTP_PREMATURE_EOF');
+  });
+});

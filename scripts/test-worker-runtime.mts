@@ -1591,69 +1591,57 @@ async function runPhase9() {
 }
 
 // ---------------------------------------------------------------------
-// PHASE 10 (SUN-1221E2D §9): the ONE local, real-`workerd`, real-
-// `cloudflare:sockets` reproduction of SUN-1221E2's real HTTP 502 this
-// checkpoint's debugging law permits -- the REAL production composition
-// (`buildWebContextV2CdpProductionRouteConfig`, real `connect`, no
-// override) making one genuine outbound fetch to the canonical
-// `https://example.com/` target used throughout this whole release
-// train. Requires real internet egress from wherever this runs.
-//
-// History: SUN-1221E2D proved (not guessed) that `globalTermsGuard`
-// (`packages/provider-adapters/src/policy/terms-guard.ts`) was a
-// module-level singleton whose `reviews` Map started empty, with zero
-// `recordReview(...)` callers anywhere in the non-test codebase --
-// every real adapter calling `globalTermsGuard.checkAccess(manifest,
-// 'live')`, `direct-public-http` included, therefore ALWAYS threw
-// `PolicyBlockedError` for `execution_mode: 'live'`, unconditionally --
-// a genuine terms-of-service/compliance gap, not a code defect or
-// network flakiness.
-//
-// SUN-1221E2T recorded the human decision this required: an explicit
-// operator risk-acceptance review for `direct-public-http`, scoped
-// narrowly to bounded fetching of buyer-supplied public HTTP/HTTPS URLs
-// under SITEBORNE's existing SSRF/DNS-rebinding/redirect/size/timeout
-// controls (`DIRECT_PUBLIC_HTTP_TERMS_REVIEW` in
-// `packages/provider-adapters/src/policy/terms-guard.ts`) -- explicitly
-// NOT a claim that any specific target site's own terms were reviewed.
-// With that review recorded, `direct-public-http` now passes the terms
-// gate and this phase proves the real socket fetch reaches actual
-// network execution end-to-end.
+// PHASE 10 (SUN-1221E2D §9, superseded by SUN-1221E5Q6G): historically the
+// ONE local, real-`workerd`, real-`cloudflare:sockets` reproduction of
+// SUN-1221E2's real HTTP 502 -- the REAL production composition making
+// one genuine paid, settled outbound fetch to `https://example.com/` via
+// `SafeSocketHttpClient`. That transport is NO LONGER the production path:
+// SUN-1221E5Q6E proved Cloudflare Workers cannot reach any target whose
+// resolved address falls inside Cloudflare's own IP ranges (which
+// `example.com` does), so SUN-1221E5Q6F/G's human-approved architecture
+// moved ALL `web_context_verified.v2` direct-HTTP retrieval to a dedicated
+// off-Cloudflare executor (`services/webctx-safe-egress`, Modal) --
+// `buildWebContextV2CdpProductionRouteConfig` now fails closed
+// (`unavailable: true`) whenever `MODAL_WEBCTX_*` credentials are absent,
+// exactly like the CDP/receipt-signing gates above it, and this isolated
+// test harness never provisions them (never fabricated, per SUN-1221E5Q6G
+// §26's secret-mutation gate). This phase now proves exactly that
+// fail-closed behavior -- no 402, no payment, no settlement, no real
+// network egress at all, unlike its historic version. A future checkpoint
+// that legitimately provisions a deployed Modal executor and real
+// `MODAL_WEBCTX_*` credentials for this isolated test harness should
+// restore a genuine end-to-end proof here.
 // ---------------------------------------------------------------------
 async function runPhase10() {
   const configPath = join(REPO_ROOT, 'wrangler.worker-runtime-test.toml');
   await withDevServer({ configPath, dbName: 'siteborne-worker-runtime-test' }, async (base) => {
     record(
-      'PHASE 10 (test-only entrypoint, web-context v2/CDP PRODUCTION composition, real socket): worker boots under real workerd',
+      'PHASE 10 (test-only entrypoint, web-context v2/CDP PRODUCTION composition): worker boots under real workerd',
       true
     );
 
     const path = '/v2/web-context-production/context';
     const body = { target_url: 'https://example.com/', retrieval_mode: 'direct' };
 
-    const challenge = await get402(base, path, body);
-    record(
-      'PHASE 10 (1): web-context-production unsigned request -> real 402 with canonical production price',
-      challenge.accepts?.[0]?.amount === '9000',
-      `expected=9000 actual=${challenge.accepts?.[0]?.amount}`
-    );
-
-    const result = await payAndFetch(base, path, body, challenge);
+    const res = await fetch(`${base}${path}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
     let parsed: any = {};
     try {
-      parsed = JSON.parse(result.body);
+      parsed = await res.json();
     } catch {
       /* leave {} */
     }
-    // SUN-1221E2T: the operator-approved direct-public-http review is now
-    // recorded, so the real socket fetch must pass the terms gate and
-    // reach genuine network execution -- proven end-to-end, real settle
-    // included, same success-shape assertion as PHASE 6 (2)'s verify/CDP
-    // equivalent.
+    // SUN-1221E5Q6G: fails closed with a configuration_error, never a 402
+    // challenge and never a settled paid fetch -- MODAL_WEBCTX_* credentials
+    // are not provisioned in this isolated test harness, and this repository
+    // never fabricates them.
     record(
-      'PHASE 10 (2): web-context-production real socket fetch to https://example.com/ passes the terms gate and succeeds through the real production composition (SUN-1221E2T)',
-      result.status === 200 && parsed.result_class === 'success' && typeof parsed.receipt_id === 'string',
-      `status=${result.status} result_class=${parsed.result_class} receipt_id_present=${typeof parsed.receipt_id === 'string'}`
+      'PHASE 10: web-context-production composition fails closed (configuration_error) without MODAL_WEBCTX_* credentials -- SafeSocket is no longer the production transport (SUN-1221E5Q6G)',
+      res.status === 500 && parsed.error === 'configuration_error' && /MODAL_WEBCTX/.test(parsed.message ?? ''),
+      `status=${res.status} error=${parsed.error} message=${parsed.message}`
     );
   });
 }

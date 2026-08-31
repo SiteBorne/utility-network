@@ -41,7 +41,12 @@ import {
   buildProductionSigner,
   ProductionSignerConfigurationError,
 } from '@siteborne/service-runtime';
-import { SafeSocketHttpClient, type ConnectFn } from '@siteborne/provider-adapters';
+import {
+  SafeSocketHttpClient,
+  ModalSafeEgressClient,
+  type ConnectFn,
+  type InjectedHttpClient,
+} from '@siteborne/provider-adapters';
 import {
   buildCdpSellerAddressLookup,
   buildProductionCdpAccountLookupClientFactory,
@@ -62,6 +67,13 @@ export interface WebContextV2CdpProductionEnv {
   PRODUCTION_ENABLED?: string;
   HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP?: string;
   PRODUCTION_CDP_CREDENTIALS_APPROVED?: string;
+  /** SUN-1221E5Q6G — dedicated, environment-scoped credentials for the
+   * off-Cloudflare safe-egress executor. See `env.ts`'s own doc comment;
+   * all three optional, fail-closed (`unavailable: true`) when absent,
+   * exactly like the CDP/receipt-signing fields above. */
+  MODAL_WEBCTX_ENDPOINT_URL?: string;
+  MODAL_WEBCTX_PROXY_KEY?: string;
+  MODAL_WEBCTX_PROXY_SECRET?: string;
 }
 
 export interface ProductionCompositionUnavailable {
@@ -111,11 +123,43 @@ export function buildWebContextV2SafeHttpClient(connectFn: ConnectFn = cloudflar
   });
 }
 
+/**
+ * SUN-1221E5Q6G — the production `InjectedHttpClient` `web_context_
+ * verified.v2`'s `retrieval_mode: 'direct'` transport actually uses
+ * (`PRODUCTION_WEBCTX_DIRECT_HTTP_USES_MODAL_EXECUTOR=YES`,
+ * `PRODUCTION_WEBCTX_DIRECT_HTTP_USES_SAFESOCKET=NO`). Calls the
+ * dedicated off-Cloudflare safe-egress executor (`services/webctx-safe-
+ * egress`) instead of dialing `cloudflare:sockets` directly --
+ * `SUN-1221E5Q6E` proved Cloudflare Workers cannot reach any target whose
+ * resolved address falls inside Cloudflare's own IP ranges, and `web_
+ * context_verified.v2`'s contract ("Public HTTP/HTTPS only") has no
+ * Cloudflare-hosted-site carve-out (`SUN-1221E5Q6F`, human-approved
+ * Approach C: unconditional, never a hybrid/CIDR-based routing split --
+ * see `buildWebContextV2SafeHttpClient` above, retained only for the dev-
+ * diagnostic seam and its own tests, never called from this function).
+ *
+ * `buildWebContextV2CdpProductionRouteConfig` returns `unavailable: true`
+ * (never falls back to `SafeSocketHttpClient`) when any of the three
+ * `MODAL_WEBCTX_*` credentials are absent -- exactly the same fail-closed
+ * pattern already established for `PAID_RECEIPT_SIGNING_PRIVATE_KEY`/CDP
+ * credentials above.
+ */
+export function buildWebContextV2ModalSafeEgressClient(env: {
+  MODAL_WEBCTX_ENDPOINT_URL: string;
+  MODAL_WEBCTX_PROXY_KEY: string;
+  MODAL_WEBCTX_PROXY_SECRET: string;
+}): InjectedHttpClient {
+  return new ModalSafeEgressClient({
+    endpointUrl: env.MODAL_WEBCTX_ENDPOINT_URL,
+    proxyKey: env.MODAL_WEBCTX_PROXY_KEY,
+    proxySecret: env.MODAL_WEBCTX_PROXY_SECRET,
+  });
+}
+
 export async function buildWebContextV2CdpProductionRouteConfig(
   env: WebContextV2CdpProductionEnv,
   db: D1Database,
-  explicitTestEvidenceOverride?: ExplicitTestEvidenceOverride,
-  connectFnOverride?: ConnectFn
+  explicitTestEvidenceOverride?: ExplicitTestEvidenceOverride
 ): Promise<X402ServiceRouteConfig | ProductionCompositionUnavailable> {
   if (!db) {
     return { unavailable: true, reason: 'no D1 database binding supplied' };
@@ -125,6 +169,11 @@ export async function buildWebContextV2CdpProductionRouteConfig(
   }
   if (!env.PAID_RECEIPT_SIGNING_KEY_ID) {
     return { unavailable: true, reason: 'PAID_RECEIPT_SIGNING_KEY_ID is missing' };
+  }
+  // SUN-1221E5Q6G — fail closed, never fall back to SafeSocketHttpClient
+  // (Approach C: unconditional, no hybrid/CIDR-based routing split).
+  if (!env.MODAL_WEBCTX_ENDPOINT_URL || !env.MODAL_WEBCTX_PROXY_KEY || !env.MODAL_WEBCTX_PROXY_SECRET) {
+    return { unavailable: true, reason: 'MODAL_WEBCTX_* safe-egress executor credentials are missing' };
   }
 
   let signer: Awaited<ReturnType<typeof buildProductionSigner>>['signer'];
@@ -187,7 +236,11 @@ export async function buildWebContextV2CdpProductionRouteConfig(
     cdpEvidence = resolved;
   }
 
-  const httpClient = buildWebContextV2SafeHttpClient(connectFnOverride);
+  const httpClient = buildWebContextV2ModalSafeEgressClient({
+    MODAL_WEBCTX_ENDPOINT_URL: env.MODAL_WEBCTX_ENDPOINT_URL,
+    MODAL_WEBCTX_PROXY_KEY: env.MODAL_WEBCTX_PROXY_KEY,
+    MODAL_WEBCTX_PROXY_SECRET: env.MODAL_WEBCTX_PROXY_SECRET,
+  });
   const executor: ServiceExecutor = buildWebContextV2ProductionExecutor(
     signer,
     registry,

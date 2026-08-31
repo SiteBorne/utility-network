@@ -63,6 +63,7 @@ export * from './http/response-bounds';
 export * from './http/encoding';
 export * from './http/safe-dns-resolve';
 export * from './http/socket-http-client';
+export * from './http/modal-safe-egress-client';
 export * from './sec/identifiers';
 export * from './sec/submissions';
 export * from './sec/company-facts';

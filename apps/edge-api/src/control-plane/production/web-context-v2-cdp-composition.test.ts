@@ -91,6 +91,13 @@ function mainnetAuthorizedTestEnv() {
     HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP: 'true',
     PRODUCTION_CDP_CREDENTIALS_APPROVED: 'true',
     WEB_CONTEXT_V2_CDP_ROUTE_ENABLED: 'true',
+    // SUN-1221E5Q6G — test-only, never a real Cloudflare secret; these
+    // tests exercise the economic-contract shape, not real Modal
+    // connectivity (the httpClient itself is never invoked by any test in
+    // this file -- no test here reaches the actual paid-execution path).
+    MODAL_WEBCTX_ENDPOINT_URL: 'https://test-workspace--siteborne-webctx-safe-egress-fetch.modal.run',
+    MODAL_WEBCTX_PROXY_KEY: 'test-modal-webctx-proxy-key',
+    MODAL_WEBCTX_PROXY_SECRET: 'test-modal-webctx-proxy-secret',
   };
 }
 

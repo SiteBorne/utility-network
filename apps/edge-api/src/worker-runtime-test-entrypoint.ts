@@ -344,9 +344,6 @@ app.all('/v2/web-context-production/*', async (c) => {
       },
       c.env.DB,
       { evidenceMode: 'fixture' }
-      // connectFnOverride deliberately omitted -- defaults to the real
-      // `cloudflare:sockets` `connect`, the real seam SUN-1221E2's HTTP
-      // 502 actually failed in.
     );
     if ('unavailable' in config) {
       return c.json({ error: 'configuration_error', message: config.reason }, 500);
