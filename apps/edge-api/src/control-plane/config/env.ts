@@ -1,4 +1,5 @@
-import type { D1Database as CloudflareD1Database } from '@cloudflare/workers-types';
+import type { D1Database as CloudflareD1Database, Workflow } from '@cloudflare/workers-types';
+import type { WorkflowContinuationInput } from '../continuation/types';
 
 export interface Env {
   DB: CloudflareD1Database;
@@ -167,6 +168,20 @@ export interface Env {
   BASE_RPC_URL?: string;
   /** Same as `BASE_RPC_URL`, for Base Sepolia (preproduction). */
   BASE_SEPOLIA_RPC_URL?: string;
+  /** SUN-1221E6R-H2AWI-3: the Cloudflare Workflows binding for the durable
+   * paid-continuation Workflow (`../workflows/paid-continuation-workflow.ts`'s
+   * `PaidContinuationWorkflow`, H2AWI-2). Type-only addition this
+   * checkpoint, per the plan's H2AWI-3/H2AWI-4 split -- the actual
+   * `wrangler.toml` `[[workflows]]` binding block that makes this
+   * genuinely resolve at runtime is H2AWI-4 scope (a real Cloudflare
+   * Workflow provisioning action, requiring its own fresh human
+   * authorization). Optional/absent until then: `x402-service.ts`'s own
+   * durable-handoff call site fails closed (never falls back to a local
+   * settle) when this binding is not configured, matching this
+   * codebase's established "missing required config fails closed"
+   * convention (see `MODAL_WEBCTX_*`, `PAID_RECEIPT_SIGNING_PRIVATE_KEY`
+   * above). */
+  PAID_CONTINUATION_WORKFLOW?: Workflow<WorkflowContinuationInput>;
 }
 
 export interface ControlPlaneConfig {
