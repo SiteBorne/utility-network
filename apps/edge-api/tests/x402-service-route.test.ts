@@ -832,4 +832,116 @@ describe('x402 HTTP vertical slice (SUN-0700A checkpoint 5)', () => {
       expect(after!.n).toBe(before!.n);
     });
   });
+
+  describe(
+    'SUN-1221E6R-H2A — post-verification execution/settlement survives ' +
+      'a disconnected request context',
+    () => {
+      /** A literal Cloudflare "client disconnected mid-request" cannot be
+       * simulated through Hono's in-process `app.request()` — there is no
+       * real HTTP connection here to tear down, and the RED incident this
+       * checkpoint fixes (job de147124, SUN-1221E6R-H1/H1A) was itself
+       * only ever observed against the real edge. What *is* both real and
+       * meaningfully testable in this harness is the actual mechanism
+       * Cloudflare Workers documents for surviving exactly that scenario:
+       * `ExecutionContext.waitUntil()`. Before this checkpoint the route
+       * never called it at all (proven below by stashing the source fix
+       * and re-running this exact test — see
+       * docs/reports/SUN-1221E6R-H2A-client-disconnect-payment-lifecycle-hardening.md
+       * §3 for the captured RED failure). After the fix, a real
+       * `ExecutionContext` is bound and this test proves: (1) the
+       * post-verification pipeline is registered with `waitUntil`
+       * exactly once, (2) that registration does not fork a second
+       * execution (the executor spy call count stays 1), and (3) the
+       * normal synchronous response is unaffected. */
+      it('registers exactly one waitUntil-protected pipeline promise, with no duplicated execution, for a normal successful paid request', async () => {
+        let executorCalls = 0;
+        const disconnectApp = new Hono();
+        createX402ServiceRoute(disconnectApp, {
+          serviceId: 'web_context_verified.v1',
+          scheme: 'exact',
+          pricingKey: 'web_context_verified_direct',
+          network: 'eip155:84532',
+          asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+          path: '/v1/web/context-disconnect-h2a',
+          inputSchema: { type: 'object' },
+          inputValidator: compileTestInputValidator({ type: 'object' }),
+          contractRelease: '1.0.0',
+          inputSchemaHash: 'sha256:' + '1'.repeat(64),
+          outputSchemaHash: 'sha256:' + '2'.repeat(64),
+          pccDependency: '1.0.0',
+          db,
+          clock: () => clockValue,
+          evidenceMode: 'fixture',
+          executor: async () => {
+            executorCalls += 1;
+            return {
+              result: {
+                result_class: 'success',
+                output: { ok: true },
+                output_hash: 'sha256:' + '3'.repeat(64),
+                receipt: { synthetic: true },
+                receipt_id: 'rcpt_h2a_test',
+              },
+            };
+          },
+        });
+
+        const waitUntilPromises: Promise<unknown>[] = [];
+        const mockExecutionCtx = {
+          waitUntil: (p: Promise<unknown>) => {
+            waitUntilPromises.push(p);
+          },
+          passThroughOnException: () => {},
+        };
+
+        const challenge = await get402(disconnectApp, '/v1/web/context-disconnect-h2a', {
+          probe: true,
+        });
+        const payload = buildBuyerPayload(challenge);
+        const header = encodePaymentSignatureHeaderSafe(payload);
+
+        const res = await disconnectApp.request(
+          '/v1/web/context-disconnect-h2a',
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', 'PAYMENT-SIGNATURE': header },
+            body: JSON.stringify({ probe: true }),
+          },
+          undefined,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- minimal ExecutionContext stand-in for this test only.
+          mockExecutionCtx as any
+        );
+
+        expect(res.status).toBe(200);
+        const body = (await res.json()) as Record<string, unknown>;
+        expect(body.result_class).toBe('success');
+
+        // The actual H2A protection assertion: exactly one continuation
+        // was registered to survive the request context, and it is the
+        // SAME promise the response was already awaited from (no fork).
+        expect(waitUntilPromises).toHaveLength(1);
+        // `.catch(() => {})` only intercepts a *rejection* — on success
+        // (this case) it passes the original resolved value straight
+        // through unchanged, so the registered promise resolves to the
+        // very same `Response` the client already received.
+        await expect(waitUntilPromises[0]).resolves.toBeInstanceOf(Response);
+
+        // No duplicated side effects: the resource executor ran exactly
+        // once, not twice (once for the response, once via a forked
+        // waitUntil task).
+        expect(executorCalls).toBe(1);
+      });
+
+      it('falls back to unprotected (but still correct) execution when no ExecutionContext is bound — every pre-existing test in this file relies on exactly this path', async () => {
+        // No 4th argument at all — identical to every other call in this
+        // file. Proves the H2A change is purely additive: routes/tests
+        // that never had an ExecutionContext keep working exactly as
+        // before.
+        const challenge = await get402(app, '/v1/company/evidence-graph', COMPANY_INPUT);
+        const res = await payAndRetry(app, '/v1/company/evidence-graph', COMPANY_INPUT, challenge);
+        expect(res.status).toBe(200);
+      });
+    }
+  );
 });

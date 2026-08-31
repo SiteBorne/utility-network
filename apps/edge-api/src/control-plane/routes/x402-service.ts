@@ -314,6 +314,28 @@ export class NeverminedEvidenceProviderNotConfiguredError extends Error {
   }
 }
 
+/**
+ * SUN-1221E6R-H2A — a client that disconnects (or a test harness that
+ * aborts, e.g. Vitest's default `it()` timeout) *after* a payment has been
+ * verified must never be able to strand the job in `EXECUTING` with no
+ * terminal transition and no settlement decision. Cloudflare Workers may
+ * cancel an in-flight request's continuation once nothing is left awaiting
+ * the client connection; `ExecutionContext.waitUntil()` is the platform's
+ * documented mechanism to keep a promise alive past that point. Accessed
+ * defensively because Hono's `c.executionCtx` getter throws when no
+ * `ExecutionContext` was bound (true of every existing `app.request(path,
+ * init)` call in this route's own test suite, and of any runtime lighter
+ * than the real Workers/Miniflare one) — this route must keep working
+ * unprotected in that case, not crash.
+ */
+function safeGetExecutionCtx(c: Context): { waitUntil(promise: Promise<unknown>): void } | undefined {
+  try {
+    return c.executionCtx;
+  } catch {
+    return undefined;
+  }
+}
+
 function jsonError(c: Context, status: number, code: string, message: string, details?: unknown) {
   return c.json(
     { error: code, message, ...(details !== undefined ? { details } : {}) },
@@ -1411,6 +1433,15 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
     await paymentAttempts.transitionLifecycleStage(paymentIdentifier, 'acquired', 'verified');
     await audit('payment_verified', { payment_identifier: paymentIdentifier });
 
+    // SUN-1221E6R-H2A — everything from here on is real economic
+    // execution: the resource has been locked against a *verified*
+    // payment, and every path below either settles it or explicitly
+    // fails/refunds it. This is exactly the span that must survive a
+    // client disconnect, so it is its own promise, registered with
+    // `waitUntil` (protecting it) *before* being awaited (so the normal
+    // synchronous response is still the same, single settlement of that
+    // one promise — never a second, forked execution).
+    async function runProtectedExecutionPipeline(): Promise<Response> {
     await transition(jobId, 'PAYMENT_VERIFIED', 'LOCKED', 'RESOURCE_LOCKED');
     await transition(jobId, 'LOCKED', 'ROUTED', 'ROUTED_TO_WORKER');
     await transition(jobId, 'ROUTED', 'EXECUTING', 'EXECUTION_STARTED');
@@ -1558,7 +1589,14 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
             ...evidenceContext,
             authorizationContext: {
               rail: 'nevermined',
-              accessToken: sigHeader,
+              // SUN-1221E6R-H2A: same `!` as the other captures on this
+              // object (`neverminedRequired!`, `config.nevermined!`,
+              // `neverminedDelegationId!`) — `sigHeader` was validated
+              // non-empty at the top of this handler, but the H2A
+              // lifecycle-protection wrap moved this read into a nested
+              // closure (`runProtectedExecutionPipeline`), across which
+              // TypeScript no longer carries that earlier narrowing.
+              accessToken: sigHeader!,
               paymentRequired: neverminedRequired!,
               agentId: config.nevermined!.agentId,
               planId: config.nevermined!.planId,
@@ -1896,6 +1934,25 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
         : encodePaymentResponseHeaderSafe(settleResponse as SettleResponse)
     );
     return c.json(responseBody, 200);
+    } // end runProtectedExecutionPipeline
+
+    // Exactly one promise represents this request's post-verification
+    // execution+settlement. It is registered with `waitUntil` (when an
+    // `ExecutionContext` is actually bound — see `safeGetExecutionCtx`)
+    // and then awaited directly for the normal response: never a second
+    // promise, never a second call into `config.executor` or
+    // `evidenceProvider.settle`, never a forked/duplicated side effect.
+    // The `.catch(() => {})` given to `waitUntil` exists only so the
+    // runtime's extra reference to this promise never produces an
+    // "unhandled rejection" — the real error, if any, still propagates
+    // normally through the `await` below and becomes this request's
+    // response exactly as it always has.
+    const pipelinePromise = runProtectedExecutionPipeline();
+    const executionCtx = safeGetExecutionCtx(c);
+    if (executionCtx) {
+      executionCtx.waitUntil(pipelinePromise.catch(() => {}));
+    }
+    return await pipelinePromise;
   });
 }
 
