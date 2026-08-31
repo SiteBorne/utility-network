@@ -28,8 +28,15 @@ import { productionServiceExecutorUnavailable } from './control-plane/routes/pro
 import { verifyAgentOutputV2CdpProductionRoute } from './control-plane/routes/production-verify-v2-cdp-route';
 import { webContextVerifiedV2CdpProductionRoute } from './control-plane/routes/production-web-context-v2-cdp-route';
 import type { Env } from './control-plane/config/env';
+import { PaidContinuationWorkflow } from './control-plane/workflows/paid-continuation-workflow';
 
 export type { ControlPlaneConfig };
+
+// SUN-1221E6R-H2AWI-4R -- a `[[workflows]]` binding's `class_name` must be
+// an export of the Worker's `main` entrypoint module (this file). The
+// class itself is fully implemented, tested, and unchanged since H2AWI-2
+// (`e7eb0fb`); this is wiring only, no behavior change to `app` below.
+export { PaidContinuationWorkflow };
 
 const app = new Hono<{ Bindings: Env }>();
 

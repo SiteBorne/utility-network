@@ -173,6 +173,22 @@ producers = [
   { queue = "siteborne-events", binding = "EVENTS" },
 ]
 
+# SUN-1221E6R-H2AWI-4R/4P -- durable paid-continuation orchestrator (H2AW
+# design, commit 21d11ab). `class_name` must be exported from `main`
+# (`apps/edge-api/src/index.ts` re-exports it for exactly this reason).
+# The Workflow resource is a *trigger*-class resource (like routes/cron),
+# registered via `PUT /accounts/{id}/workflows/{name}` -- but that call is
+# only issued by `wrangler triggers deploy`, NOT by `versions upload` or
+# `versions deploy` (confirmed by reading wrangler's own source, and by a
+# real `workflow.not_found` after deploying a version with this binding
+# but before running `triggers deploy`). Run `wrangler triggers deploy`
+# once after any change to this block, in addition to a normal version
+# upload/deploy.
+[[workflows]]
+name = "siteborne-paid-continuation"
+binding = "PAID_CONTINUATION_WORKFLOW"
+class_name = "PaidContinuationWorkflow"
+
 [ai]
 binding = "AI"
 
