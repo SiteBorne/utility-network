@@ -28,9 +28,19 @@ import {
   REGISTRY_SERVICES,
   assertPreproductionNetwork,
   isProductionPaymentAuthorized,
+  resolvePaymentEvidenceProvider,
   resolvePaymentNetwork,
   type ProductionAuthorizationInput,
 } from '@siteborne/protocol-x402';
+// SUN-1221E6R-H2AWI-3: this dev/fixture-only route builder (never
+// imported by the real Worker entrypoint `index.ts` — confirmed this
+// checkpoint) wires every mounted route to an in-process
+// WorkflowBindingLike double so the large pre-existing HTTP-level test
+// suite keeps exercising real business logic end-to-end through the new
+// durable-continuation wiring. See that module's own doc comment for why
+// this is safe to ship in `src/` (same precedent as
+// `FixturePaymentEvidenceProvider`) and never reachable from production.
+import { createInProcessWorkflowBinding } from '../testing/in-process-workflow-binding';
 import { resolvePaymentAsset } from '../config/production-payment';
 import {
   NEVERMINED_DECLARATIONS,
@@ -224,6 +234,51 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
   const clock = config.clock ?? (() => new Date().toISOString());
   const rail = config.rail ?? 'cdp';
 
+  // SUN-1221E6R-H2AWI-3: one shared in-process Workflow binding key/
+  // evidence-provider resolution per app instance -- every route mounted
+  // below is wired to `createX402ServiceRouteWithContinuation` (not
+  // `createX402ServiceRoute` directly) so payment continuation flows
+  // through the same durable-handoff/waiter mechanism a real production
+  // route uses, exercised here against an in-process double instead of a
+  // live Cloudflare Workflow. Never touches a real key/secret/resource.
+  const continuationEnvelopeKey = await crypto.subtle.generateKey(
+    { name: 'AES-GCM', length: 256 },
+    true,
+    ['encrypt', 'decrypt']
+  );
+  const sharedEvidenceProvider = resolvePaymentEvidenceProvider(
+    config.evidenceMode,
+    config.evidenceProvider
+  );
+
+  function createX402ServiceRouteWithContinuation(
+    targetApp: Hono,
+    routeConfig: Parameters<typeof createX402ServiceRoute>[1]
+  ): void {
+    createX402ServiceRoute(targetApp, {
+      ...routeConfig,
+      workflow: createInProcessWorkflowBinding({
+        db: config.db,
+        executor: routeConfig.executor,
+        evidenceProvider: sharedEvidenceProvider,
+        envelopeKey: continuationEnvelopeKey,
+        network: routeConfig.network,
+        rail: routeConfig.rail,
+        neverminedAgentId: routeConfig.nevermined?.agentId,
+        neverminedPlanId: routeConfig.nevermined?.planId,
+        chainReceiptChecker: routeConfig.cdpChainReceiptChecker,
+        // Reuses THIS app's own (possibly fixed/test-injected) `clock`
+        // -- never real wall-clock time, which would otherwise make the
+        // authorization-expiry check (`valid_before_unix`, derived from
+        // the quote's own `expires_at` under this same clock) spuriously
+        // fail against a fixed historical test clock.
+        clock: () => Math.floor(new Date(clock()).getTime() / 1000),
+      }),
+      continuationEnvelopeKey,
+      continuationEnvelopeKeyId: 'in-process-v1',
+    });
+  }
+
   function paymentRoute(serviceId: (typeof ALL_BAZAAR_SERVICE_IDS)[number], cdpPath: string) {
     if (rail === 'nevermined') {
       const declaration = NEVERMINED_DECLARATIONS[serviceId];
@@ -344,7 +399,7 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
   }
 
   // ---- company_evidence_graph.v1 (exact) ----
-  createX402ServiceRoute(app, {
+  createX402ServiceRouteWithContinuation(app, {
     serviceId: 'company_evidence_graph.v1',
     scheme: 'exact',
     pricingKey: 'company_evidence_graph',
@@ -384,7 +439,7 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
   });
 
   // ---- web_context_verified.v1 (exact) ----
-  createX402ServiceRoute(app, {
+  createX402ServiceRouteWithContinuation(app, {
     serviceId: 'web_context_verified.v1',
     scheme: 'exact',
     pricingKey: 'web_context_verified_direct',
@@ -426,7 +481,7 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
   });
 
   // ---- document_evidence_json.v1 (upto) ----
-  createX402ServiceRoute(app, {
+  createX402ServiceRouteWithContinuation(app, {
     serviceId: 'document_evidence_json.v1',
     scheme: 'upto',
     pricingKey: 'document_evidence_json_max_job',
@@ -511,7 +566,7 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
   });
 
   // ---- verify_agent_output.v1 (exact) ----
-  createX402ServiceRoute(app, {
+  createX402ServiceRouteWithContinuation(app, {
     serviceId: 'verify_agent_output.v1',
     scheme: 'exact',
     pricingKey: 'verify_agent_output_standard',
@@ -554,7 +609,7 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
   // ================================================================
 
   // ---- company_evidence_graph.v2 (exact) ----
-  createX402ServiceRoute(app, {
+  createX402ServiceRouteWithContinuation(app, {
     serviceId: 'company_evidence_graph.v2',
     scheme: 'exact',
     pricingKey: 'company_evidence_graph',
@@ -595,7 +650,7 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
 
   // ---- company_evidence_graph.v2 (Nevermined rail, checkpoint 1O-B2, additive) ----
   if (config.neverminedV2Enabled) {
-    createX402ServiceRoute(app, {
+    createX402ServiceRouteWithContinuation(app, {
       serviceId: 'company_evidence_graph.v2',
       scheme: 'exact',
       pricingKey: 'company_evidence_graph',
@@ -636,7 +691,7 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
   }
 
   // ---- web_context_verified.v2 (exact) ----
-  createX402ServiceRoute(app, {
+  createX402ServiceRouteWithContinuation(app, {
     serviceId: 'web_context_verified.v2',
     scheme: 'exact',
     pricingKey: 'web_context_verified_direct',
@@ -679,7 +734,7 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
 
   // ---- web_context_verified.v2 (Nevermined rail, checkpoint 1O-B2, additive) ----
   if (config.neverminedV2Enabled) {
-    createX402ServiceRoute(app, {
+    createX402ServiceRouteWithContinuation(app, {
       serviceId: 'web_context_verified.v2',
       scheme: 'exact',
       pricingKey: 'web_context_verified_direct',
@@ -727,7 +782,7 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
   }
 
   // ---- document_evidence_json.v2 (upto) ----
-  createX402ServiceRoute(app, {
+  createX402ServiceRouteWithContinuation(app, {
     serviceId: 'document_evidence_json.v2',
     scheme: 'upto',
     pricingKey: 'document_evidence_json_max_job',
@@ -806,7 +861,7 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
 
   // ---- document_evidence_json.v2 (Nevermined rail, checkpoint 1O-B2, additive) ----
   if (config.neverminedV2Enabled) {
-    createX402ServiceRoute(app, {
+    createX402ServiceRouteWithContinuation(app, {
       serviceId: 'document_evidence_json.v2',
       scheme: 'upto',
       pricingKey: 'document_evidence_json_max_job',
@@ -885,7 +940,7 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
   }
 
   // ---- verify_agent_output.v2 (exact) ----
-  createX402ServiceRoute(app, {
+  createX402ServiceRouteWithContinuation(app, {
     serviceId: 'verify_agent_output.v2',
     scheme: 'exact',
     pricingKey: 'verify_agent_output_standard',
@@ -918,7 +973,7 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
 
   // ---- verify_agent_output.v2 (Nevermined rail, checkpoint 1O-B2, additive) ----
   if (config.neverminedV2Enabled) {
-    createX402ServiceRoute(app, {
+    createX402ServiceRouteWithContinuation(app, {
       serviceId: 'verify_agent_output.v2',
       scheme: 'exact',
       pricingKey: 'verify_agent_output_standard',

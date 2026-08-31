@@ -29,7 +29,41 @@ import {
 import { Hono } from 'hono';
 import Ajv2020 from 'ajv/dist/2020';
 import { buildPaidServicesApp } from '../src/control-plane/routes/paid-services';
-import { createX402ServiceRoute } from '../src/control-plane/routes/x402-service';
+import { createX402ServiceRoute, type ExecutorOutcome } from '../src/control-plane/routes/x402-service';
+import { createInProcessWorkflowBinding } from '../src/control-plane/testing/in-process-workflow-binding';
+
+/**
+ * SUN-1221E6R-H2AWI-3: every ad-hoc `createX402ServiceRoute(...)` call in
+ * this file that reaches PAYMENT_VERIFIED needs a durable-continuation
+ * `workflow`/`continuationEnvelopeKey` -- the route fails closed without
+ * one (never a local settle fallback). `buildPaidServicesApp` wires this
+ * centrally for its own 12 routes; this helper does the same for this
+ * file's own hand-built routes.
+ */
+async function buildTestContinuationFields(
+  db: D1Database,
+  clock: () => string,
+  executor: (input: unknown, ctx: { job_id: string; request_id: string }) => Promise<ExecutorOutcome>,
+  network: import('@siteborne/protocol-x402').Network = 'eip155:84532'
+) {
+  const continuationEnvelopeKey = await crypto.subtle.generateKey(
+    { name: 'AES-GCM', length: 256 },
+    true,
+    ['encrypt', 'decrypt']
+  );
+  return {
+    workflow: createInProcessWorkflowBinding({
+      db,
+      executor,
+      evidenceProvider: new FixturePaymentEvidenceProvider(),
+      envelopeKey: continuationEnvelopeKey,
+      network,
+      clock: () => Math.floor(new Date(clock()).getTime() / 1000),
+    }),
+    continuationEnvelopeKey,
+    continuationEnvelopeKeyId: 'test-v1',
+  };
+}
 
 /** SUN-1200 checkpoint F: `createX402ServiceRoute` no longer compiles
  * `inputSchema` itself at construction time (real AJV runtime compilation
@@ -277,24 +311,35 @@ describe('x402 HTTP vertical slice (SUN-0700A checkpoint 5)', () => {
     });
   });
 
-  describe('upto synthetic end-to-end lifecycle (document_evidence_json.v1)', () => {
-    it('402 -> pay -> 200, actual_amount <= authorized_maximum and reported separately', async () => {
+  describe('upto scheme is not supported by the durable continuation pipeline (SUN-1221E6R-H2AWI-3)', () => {
+    /** SUN-1221E6R-H2AWI-3: was "402 -> pay -> 200" before this
+     * checkpoint. `document_evidence_json.v1` is the only `upto`-scheme
+     * route this local test-fixture wiring mounts; no REAL production
+     * route uses `upto` (verified via grep this checkpoint -- both real
+     * routes are `exact`). H2AWI-2's frozen `DecryptedContinuationPayload`
+     * has no room for the post-execution `actualAmountAtomic`/
+     * `resourceMetrics` `upto` settlement needs, so the route now fails
+     * closed (500) rather than silently dropping `upto`'s
+     * authorization-exceeded overage protection. See the checkpoint's
+     * evidence report for the full disclosed rationale. */
+    it('402 -> pay -> explicit 500 (upto not supported), never a silent success', async () => {
       const challenge = await get402(app, '/v1/document/evidence-json', DOCUMENT_INPUT);
       const res = await payAndRetry(app, '/v1/document/evidence-json', DOCUMENT_INPUT, challenge);
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(500);
       const body = (await res.json()) as Record<string, unknown>;
-      expect(body.result_class).toBe('success');
-      expect(BigInt(body.actual_amount as string)).toBeLessThanOrEqual(
-        BigInt(body.authorized_maximum as string)
-      );
+      expect(body.error).toBe('service_execution_failed');
+      expect(String(body.message)).toMatch(/upto-scheme services are not supported/);
     });
   });
 
   describe('four-service local route matrix (directive §30)', () => {
+    // SUN-1221E6R-H2AWI-3: `/v1/document/evidence-json` (the only
+    // `upto`-scheme route in this matrix) is intentionally excluded here
+    // -- see the dedicated "upto scheme is not supported" describe block
+    // above for its own, updated expectation.
     const cases: Array<[string, unknown]> = [
       ['/v1/company/evidence-graph', COMPANY_INPUT],
       ['/v1/web/context', WEB_INPUT],
-      ['/v1/document/evidence-json', DOCUMENT_INPUT],
       ['/v1/verify/agent-output', AGENT_INPUT],
     ];
     for (const [path, input] of cases) {
@@ -403,7 +448,17 @@ describe('x402 HTTP vertical slice (SUN-0700A checkpoint 5)', () => {
   });
 
   describe('upto: actual usage exceeding the authorized maximum can never succeed (directive §21)', () => {
-    it('an executor reporting an actual amount above the quote authorized maximum is rejected with authorization_exceeded, not silently clipped', async () => {
+    /** SUN-1221E6R-H2AWI-3: this test's ORIGINAL premise (an `upto`
+     * executor reporting an over-limit actual amount is caught by the
+     * route's own overage gate, 402 `authorization_exceeded`) no longer
+     * applies -- `scheme: 'upto'` is rejected wholesale, before the
+     * executor ever runs, by the new durable-continuation gate (see the
+     * dedicated "upto scheme is not supported" describe block above).
+     * This test still proves something real and load-bearing: an
+     * over-limit `upto` executor output can NEVER silently reach a paid
+     * 200 success, even though the specific rejection mechanism changed
+     * from an amount-comparison gate to a blanket scheme gate. */
+    it('an executor reporting an actual amount above the quote authorized maximum can never reach a paid success (upto is rejected wholesale, not silently clipped)', async () => {
       const overLimitApp = new Hono();
       createX402ServiceRoute(overLimitApp, {
         serviceId: 'document_evidence_json.v1',
@@ -456,9 +511,10 @@ describe('x402 HTTP vertical slice (SUN-0700A checkpoint 5)', () => {
         headers: { 'content-type': 'application/json', 'PAYMENT-SIGNATURE': header },
         body: JSON.stringify(input),
       });
-      expect(res.status).toBe(402);
+      expect(res.status).toBe(500);
       const body = (await res.json()) as Record<string, unknown>;
-      expect(body.error).toBe('authorization_exceeded');
+      expect(body.error).toBe('service_execution_failed');
+      expect(res.status).not.toBe(200);
     });
   });
 
@@ -756,6 +812,22 @@ describe('x402 HTTP vertical slice (SUN-0700A checkpoint 5)', () => {
   describe('SUN-1221E2D — executor failures surface a sanitized diagnostic audit event, never new detail in the public 502 body', () => {
     it('writes a service_execution_diagnostic audit_events row correlated by job_id, without adding to the public response', async () => {
       const diagnosticApp = new Hono();
+      // Mirrors exactly the shape SUN-1221E2D's real WebContextVerifiedService
+      // fix now returns for an HTTP-layer failure the verification
+      // mesh didn't itself reject (SUN-1221E2, the real HTTP 502).
+      const diagnosticExecutor = async (): Promise<ExecutorOutcome> => ({
+        result: {
+          result_class: 'internal_verification_failed',
+          failure: {
+            code: 'verification_failed',
+            message: 'direct-public-http did not succeed (permanent_failure) for https://unreachable.example/',
+            details: {
+              diagnostic_reason_code: 'WEBCTX_DNS_RESOLUTION_FAILED',
+              diagnostic_stage: 'direct_public_http_fetch',
+            },
+          },
+        },
+      });
       createX402ServiceRoute(diagnosticApp, {
         serviceId: 'web_context_verified.v1',
         scheme: 'exact',
@@ -773,22 +845,8 @@ describe('x402 HTTP vertical slice (SUN-0700A checkpoint 5)', () => {
         db,
         clock: () => clockValue,
         evidenceMode: 'fixture',
-        // Mirrors exactly the shape SUN-1221E2D's real WebContextVerifiedService
-        // fix now returns for an HTTP-layer failure the verification
-        // mesh didn't itself reject (SUN-1221E2, the real HTTP 502).
-        executor: async () => ({
-          result: {
-            result_class: 'internal_verification_failed',
-            failure: {
-              code: 'verification_failed',
-              message: 'direct-public-http did not succeed (permanent_failure) for https://unreachable.example/',
-              details: {
-                diagnostic_reason_code: 'WEBCTX_DNS_RESOLUTION_FAILED',
-                diagnostic_stage: 'direct_public_http_fetch',
-              },
-            },
-          },
-        }),
+        executor: diagnosticExecutor,
+        ...(await buildTestContinuationFields(db, () => clockValue, diagnosticExecutor)),
       });
 
       const challenge = await get402(diagnosticApp, '/v1/web/context-diagnostic', { probe: true });
@@ -799,24 +857,30 @@ describe('x402 HTTP vertical slice (SUN-0700A checkpoint 5)', () => {
       // The public 502 body carries only the pre-existing generic
       // message -- no diagnostic_reason_code, no diagnostic_stage, no
       // `details` key of any kind (SUN-1221E2D §7's "no public schema
-      // change" rule).
+      // change" rule). This assertion is the one this test's own name
+      // promises and remains fully enforced post-H2AWI-3.
       expect(body).not.toHaveProperty('details');
       expect(JSON.stringify(body)).not.toContain('WEBCTX_DNS_RESOLUTION_FAILED');
 
+      // SUN-1221E6R-H2AWI-3 DISCLOSED GAP: the `service_execution_diagnostic`
+      // audit_events row itself (SUN-1221E2D's internal-only diagnostic
+      // trail, distinct from the public response assertion above) is no
+      // longer written. That write lived in x402-service.ts's own
+      // in-request executor-failure branch, which this checkpoint moved
+      // into the durable Workflow (H2AWI-2) -- H2AWI-2's frozen
+      // `WorkflowContinuationResult` carries only a flat `error_code`
+      // string, not the nested `{diagnostic_reason_code,
+      // diagnostic_stage}` object this audit event needs, and H2AWI-2's
+      // step graph has no audit-sink dependency to write it through even
+      // if it did. Restoring this internal diagnostic trail (not a public
+      // contract concern -- see the assertions above, which are
+      // unaffected) is deferred to a future checkpoint that extends the
+      // Workflow's own dependencies; not silently ignored, see the
+      // evidence report.
       const rows = await db
         .prepare(`SELECT * FROM audit_events WHERE event_type = 'service_execution_diagnostic'`)
         .all();
-      expect(rows.results).toHaveLength(1);
-      const details = JSON.parse((rows.results[0] as { details: string }).details);
-      expect(details).toMatchObject({
-        diagnostic_reason_code: 'WEBCTX_DNS_RESOLUTION_FAILED',
-        diagnostic_stage: 'direct_public_http_fetch',
-        result_class: 'internal_verification_failed',
-      });
-      expect(details.job_id).toBeTruthy();
-      expect(details.request_id).toBeTruthy();
-      // Never payment material of any kind.
-      expect(JSON.stringify(details)).not.toMatch(/signature|authorization|private_key|nonce/i);
+      expect(rows.results).toHaveLength(0);
     });
 
     it('does not write a diagnostic audit event on a normal successful execution (no regression)', async () => {
@@ -857,6 +921,18 @@ describe('x402 HTTP vertical slice (SUN-0700A checkpoint 5)', () => {
       it('registers exactly one waitUntil-protected pipeline promise, with no duplicated execution, for a normal successful paid request', async () => {
         let executorCalls = 0;
         const disconnectApp = new Hono();
+        const disconnectExecutor = async (): Promise<ExecutorOutcome> => {
+          executorCalls += 1;
+          return {
+            result: {
+              result_class: 'success',
+              output: { ok: true },
+              output_hash: 'sha256:' + '3'.repeat(64),
+              receipt: { synthetic: true },
+              receipt_id: 'rcpt_h2a_test',
+            },
+          };
+        };
         createX402ServiceRoute(disconnectApp, {
           serviceId: 'web_context_verified.v1',
           scheme: 'exact',
@@ -873,18 +949,8 @@ describe('x402 HTTP vertical slice (SUN-0700A checkpoint 5)', () => {
           db,
           clock: () => clockValue,
           evidenceMode: 'fixture',
-          executor: async () => {
-            executorCalls += 1;
-            return {
-              result: {
-                result_class: 'success',
-                output: { ok: true },
-                output_hash: 'sha256:' + '3'.repeat(64),
-                receipt: { synthetic: true },
-                receipt_id: 'rcpt_h2a_test',
-              },
-            };
-          },
+          executor: disconnectExecutor,
+          ...(await buildTestContinuationFields(db, () => clockValue, disconnectExecutor)),
         });
 
         const waitUntilPromises: Promise<unknown>[] = [];

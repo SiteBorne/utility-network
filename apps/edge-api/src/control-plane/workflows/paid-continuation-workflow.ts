@@ -131,6 +131,12 @@ export type PaymentAttemptSettlementRepository = Pick<
   | 'recordCdpSettlementOutcome'
   | 'recordSettledExternal'
   | 'incrementCdpSuccessfulSettlementCount'
+  // SUN-1221E6R-H2AWI-3 fix: needed to durably advance
+  // `verified` -> `executed` after executor success, the exact
+  // precondition `recordSettlementPending`'s own CAS already requires
+  // (see the call site below) -- see that call site's own doc comment
+  // for the full incident this closes.
+  | 'transitionLifecycleStage'
 >;
 
 /** `PaymentEvidenceProvider['settle']` reused exactly, via `Pick<>` —
@@ -515,6 +521,28 @@ export async function runPaidContinuationWorkflow(
     });
   }
   await transitionJobState(jobId, 'VERIFYING', 'EXECUTION_COMPLETED', deps.persistence.job);
+  // SUN-1221E6R-H2AWI-3 fix (discovered via real-D1 integration testing,
+  // not caught by H2AWI-2's own fake-repository unit tests): the REUSED
+  // `D1PaymentAttemptRepository.recordSettlementPending` (called a few
+  // lines below, inside `runSettlementStep`) has an existing, unchanged
+  // `WHERE lifecycle_stage = 'executed'` CAS precondition -- the exact
+  // same one `x402-service.ts`'s own removed in-request pipeline always
+  // satisfied via its own `transitionLifecycleStage(paymentIdentifier,
+  // 'verified', 'executed')` call immediately after executor success.
+  // That call has no equivalent anywhere in this Workflow's original
+  // step graph; without it, `recordSettlementPending` always failed its
+  // CAS (the row was still at `verified`), and every real settlement
+  // silently routed to `ambiguous_unresolved` before `.settle()` was
+  // ever called. Reused unchanged, in the same place the old pipeline
+  // called it. Best-effort/non-blocking: an `illegal_transition` here
+  // (the row already advanced past `verified` on some prior/resumed
+  // attempt) is not itself fatal -- `recordSettlementPending`'s own CAS
+  // immediately below remains the authoritative, fail-closed gate.
+  await deps.settlement.repository.transitionLifecycleStage(
+    paymentIdentifier,
+    'verified',
+    'executed'
+  );
 
   // STEP 3 — generate-pcc (validates the PCC the executor already
   // produced as part of its own signing call — see this file's module

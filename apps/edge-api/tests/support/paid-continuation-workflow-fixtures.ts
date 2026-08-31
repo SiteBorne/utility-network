@@ -287,6 +287,32 @@ export class FakeSettlementRepository implements PaymentAttemptSettlementReposit
     const row = this.getOrCreate(paymentIdentifier);
     row.cdpSuccessfulEconomicSettlementCount += 1;
   }
+
+  transitionLifecycleStageCallCount = 0;
+
+  /** SUN-1221E6R-H2AWI-3 fix: mirrors the real
+   * `D1PaymentAttemptRepository.transitionLifecycleStage`'s CAS semantics
+   * (UPDATE ... WHERE lifecycle_stage = from) closely enough for this
+   * Workflow's own `verified -> executed` call site — every fixture in
+   * this file already seeds `lifecycleStage: 'executed'` directly (never
+   * `'verified'`), so this is a harmless, correctly-typed no-op
+   * (`illegal_transition`) for every EXISTING test here, and becomes load
+   * -bearing only for a test that deliberately seeds `'verified'`. */
+  async transitionLifecycleStage(
+    paymentIdentifier: string,
+    from: PaymentLifecycleStage,
+    to: PaymentLifecycleStage
+  ): Promise<
+    { status: 'transitioned' } | { status: 'illegal_transition' } | { status: 'error'; reason: string }
+  > {
+    this.transitionLifecycleStageCallCount += 1;
+    const row = this.getOrCreate(paymentIdentifier);
+    if (row.lifecycleStage !== from) {
+      return { status: 'illegal_transition' };
+    }
+    row.lifecycleStage = to;
+    return { status: 'transitioned' };
+  }
 }
 
 // -----------------------------------------------------------------------
