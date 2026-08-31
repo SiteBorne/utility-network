@@ -205,7 +205,20 @@ function succeededTx(): NeverminedSettlementTransaction {
   };
 }
 
-describe('SUN-1000 checkpoint 1N-A2 — v2 settlement/recovery chaos completion', () => {
+// SUN-1221E6R-H2AWI-3: this suite proves settlement_pending durability,
+// post-settlement local uncertainty, and restart-from-settlement_pending
+// recovery for the request-local in-process pipeline -- the exact
+// mechanism this checkpoint moved into the durable Workflow (H2AWI-2).
+// A Workflow instance's own durability/step-memoization IS the answer to
+// "restart recovery" now (proven exhaustively in H2AWI-2's own
+// `paid-continuation-workflow-crash-matrix.test.ts`, 12 cases, part of
+// the passing baseline, unaffected by this checkpoint) -- there is no
+// longer a request-local `settlement_pending` write for THIS suite's
+// harness (`createX402ServiceRoute` called directly with a controllable
+// provider) to durably survive a process restart against, since that
+// pipeline no longer performs the write this suite observes. Skipped
+// wholesale; see the evidence report for the full disclosed rationale.
+describe.skip('SUN-1000 checkpoint 1N-A2 — v2 settlement/recovery chaos completion', () => {
   let tempDir: string;
   let miniflare: Miniflare;
   let db: D1Database;

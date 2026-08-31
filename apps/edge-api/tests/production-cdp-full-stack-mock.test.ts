@@ -249,7 +249,24 @@ describe('production CDP full-stack mock (SUN-1200 checkpoint D, directive §22/
     expect(settleCount).toBe(2);
   });
 
-  it('§23 full outer HTTP recovery mock: ambiguous production settlement, fresh app context, same Payment-Identifier replay reaches recovery, never a generic perpetual 202', async () => {
+  // SUN-1221E6R-H2AWI-3: `attemptCdpRecovery` (SUN-1200 checkpoint C),
+  // the mechanism this test proves, is REMOVED -- settlement ambiguity
+  // is now resolved exclusively INSIDE the durable Workflow (H2AWI-2's
+  // `resolveViaReconciliation`, its own bounded retries happening BEFORE
+  // the client ever sees a response), and a same-identifier HTTP retry
+  // joins that SAME already-terminal Workflow instance rather than
+  // triggering a second, distinct recovery attempt or a fresh "202
+  // processing" placeholder. Equivalent settlement-ambiguity/
+  // reconciliation coverage lives in H2AWI-2's own
+  // `paid-continuation-workflow.test.ts`/
+  // `paid-continuation-workflow-crash-matrix.test.ts` (already part of
+  // the passing baseline) and in this checkpoint's own required test
+  // matrix. Skipped rather than rewritten: this test's premise (a
+  // SEPARATE recovery attempt on retry, converging to a NEW outcome) is
+  // structurally the anti-pattern this checkpoint's architecture
+  // eliminates -- see production-cdp-provider-wiring.test.ts's updated
+  // "settlement ambiguous" test for the direct replacement proof.
+  it.skip('§23 full outer HTTP recovery mock: ambiguous production settlement, fresh app context, same Payment-Identifier replay reaches recovery, never a generic perpetual 202', async () => {
     let settleCount = 0;
     const facilitator = mockFacilitator({
       async settle(context) {
@@ -275,7 +292,11 @@ describe('production CDP full-stack mock (SUN-1200 checkpoint D, directive §22/
     expect(settleCount).toBe(2);
   });
 
-  it('§23 recovery via chain receipt checker: ambiguous settlement with a candidate tx hash converges via the real (mocked) chain-receipt boundary, zero additional facilitator settle calls', async () => {
+  // SUN-1221E6R-H2AWI-3: same disclosed reason as the test above --
+  // `attemptCdpRecovery`'s chain-receipt-checker step is removed; the
+  // Workflow's own settlement step (H2AWI-2) never had a
+  // `cdpChainReceiptChecker` port wired to it in this checkpoint.
+  it.skip('§23 recovery via chain receipt checker: ambiguous settlement with a candidate tx hash converges via the real (mocked) chain-receipt boundary, zero additional facilitator settle calls', async () => {
     let settleCount = 0;
     const facilitator = mockFacilitator({
       async settle() {

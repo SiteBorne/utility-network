@@ -156,7 +156,25 @@ function mockFacilitator(
   } as unknown as HTTPFacilitatorClient;
 }
 
-describe('production CDP settlement recovery (SUN-1200 checkpoint C)', () => {
+// SUN-1221E6R-H2AWI-3: this entire suite proves `attemptCdpRecovery`
+// (x402-service.ts, SUN-1200 checkpoint C) -- a function that no longer
+// exists. Settlement, and its ambiguity-recovery reconciliation, moved
+// exclusively into the durable Workflow (H2AWI-2's `runSettlementStep`/
+// `resolveViaReconciliation`), which resolves ambiguity INSIDE one
+// Workflow run, before the client ever sees a response, rather than via
+// a second, distinct HTTP-triggered recovery attempt. Equivalent
+// coverage (bounded reconciliation retries, zero-blind-retry-on-settle,
+// explicit-vs-ambiguous classification, crash-during-settle recovery)
+// lives in H2AWI-2's own `paid-continuation-workflow.test.ts`/
+// `paid-continuation-workflow-crash-matrix.test.ts` (already part of the
+// passing baseline, unaffected by this checkpoint) and in this
+// checkpoint's own required test matrix
+// (continuation-handoff.test.ts/continuation-waiter.test.ts and the new
+// x402-service-route.test.ts scenarios). Skipped wholesale rather than
+// individually rewritten -- see the evidence report for the full,
+// disclosed rationale and a per-test correspondence to its H2AWI-2
+// equivalent where one exists.
+describe.skip('production CDP settlement recovery (SUN-1200 checkpoint C)', () => {
   let mf: Miniflare;
   let db: D1Database;
   let tempDir: string;
