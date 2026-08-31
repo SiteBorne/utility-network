@@ -60,6 +60,19 @@ function compileTestInputValidator(schema: Record<string, unknown>) {
   return new Ajv2020({ strict: false }).compile(schema);
 }
 
+/** Polls `predicate` instead of sleeping a fixed duration -- robust
+ * under a full parallel test-suite run's variable system load, where a
+ * fixed `setTimeout` short enough not to slow the suite down is too
+ * short under contention (observed flakiness this checkpoint, fixed
+ * here rather than left as an intermittent failure). */
+async function waitFor(predicate: () => boolean, timeoutMs = 5000, pollMs = 10): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!predicate()) {
+    if (Date.now() > deadline) throw new Error(`waitFor timed out after ${timeoutMs}ms`);
+    await new Promise((resolve) => setTimeout(resolve, pollMs));
+  }
+}
+
 function buildBuyerPayload(challenge: PaymentRequired, id?: string): PaymentPayload {
   const requirement = challenge.accepts[0];
   const extensions = buildBuyerPaymentIdentifierExtensions(challenge.extensions ?? {}, id);
@@ -308,12 +321,11 @@ describe('HTTP -> durable Workflow integration (SUN-1221E6R-H2AWI-3 required tes
     };
 
     const payPromise = pay(app, challenge, id);
+    await waitFor(() => capturedInstance !== undefined);
     // Let the waiter poll a handful of times against a still-'running'
     // instance before settling it -- proves the poll loop tolerates an
     // arbitrary number of non-terminal polls rather than giving up.
-    await new Promise((resolve) => setTimeout(resolve, 800));
-    expect(capturedInstance).toBeDefined();
-    expect(capturedInstance!.statusCallCount).toBeGreaterThan(1);
+    await waitFor(() => (capturedInstance?.statusCallCount ?? 0) > 1);
     await settleFakeWorkflow(id, capturedInstance!, 'rcpt_slow');
 
     const res = await payPromise;
@@ -344,8 +356,7 @@ describe('HTTP -> durable Workflow integration (SUN-1221E6R-H2AWI-3 required tes
 
     const controller = new AbortController();
     const payPromise = pay(app, challenge, id, controller.signal);
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    expect(capturedInstance).toBeDefined();
+    await waitFor(() => capturedInstance !== undefined);
     const instanceIdBeforeAbort = capturedInstance!.id;
 
     // The client goes away.
@@ -372,7 +383,7 @@ describe('HTTP -> durable Workflow integration (SUN-1221E6R-H2AWI-3 required tes
   });
 
   it('same payment_identifier retried while the first Workflow instance is still running -> joins the SAME instance, never creates a second one, never triggers a second executor run', async () => {
-    const { binding, createCalls } = buildControllableWorkflowBinding();
+    const { binding, createCalls, getCalls } = buildControllableWorkflowBinding();
     let executorCalls = 0;
     const app = await buildApp(binding, async () => {
       executorCalls += 1;
@@ -398,8 +409,7 @@ describe('HTTP -> durable Workflow integration (SUN-1221E6R-H2AWI-3 required tes
     };
 
     const firstPromise = pay(app, challenge, id);
-    await new Promise((resolve) => setTimeout(resolve, 300));
-    expect(capturedInstance).toBeDefined();
+    await waitFor(() => capturedInstance !== undefined);
 
     // A second, independent HTTP request with the SAME payment_identifier
     // while the first is still (per the fake instance) 'running'. Not
@@ -409,7 +419,7 @@ describe('HTTP -> durable Workflow integration (SUN-1221E6R-H2AWI-3 required tes
     // the first request. What this test proves happens SYNCHRONOUSLY,
     // before either promise resolves: the join, not a second create().
     const secondPromise = pay(app, challenge, id);
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    await waitFor(() => getCalls.length > 0);
     // join_only path: get(), not create() -- exactly one create() call
     // total across both HTTP invocations, even though two independent
     // HTTP requests are both currently in-flight against this same
