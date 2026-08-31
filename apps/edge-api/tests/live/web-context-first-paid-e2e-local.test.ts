@@ -48,6 +48,18 @@
  * updated to that candidate; again a routing-constant-only fix — no Worker
  * runtime, candidate source, economics, or payment-semantics change.
  *
+ * SUN-1221E6R-H1 correction: SUN-1221E5Q6H/Q6HR/Q6I/E6/E6P discovered and
+ * fixed a genuine defect unrelated to the socket-transport work above —
+ * `090a4bc4` predates the Modal safe-egress executor entirely and would
+ * 503 with `service_executor_not_configured` on this route regardless of
+ * payment. E6P's production-route Modal env-propagation fix (commit
+ * `f1b244c`) and Q6I's single-version rebuild produced a corrected
+ * candidate (`30ab6b71-...`) carrying the Modal wiring, all 7 governed
+ * vars, and all secrets, independently read back as technically valid.
+ * `CANDIDATE_VERSION_ID` below is updated to that candidate; again a
+ * routing-constant-only fix — no Worker runtime, candidate source,
+ * economics, or payment-semantics change.
+ *
  * `WORKER_ORIGIN` uses the custom domain (`utility.siteborne.net`), not
  * `workers.dev` — the `/mcp` route enforces a Host allowlist
  * (`MCP_ALLOWED_HOSTS` in `apps/edge-api/src/routes/mcp.ts`) that only the
@@ -85,7 +97,7 @@ const WORKER_SCRIPT_NAME = 'siteborne-utility-edge';
 const WORKER_ORIGIN = 'https://utility.siteborne.net';
 const TARGET_PATH = '/v2/web/context';
 const TARGET_URL = `${WORKER_ORIGIN}${TARGET_PATH}`;
-const CANDIDATE_VERSION_ID = '090a4bc4-64e4-4152-8ce9-d41977238162';
+const CANDIDATE_VERSION_ID = '30ab6b71-fb3f-463f-9bae-46f090c5cdb4';
 const VERSION_OVERRIDE_HEADER = 'Cloudflare-Workers-Version-Overrides';
 const VERSION_OVERRIDE_HEADER_VALUE = `${WORKER_SCRIPT_NAME}="${CANDIDATE_VERSION_ID}"`;
 
