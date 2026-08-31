@@ -14,6 +14,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 import { runPaidContinuationWorkflow } from '../src/control-plane/workflows/paid-continuation-workflow';
+import { deriveWorkflowInstanceId } from '../src/control-plane/continuation/instance-id';
 import { FakeWorkflowStep } from './support/fake-workflow-step';
 import {
   buildTestDependencies,
@@ -314,5 +315,35 @@ describe('paid-continuation-workflow — result/receipt persistence + terminal t
       status: 'settled',
     });
     expect(deps.jobPersistence.events.length).toBe(eventsAfterFirst); // no new terminal event
+  });
+});
+
+describe('paid-continuation-workflow — deterministic instance identity reuse (proof requirement #13)', () => {
+  // H2AWI-2 does not itself create Workflow instances (that is H2AWI-3's
+  // `createOrJoinPaidContinuation` job) and does not reimplement instance
+  // identity derivation — it reuses the frozen H2AWI-1 primitive verbatim.
+  // This is a non-forking proof, not a re-test of instance-id.ts's own
+  // exhaustive suite (continuation-instance-id.test.ts already covers the
+  // algorithm itself in full).
+  it('same payment_identifier -> byte-identical Workflow instance id, via the committed H2AWI-1 helper', async () => {
+    const first = await deriveWorkflowInstanceId('pay_test_0001');
+    const second = await deriveWorkflowInstanceId('pay_test_0001');
+    expect(first).toBe(second);
+    expect(first).toMatch(/^siteborne-wf-[0-9a-f]{48}$/);
+  });
+
+  it('different payment_identifier values -> different Workflow instance ids', async () => {
+    const first = await deriveWorkflowInstanceId('pay_test_0001');
+    const second = await deriveWorkflowInstanceId('pay_test_0002');
+    expect(first).not.toBe(second);
+  });
+
+  it('this module never defines its own instance-id/hash helper (static source proof — no computeAttemptHash-style reimplementation)', () => {
+    const source = readFileSync(
+      path.resolve(__dirname, '../src/control-plane/workflows/paid-continuation-workflow.ts'),
+      'utf8'
+    );
+    expect(source).not.toMatch(/function\s+(derive|compute).*(InstanceId|AttemptHash)/i);
+    expect(source).not.toContain('deriveWorkflowInstanceId'); // not even imported — H2AWI-3's concern
   });
 });
