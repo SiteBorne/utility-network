@@ -169,6 +169,53 @@ describe('webContextVerifiedV2CdpProductionRoute (integration point only)', () =
     expect(webCtxRes.status).toBe(404);
   });
 
+  it('forwards all three MODAL_WEBCTX_* safe-egress credentials from c.env to the composition builder (SUN-1221E6P)', async () => {
+    const spy = vi.spyOn(composition, 'buildWebContextV2CdpProductionRouteConfig');
+    const app = appWithRoute();
+    const validHex = '3'.repeat(64);
+    await app.request(
+      '/v2/web/context',
+      { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' },
+      baseEnv({
+        PAID_ROUTES_ENABLED: 'true',
+        WEB_CONTEXT_V2_CDP_ROUTE_ENABLED: 'true',
+        PAID_RECEIPT_SIGNING_PRIVATE_KEY: validHex,
+        PAID_RECEIPT_SIGNING_KEY_ID: 'kid_prod0123456789abcdefghij',
+        MODAL_WEBCTX_ENDPOINT_URL: 'https://example-modal-endpoint.invalid/fetch',
+        MODAL_WEBCTX_PROXY_KEY: 'wk-test-forwarding-proxy-key',
+        MODAL_WEBCTX_PROXY_SECRET: 'ws-test-forwarding-proxy-secret',
+      })
+    );
+    expect(spy).toHaveBeenCalledTimes(1);
+    const forwardedEnv = spy.mock.calls[0]?.[0];
+    expect(forwardedEnv?.MODAL_WEBCTX_ENDPOINT_URL).toBe('https://example-modal-endpoint.invalid/fetch');
+    expect(forwardedEnv?.MODAL_WEBCTX_PROXY_KEY).toBe('wk-test-forwarding-proxy-key');
+    expect(forwardedEnv?.MODAL_WEBCTX_PROXY_SECRET).toBe('ws-test-forwarding-proxy-secret');
+    spy.mockRestore();
+  });
+
+  it('enabled + full config except MODAL_WEBCTX_PROXY_SECRET -> still the governed unavailable response (fails closed, SUN-1221E6P negative control)', async () => {
+    const app = appWithRoute();
+    const validHex = '4'.repeat(64);
+    const res = await app.request(
+      '/v2/web/context',
+      { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' },
+      baseEnv({
+        PAID_ROUTES_ENABLED: 'true',
+        WEB_CONTEXT_V2_CDP_ROUTE_ENABLED: 'true',
+        PAID_RECEIPT_SIGNING_PRIVATE_KEY: validHex,
+        PAID_RECEIPT_SIGNING_KEY_ID: 'kid_prod0123456789abcdefghij',
+        MODAL_WEBCTX_ENDPOINT_URL: 'https://example-modal-endpoint.invalid/fetch',
+        MODAL_WEBCTX_PROXY_KEY: 'wk-test-forwarding-proxy-key',
+        // MODAL_WEBCTX_PROXY_SECRET deliberately absent
+      })
+    );
+    expect(res.status).toBe(503);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.error).toBe('service_executor_not_configured');
+    expect(res.headers.get('PAYMENT-REQUIRED')).toBeNull();
+  });
+
   it('never imports a fixture signer, fixture registry, or fixture composition (structural, import-lines only)', () => {
     const path = fileURLToPath(
       new URL('./production-web-context-v2-cdp-route.ts', import.meta.url)

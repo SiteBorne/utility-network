@@ -64,6 +64,16 @@ export async function webContextVerifiedV2CdpProductionRoute(
       PRODUCTION_ENABLED: c.env.PRODUCTION_ENABLED,
       HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP: c.env.HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP,
       PRODUCTION_CDP_CREDENTIALS_APPROVED: c.env.PRODUCTION_CDP_CREDENTIALS_APPROVED,
+      // SUN-1221E6P — these three were missing from this forwarding object
+      // entirely: the composition's own fail-closed MODAL_WEBCTX_* check
+      // (`web-context-v2-cdp-composition.ts`) always saw them as
+      // `undefined` here regardless of whether the Worker actually had
+      // them bound, making `web_context_verified.v2` permanently
+      // unavailable (`service_executor_not_configured`) since SUN-1221E5Q6G
+      // introduced the Modal safe-egress executor.
+      MODAL_WEBCTX_ENDPOINT_URL: c.env.MODAL_WEBCTX_ENDPOINT_URL,
+      MODAL_WEBCTX_PROXY_KEY: c.env.MODAL_WEBCTX_PROXY_KEY,
+      MODAL_WEBCTX_PROXY_SECRET: c.env.MODAL_WEBCTX_PROXY_SECRET,
     },
     c.env.DB
   );
