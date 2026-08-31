@@ -53,6 +53,17 @@ export default defineConfig({
         __dirname,
         'apps/edge-api/tests/support/cloudflare-sockets-shim.ts'
       ),
+      // SUN-1221E6R-H2AWI-2: same rationale as the `cloudflare:sockets`
+      // alias immediately above, for the other Workers-runtime built-in
+      // this repository now statically imports as a base class
+      // (`paid-continuation-workflow.ts`'s `WorkflowEntrypoint`). See
+      // `apps/edge-api/tests/support/cloudflare-workers-shim.ts`'s own doc
+      // comment for why this one is a working structural stand-in rather
+      // than a throw-on-use stub.
+      'cloudflare:workers': path.resolve(
+        __dirname,
+        'apps/edge-api/tests/support/cloudflare-workers-shim.ts'
+      ),
     },
     typecheck: {
       tsconfig: 'tsconfig.base.json',
