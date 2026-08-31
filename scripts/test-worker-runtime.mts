@@ -1773,22 +1773,28 @@ async function runBundleIsolationCheck() {
     // mean H2AWI-3 failed to wire anything real -- the opposite of what
     // actually happened.
     //
-    // The other two markers this gate previously also checked
-    // (`openContinuationEnvelope`'s two `EnvelopeOpenError` messages,
-    // `envelope.ts`) are DELIBERATELY still absent: `openContinuationEnvelope`
-    // is only ever called from `paid-continuation-workflow.ts`'s `run()`
-    // (the real `WorkflowEntrypoint` subclass), which is not yet
-    // exported from the Worker's main module or bound in `wrangler.toml`
-    // -- wiring `PaidContinuationWorkflow` as an actual Workflow
-    // binding/export is explicitly H2AWI-4 scope, never this
-    // checkpoint's. Their continued absence is therefore itself a
-    // correct, expected signal (index.ts's import graph does not yet
-    // reach the Workflow's OWN run() body), checked explicitly below
-    // rather than left as an unexplained partial match.
+    // SUN-1221E6R-H2BF1 flips this gate's DIRECTION again, deliberately,
+    // for the same reason H2AWI-3 flipped the one above it: this is
+    // EXACTLY where `PaidContinuationWorkflow.run()` (already exported
+    // from `index.ts` since H2AWI-4R, for the Workflow binding's
+    // `class_name` resolution) stops being a self-contained
+    // `throw new Error(...)` stub and starts genuinely calling
+    // `runPaidContinuationWorkflow`, which calls `openContinuationEnvelope`
+    // -- making its two `EnvelopeOpenError` messages reachable from
+    // `index.ts`'s import graph for the first time. Before this
+    // checkpoint, the stub referenced neither function, so esbuild
+    // tree-shook both out of the bundle entirely (the previous, correct
+    // "not yet wired" absence proof). Continuing to assert their absence
+    // now would mean H2BF1 failed to wire anything real -- the exact
+    // defect this checkpoint exists to close (see
+    // docs/reports/SUN-1221E6R-H2B-real-durable-workflow-payment-
+    // qualification.md and
+    // docs/reports/SUN-1221E6R-H2BF1-workflow-entrypoint-version-graph-
+    // reconciliation.md for the full incident).
     const reachableContinuationMarkers = ['siteborne-wf-', 'paymentIdentifier must be a non-empty string'].filter(
       (marker) => bundle.includes(marker)
     );
-    const notYetReachableWorkflowRunMarkers = [
+    const reachableWorkflowRunMarkers = [
       'Continuation envelope decryption failed',
       'Continuation envelope associated data does not match',
     ].filter((marker) => bundle.includes(marker));
@@ -1798,9 +1804,9 @@ async function runBundleIsolationCheck() {
       `markers=${reachableContinuationMarkers.join(',') || 'none'}`
     );
     record(
-      'bundle isolation: real wrangler.toml dry-run bundle does NOT contain PaidContinuationWorkflow.run()-only markers (WorkflowEntrypoint export/binding is H2AWI-4 scope, not yet wired)',
-      notYetReachableWorkflowRunMarkers.length === 0,
-      `markers=${notYetReachableWorkflowRunMarkers.join(',') || 'none'}`
+      'bundle reachability (SUN-1221E6R-H2BF1): real wrangler.toml dry-run bundle DOES contain PaidContinuationWorkflow.run()-only markers -- proof run() really calls the real orchestration/envelope-open path, not the old dead-end stub',
+      reachableWorkflowRunMarkers.length === 2,
+      `markers=${reachableWorkflowRunMarkers.join(',') || 'none'}`
     );
     // SUN-1216 PRE-UPLOAD RESIDUAL ADJUDICATION. The literal string
     // "zero fixture markers" is intentionally NOT the gate below --

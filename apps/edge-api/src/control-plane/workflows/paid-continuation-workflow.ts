@@ -63,6 +63,7 @@ import type { JobState, TransitionReason, StateEvent } from '../state-machine';
 import type { ServiceExecutor, ExecutorOutcome } from '../routes/x402-service';
 import type { D1PaymentAttemptRepository } from '../repositories/d1/payment-attempts';
 import type { Env } from '../config/env';
+import { buildProductionPaidContinuationWorkflowDependencies } from './production-dependencies';
 
 // ---------------------------------------------------------------------
 // Structural WorkflowStep/WorkflowEvent typing
@@ -647,19 +648,43 @@ export async function runPaidContinuationWorkflow(
 // chain-receipt checker) is H2AWI-3/4 scope, not this checkpoint's.
 // ---------------------------------------------------------------------
 export class PaidContinuationWorkflow extends WorkflowEntrypoint<Env, WorkflowContinuationInput> {
+  /**
+   * SUN-1221E6R-H2BF1 — real production wiring. Deferred since H2AWI-2
+   * (this class was a hard-coded throwing stub straight through
+   * provisioning and the H2B real-payment attempt, which errored with
+   * zero Workflow steps executed — see
+   * `docs/reports/SUN-1221E6R-H2B-real-durable-workflow-payment-
+   * qualification.md` and `SUN-1221E6R-H2BF1-workflow-entrypoint-
+   * version-graph-reconciliation.md`).
+   *
+   * Deliberately thin: `this.env` is the only thing a real
+   * `WorkflowEntrypoint.run()` ever has, so dependency construction
+   * itself lives in the separate, independently testable
+   * `buildProductionPaidContinuationWorkflowDependencies` (module
+   * boundary tests mock this import; see
+   * `paid-continuation-workflow-entrypoint.test.ts`). No settlement
+   * semantics, retry policy, or step graph changed by this wiring —
+   * `runPaidContinuationWorkflow` (already exhaustively tested against
+   * fakes by H2AWI-2) is called completely unmodified.
+   */
   async run(
     event: PaidContinuationWorkflowEvent,
     step: PaidContinuationWorkflowStep
   ): Promise<WorkflowContinuationResult> {
-    // `event`/`step` are accepted (not `_`-prefixed) to document the real
-    // eventual call shape precisely — see `runPaidContinuationWorkflow`,
-    // which H2AWI-3/4 will call from here once dependency wiring exists.
-    void event;
-    void step;
-    throw new Error(
-      'PaidContinuationWorkflow.run() dependency wiring is not implemented until H2AWI-3/4 — ' +
-        'this checkpoint (H2AWI-2) only implements and tests runPaidContinuationWorkflow() ' +
-        'directly against injected fakes.'
+    const jobId = event.payload.metadata.job_id;
+    const deps = await buildProductionPaidContinuationWorkflowDependencies(
+      this.env,
+      event.payload.metadata.service
     );
+    if ('unavailable' in deps) {
+      // Fail closed — never a plaintext fallback, never a partial/guessed
+      // dependency set. Mirrors the exact convention every real
+      // production route composition function already uses for a
+      // missing MODAL_WEBCTX_*/CDP/receipt-signing credential.
+      return terminal('workflow_internal_error', jobId, {
+        error_code: `dependencies_unavailable: ${deps.reason}`,
+      });
+    }
+    return runPaidContinuationWorkflow(event, step, deps);
   }
 }
