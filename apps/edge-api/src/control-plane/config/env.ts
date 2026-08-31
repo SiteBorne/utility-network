@@ -182,6 +182,16 @@ export interface Env {
    * convention (see `MODAL_WEBCTX_*`, `PAID_RECEIPT_SIGNING_PRIVATE_KEY`
    * above). */
   PAID_CONTINUATION_WORKFLOW?: Workflow<WorkflowContinuationInput>;
+
+  /** SUN-1221E6R-H2AWI-3F — base64-encoded 256-bit AES-GCM key sealing the
+   * durable continuation envelope handed to `PAID_CONTINUATION_WORKFLOW`.
+   * Paired 1:1 with the binding above: both are required together for a
+   * paid production route to accept real traffic; either missing fails
+   * closed via `production-web-context-v2-cdp-route.ts` /
+   * `production-verify-v2-cdp-route.ts`, never a silent `undefined`
+   * fallthrough into `createX402ServiceRoute`. See
+   * `continuation/envelope.ts`'s `importContinuationEnvelopeKey`. */
+  PAYMENT_CONTINUATION_ENCRYPTION_KEY?: string;
 }
 
 export interface ControlPlaneConfig {

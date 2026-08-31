@@ -62,6 +62,7 @@ import { createX402ServiceRoute } from './x402-service';
 import { buildVerifyAgentOutputV2CdpProductionRouteConfig } from '../production/verify-agent-output-v2-cdp-composition';
 import { isVerifyAgentOutputV2CdpRouteFlagEnabled } from '../config/production-payment';
 import { outputValidatorsById } from '../../generated/output-validators.generated.js';
+import { importContinuationEnvelopeKey } from '../continuation/envelope';
 
 // SUN-1200 checkpoint F (P0-A) registered these build-time-precompiled
 // output-schema validators once at real Worker module-load time -- but
@@ -136,6 +137,19 @@ export async function verifyAgentOutputV2CdpProductionRoute(
   if ('unavailable' in config) {
     return productionServiceExecutorUnavailable(c);
   }
+
+  // SUN-1221E6R-H2AWI-3F -- mirrors the identical fix in
+  // `production-web-context-v2-cdp-route.ts`: H2AWI-3 made the durable
+  // Workflow the *only* settlement path, but neither `workflow` nor
+  // `continuationEnvelopeKey` was ever forwarded here, so every real
+  // payment silently hit `create_failed` inside `createX402ServiceRoute`.
+  if (!c.env.PAID_CONTINUATION_WORKFLOW || !c.env.PAYMENT_CONTINUATION_ENCRYPTION_KEY) {
+    return productionServiceExecutorUnavailable(c);
+  }
+  config.workflow = c.env.PAID_CONTINUATION_WORKFLOW;
+  config.continuationEnvelopeKey = await importContinuationEnvelopeKey(
+    c.env.PAYMENT_CONTINUATION_ENCRYPTION_KEY
+  );
 
   const subApp = new Hono();
   createX402ServiceRoute(subApp, config);

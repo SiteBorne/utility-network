@@ -38,6 +38,50 @@ export interface OpenInput {
   readonly keyMaterial: CryptoKey;
 }
 
+export type EnvelopeKeyImportErrorCode = 'malformed_encoding' | 'invalid_key_length';
+
+export class EnvelopeKeyImportError extends Error {
+  readonly code: EnvelopeKeyImportErrorCode;
+
+  constructor(code: EnvelopeKeyImportErrorCode, message: string) {
+    super(message);
+    this.name = 'EnvelopeKeyImportError';
+    this.code = code;
+  }
+}
+
+/**
+ * SUN-1221E6R-H2AWI-3F — imports the Worker's `PAYMENT_CONTINUATION_ENCRYPTION_KEY`
+ * secret (standard base64, exactly 32 raw bytes / 256 bits) into a non-extractable
+ * AES-GCM `CryptoKey` usable by `sealContinuationEnvelope`/`openContinuationEnvelope`.
+ * Fails closed (throws) on malformed encoding or wrong key length -- never returns
+ * a key derived from anything other than exactly 32 raw bytes.
+ */
+export async function importContinuationEnvelopeKey(base64Key: string): Promise<CryptoKey> {
+  let raw: Uint8Array;
+  try {
+    const binary = atob(base64Key);
+    raw = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      raw[i] = binary.charCodeAt(i);
+    }
+  } catch {
+    throw new EnvelopeKeyImportError(
+      'malformed_encoding',
+      'Continuation envelope key is not valid base64',
+    );
+  }
+
+  if (raw.byteLength * 8 !== AES_KEY_BITS) {
+    throw new EnvelopeKeyImportError(
+      'invalid_key_length',
+      `Continuation envelope key must be exactly ${AES_KEY_BITS / 8} raw bytes`,
+    );
+  }
+
+  return crypto.subtle.importKey('raw', raw, { name: AES_GCM }, false, ['encrypt', 'decrypt']);
+}
+
 function validateMetadata(metadata: ContinuationEnvelopeMetadata): void {
   if (metadata === null || typeof metadata !== 'object') {
     throw new TypeError('Continuation envelope metadata is invalid');

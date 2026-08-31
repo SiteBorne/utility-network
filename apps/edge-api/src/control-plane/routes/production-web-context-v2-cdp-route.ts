@@ -21,6 +21,7 @@ import { createX402ServiceRoute } from './x402-service';
 import { buildWebContextV2CdpProductionRouteConfig } from '../production/web-context-v2-cdp-composition';
 import { isWebContextV2CdpRouteFlagEnabled } from '../config/production-payment';
 import { outputValidatorsById } from '../../generated/output-validators.generated.js';
+import { importContinuationEnvelopeKey } from '../continuation/envelope';
 
 // Mirrors `production-verify-v2-cdp-route.ts`'s own registration exactly
 // (see that file's doc comment for the full SUN-1200/SUN-1214 history).
@@ -80,6 +81,21 @@ export async function webContextVerifiedV2CdpProductionRoute(
   if ('unavailable' in config) {
     return productionServiceExecutorUnavailable(c);
   }
+
+  // SUN-1221E6R-H2AWI-3F -- H2AWI-3 removed the request-local settlement
+  // fallback entirely; the durable Workflow is now the *only* settlement
+  // path. Neither `workflow` nor `continuationEnvelopeKey` was ever
+  // forwarded here, so every real payment silently hit `create_failed`
+  // inside `createX402ServiceRoute`. Fail closed explicitly, the same way
+  // the Modal/CDP dependencies above already do, rather than letting each
+  // request discover this individually.
+  if (!c.env.PAID_CONTINUATION_WORKFLOW || !c.env.PAYMENT_CONTINUATION_ENCRYPTION_KEY) {
+    return productionServiceExecutorUnavailable(c);
+  }
+  config.workflow = c.env.PAID_CONTINUATION_WORKFLOW;
+  config.continuationEnvelopeKey = await importContinuationEnvelopeKey(
+    c.env.PAYMENT_CONTINUATION_ENCRYPTION_KEY
+  );
 
   const subApp = new Hono();
   createX402ServiceRoute(subApp, config);
