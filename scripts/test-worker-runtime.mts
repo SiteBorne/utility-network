@@ -1708,6 +1708,26 @@ async function runBundleIsolationCheck() {
       hardFixtureBypassMarkers.length === 0,
       `markers=${hardFixtureBypassMarkers.join(',') || 'none'}`
     );
+    // SUN-1221E6R-H2AWI-1: the new durable-continuation shared primitives
+    // (apps/edge-api/src/control-plane/continuation/*) are inert
+    // building blocks — no WorkflowEntrypoint, no Workflow binding, and
+    // nothing in `index.ts` imports them yet (that wiring is H2AWI-3).
+    // Four exact, real strings pulled directly from the source (not
+    // approximations) act as accidental-import tripwires: the Workflow
+    // instance-ID prefix and three distinct thrown-error messages from
+    // `instance-id.ts`/`envelope.ts`. None of the four is a word likely
+    // to appear for any unrelated reason.
+    const continuationPrimitiveMarkers = [
+      'siteborne-wf-',
+      'Continuation envelope decryption failed',
+      'Continuation envelope associated data does not match',
+      'paymentIdentifier must be a non-empty string',
+    ].filter((marker) => bundle.includes(marker));
+    record(
+      'bundle isolation: real wrangler.toml dry-run bundle does NOT contain the H2AWI-1 durable-continuation primitives (not yet wired, still inert)',
+      continuationPrimitiveMarkers.length === 0,
+      `markers=${continuationPrimitiveMarkers.join(',') || 'none'}`
+    );
     // SUN-1216 PRE-UPLOAD RESIDUAL ADJUDICATION. The literal string
     // "zero fixture markers" is intentionally NOT the gate below --
     // STRING_MARKER_PRESENT (raw text search) and
