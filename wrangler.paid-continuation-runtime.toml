@@ -1,0 +1,125 @@
+# SUN-1221E6R-H2BF4 — dedicated Workflow-host Worker.
+#
+# Hosts EXACTLY ONE thing: the `siteborne-paid-continuation` Workflow's
+# `PaidContinuationWorkflow` class (`apps/edge-api/src/
+# workflow-host-entrypoint.ts`). This is a SEPARATE Cloudflare Worker
+# script from the public SITEBORNE API Worker (`wrangler.toml`,
+# `name = "siteborne-utility-edge"`) -- deploying THIS config with a
+# normal, single-version `wrangler deploy` can only ever affect THIS
+# script's own traffic (100% of a script with zero public routes -- see
+# `docs/design/SUN-1221E6R-H2BF4-dedicated-workflow-host-architecture.md`
+# §"Public 100% semantics"). It can never touch the public API Worker's
+# `de70bf98.../855ee345...` 100%/0% split, its routes, or its `workers.dev`
+# surface.
+#
+# NOT YET DEPLOYED. This file is frozen local configuration only -- see
+# H2BF4's evidence report for the exact, gated H2BF5 external-mutation
+# ordering required before `wrangler deploy --config
+# wrangler.paid-continuation-runtime.toml` may ever actually run.
+name = "siteborne-paid-continuation-runtime"
+main = "apps/edge-api/src/workflow-host-entrypoint.ts"
+# Matches the public API Worker's own compatibility_date
+# (`wrangler.toml`) -- same runtime semantics, same bundling behavior, no
+# independent compatibility-date drift between the two scripts.
+compatibility_date = "2026-08-05"
+compatibility_flags = ["nodejs_compat"]
+
+# H2BF4 design doc §4 hard invariant: WORKFLOW_RUNTIME_WORKERS_DEV=DISABLED.
+# This script serves no public traffic of any kind -- disabling the
+# workers.dev preview URL entirely is the correct default, not merely
+# unset (an unset `workers_dev` with no `routes` array defaults to `true`
+# per Wrangler's own documented behavior -- see the public `wrangler.toml`'s
+# own SUN-1100 checkpoint 2 comment on exactly this point). Empirically
+# confirmed this checkpoint (`wrangler deploy --dry-run`) that
+# `workers_dev = false` with no `routes`/`[[routes]]`/custom domains still
+# builds and validates cleanly for a Workflow-only script.
+workers_dev = false
+# No `routes`, no custom domains, no `[triggers]` cron schedule for this
+# script (H2BF4 §4: WORKFLOW_RUNTIME_CUSTOM_DOMAINS=0,
+# WORKFLOW_RUNTIME_CRON_TRIGGERS=0). The Workflow definition below also
+# declares no `schedules` -- instances are created exclusively by the
+# public API Worker's own request-time `env.PAID_CONTINUATION_WORKFLOW
+# .create()` call (cross-script), never by a Workflow-level cron.
+
+# Same authoritative production D1 database the public API Worker binds --
+# no migration, no new database (H2BF4 design doc "D1 ownership": shared
+# payment/job state is a hard requirement of this split, since
+# `PaidContinuationWorkflow.run()` reads/writes the exact same
+# `payment_attempts`/`jobs`/`state_events`/`x402_service_results` tables
+# the public API Worker's own HTTP routes and this Workflow's pre-split
+# same-script incarnation always used).
+[[d1_databases]]
+binding = "DB"
+database_name = "siteborne-utility"
+database_id = "efe23c42-cbcc-47c2-9b28-922a541bdcdd"
+
+# Non-secret public receiving address (SUN-1200 checkpoint E) --
+# `buildProductionPaidContinuationWorkflowDependencies` reads this via the
+# same two composition functions the public API Worker's HTTP routes
+# already call. Byte-identical value to the public `wrangler.toml`'s own
+# `[vars]` entry -- never re-derived or hardcoded independently.
+[vars]
+SELLER_WALLET_ADDRESS = "0x7f44a2dd237938F18632d4CcA40f4c690295E6E1"
+# PAYMENT_ENVIRONMENT / PRODUCTION_ENABLED /
+# HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP / PRODUCTION_CDP_CREDENTIALS_APPROVED
+# are deliberately ABSENT here, exactly mirroring the public `wrangler.toml`'s
+# own SUN-1205 checkpoint K stance ("deliberately absent from the frozen
+# pre-upload candidate... every consumer is fail-closed on absence"). A
+# later, separately authorized cutover sets the exact bounded values it
+# needs in its own reviewed commit/version -- never this file, never by
+# default.
+
+# The following are real secrets and must NEVER be added to [vars] above
+# or committed anywhere in this repo -- provisioned with
+# `wrangler secret put <NAME> --config wrangler.paid-continuation-runtime.toml`
+# once H2BF5 is authorized (see this checkpoint's evidence report §Host
+# Dependency Inventory / §Secret Source Availability for the exact
+# provisioning-source analysis of each):
+#   PAYMENT_CONTINUATION_ENCRYPTION_KEY - AES-256-GCM key sealing/opening
+#                             the durable continuation envelope; MUST be
+#                             byte-identical to the public API Worker's own
+#                             secret of the same name (H2BF4 design doc
+#                             "Continuation-key sourcing/rotation").
+#   PAID_RECEIPT_SIGNING_PRIVATE_KEY - Ed25519 paid-receipt signing key
+#                             (raw hex), same value as the public API
+#                             Worker's own secret of the same name.
+#   PAID_RECEIPT_SIGNING_KEY_ID - paired key identifier, same value as the
+#                             public API Worker's own secret of the same
+#                             name.
+#   CDP_API_KEY_ID          - Coinbase CDP API key ID.
+#   CDP_API_KEY_SECRET      - Coinbase CDP API key secret.
+# Explicitly NOT a secret of this script (H2BF4 §"CDP_WALLET_SECRET law"):
+#   CDP_WALLET_SECRET -- never required by the facilitator client or the
+#                             read-only seller getAccount lookup; must
+#                             never be provisioned here.
+# Optional (only for `web_context_verified.v2`; both-or-neither, same
+# fail-closed convention the public API Worker's own route composition
+# already enforces):
+#   MODAL_WEBCTX_ENDPOINT_URL, MODAL_WEBCTX_PROXY_KEY,
+#   MODAL_WEBCTX_PROXY_SECRET
+# Optional, non-secret (chain-receipt reconciliation only; absent falls
+# back to viem's built-in default Base RPC, identical to the public API
+# Worker's own behavior):
+#   BASE_RPC_URL, BASE_SEPOLIA_RPC_URL
+
+# The Workflow definition itself -- SELF-HOSTED on this script (no
+# `script_name`: the class this `class_name` names is exported by THIS
+# script's own `main`, per `wrangler.paid-continuation-runtime.toml`'s
+# `main` above). This is the block a future, explicitly authorized
+# `wrangler deploy --config wrangler.paid-continuation-runtime.toml` reads
+# to register/update the EXISTING `siteborne-paid-continuation` Workflow
+# resource's `script_name`/`class_name`/compiled DAG (H2BF4 §"Workflow
+# resource reuse analysis" -- reuse eligibility is UNPROVEN pending a real
+# H2BF5 deploy+readback, not assumed here). `binding` is a required field
+# of Wrangler's `[[workflows]]` schema even though this script's own inert
+# fetch handler never reads it -- only a CALLING script's `env` binding of
+# the same name is ever actually used (`env.PAID_CONTINUATION_WORKFLOW
+# .create()`/`.get()`, from the public API Worker after H2BF5's cutover).
+# No `schedules` -- this Workflow is never cron-triggered.
+[[workflows]]
+name = "siteborne-paid-continuation"
+binding = "PAID_CONTINUATION_WORKFLOW"
+class_name = "PaidContinuationWorkflow"
+
+[observability]
+enabled = true

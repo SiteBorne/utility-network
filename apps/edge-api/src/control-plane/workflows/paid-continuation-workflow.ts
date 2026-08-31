@@ -66,6 +66,47 @@ import type { Env } from '../config/env';
 import { buildProductionPaidContinuationWorkflowDependencies } from './production-dependencies';
 
 // ---------------------------------------------------------------------
+// SUN-1221E6R-H2BF4 — minimum-privilege host env type.
+//
+// `PaidContinuationWorkflow.run()`'s ONLY access to the ambient platform
+// is `this.env`, resolved (per Cloudflare's Workflow/Durable Object RPC
+// entrypoint model) against whichever Worker SCRIPT actually exports this
+// class -- after H2BF4's dedicated-host split, that is
+// `workflow-host-entrypoint.ts` / `wrangler.paid-continuation-runtime.toml`,
+// never the public API Worker's `index.ts`/`wrangler.toml` (H2BF4 design
+// doc §Host Env Dependency Trace). The public `Env` interface
+// (`../config/env.ts`) describes the PUBLIC API WORKER's full binding
+// surface -- ARTIFACTS/JOBS/EVENTS/CATALOG/AI/BROWSER, every route-family
+// flag, every credential not this Workflow's concern (VOYAGE_API_KEY,
+// MODAL_TOKEN_ID/SECRET, NVM_*, AGENT_CARD_SIGNING_*, SENTRY_DSN, ...).
+// None of that belongs on the dedicated Workflow-host script, which exists
+// only to run this one class. `PaidContinuationWorkflowHostEnv` is the
+// exact, narrow `Pick<Env, ...>` this file's own dependency trace proves
+// `buildProductionPaidContinuationWorkflowDependencies` reads and nothing
+// more (see that function's body in `production-dependencies.ts` -- every
+// field below is dereferenced there at least once; none of the omitted
+// `Env` fields are referenced anywhere in this module or that one).
+export type PaidContinuationWorkflowHostEnv = Pick<
+  Env,
+  | 'DB'
+  | 'PAYMENT_CONTINUATION_ENCRYPTION_KEY'
+  | 'PAID_RECEIPT_SIGNING_PRIVATE_KEY'
+  | 'PAID_RECEIPT_SIGNING_KEY_ID'
+  | 'SELLER_WALLET_ADDRESS'
+  | 'CDP_API_KEY_ID'
+  | 'CDP_API_KEY_SECRET'
+  | 'PAYMENT_ENVIRONMENT'
+  | 'PRODUCTION_ENABLED'
+  | 'HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP'
+  | 'PRODUCTION_CDP_CREDENTIALS_APPROVED'
+  | 'MODAL_WEBCTX_ENDPOINT_URL'
+  | 'MODAL_WEBCTX_PROXY_KEY'
+  | 'MODAL_WEBCTX_PROXY_SECRET'
+  | 'BASE_RPC_URL'
+  | 'BASE_SEPOLIA_RPC_URL'
+>;
+
+// ---------------------------------------------------------------------
 // Structural WorkflowStep/WorkflowEvent typing
 // ---------------------------------------------------------------------
 
@@ -647,7 +688,10 @@ export async function runPaidContinuationWorkflow(
 // construction, the real `CdpPaymentEvidenceProvider`, the real
 // chain-receipt checker) is H2AWI-3/4 scope, not this checkpoint's.
 // ---------------------------------------------------------------------
-export class PaidContinuationWorkflow extends WorkflowEntrypoint<Env, WorkflowContinuationInput> {
+export class PaidContinuationWorkflow extends WorkflowEntrypoint<
+  PaidContinuationWorkflowHostEnv,
+  WorkflowContinuationInput
+> {
   /**
    * SUN-1221E6R-H2BF1 — real production wiring. Deferred since H2AWI-2
    * (this class was a hard-coded throwing stub straight through

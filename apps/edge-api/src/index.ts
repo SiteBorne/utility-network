@@ -28,15 +28,25 @@ import { productionServiceExecutorUnavailable } from './control-plane/routes/pro
 import { verifyAgentOutputV2CdpProductionRoute } from './control-plane/routes/production-verify-v2-cdp-route';
 import { webContextVerifiedV2CdpProductionRoute } from './control-plane/routes/production-web-context-v2-cdp-route';
 import type { Env } from './control-plane/config/env';
-import { PaidContinuationWorkflow } from './control-plane/workflows/paid-continuation-workflow';
 
 export type { ControlPlaneConfig };
 
-// SUN-1221E6R-H2AWI-4R -- a `[[workflows]]` binding's `class_name` must be
-// an export of the Worker's `main` entrypoint module (this file). The
-// class itself is fully implemented, tested, and unchanged since H2AWI-2
-// (`e7eb0fb`); this is wiring only, no behavior change to `app` below.
-export { PaidContinuationWorkflow };
+// SUN-1221E6R-H2BF4 -- this Worker no longer owns or exports
+// `PaidContinuationWorkflow`. H2AWI-4R's own same-script export (a
+// `[[workflows]]` binding's `class_name` had to be an export of whichever
+// script owned the binding) is exactly the topology H2BF3's forensics
+// found structurally incapable of ever producing a compiled Workflow DAG
+// through this Worker's `versions upload` / `versions deploy` / `triggers
+// deploy` release pipeline (see
+// docs/reports/SUN-1221E6R-H2BF3-workflow-version-id-graph-forensics.md
+// §12/§19). The class now lives EXCLUSIVELY in the dedicated Workflow-host
+// script (`apps/edge-api/src/workflow-host-entrypoint.ts`,
+// `wrangler.paid-continuation-runtime.toml`); this Worker's own
+// `wrangler.toml` `[[workflows]]` block now binds to it cross-script via
+// `script_name`, needing no local class export at all (see
+// docs/design/SUN-1221E6R-H2BF4-dedicated-workflow-host-architecture.md
+// §"Remove ambiguous same-script ownership" for the full reasoning against
+// re-adding a duplicate export here).
 
 const app = new Hono<{ Bindings: Env }>();
 

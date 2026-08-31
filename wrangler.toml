@@ -174,20 +174,46 @@ producers = [
 ]
 
 # SUN-1221E6R-H2AWI-4R/4P -- durable paid-continuation orchestrator (H2AW
-# design, commit 21d11ab). `class_name` must be exported from `main`
-# (`apps/edge-api/src/index.ts` re-exports it for exactly this reason).
-# The Workflow resource is a *trigger*-class resource (like routes/cron),
-# registered via `PUT /accounts/{id}/workflows/{name}` -- but that call is
-# only issued by `wrangler triggers deploy`, NOT by `versions upload` or
-# `versions deploy` (confirmed by reading wrangler's own source, and by a
-# real `workflow.not_found` after deploying a version with this binding
-# but before running `triggers deploy`). Run `wrangler triggers deploy`
-# once after any change to this block, in addition to a normal version
-# upload/deploy.
+# design, commit 21d11ab). The Workflow resource is a *trigger*-class
+# resource (like routes/cron), registered via
+# `PUT /accounts/{id}/workflows/{name}` -- but that call is only issued by
+# `wrangler triggers deploy`, NOT by `versions upload` or `versions
+# deploy` (confirmed by reading wrangler's own source, and by a real
+# `workflow.not_found` after deploying a version with this binding but
+# before running `triggers deploy`).
+#
+# SUN-1221E6R-H2BF4 -- H2BF3's forensics proved this same-script topology
+# (this Worker's own `versions upload`/`versions deploy`/`triggers deploy`
+# release pipeline, `class_name` exported from this Worker's own `main`)
+# structurally never produces a compiled Workflow DAG: both Workflow
+# Versions this project ever created this way show `has_dag: false`,
+# `graph: null`, regardless of the exported class's source content (see
+# docs/reports/SUN-1221E6R-H2BF3-workflow-version-id-graph-forensics.md).
+# Cloudflare's own documentation identifies plain `wrangler deploy` (a
+# single-version, 100%-traffic command, incompatible with this Worker's
+# 0%-candidate qualification governance) as the only documented path that
+# compiles a Workflow DAG. `script_name` below points this binding at a
+# SEPARATE, dedicated Workflow-host Worker
+# (`siteborne-paid-continuation-runtime` --
+# `apps/edge-api/src/workflow-host-entrypoint.ts` /
+# `wrangler.paid-continuation-runtime.toml`) that CAN be deployed with a
+# plain `wrangler deploy` of its own without ever touching this Worker's
+# 100%/0% traffic split, because it is a genuinely different Worker
+# script. `class_name` no longer needs to be exported from this Worker's
+# own `main` (`apps/edge-api/src/index.ts`) -- see
+# docs/design/SUN-1221E6R-H2BF4-dedicated-workflow-host-architecture.md.
+# Run `wrangler triggers deploy` once after any change to this block, in
+# addition to a normal version upload/deploy, exactly as before.
+#
+# NOT YET DEPLOYED as of this commit -- see H2BF4's evidence report for
+# the exact gated H2BF5 ordering (dedicated host must be independently
+# qualified on real Cloudflare BEFORE this Worker's own candidate is
+# updated to point at it).
 [[workflows]]
 name = "siteborne-paid-continuation"
 binding = "PAID_CONTINUATION_WORKFLOW"
 class_name = "PaidContinuationWorkflow"
+script_name = "siteborne-paid-continuation-runtime"
 
 [ai]
 binding = "AI"

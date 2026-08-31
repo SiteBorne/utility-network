@@ -25,7 +25,6 @@
  * or CDP/facilitator wiring — it only adapts already-real pieces to the
  * narrow port shapes `PaidContinuationWorkflowDependencies` declares.
  */
-import type { Env } from '../config/env';
 import { buildWebContextV2CdpProductionRouteConfig } from '../production/web-context-v2-cdp-composition';
 import { buildVerifyAgentOutputV2CdpProductionRouteConfig } from '../production/verify-agent-output-v2-cdp-composition';
 import { importContinuationEnvelopeKey } from '../continuation/envelope';
@@ -39,6 +38,7 @@ import {
 } from '../continuation/idempotency-keys';
 import type {
   PaidContinuationWorkflowDependencies,
+  PaidContinuationWorkflowHostEnv,
   JobRecord,
   JobStatePersistence,
   ResultReceiptPersistence,
@@ -180,9 +180,17 @@ class D1ResultReceiptPersistence implements ResultReceiptPersistence {
  * `unavailable` (the exact same MODAL_WEBCTX_ / CDP / receipt-signing
  * gates the real HTTP routes already enforce — reused, never
  * re-implemented).
+ *
+ * SUN-1221E6R-H2BF4 — `env` is deliberately typed as the minimal
+ * `PaidContinuationWorkflowHostEnv` (`Pick<Env, ...>`, defined in
+ * `paid-continuation-workflow.ts`), not the full public-API `Env`. Every
+ * field this function body dereferences below is a member of that Pick;
+ * TypeScript itself is the proof no other `Env` field is (or can silently
+ * become) a dependency of this function without a corresponding widening
+ * of that Pick.
  */
 export async function buildProductionPaidContinuationWorkflowDependencies(
-  env: Env,
+  env: PaidContinuationWorkflowHostEnv,
   service: string
 ): Promise<PaidContinuationWorkflowDependencies | ProductionDependenciesUnavailable> {
   if (!SUPPORTED_SERVICES.has(service)) {

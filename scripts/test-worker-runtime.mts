@@ -1784,17 +1784,27 @@ async function runBundleIsolationCheck() {
     // `index.ts`'s import graph for the first time. Before this
     // checkpoint, the stub referenced neither function, so esbuild
     // tree-shook both out of the bundle entirely (the previous, correct
-    // "not yet wired" absence proof). Continuing to assert their absence
-    // now would mean H2BF1 failed to wire anything real -- the exact
-    // defect this checkpoint exists to close (see
-    // docs/reports/SUN-1221E6R-H2B-real-durable-workflow-payment-
-    // qualification.md and
-    // docs/reports/SUN-1221E6R-H2BF1-workflow-entrypoint-version-graph-
-    // reconciliation.md for the full incident).
+    // "not yet wired" absence proof). H2BF1 flipped this to "must be
+    // present" because at that point `PaidContinuationWorkflow` was still
+    // exported from THIS Worker's own `index.ts` (same-script topology).
+    //
+    // SUN-1221E6R-H2BF4 flips this gate's DIRECTION a third time,
+    // deliberately, for the opposite reason: `index.ts` no longer exports
+    // `PaidContinuationWorkflow` at all -- the class now lives exclusively
+    // in the dedicated Workflow-host script
+    // (`workflow-host-entrypoint.ts` / `wrangler.paid-continuation-
+    // runtime.toml`, see `runWorkflowHostBundleIsolationCheck` below,
+    // which asserts these SAME two strings ARE present in THAT bundle
+    // instead). Continuing to assert their presence HERE would mean the
+    // H2BF4 split failed to actually separate the two runtimes -- exactly
+    // the defect this checkpoint exists to prove is NOT the case (see
+    // docs/design/SUN-1221E6R-H2BF4-dedicated-workflow-host-architecture.md
+    // and docs/reports/SUN-1221E6R-H2BF4-dedicated-workflow-host-local-
+    // qualification.md).
     const reachableContinuationMarkers = ['siteborne-wf-', 'paymentIdentifier must be a non-empty string'].filter(
       (marker) => bundle.includes(marker)
     );
-    const reachableWorkflowRunMarkers = [
+    const workflowRunOnlyMarkers = [
       'Continuation envelope decryption failed',
       'Continuation envelope associated data does not match',
     ].filter((marker) => bundle.includes(marker));
@@ -1804,9 +1814,20 @@ async function runBundleIsolationCheck() {
       `markers=${reachableContinuationMarkers.join(',') || 'none'}`
     );
     record(
-      'bundle reachability (SUN-1221E6R-H2BF1): real wrangler.toml dry-run bundle DOES contain PaidContinuationWorkflow.run()-only markers -- proof run() really calls the real orchestration/envelope-open path, not the old dead-end stub',
-      reachableWorkflowRunMarkers.length === 2,
-      `markers=${reachableWorkflowRunMarkers.join(',') || 'none'}`
+      'bundle isolation (SUN-1221E6R-H2BF4): real wrangler.toml (public API Worker) dry-run bundle does NOT contain PaidContinuationWorkflow.run()-only markers -- proof the Workflow class/orchestration/envelope-open path moved OUT to the dedicated host script, not merely duplicated',
+      workflowRunOnlyMarkers.length === 0,
+      `markers=${workflowRunOnlyMarkers.join(',') || 'none'}`
+    );
+    // esbuild lowers `export class X extends Y` to `var X = class extends
+    // Y`, never a literal `class X` token -- this marker matches esbuild's
+    // actual emitted form (confirmed by direct inspection of both bundles
+    // this checkpoint), not the TypeScript source syntax.
+    const containsWorkflowClassBody = bundle.includes('PaidContinuationWorkflow = class extends WorkflowEntrypoint');
+    record(
+      'bundle isolation (SUN-1221E6R-H2BF4): real wrangler.toml (public API Worker) dry-run bundle does NOT contain the PaidContinuationWorkflow class body itself',
+      !containsWorkflowClassBody &&
+        !bundle.includes('buildProductionPaidContinuationWorkflowDependencies'),
+      `containsClass=${containsWorkflowClassBody} containsDepsBuilder=${bundle.includes('buildProductionPaidContinuationWorkflowDependencies')}`
     );
     // SUN-1216 PRE-UPLOAD RESIDUAL ADJUDICATION. The literal string
     // "zero fixture markers" is intentionally NOT the gate below --
@@ -1931,6 +1952,134 @@ async function runBundleIsolationCheck() {
   }
 }
 
+/** Like `runCommand`, but resolves with captured stdout+stderr instead of
+ * discarding it on success -- needed below to inspect `wrangler deploy
+ * --dry-run`'s own binding-table text (the ONLY place the cross-script
+ * `(defined in <script>)` annotation is emitted; it is not part of the
+ * bundled JS output `readFileSync`'d elsewhere in this file). Still
+ * rejects on non-zero exit, same as `runCommand`. */
+function runCommandCapture(cmd: string, args: string[], cwd: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(cmd, args, { cwd, stdio: 'pipe' });
+    let output = '';
+    child.stdout?.on('data', (d) => (output += String(d)));
+    child.stderr?.on('data', (d) => (output += String(d)));
+    child.on('error', (err) => reject(new Error(`failed to spawn ${cmd}: ${String(err)}`)));
+    child.on('exit', (code) => {
+      if (code === 0) resolve(output);
+      else reject(new Error(`${cmd} ${args.join(' ')} exited ${code}\n${output.slice(-2000)}`));
+    });
+  });
+}
+
+// ---------------------------------------------------------------------
+// SUN-1221E6R-H2BF4 §27/28 -- dedicated Workflow-host bundle proof.
+//
+// Two complementary checks:
+//   (a) the PUBLIC API Worker's own `wrangler deploy --dry-run` binding
+//       table text confirms `env.PAID_CONTINUATION_WORKFLOW` now resolves
+//       cross-script, to `siteborne-paid-continuation-runtime` (proves
+//       the `wrangler.toml` `[[workflows]]` `script_name` change is real,
+//       not merely present as unparsed text).
+//   (b) the DEDICATED HOST's own `wrangler deploy --dry-run --config
+//       wrangler.paid-continuation-runtime.toml` bundle contains the real
+//       `PaidContinuationWorkflow` class, real orchestration, real
+//       production-dependency construction, and real D1
+//       repositories/composition modules -- and excludes every public
+//       HTTP surface (Hono app construction, MCP/A2A routes, the public
+//       discovery/catalog handlers) and every test-only/fixture module
+//       this repository has ever introduced.
+// ---------------------------------------------------------------------
+async function runWorkflowHostBundleIsolationCheck() {
+  // (a) cross-script binding resolution, read from the PUBLIC API
+  // Worker's own dry-run stdout (not its bundled JS -- the binding table
+  // is CLI output, never part of the JS bundle itself).
+  try {
+    const apiDryRunOutput = await runCommandCapture(WRANGLER_BIN, ['deploy', '--dry-run'], REPO_ROOT);
+    const bindingLineMatch = apiDryRunOutput
+      .split('\n')
+      .find((line) => line.includes('PAID_CONTINUATION_WORKFLOW'));
+    const resolvesCrossScript = Boolean(
+      bindingLineMatch &&
+        bindingLineMatch.includes('PaidContinuationWorkflow') &&
+        bindingLineMatch.includes('siteborne-paid-continuation-runtime')
+    );
+    record(
+      'cross-script binding (SUN-1221E6R-H2BF4): public API Worker wrangler deploy --dry-run reports env.PAID_CONTINUATION_WORKFLOW as "PaidContinuationWorkflow (defined in siteborne-paid-continuation-runtime)"',
+      resolvesCrossScript,
+      `bindingLine=${JSON.stringify(bindingLineMatch ?? null)}`
+    );
+  } catch (err) {
+    record(
+      'cross-script binding (SUN-1221E6R-H2BF4): public API Worker wrangler deploy --dry-run',
+      false,
+      String(err)
+    );
+  }
+
+  // (b) dedicated host bundle content.
+  const outDir = mkdtempSync(join(tmpdir(), 'siteborne-workflow-host-bundle-audit-'));
+  try {
+    await runCommand(
+      WRANGLER_BIN,
+      ['deploy', '--dry-run', '--config', 'wrangler.paid-continuation-runtime.toml', '--outdir', outDir],
+      REPO_ROOT
+    );
+    const hostBundlePath = join(outDir, 'workflow-host-entrypoint.js');
+    const bundle = readFileSync(hostBundlePath, 'utf-8');
+
+    const requiredPresentMarkers = {
+      // esbuild lowers `export class X extends Y` to `var X = class extends
+      // Y` -- matches the actual emitted form, not TS source syntax.
+      WORKFLOW_CLASS: bundle.includes('PaidContinuationWorkflow = class extends WorkflowEntrypoint'),
+      REAL_ORCHESTRATION: bundle.includes('async function runPaidContinuationWorkflow'),
+      PRODUCTION_DEPENDENCY_BUILDER: bundle.includes(
+        'async function buildProductionPaidContinuationWorkflowDependencies'
+      ),
+      ENVELOPE_OPEN: bundle.includes('openContinuationEnvelope') || bundle.includes('Continuation envelope decryption failed'),
+      D1_JOBS_REPOSITORY: bundle.includes('D1JobsRepository'),
+      D1_PAYMENT_ATTEMPT_REPOSITORY: bundle.includes('D1PaymentAttemptRepository'),
+      X402_RESULT_REPOSITORY: bundle.includes('X402ServiceResultRepository'),
+      CHAIN_RECEIPT_CHECKER: bundle.includes('buildProductionCdpChainReceiptChecker'),
+      WEB_CONTEXT_COMPOSITION: bundle.includes('buildWebContextV2CdpProductionRouteConfig'),
+      VERIFY_COMPOSITION: bundle.includes('buildVerifyAgentOutputV2CdpProductionRouteConfig'),
+    };
+    record(
+      'WORKFLOW_HOST_BUNDLE_ISOLATION (inclusion half, SUN-1221E6R-H2BF4 §27): dedicated host dry-run bundle DOES contain the real Workflow class, real run()-delegation, real production-dependency construction, and every real repository/composition it needs',
+      Object.values(requiredPresentMarkers).every(Boolean),
+      Object.entries(requiredPresentMarkers)
+        .map(([k, v]) => `${k}=${v ? 'YES' : 'NO'}`)
+        .join(' ')
+    );
+
+    const forbiddenPresentMarkers = {
+      HONO_APP_CONSTRUCTION: bundle.includes('new Hono'),
+      MCP_ROUTE: bundle.includes('mcpRoute'),
+      A2A_ROUTE: bundle.includes('a2aRoute'),
+      CATALOG_ROUTE: bundle.includes('catalogRoute'),
+      HEALTH_ROUTE: bundle.includes('healthRoute'),
+      READINESS_ROUTE: bundle.includes('readinessRoute'),
+      OPENAPI_ROUTE: bundle.includes('openapiRoute'),
+      WORKER_RUNTIME_TEST_ENTRYPOINT: bundle.includes('worker-runtime-test-entrypoint'),
+      TEST_ENTRYPOINT_MARKER: bundle.includes('SUN-1201-WORKER-RUNTIME-TEST-ENTRYPOINT-b7f2c4'),
+      FIXTURE_PAYMENT_PROVIDER_IMPORT: /\bimport\b[^\n]*FixturePaymentEvidenceProvider/.test(bundle),
+      NEVERMINED_TEST_CLIENTS: bundle.includes('successNeverminedClient') || bundle.includes('denyingNeverminedClient'),
+      WEB_CONTEXT_HTTP_ROUTE: bundle.includes('webContextVerifiedV2CdpProductionRoute'),
+      VERIFY_HTTP_ROUTE: bundle.includes('verifyAgentOutputV2CdpProductionRoute'),
+    };
+    const forbiddenFound = Object.entries(forbiddenPresentMarkers).filter(([, v]) => v);
+    record(
+      'WORKFLOW_HOST_BUNDLE_ISOLATION (exclusion half, SUN-1221E6R-H2BF4 §27): dedicated host dry-run bundle excludes the public SITEBORNE HTTP router, MCP/A2A handlers, public discovery handlers, both real production HTTP route modules, and every test-only/fixture module',
+      forbiddenFound.length === 0,
+      forbiddenFound.length === 0
+        ? 'none found'
+        : `found=${forbiddenFound.map(([k]) => k).join(',')}`
+    );
+  } finally {
+    rmSync(outDir, { recursive: true, force: true });
+  }
+}
+
 async function main() {
   let exitCode = 0;
   try {
@@ -1960,6 +2109,7 @@ async function main() {
       );
     }
     await runBundleIsolationCheck();
+    await runWorkflowHostBundleIsolationCheck();
   } catch (err) {
     record('harness execution', false, String(err));
   }
