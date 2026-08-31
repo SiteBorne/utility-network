@@ -762,6 +762,13 @@ describe.skipIf(!process.env[RUN_LOCAL_WEB_CONTEXT_FIRST_PAID_E2E_ENV_VAR])(
       // eslint-disable-next-line no-console -- the one authorized, sanitized output surface.
       console.log(JSON.stringify(result));
       expect(result.stage).toBeDefined();
-    });
+    }, 120_000);
+    // ^ SUN-1221E6R-H2B -- the H1 incident (job de147124) was caused by
+    // this test running under Vitest's 5000ms default timeout while the
+    // real CDP-signing + HTTP round trip took longer, killing the client
+    // process mid-flight with an ambiguous (non-)result. Never rely on
+    // Vitest's default here: the real path is CDP signing + a synchronous
+    // HTTP wait for a Cloudflare Workflow (executor, up to Modal's own 35s
+    // hard timeout, + PCC + settlement) to reach a terminal state.
   }
 );
