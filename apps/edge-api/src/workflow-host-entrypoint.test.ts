@@ -36,7 +36,13 @@ const SOURCE_PATH = fileURLToPath(new URL('./workflow-host-entrypoint.ts', impor
 function fakeEvent(): PaidContinuationWorkflowEvent {
   return {
     payload: {
-      envelope: { v: 1, key_id: 'v1', iv_b64: 'AAAAAAAAAAAAAAAA', ciphertext_b64: 'AAAA', aad_fingerprint: 'x' },
+      envelope: {
+        v: 1,
+        key_id: 'v1',
+        iv_b64: 'AAAAAAAAAAAAAAAA',
+        ciphertext_b64: 'AAAA',
+        aad_fingerprint: 'x',
+      },
       metadata: {
         job_id: 'job-h2bf4-1',
         payment_identifier: 'pay-h2bf4-1',
@@ -56,6 +62,7 @@ function fakeDeps(): PaidContinuationWorkflowDependencies {
   return {
     envelopeKey: {} as CryptoKey,
     clock: () => 1_000_000,
+    evidenceMode: 'production',
     executor: vi.fn() as never,
     validatePcc: vi.fn() as never,
     settlement: { repository: {} as never, evidenceProvider: {} as never },
@@ -81,15 +88,22 @@ describe('SUN-1221E6R-H2BF4 dedicated Workflow-host entrypoint', () => {
     buildDependenciesMock.mockResolvedValue(deps);
     const fakeEnv = { DB: {} } as unknown as Env;
     const workflow = new PaidContinuationWorkflow({} as never, fakeEnv);
-    const doSpy = vi.fn(async (_name: string, _config: unknown, cb: () => Promise<unknown>) => cb());
+    const doSpy = vi.fn(async (_name: string, _config: unknown, cb: () => Promise<unknown>) =>
+      cb()
+    );
 
     // The old deferred-wiring stub synchronously threw before ever
     // returning a `WorkflowContinuationResult` at all -- the mere fact
     // this resolves (rather than rejects) and reaches `step.do(...)` is
     // itself the proof real orchestration is wired through this entrypoint.
-    const result = await workflow.run(fakeEvent(), { do: doSpy } as unknown as PaidContinuationWorkflowStep);
+    const result = await workflow.run(fakeEvent(), {
+      do: doSpy,
+    } as unknown as PaidContinuationWorkflowStep);
 
-    expect(buildDependenciesMock).toHaveBeenCalledExactlyOnceWith(fakeEnv, 'web_context_verified.v2');
+    expect(buildDependenciesMock).toHaveBeenCalledExactlyOnceWith(
+      fakeEnv,
+      'web_context_verified.v2'
+    );
     expect(doSpy).toHaveBeenCalled();
     expect(doSpy.mock.calls[0][0]).toBe('open-envelope');
     expect(result.job_id).toBe('job-h2bf4-1');
@@ -102,7 +116,9 @@ describe('SUN-1221E6R-H2BF4 dedicated Workflow-host entrypoint', () => {
     expect(typeof hostModule.default.fetch).toBe('function');
     const response = await hostModule.default.fetch(new Request('https://example.com/anything'));
     expect(response.status).toBe(404);
-    const response2 = await hostModule.default.fetch(new Request('https://example.com/v2/web/context'));
+    const response2 = await hostModule.default.fetch(
+      new Request('https://example.com/v2/web/context')
+    );
     expect(response2.status).toBe(404);
   });
 

@@ -29,6 +29,7 @@
 import type { D1Database } from '@cloudflare/workers-types';
 import type {
   Network,
+  PaymentEvidenceMode,
   PaymentEvidenceProvider,
   PaymentServiceLink,
   SettleResponse,
@@ -64,6 +65,7 @@ export interface InProcessWorkflowBindingOptions {
   readonly evidenceProvider: Pick<PaymentEvidenceProvider, 'settle'>;
   readonly envelopeKey: CryptoKey;
   readonly network: Network;
+  readonly evidenceMode?: PaymentEvidenceMode;
   readonly rail?: 'cdp' | 'nevermined';
   readonly neverminedAgentId?: string;
   readonly neverminedPlanId?: string;
@@ -142,7 +144,11 @@ export function createInProcessWorkflowBinding(
         async getJob(jobId): Promise<JobRecord | null> {
           const result = await jobsRepo.getById(jobId);
           if (!result.ok || !result.value) return null;
-          return { id: result.value.id, current_state: result.value.current_state, attempt_number: 1 };
+          return {
+            id: result.value.id,
+            current_state: result.value.current_state,
+            attempt_number: 1,
+          };
         },
         async appendStateEvent(event) {
           await stateEventsRepo.create(event);
@@ -155,6 +161,7 @@ export function createInProcessWorkflowBinding(
       const deps: PaidContinuationWorkflowDependencies = {
         envelopeKey: options.envelopeKey,
         clock: options.clock ?? (() => Math.floor(Date.now() / 1000)),
+        evidenceMode: options.evidenceMode ?? 'fixture',
         executor: recordingExecutor,
         validatePcc: (outcome) => ({ valid: true, pcc: outcome.result.verification }),
         settlement: {
@@ -246,7 +253,8 @@ export function createInProcessWorkflowBinding(
                     }
                   : {
                       success: true,
-                      transaction: capturedSettlement.transactionReference ?? 'synthetic-tx:unknown',
+                      transaction:
+                        capturedSettlement.transactionReference ?? 'synthetic-tx:unknown',
                       network: options.network,
                       ...(capturedSettlement.payer ? { payer: capturedSettlement.payer } : {}),
                       amount: metadata.amount_atomic,

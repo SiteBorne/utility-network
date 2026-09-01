@@ -57,10 +57,7 @@ export interface ProductionDependenciesUnavailable {
  * this Workflow was never wired for) — fails closed, never a silent
  * default to one service's dependencies for another's payload.
  */
-const SUPPORTED_SERVICES = new Set([
-  'web_context_verified.v2',
-  'verify_agent_output.v2',
-]);
+const SUPPORTED_SERVICES = new Set(['web_context_verified.v2', 'verify_agent_output.v2']);
 
 /**
  * The one real PCC gate this codebase has ever had: `@siteborne/
@@ -109,14 +106,19 @@ class D1JobStatePersistence implements JobStatePersistence {
     };
   }
 
-  async appendStateEvent(event: Parameters<JobStatePersistence['appendStateEvent']>[0]): Promise<void> {
+  async appendStateEvent(
+    event: Parameters<JobStatePersistence['appendStateEvent']>[0]
+  ): Promise<void> {
     const result = await this.stateEvents.create(event);
     if (!result.ok) {
       throw new Error(`D1JobStatePersistence.appendStateEvent failed: ${result.error.code}`);
     }
   }
 
-  async setCurrentState(jobId: string, state: Parameters<JobStatePersistence['setCurrentState']>[1]): Promise<void> {
+  async setCurrentState(
+    jobId: string,
+    state: Parameters<JobStatePersistence['setCurrentState']>[1]
+  ): Promise<void> {
     const result = await this.jobs.updateState(jobId, state);
     if (!result.ok) {
       throw new Error(`D1JobStatePersistence.setCurrentState failed: ${result.error.code}`);
@@ -266,7 +268,9 @@ export async function buildProductionPaidContinuationWorkflowDependencies(
     new D1JobsRepository(env.DB),
     new D1StateEventsRepository(env.DB)
   );
-  const resultReceiptPersistence = new D1ResultReceiptPersistence(new X402ServiceResultRepository(env.DB));
+  const resultReceiptPersistence = new D1ResultReceiptPersistence(
+    new X402ServiceResultRepository(env.DB)
+  );
   const chainReceiptChecker = buildProductionCdpChainReceiptChecker({
     productionRpcUrl: env.BASE_RPC_URL,
     preproductionRpcUrl: env.BASE_SEPOLIA_RPC_URL,
@@ -275,6 +279,7 @@ export async function buildProductionPaidContinuationWorkflowDependencies(
   return {
     envelopeKey,
     clock: () => Math.floor(Date.now() / 1000),
+    evidenceMode: 'production',
     executor: routeConfig.executor,
     validatePcc: validateExecutorPcc,
     settlement: {

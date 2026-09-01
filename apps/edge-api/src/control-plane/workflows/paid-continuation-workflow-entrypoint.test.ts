@@ -39,7 +39,13 @@ vi.mock('./production-dependencies', () => ({
 function fakeEvent(service = 'web_context_verified.v2'): PaidContinuationWorkflowEvent {
   return {
     payload: {
-      envelope: { v: 1, key_id: 'v1', iv_b64: 'AAAAAAAAAAAAAAAA', ciphertext_b64: 'AAAA', aad_fingerprint: 'x' },
+      envelope: {
+        v: 1,
+        key_id: 'v1',
+        iv_b64: 'AAAAAAAAAAAAAAAA',
+        ciphertext_b64: 'AAAA',
+        aad_fingerprint: 'x',
+      },
       metadata: {
         job_id: 'job-h2bf1-1',
         payment_identifier: 'pay-h2bf1-1',
@@ -63,6 +69,7 @@ function fakeDeps(): PaidContinuationWorkflowDependencies {
   return {
     envelopeKey: {} as CryptoKey,
     clock: () => 1_000_000,
+    evidenceMode: 'production',
     executor: vi.fn() as never,
     validatePcc: vi.fn() as never,
     settlement: { repository: {} as never, evidenceProvider: {} as never },
@@ -90,7 +97,10 @@ describe('SUN-1221E6R-H2BF1 PaidContinuationWorkflow.run() real entrypoint wirin
     // (`runPaidContinuationWorkflow`), not that decryption succeeds.
     const result: WorkflowContinuationResult = await workflow.run(event, fakeStep);
 
-    expect(buildDependenciesMock).toHaveBeenCalledExactlyOnceWith(fakeEnv, 'web_context_verified.v2');
+    expect(buildDependenciesMock).toHaveBeenCalledExactlyOnceWith(
+      fakeEnv,
+      'web_context_verified.v2'
+    );
     // A decrypt failure on garbage ciphertext also terminates as
     // `workflow_internal_error` (same status as a dependency-unavailable
     // short-circuit, different error_code) — the discriminator that
@@ -113,7 +123,9 @@ describe('SUN-1221E6R-H2BF1 PaidContinuationWorkflow.run() real entrypoint wirin
     // site -- not weakening `doSpy`'s own inferred type, which
     // `.mock.calls` below still reads normally -- is the narrow, test-only
     // fix (SUN-1222B typecheck remediation).
-    const doSpy = vi.fn(async (_name: string, _config: unknown, cb: () => Promise<unknown>) => cb());
+    const doSpy = vi.fn(async (_name: string, _config: unknown, cb: () => Promise<unknown>) =>
+      cb()
+    );
     const workflow = new PaidContinuationWorkflow({} as never, {} as Env);
 
     await workflow.run(fakeEvent(), { do: doSpy } as unknown as PaidContinuationWorkflowStep);
@@ -123,7 +135,10 @@ describe('SUN-1221E6R-H2BF1 PaidContinuationWorkflow.run() real entrypoint wirin
   });
 
   it('ACTUAL_CLASS_FAIL_CLOSED: an unsupported/unknown service never reaches step.do, never touches settlement, and THROWS (SUN-1221E6R-H2BF5-R1 — a resolved return here is recorded by the real Cloudflare Workflows platform as Completed/Success regardless of the application-level status field; see the real H2BF5 zero-step "Completed, Success=Yes" instance this closes)', async () => {
-    buildDependenciesMock.mockResolvedValue({ unavailable: true, reason: 'unsupported service: nope' });
+    buildDependenciesMock.mockResolvedValue({
+      unavailable: true,
+      reason: 'unsupported service: nope',
+    });
     const doSpy = vi.fn();
     const workflow = new PaidContinuationWorkflow({} as never, {} as Env);
 
@@ -153,7 +168,10 @@ describe('SUN-1221E6R-H2BF1 PaidContinuationWorkflow.run() real entrypoint wirin
 
     await workflow.run(fakeEvent('verify_agent_output.v2'), fakeStep);
 
-    expect(buildDependenciesMock).toHaveBeenCalledExactlyOnceWith(expect.anything(), 'verify_agent_output.v2');
+    expect(buildDependenciesMock).toHaveBeenCalledExactlyOnceWith(
+      expect.anything(),
+      'verify_agent_output.v2'
+    );
   });
 
   it('MUTATION_REAL_ORCHESTRATION_BYPASS: if run() returned without calling runPaidContinuationWorkflow, step.do would never be reached — this test fails if that regresses', async () => {

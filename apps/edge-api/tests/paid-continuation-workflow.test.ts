@@ -21,6 +21,7 @@ import {
   buildSuccessfulExecutorOutcome,
   buildTestDependencies,
   buildTestMetadata,
+  fakeSettleSuccess,
   fakeSettleRejected,
   sealTestInput,
   TEST_JOB_ID,
@@ -60,12 +61,18 @@ describe('paid-continuation-workflow — step graph (H2AWI-2a)', () => {
     const { step } = await runHappyPath();
 
     for (const call of step.calls) {
-      expect(call.config.retries, `step "${call.name}" must declare retries explicitly`).toBeDefined();
+      expect(
+        call.config.retries,
+        `step "${call.name}" must declare retries explicitly`
+      ).toBeDefined();
       expect(
         typeof call.config.retries?.limit,
         `step "${call.name}" retries.limit must be a number`
       ).toBe('number');
-      expect(call.config.timeout, `step "${call.name}" must declare a timeout explicitly`).toBeDefined();
+      expect(
+        call.config.timeout,
+        `step "${call.name}" must declare a timeout explicitly`
+      ).toBeDefined();
     }
   });
 
@@ -200,6 +207,27 @@ describe('paid-continuation-workflow — authorization expiry gate (H2AWI-2f)', 
     expect(deps.executor).not.toHaveBeenCalled();
     expect(deps.settle).not.toHaveBeenCalled();
   });
+
+  it('expires during executor/PCC work: rechecks immediately before a new settlement and never calls settle', async () => {
+    const metadata = buildTestMetadata({ valid_before_unix: 1000 });
+    let now = 999;
+    const executor = vi.fn(async () => {
+      now = 1000;
+      return buildSuccessfulExecutorOutcome();
+    });
+    const deps = await buildTestDependencies({
+      clock: () => now,
+      executor,
+    });
+    const input = await sealTestInput(metadata, { key: deps.envelopeKey });
+    const step = new FakeWorkflowStep();
+
+    const result = await runPaidContinuationWorkflow({ payload: input }, step, deps);
+
+    expect(result.status).toBe('authorization_expired');
+    expect(executor).toHaveBeenCalledTimes(1);
+    expect(deps.settle).not.toHaveBeenCalled();
+  });
 });
 
 describe('paid-continuation-workflow — settlement step (H2AWI-2d)', () => {
@@ -222,6 +250,25 @@ describe('paid-continuation-workflow — settlement step (H2AWI-2d)', () => {
     expect(result.status).toBe('settlement_rejected');
     expect(deps.settle).toHaveBeenCalledTimes(1);
     expect(step.calls.map((c) => c.name)).not.toContain('persist-result');
+  });
+
+  it('rejects successful-looking settlement evidence whose economic binding does not match the accepted context', async () => {
+    const metadata = buildTestMetadata();
+    const deps = await buildTestDependencies({
+      settleResponse: {
+        ...fakeSettleSuccess(),
+        payee: '0x000000000000000000000000000000000000bb',
+      },
+    });
+    const input = await sealTestInput(metadata, { key: deps.envelopeKey });
+    const step = new FakeWorkflowStep();
+
+    const result = await runPaidContinuationWorkflow({ payload: input }, step, deps);
+
+    expect(result.status).toBe('settlement_rejected');
+    expect(result.error_code).toBe('not_structurally_valid:payee_mismatch');
+    expect(deps.settlementRepository.recordSettledExternalCallCount).toBe(0);
+    expect(deps.resultReceiptPersistence.persistResultCallCount).toBe(0);
   });
 
   it('transport ambiguity (settle() throws, no tx ref ever known): resolves via reconciliation abstraction only, never retries settle()', async () => {
@@ -272,6 +319,30 @@ describe('paid-continuation-workflow — settlement step (H2AWI-2d)', () => {
     expect(result.settlement_transaction_reference).toBe('0xpending');
   });
 
+  it('expired authorization with a pre-existing pending transaction still reconciles and never resubmits settlement', async () => {
+    const metadata = buildTestMetadata({ valid_before_unix: 1000 });
+    const deps = await buildTestDependencies({ clock: () => 1001 });
+    deps.settlementRepository.seed(metadata.payment_identifier, {
+      lifecycleStage: 'settlement_pending',
+      settlementTransactionReference: '0xexpired-but-pending',
+    });
+    deps.reconciliationChecker.mockResolvedValue('SETTLED');
+    const input = await sealTestInput(metadata, { key: deps.envelopeKey });
+
+    // Simulate Workflow step memoization: the entry expiry check passed
+    // before executor work, then the authorization expired before this
+    // resumed settlement step examined durable state.
+    const step = new FakeWorkflowStep(
+      new Map([['check-authorization-expiry', { expired: false }]])
+    );
+    const result = await runPaidContinuationWorkflow({ payload: input }, step, deps);
+
+    expect(result.status).toBe('settled');
+    expect(result.settlement_transaction_reference).toBe('0xexpired-but-pending');
+    expect(deps.settle).not.toHaveBeenCalled();
+    expect(deps.reconciliationChecker).toHaveBeenCalledTimes(1);
+  });
+
   it('never calls settle() a second time within one run under any injected failure sequence (idempotency mutation guard)', async () => {
     const metadata = buildTestMetadata();
     const deps = await buildTestDependencies();
@@ -313,7 +384,9 @@ describe('paid-continuation-workflow — result/receipt persistence + terminal t
       settlementTransactionReference: '0xsettledhash',
     });
 
-    await expect(runPaidContinuationWorkflow({ payload: input }, step, deps)).resolves.toMatchObject({
+    await expect(
+      runPaidContinuationWorkflow({ payload: input }, step, deps)
+    ).resolves.toMatchObject({
       status: 'settled',
     });
     expect(deps.jobPersistence.events.length).toBe(eventsAfterFirst); // no new terminal event

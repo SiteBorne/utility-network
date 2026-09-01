@@ -48,7 +48,9 @@ import type {
   ExternalVerificationEvidence,
   ExternalSettlementEvidence,
   PaymentLifecycleStage,
+  PaymentEvidenceMode,
 } from '@siteborne/protocol-x402';
+import { canAdvanceToSettled, hashPaymentObject } from '@siteborne/protocol-x402';
 import type {
   ContinuationEnvelopeMetadata,
   WorkflowContinuationInput,
@@ -119,7 +121,11 @@ export type PaidContinuationWorkflowStep = {
   do<T>(
     name: string,
     config: {
-      readonly retries?: { readonly limit: number; readonly delay?: unknown; readonly backoff?: string };
+      readonly retries?: {
+        readonly limit: number;
+        readonly delay?: unknown;
+        readonly backoff?: string;
+      };
       readonly timeout?: unknown;
     },
     callback: () => Promise<T>
@@ -194,7 +200,9 @@ export type PccValidationResult =
   | { readonly valid: true; readonly pcc: unknown }
   | { readonly valid: false; readonly reason: string };
 
-export type PccValidator = (outcome: ExecutorOutcome) => PccValidationResult | Promise<PccValidationResult>;
+export type PccValidator = (
+  outcome: ExecutorOutcome
+) => PccValidationResult | Promise<PccValidationResult>;
 
 /** The read-only on-chain checker's exact type from
  * `../evidence/chain-receipt-checker.ts`'s `buildCdpChainReceiptChecker`
@@ -257,6 +265,10 @@ export interface PaidContinuationWorkflowDependencies {
   /** Unix seconds. Injected so authorization-expiry boundary tests never
    * depend on real wall time. */
   readonly clock: () => number;
+  /** Trust policy applied to both verification and settlement evidence.
+   * Production dependency composition always supplies `production`; test
+   * fixtures explicitly supply `fixture`. */
+  readonly evidenceMode: PaymentEvidenceMode;
   readonly executor: ServiceExecutor;
   readonly validatePcc: PccValidator;
   readonly settlement: {
@@ -310,7 +322,12 @@ const STEP_CONFIG = {
 function terminal(
   status: WorkflowTerminalStatus,
   jobId: string,
-  extra?: Partial<Pick<WorkflowContinuationResult, 'receipt_id' | 'settlement_transaction_reference' | 'error_code'>>
+  extra?: Partial<
+    Pick<
+      WorkflowContinuationResult,
+      'receipt_id' | 'settlement_transaction_reference' | 'error_code'
+    >
+  >
 ): WorkflowContinuationResult {
   return { status, job_id: jobId, ...extra };
 }
@@ -345,7 +362,14 @@ async function transitionJobState(
     // is already correctly positioned further along; nothing to do.
     return;
   }
-  const event = createStateEvent(jobId, job.attempt_number, job.current_state, toState, reason, 'SYSTEM');
+  const event = createStateEvent(
+    jobId,
+    job.attempt_number,
+    job.current_state,
+    toState,
+    reason,
+    'SYSTEM'
+  );
   await persistence.appendStateEvent(event);
   await persistence.setCurrentState(jobId, toState);
 }
@@ -358,7 +382,10 @@ async function transitionJobState(
  * `createStateEvent` with an already-terminal `fromState` — removing that
  * `isTerminal()` guard is exactly the mutation
  * `paid-continuation-workflow.test.ts` proves is caught. */
-async function finalizeTerminalState(jobId: string, persistence: JobStatePersistence): Promise<void> {
+async function finalizeTerminalState(
+  jobId: string,
+  persistence: JobStatePersistence
+): Promise<void> {
   const job = await persistence.getJob(jobId);
   if (!job) return;
   if (isTerminal(job.current_state)) return;
@@ -381,6 +408,7 @@ async function finalizeTerminalState(jobId: string, persistence: JobStatePersist
 type SettleStepOutcome =
   | { readonly kind: 'confirmed'; readonly transactionReference?: string }
   | { readonly kind: 'rejected'; readonly reason: string }
+  | { readonly kind: 'authorization_expired' }
   | { readonly kind: 'ambiguous_unresolved' };
 
 const UNRESOLVED_LIFECYCLE_STAGES: readonly PaymentLifecycleStage[] = ['settlement_pending'];
@@ -417,7 +445,10 @@ async function resolveViaReconciliation(
     // direct-success and reconciliation-confirmed paths is safe under
     // resume/retry.
     await deps.settlement.repository.markConsumed(paymentIdentifier);
-    return { kind: 'confirmed', transactionReference: reconciliation.settlement_transaction_reference };
+    return {
+      kind: 'confirmed',
+      transactionReference: reconciliation.settlement_transaction_reference,
+    };
   }
   if (reconciliation.outcome === 'not_found') {
     await deps.settlement.repository.recordCdpSettlementOutcome(
@@ -452,6 +483,7 @@ async function resolveViaReconciliation(
  */
 async function runSettlementStep(
   paymentIdentifier: string,
+  validBeforeUnix: number,
   decrypted: DecryptedContinuationPayload,
   deps: PaidContinuationWorkflowDependencies
 ): Promise<SettleStepOutcome> {
@@ -469,10 +501,22 @@ async function runSettlementStep(
     // platform's own step memoization should make this unreachable in
     // practice (step 4 itself would already be memoized once it returns
     // 'confirmed'), but never re-calls settle() even here.
-    return { kind: 'confirmed', transactionReference: existing.settlementTransactionReference ?? undefined };
+    return {
+      kind: 'confirmed',
+      transactionReference: existing.settlementTransactionReference ?? undefined,
+    };
   }
   if (existing && existing.lifecycleStage === 'settlement_failed') {
     return { kind: 'rejected', reason: existing.settlementOutcomeKind ?? 'settlement_rejected' };
+  }
+
+  // Recheck immediately before claiming a NEW settlement. Executor/PCC
+  // work can outlive an authorization that was valid at Workflow entry.
+  // This deliberately follows all existing-state guards above: an
+  // already-transmitted settlement must still be reconciled after expiry,
+  // never hidden behind an expiry error and never submitted a second time.
+  if (deps.clock() >= validBeforeUnix) {
+    return { kind: 'authorization_expired' };
   }
 
   const pending = await repo.recordSettlementPending(paymentIdentifier, {
@@ -499,7 +543,15 @@ async function runSettlementStep(
     return resolveViaReconciliation(paymentIdentifier, deps);
   }
 
-  if (settlementEvidence.success) {
+  const acceptedVerificationEvidenceHash = await hashPaymentObject(decrypted.verificationEvidence);
+  const settlementGate = canAdvanceToSettled(
+    settlementEvidence,
+    decrypted.settlementContext,
+    deps.evidenceMode,
+    acceptedVerificationEvidenceHash
+  );
+
+  if (settlementGate.allowed) {
     await repo.recordSettledExternal(paymentIdentifier, settlementEvidence.transaction_reference);
     await repo.incrementCdpSuccessfulSettlementCount(paymentIdentifier);
     // SUN-1221E6R-H2AWI-3 fix: see the reconciliation-confirmed branch's
@@ -516,7 +568,13 @@ async function runSettlementStep(
     'explicit_rejection',
     settlementEvidence.transaction_reference
   );
-  return { kind: 'rejected', reason: settlementEvidence.reason ?? 'settlement_rejected' };
+  const gateReason = settlementGate.allowed
+    ? undefined
+    : `${settlementGate.reason}${settlementGate.detail ? `:${settlementGate.detail}` : ''}`;
+  return {
+    kind: 'rejected',
+    reason: gateReason ?? settlementEvidence.reason ?? 'settlement_rejected',
+  };
 }
 
 // ---------------------------------------------------------------------
@@ -577,7 +635,10 @@ export async function runPaidContinuationWorkflow(
   let executorOutcome: ExecutorOutcome;
   try {
     executorOutcome = await step.do('invoke-executor', STEP_CONFIG.INVOKE_EXECUTOR, async () => {
-      return deps.executor(decrypted.executorInput, { job_id: jobId, request_id: input.request_id });
+      return deps.executor(decrypted.executorInput, {
+        job_id: jobId,
+        request_id: input.request_id,
+      });
     });
   } catch (e) {
     await transitionJobState(jobId, 'QUARANTINED', 'EXECUTION_FAILED', deps.persistence.job);
@@ -629,9 +690,13 @@ export async function runPaidContinuationWorkflow(
 
   // STEP 4 — settle. Zero blind retries (frozen invariant, STEP_CONFIG.SETTLE).
   const settleOutcome = await step.do('settle', STEP_CONFIG.SETTLE, async () =>
-    runSettlementStep(paymentIdentifier, decrypted, deps)
+    runSettlementStep(paymentIdentifier, metadata.valid_before_unix, decrypted, deps)
   );
 
+  if (settleOutcome.kind === 'authorization_expired') {
+    await transitionJobState(jobId, 'REJECTED', 'PAYMENT_FAILED', deps.persistence.job);
+    return terminal('authorization_expired', jobId);
+  }
   if (settleOutcome.kind === 'ambiguous_unresolved') {
     // Design §13: the job legitimately stays non-terminal, pending
     // ops/human reconciliation — never forced into a REJECTED-family

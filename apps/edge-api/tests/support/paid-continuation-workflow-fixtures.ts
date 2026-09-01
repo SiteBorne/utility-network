@@ -11,6 +11,7 @@ import type {
   ExternalSettlementEvidence,
   PaymentLifecycleStage,
 } from '@siteborne/protocol-x402';
+import { hashPaymentObject } from '@siteborne/protocol-x402';
 import type {
   ContinuationEnvelopeMetadata,
   WorkflowContinuationInput,
@@ -167,7 +168,9 @@ export function buildSuccessfulExecutorOutcome(
   };
 }
 
-export function fakeExecutor(outcome: ExecutorOutcome | (() => Promise<ExecutorOutcome>)): ServiceExecutor {
+export function fakeExecutor(
+  outcome: ExecutorOutcome | (() => Promise<ExecutorOutcome>)
+): ServiceExecutor {
   return vi.fn(async () => (typeof outcome === 'function' ? outcome() : outcome));
 }
 
@@ -263,7 +266,8 @@ export class FakeSettlementRepository implements PaymentAttemptSettlementReposit
     }
     row.lifecycleStage = 'settlement_failed';
     row.settlementOutcomeKind = kind;
-    if (candidateTransactionReference) row.settlementTransactionReference = candidateTransactionReference;
+    if (candidateTransactionReference)
+      row.settlementTransactionReference = candidateTransactionReference;
     row.cdpFacilitatorSettleAttemptCount += 1;
     return { status: 'transitioned' };
   }
@@ -279,7 +283,8 @@ export class FakeSettlementRepository implements PaymentAttemptSettlementReposit
       return { status: 'illegal_transition' };
     }
     row.lifecycleStage = 'settled_external';
-    if (settlementTransactionReference) row.settlementTransactionReference = settlementTransactionReference;
+    if (settlementTransactionReference)
+      row.settlementTransactionReference = settlementTransactionReference;
     return { status: 'transitioned' };
   }
 
@@ -315,7 +320,9 @@ export class FakeSettlementRepository implements PaymentAttemptSettlementReposit
     from: PaymentLifecycleStage,
     to: PaymentLifecycleStage
   ): Promise<
-    { status: 'transitioned' } | { status: 'illegal_transition' } | { status: 'error'; reason: string }
+    | { status: 'transitioned' }
+    | { status: 'illegal_transition' }
+    | { status: 'error'; reason: string }
   > {
     this.transitionLifecycleStageCallCount += 1;
     const row = this.getOrCreate(paymentIdentifier);
@@ -331,7 +338,10 @@ export class FakeSettlementRepository implements PaymentAttemptSettlementReposit
 // Fake settlement facilitator (evidenceProvider.settle)
 // -----------------------------------------------------------------------
 
-export function fakeSettleSuccess(transactionReference = '0xsettledhash'): ExternalSettlementEvidence {
+export function fakeSettleSuccess(
+  transactionReference = '0xsettledhash',
+  verificationEvidenceHash = 'sha256:test-verification-hash'
+): ExternalSettlementEvidence {
   return {
     x402_version: 2,
     scheme: 'exact',
@@ -347,7 +357,7 @@ export function fakeSettleSuccess(transactionReference = '0xsettledhash'): Exter
     settled_at: '2026-08-31T00:00:05.000Z',
     facilitator_identity: 'test-facilitator',
     raw_evidence_hash: 'sha256:settlement-hash',
-    verification_evidence_hash: 'sha256:test-verification-hash',
+    verification_evidence_hash: verificationEvidenceHash,
     trust_class: 'synthetic_fixture',
   };
 }
@@ -396,7 +406,10 @@ export class FakeJobStatePersistence implements JobStatePersistence {
   }
 
   async appendStateEvent(event: StateEvent): Promise<void> {
-    if (this.failAppendStateEventForToState && event.to_state === this.failAppendStateEventForToState) {
+    if (
+      this.failAppendStateEventForToState &&
+      event.to_state === this.failAppendStateEventForToState
+    ) {
       this.failAppendStateEventForToState = null;
       throw new Error('simulated terminal-state-event persistence failure');
     }
@@ -486,10 +499,17 @@ export async function buildTestDependencies(
     ...overrides.seedJob,
   });
 
-  const settle = vi.fn(async () => {
-    const response = overrides.settleResponse ?? fakeSettleSuccess();
-    return typeof response === 'function' ? response() : response;
-  });
+  const settle = vi.fn(
+    async (
+      _context: PaymentSettlementContext,
+      verificationEvidence: ExternalVerificationEvidence
+    ) => {
+      const response = overrides.settleResponse ?? fakeSettleSuccess();
+      if (typeof response === 'function') return response();
+      if (overrides.settleResponse !== undefined) return response;
+      return fakeSettleSuccess('0xsettledhash', await hashPaymentObject(verificationEvidence));
+    }
+  );
 
   const reconciliationChecker = vi.fn(async () => 'STILL_UNKNOWN' as const);
   const envelopeKey = overrides.envelopeKey ?? (await generateTestKey());
@@ -497,6 +517,7 @@ export async function buildTestDependencies(
   return {
     envelopeKey,
     clock: overrides.clock ?? (() => 0),
+    evidenceMode: 'fixture',
     executor: overrides.executor ?? fakeExecutor(buildSuccessfulExecutorOutcome()),
     validatePcc:
       overrides.validatePcc ??
