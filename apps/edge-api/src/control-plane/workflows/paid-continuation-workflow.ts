@@ -715,19 +715,31 @@ export class PaidContinuationWorkflow extends WorkflowEntrypoint<
     event: PaidContinuationWorkflowEvent,
     step: PaidContinuationWorkflowStep
   ): Promise<WorkflowContinuationResult> {
-    const jobId = event.payload.metadata.job_id;
     const deps = await buildProductionPaidContinuationWorkflowDependencies(
       this.env,
       event.payload.metadata.service
     );
     if ('unavailable' in deps) {
-      // Fail closed — never a plaintext fallback, never a partial/guessed
-      // dependency set. Mirrors the exact convention every real
-      // production route composition function already uses for a
-      // missing MODAL_WEBCTX_*/CDP/receipt-signing credential.
-      return terminal('workflow_internal_error', jobId, {
-        error_code: `dependencies_unavailable: ${deps.reason}`,
-      });
+      // SUN-1221E6R-H2BF5-R1 — THROW, never resolve. A resolved return
+      // value here (the pre-fix behavior) is recorded by the real
+      // Cloudflare Workflows platform as instance status "Completed" /
+      // "Success" purely because `run()` didn't throw — the platform has
+      // no visibility into this object's own `status:
+      // 'workflow_internal_error'` field, which is application-level
+      // payload, not a platform signal. That mismatch produced the real
+      // H2BF5 synthetic instance's "Completed, Success=Yes, Steps=0"
+      // result when the five required host secrets were absent (see
+      // `docs/reports/SUN-1221E6R-H2BF5-R1-*.md`) — a genuine
+      // configuration failure recorded by Cloudflare as a success.
+      // Throwing is the only way to make the PLATFORM's own status field
+      // agree with reality; never a plaintext fallback, never a
+      // partial/guessed dependency set. Mirrors the exact convention
+      // every real production route composition function already uses
+      // for a missing MODAL_WEBCTX_*/CDP/receipt-signing credential —
+      // this is that same fail-closed contract, now enforced at the
+      // one additional layer (Workflow instance status) those HTTP
+      // routes never had to account for.
+      throw new Error(`dependencies_unavailable: ${deps.reason}`);
     }
     return runPaidContinuationWorkflow(event, step, deps);
   }

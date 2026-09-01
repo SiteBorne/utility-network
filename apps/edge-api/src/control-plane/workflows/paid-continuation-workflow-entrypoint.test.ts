@@ -108,19 +108,18 @@ describe('SUN-1221E6R-H2BF1 PaidContinuationWorkflow.run() real entrypoint wirin
     expect(doSpy.mock.calls[0][0]).toBe('open-envelope');
   });
 
-  it('ACTUAL_CLASS_FAIL_CLOSED: an unsupported/unknown service never reaches step.do and never touches settlement', async () => {
+  it('ACTUAL_CLASS_FAIL_CLOSED: an unsupported/unknown service never reaches step.do, never touches settlement, and THROWS (SUN-1221E6R-H2BF5-R1 — a resolved return here is recorded by the real Cloudflare Workflows platform as Completed/Success regardless of the application-level status field; see the real H2BF5 zero-step "Completed, Success=Yes" instance this closes)', async () => {
     buildDependenciesMock.mockResolvedValue({ unavailable: true, reason: 'unsupported service: nope' });
     const doSpy = vi.fn();
     const workflow = new PaidContinuationWorkflow({} as never, {} as Env);
 
-    const result = await workflow.run(fakeEvent('nope'), { do: doSpy });
-
+    await expect(workflow.run(fakeEvent('nope'), { do: doSpy })).rejects.toThrow(
+      /dependencies_unavailable: unsupported service: nope/
+    );
     expect(doSpy).not.toHaveBeenCalled();
-    expect(result.status).toBe('workflow_internal_error');
-    expect(result.error_code).toContain('dependencies_unavailable');
   });
 
-  it('ACTUAL_CLASS_FAIL_CLOSED: missing PAYMENT_CONTINUATION_ENCRYPTION_KEY (surfaced via the dependency builder) never reaches step.do', async () => {
+  it('ACTUAL_CLASS_FAIL_CLOSED: missing PAYMENT_CONTINUATION_ENCRYPTION_KEY (surfaced via the dependency builder) never reaches step.do and THROWS (platform must record Errored, not Completed)', async () => {
     buildDependenciesMock.mockResolvedValue({
       unavailable: true,
       reason: 'PAYMENT_CONTINUATION_ENCRYPTION_KEY is missing',
@@ -128,10 +127,10 @@ describe('SUN-1221E6R-H2BF1 PaidContinuationWorkflow.run() real entrypoint wirin
     const doSpy = vi.fn();
     const workflow = new PaidContinuationWorkflow({} as never, {} as Env);
 
-    const result = await workflow.run(fakeEvent(), { do: doSpy });
-
+    await expect(workflow.run(fakeEvent(), { do: doSpy })).rejects.toThrow(
+      /dependencies_unavailable: PAYMENT_CONTINUATION_ENCRYPTION_KEY is missing/
+    );
     expect(doSpy).not.toHaveBeenCalled();
-    expect(result.status).toBe('workflow_internal_error');
   });
 
   it('verify_agent_output.v2 requests the verify-service dependency set, not web-context', async () => {
