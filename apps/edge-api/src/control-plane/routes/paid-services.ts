@@ -263,6 +263,20 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
         evidenceProvider: sharedEvidenceProvider,
         envelopeKey: continuationEnvelopeKey,
         network: routeConfig.network,
+        // SUN-1222B-S2: without this, `createInProcessWorkflowBinding`
+        // defaulted to `evidenceMode: 'fixture'` regardless of this app's
+        // own `config.evidenceMode` -- harmless while `canAdvanceToSettled`
+        // didn't exist, but once it started gating on trust class
+        // (`isTrustClassAllowed`), a `config.evidenceMode: 'production'`
+        // app wired to the real `CdpPaymentEvidenceProvider` (which
+        // reports `trust_class: 'external_verified'`) was silently
+        // evaluated under 'fixture' policy -- which allows only
+        // `synthetic_fixture`/`locally_derived_structure_only` -- so every
+        // real-provider settlement was rejected as `trust_class_not_allowed`
+        // no matter how genuinely successful. Threading the same
+        // `config.evidenceMode` already used to select the evidence
+        // provider a few lines up closes that gap.
+        evidenceMode: config.evidenceMode,
         rail: routeConfig.rail,
         neverminedAgentId: routeConfig.nevermined?.agentId,
         neverminedPlanId: routeConfig.nevermined?.planId,

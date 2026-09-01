@@ -780,6 +780,21 @@ export async function runPaidContinuationWorkflow(
       settlement_transaction_reference: settleOutcome.transactionReference,
     });
   }
+  // `hashPaymentObject` canonicalizes through `canonical-json`, which
+  // throws on `undefined` (root-level or nested) rather than silently
+  // dropping it the way `JSON.stringify` would -- an uncaught throw here
+  // would surface as an opaque 500 instead of the same clean, already-
+  // established `persistence_failed_after_settlement` terminal state used
+  // just above for the sibling `missing_verification_receipt_id` case.
+  // `PccValidator`'s return type declares `pcc: unknown` as required, but
+  // that's compile-time only; nothing stops an implementation from
+  // resolving it to `undefined` at runtime.
+  if (verificationReceipt === undefined) {
+    return terminal('persistence_failed_after_settlement', jobId, {
+      error_code: 'missing_verification_receipt',
+      settlement_transaction_reference: settleOutcome.transactionReference,
+    });
+  }
 
   const serviceOutputHash =
     executorOutcome.result.output_hash ??

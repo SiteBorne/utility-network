@@ -33,7 +33,10 @@ import {
 } from '@siteborne/protocol-x402';
 import type { PaymentPayload } from '@siteborne/protocol-x402';
 import Ajv2020 from 'ajv/dist/2020';
-import { createX402ServiceRoute, type ExecutorOutcome } from '../src/control-plane/routes/x402-service';
+import {
+  createX402ServiceRoute,
+  type ExecutorOutcome,
+} from '../src/control-plane/routes/x402-service';
 import { buildPaidServicesApp } from '../src/control-plane/routes/paid-services';
 import { createInProcessWorkflowBinding } from '../src/control-plane/testing/in-process-workflow-binding';
 
@@ -47,7 +50,10 @@ import { createInProcessWorkflowBinding } from '../src/control-plane/testing/in-
 async function buildTestContinuationFields(
   db: D1Database,
   clock: () => string,
-  executor: (input: unknown, ctx: { job_id: string; request_id: string }) => Promise<ExecutorOutcome>,
+  executor: (
+    input: unknown,
+    ctx: { job_id: string; request_id: string }
+  ) => Promise<ExecutorOutcome>,
   evidenceProvider: PaymentEvidenceProvider,
   network: import('@siteborne/protocol-x402').Network = 'eip155:8453'
 ) {
@@ -168,6 +174,12 @@ class RecordingProvider implements PaymentEvidenceProvider {
       requirement_id: context.requirement_id,
       payment_identifier: context.payment_identifier,
       success: true,
+      // SUN-1222B-S2: `validateSettlementEvidenceStructureAndBinding` now
+      // requires a non-blank `transaction_reference` on any
+      // `success: true` evidence (a claimed-successful settlement must
+      // carry an authoritative transaction to persist) -- this recorder
+      // predates that guard and omitted the field entirely.
+      transaction_reference: 'synthetic-tx:' + context.payment_identifier,
       settled_at: context.nowIso,
       facilitator_identity: 'synthetic:recording-provider',
       raw_evidence_hash: 'sha256:' + '2'.repeat(64),
@@ -240,6 +252,21 @@ describe('PaymentEvidenceProvider HTTP boundary wiring (SUN-0700B checkpoint 1 p
         output_hash: 'sha256:' + '3'.repeat(64),
         receipt_id: 'rcpt_' + '1'.repeat(24),
         receipt: { fake: true },
+        // SUN-1222B-S2: see the identical note in
+        // x402-service-route.test.ts's `disconnectExecutor` -- the
+        // default `validatePcc` reads `outcome.result.verification` and
+        // the Workflow now hashes it unconditionally past settlement.
+        verification: {
+          schema_valid: true,
+          material_claims_supported: true,
+          evidence_accessibility: 1,
+          freshness: 1,
+          completeness: 1,
+          cross_source_agreement: 1,
+          provenance_valid: true,
+          decision: 'pass',
+          score: 1,
+        },
       },
     });
     createX402ServiceRoute(app, {

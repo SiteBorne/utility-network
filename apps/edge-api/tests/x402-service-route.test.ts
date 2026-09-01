@@ -29,7 +29,10 @@ import {
 import { Hono } from 'hono';
 import Ajv2020 from 'ajv/dist/2020';
 import { buildPaidServicesApp } from '../src/control-plane/routes/paid-services';
-import { createX402ServiceRoute, type ExecutorOutcome } from '../src/control-plane/routes/x402-service';
+import {
+  createX402ServiceRoute,
+  type ExecutorOutcome,
+} from '../src/control-plane/routes/x402-service';
 import { createInProcessWorkflowBinding } from '../src/control-plane/testing/in-process-workflow-binding';
 
 /**
@@ -43,7 +46,10 @@ import { createInProcessWorkflowBinding } from '../src/control-plane/testing/in-
 async function buildTestContinuationFields(
   db: D1Database,
   clock: () => string,
-  executor: (input: unknown, ctx: { job_id: string; request_id: string }) => Promise<ExecutorOutcome>,
+  executor: (
+    input: unknown,
+    ctx: { job_id: string; request_id: string }
+  ) => Promise<ExecutorOutcome>,
   network: import('@siteborne/protocol-x402').Network = 'eip155:84532'
 ) {
   const continuationEnvelopeKey = await crypto.subtle.generateKey(
@@ -820,7 +826,8 @@ describe('x402 HTTP vertical slice (SUN-0700A checkpoint 5)', () => {
           result_class: 'internal_verification_failed',
           failure: {
             code: 'verification_failed',
-            message: 'direct-public-http did not succeed (permanent_failure) for https://unreachable.example/',
+            message:
+              'direct-public-http did not succeed (permanent_failure) for https://unreachable.example/',
             details: {
               diagnostic_reason_code: 'WEBCTX_DNS_RESOLUTION_FAILED',
               diagnostic_stage: 'direct_public_http_fetch',
@@ -850,7 +857,12 @@ describe('x402 HTTP vertical slice (SUN-0700A checkpoint 5)', () => {
       });
 
       const challenge = await get402(diagnosticApp, '/v1/web/context-diagnostic', { probe: true });
-      const res = await payAndRetry(diagnosticApp, '/v1/web/context-diagnostic', { probe: true }, challenge);
+      const res = await payAndRetry(
+        diagnosticApp,
+        '/v1/web/context-diagnostic',
+        { probe: true },
+        challenge
+      );
 
       expect(res.status).toBe(502);
       const body = (await res.json()) as Record<string, unknown>;
@@ -885,13 +897,17 @@ describe('x402 HTTP vertical slice (SUN-0700A checkpoint 5)', () => {
 
     it('does not write a diagnostic audit event on a normal successful execution (no regression)', async () => {
       const before = await db
-        .prepare(`SELECT COUNT(*) as n FROM audit_events WHERE event_type = 'service_execution_diagnostic'`)
+        .prepare(
+          `SELECT COUNT(*) as n FROM audit_events WHERE event_type = 'service_execution_diagnostic'`
+        )
         .first<{ n: number }>();
       const challenge = await get402(app, '/v1/company/evidence-graph', COMPANY_INPUT);
       const res = await payAndRetry(app, '/v1/company/evidence-graph', COMPANY_INPUT, challenge);
       expect(res.status).toBe(200);
       const after = await db
-        .prepare(`SELECT COUNT(*) as n FROM audit_events WHERE event_type = 'service_execution_diagnostic'`)
+        .prepare(
+          `SELECT COUNT(*) as n FROM audit_events WHERE event_type = 'service_execution_diagnostic'`
+        )
         .first<{ n: number }>();
       expect(after!.n).toBe(before!.n);
     });
@@ -930,6 +946,30 @@ describe('x402 HTTP vertical slice (SUN-0700A checkpoint 5)', () => {
               output_hash: 'sha256:' + '3'.repeat(64),
               receipt: { synthetic: true },
               receipt_id: 'rcpt_h2a_test',
+              // SUN-1222B-S2: `createInProcessWorkflowBinding`'s default
+              // `validatePcc` reads `outcome.result.verification` as the
+              // PCC object it hands the Workflow's post-settlement
+              // receipt/link-building step (`hashPaymentObject(pccResult.pcc)`).
+              // Every OTHER executor this file/`paid-services.ts` uses for
+              // a genuine `result_class: 'success'` path (real
+              // `executeLocalService()` calls) naturally produces this
+              // field; this hand-rolled fixture predates the settlement
+              // step actually dereferencing it and omitted it, which
+              // crashed with an opaque "canonical-json returned undefined"
+              // 500 the moment 53df612 started hashing `pcc` for real. A
+              // "normal successful paid request" (this test's own
+              // description) should carry a normal verification block.
+              verification: {
+                schema_valid: true,
+                material_claims_supported: true,
+                evidence_accessibility: 1,
+                freshness: 1,
+                completeness: 1,
+                cross_source_agreement: 1,
+                provenance_valid: true,
+                decision: 'pass',
+                score: 1,
+              },
             },
           };
         };
