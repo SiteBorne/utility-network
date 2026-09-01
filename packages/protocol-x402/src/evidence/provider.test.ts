@@ -172,6 +172,7 @@ function externalSettlement(
     quote_id: CTX.quote_id,
     requirement_id: CTX.requirement_id,
     payment_identifier: CTX.payment_identifier,
+    transaction_reference: 'fixture:external-settlement',
     success: true,
     settled_at: CTX.nowIso,
     facilitator_identity: 'cdp:facilitator-test-double',
