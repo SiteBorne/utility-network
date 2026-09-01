@@ -207,3 +207,36 @@ describe('ModalSafeEgressClient — never leaks credentials into thrown errors',
     expect(thrown?.message).not.toContain('super-secret-value-xyz');
   });
 });
+
+// SUN-1221E6R-H2B2-R2 — the default `max_response_bytes` this client sends
+// must never exceed the authoritative Modal-side bound declared by
+// `services/webctx-safe-egress/src/webctx_safe_egress/schemas.py`'s
+// `WebctxFetchRequest.max_response_bytes: int = Field(gt=0, le=10_000_000)`.
+// This is a real, load-bearing production defect: `10 * 1024 * 1024` ===
+// 10,485,760, which is 485,760 bytes ABOVE that Pydantic `le` bound, so
+// Modal rejects every single request with an HTTP 400 request-schema
+// validation error before ever attempting the target fetch — proven against
+// real Modal access logs in SUN-1221E6R-H2B2-D1 (evidence commit `1440b5b`).
+const MODAL_AUTHORITATIVE_MAX_RESPONSE_BYTES = 10_000_000;
+
+describe('ModalSafeEgressClient — Modal max_response_bytes contract (SUN-1221E6R-H2B2-R2)', () => {
+  it('default request body never exceeds the authoritative Modal schema bound', async () => {
+    const fetchImpl = jsonFetch(200, successBody());
+    const client = new ModalSafeEgressClient({ ...CONFIG, fetchImpl });
+
+    await client.fetch('https://example.com/');
+
+    const sentBody = JSON.parse((fetchImpl as ReturnType<typeof vi.fn>).mock.calls[0][1].body);
+    expect(sentBody.max_response_bytes).toBeLessThanOrEqual(MODAL_AUTHORITATIVE_MAX_RESPONSE_BYTES);
+  });
+
+  it('default request body sends exactly the canonical production value 10_000_000', async () => {
+    const fetchImpl = jsonFetch(200, successBody());
+    const client = new ModalSafeEgressClient({ ...CONFIG, fetchImpl });
+
+    await client.fetch('https://example.com/');
+
+    const sentBody = JSON.parse((fetchImpl as ReturnType<typeof vi.fn>).mock.calls[0][1].body);
+    expect(sentBody.max_response_bytes).toBe(MODAL_AUTHORITATIVE_MAX_RESPONSE_BYTES);
+  });
+});

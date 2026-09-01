@@ -56,7 +56,16 @@ export interface ModalSafeEgressClientConfig {
   fetchImpl?: typeof fetch;
 }
 
-const DEFAULT_MAX_RESPONSE_BYTES = 10 * 1024 * 1024;
+// Must match the authoritative Modal-side bound exactly:
+// `services/webctx-safe-egress/src/webctx_safe_egress/schemas.py`'s
+// `WebctxFetchRequest.max_response_bytes: int = Field(gt=0, le=10_000_000)`.
+// This is a decimal byte count, NOT a MiB-based `10 * 1024 * 1024`
+// (10,485,760) — that previous value exceeded Modal's bound by 485,760
+// bytes on every single request, so Modal rejected every paid-context call
+// with an HTTP 400 request-schema validation error before ever attempting
+// the target fetch (proven in SUN-1221E6R-H2B2-D1, evidence commit
+// `1440b5b`).
+const DEFAULT_MAX_RESPONSE_BYTES = 10_000_000;
 const DEFAULT_DEADLINE_MS = 25_000;
 const SECURITY_POLICY_VERSION = 1;
 const REQUEST_VERSION = 1;
