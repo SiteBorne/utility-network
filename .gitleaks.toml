@@ -32,6 +32,32 @@ regexes = [
   # the same literal elsewhere in the repo as a bare const isn't flagged,
   # confirming this is a match-context false positive, not a real secret.
   '''0x036CbD53842c5426634e7929541eC2318f3dCF7e''',
+  # SUN-1222B-S2: Circle's official Base MAINNET USDC ERC-20 contract
+  # address (public, verifiable on BaseScan) — the actual asset SITEBORNE
+  # is configured to receive payment in. Proven non-secret and canonical
+  # by cross-reference against source: it is the literal `EXPECTED_ASSET`
+  # constant asserted in apps/edge-api/src/control-plane/production/
+  # verify-agent-output-v2-cdp-composition.domain-metadata.test.ts and
+  # web-context-v2-cdp-composition.test.ts, i.e. the same value the
+  # production executors are actually configured to require — appearing
+  # in forensic evidence docs (SUN-1220O, SUN-1222B) purely as a quoted
+  # "matches authorized USDC asset" confirmation, never as key material.
+  # Same false-positive class as the Sepolia entry above, extended to
+  # mainnet now that mainnet forensic evidence exists.
+  '''0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913''',
+  # SUN-1222B-S2: two internal payment/idempotency correlation IDs quoted
+  # verbatim in frozen forensic evidence reports (SUN-1221E2R, SUN-1221E6R-
+  # H2B2). Proven non-secret: grep of apps/edge-api/src/control-plane/
+  # continuation/idempotency-keys.ts and the D1 payment-attempts repository
+  # shows `paymentIdentifier` is used only to derive D1 dedup/lookup keys —
+  # never as a bearer credential, never sufficient on its own to authorize,
+  # forge, or replay a settlement (that authority is the EIP-3009-signed
+  # authorization payload, a wholly separate value never captured in these
+  # reports). Allowlisted as two exact one-off values, not a `pay_[a-z0-9]+`
+  # pattern, so a real credential that happens to share the prefix is still
+  # caught.
+  '''pay_5b90677d6a7d4a178bec037e21409e22''',
+  '''pay_eb7a027d441448c5b9f5d707e20df776''',
   # `PrivateEs256Jwk` is a TypeScript TYPE NAME (SUN-0800B checkpoint 2,
   # packages/protocol-a2a/src/signing.ts — the production Agent Card
   # signing key structural-validation boundary), never a value. The
