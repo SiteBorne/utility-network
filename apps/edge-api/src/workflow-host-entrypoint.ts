@@ -33,7 +33,27 @@
  * `WORKFLOW_RUNTIME_PUBLIC_ROUTES=0`, `WORKFLOW_RUNTIME_HTTP_API_SURFACE=0`
  * (H2BF4 design doc §4 hard invariants) — this inert 404 is the entire
  * HTTP surface of this script.
+ *
+ * SUN-1221E6R-H2B2-R1: also registers the build-time-precompiled
+ * output-schema validators at module load, exactly like the two real
+ * production API route entrypoints already do (see
+ * `production-web-context-v2-cdp-route.ts` / `production-verify-v2-cdp-route.ts`
+ * and the SUN-1200 checkpoint F incident report). The first real H2B2
+ * payment attempt reached this host's `PaidContinuationWorkflow` and threw
+ * `EvalError: Code generation from strings disallowed for this context`
+ * inside `SchemaVerifier`'s output-validation step: this host never made
+ * this call, so `getPrecompiledOutputValidator()` returned `undefined` and
+ * execution fell through to `getAjv()`'s runtime AJV-compilation path,
+ * which the real Workers isolate blocks. Idempotent and side-effect-free
+ * if called more than once (see `setPrecompiledOutputValidators`'s own
+ * doc comment) -- safe to keep alongside the public API Worker's own,
+ * separate module-load registration.
  */
+import { setPrecompiledOutputValidators } from '@siteborne/verification';
+import { outputValidatorsById } from './generated/output-validators.generated.js';
+
+setPrecompiledOutputValidators(outputValidatorsById);
+
 export { PaidContinuationWorkflow } from './control-plane/workflows/paid-continuation-workflow';
 
 export default {

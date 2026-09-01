@@ -2043,6 +2043,13 @@ async function runWorkflowHostBundleIsolationCheck() {
       CHAIN_RECEIPT_CHECKER: bundle.includes('buildProductionCdpChainReceiptChecker'),
       WEB_CONTEXT_COMPOSITION: bundle.includes('buildWebContextV2CdpProductionRouteConfig'),
       VERIFY_COMPOSITION: bundle.includes('buildVerifyAgentOutputV2CdpProductionRouteConfig'),
+      // SUN-1221E6R-H2B2-R1: the module-load precompiled-output-validator
+      // registration call, proved missing by the first real H2B2 payment
+      // attempt's EvalError. Checked against the actual dry-run bundle
+      // (not just source) so this is authoritative for what the real
+      // deployed artifact executes at module load, matching the same
+      // proof style already used for every other marker in this table.
+      PRECOMPILED_VALIDATOR_REGISTRATION: bundle.includes('setPrecompiledOutputValidators'),
     };
     record(
       'WORKFLOW_HOST_BUNDLE_ISOLATION (inclusion half, SUN-1221E6R-H2BF4 §27): dedicated host dry-run bundle DOES contain the real Workflow class, real run()-delegation, real production-dependency construction, and every real repository/composition it needs',
