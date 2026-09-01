@@ -15,14 +15,39 @@ import {
 
 const JSON_MEDIA_TYPE = 'application/json';
 
+/** SUN-1222B (Agent Card skill normalization): `company_evidence_graph.v1`
+ * and `.v2` (and the other three families) carry byte-identical
+ * `title`/`description`/`capabilities` in the registry -- SUN-1000
+ * checkpoint 1M added v2 alongside v1 with "same economics, same schemas,
+ * only service_id/service_version differ" -- so before this fix `buildSkill`
+ * produced two visually-indistinguishable `AgentSkill` entries per family
+ * (external machine discovery, observed live via Agenstry, reported this as
+ * duplicate skills). The eight IDs stay: `executor.ts`'s `SERVICE_ID_SET`
+ * dispatches directly on the full `<family>.v<n>` id, every frozen
+ * input/output schema and x402 price is keyed by it, and
+ * `docs/contracts/VERSIONING.md` documents `.v1`/`.v2` as a "stable public
+ * service-major identity" -- a real, permanent compatibility contract, not
+ * decorative metadata `AgentSkill` has no standard `versions` field to
+ * collapse into anyway. So the fix distinguishes the human-facing name and
+ * description per skill instead of reducing skill count: the service
+ * contract major is now stated explicitly in both, and each description
+ * points to this same Agent Card's x402 extension `services[]` (and the
+ * public catalog/OpenAPI) for that id's current production status, pricing,
+ * and schema -- rather than duplicating (and risking drifting from) values
+ * this file already emits elsewhere. */
 function buildSkill(serviceId: (typeof SITEBORNE_SERVICE_IDS)[number]): AgentSkill {
   const service = REGISTRY_SERVICES[serviceId];
+  const versionLabel = service.service_version.toUpperCase();
 
   return {
     id: service.service_id,
-    name: service.title,
-    description: service.description,
-    tags: [...service.capabilities],
+    name: `${service.title} (${versionLabel})`,
+    description:
+      `${service.description} SITEBORNE service contract major ` +
+      `${service.service_version} -- see this id ("${service.service_id}") in this ` +
+      `Agent Card's x402 extension params and the SITEBORNE service catalog/OpenAPI ` +
+      'for its exact schema, pricing, and current production status.',
+    tags: [...service.capabilities, service.service_version],
     examples: [],
     inputModes: [JSON_MEDIA_TYPE],
     outputModes: [JSON_MEDIA_TYPE],

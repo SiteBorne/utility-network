@@ -87,4 +87,45 @@ describe('SITEBORNE A2A v1 Agent Card contract', () => {
     };
     expect(inactiveParams.productionEnabled).toBe(false);
   });
+
+  // SUN-1222B (Agent Card skill normalization): external machine-discovery
+  // consumers (observed live: Agenstry) reported the eight skills as four
+  // visually-identical pairs. `company_evidence_graph.v1` and
+  // `.v2` share byte-identical `title`/`description`/`capabilities` in the
+  // registry (SUN-1000 checkpoint 1M's "same economics, same schemas, only
+  // service_id/service_version differ") -- version-specific IDs stay
+  // (`executor.ts`'s `SERVICE_ID_SET` dispatches directly on them, and every
+  // frozen input/output schema, x402 price, and contract-release artifact is
+  // keyed by the full `<family>.v<n>` id -- collapsing to four skills would
+  // break real dispatch, not just cosmetics), so the fix is distinguishable
+  // human-facing metadata per skill, not fewer skills.
+  it('gives every skill a unique human-facing name distinguishing its service-contract major', () => {
+    const card = buildUnsignedSiteborneAgentCard();
+    const names = card.skills.map((skill) => skill.name);
+    expect(new Set(names).size).toBe(names.length);
+
+    const descriptions = card.skills.map((skill) => skill.description);
+    expect(new Set(descriptions).size).toBe(descriptions.length);
+
+    // Both majors of all four capability families stay discoverable, and
+    // each name states its own major explicitly (not just a shared prefix).
+    for (const family of [
+      'Company Evidence Graph',
+      'Verified Web Context',
+      'Document Evidence JSON',
+      'Agent Output Verification',
+    ]) {
+      const v1 = card.skills.find(
+        (skill) => skill.id.endsWith('.v1') && skill.name.includes(family)
+      );
+      const v2 = card.skills.find(
+        (skill) => skill.id.endsWith('.v2') && skill.name.includes(family)
+      );
+      expect(v1, `expected a v1 skill for ${family}`).toBeDefined();
+      expect(v2, `expected a v2 skill for ${family}`).toBeDefined();
+      expect(v1?.name).not.toBe(v2?.name);
+      expect(v1?.name.toLowerCase()).toContain('v1');
+      expect(v2?.name.toLowerCase()).toContain('v2');
+    }
+  });
 });

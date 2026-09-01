@@ -51,10 +51,15 @@ describe('A2A Agent Card machine baseline', () => {
     for (const serviceId of SITEBORNE_SERVICE_IDS) {
       const skill = first.skills.find((candidate) => candidate.id === serviceId);
       const service = REGISTRY_SERVICES[serviceId];
-      expect(skill).toMatchObject({
-        name: service.title,
-        description: service.description,
-      });
+      // SUN-1222B: name/description are no longer a bare copy of the
+      // registry title/description -- they're distinguished per service-
+      // contract major (see card.ts's `buildSkill` doc comment) -- so this
+      // asserts containment/derivation rather than exact equality, while
+      // still proving the skill is traceable to its registry entry.
+      expect(skill?.name).toContain(service.title);
+      expect(skill?.name.toUpperCase()).toContain(service.service_version.toUpperCase());
+      expect(skill?.description).toContain(service.description);
+      expect(skill?.description).toContain(service.service_id);
       expect(params.services.find((candidate) => candidate.serviceId === serviceId)).toMatchObject({
         scheme: fixture.payment_modes[serviceId],
         productionEnabled: false,
