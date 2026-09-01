@@ -364,7 +364,25 @@ export function createSiteborneMcpServer(options: CreateSiteborneMcpOptions = {}
 }
 
 export function createSiteborneMcpHandler(options: CreateSiteborneMcpOptions = {}) {
-  const handler = createMcpHandler(() => createSiteborneMcpServer(options), { legacy: 'reject' });
+  // SUN-1222A: `legacy: 'reject'` (this handler's prior configuration)
+  // answers every 2025-11-25-family request -- the plain, envelope-free
+  // `initialize` → `tools/list` lifecycle the official MCP Registry client,
+  // Odel, Glama, FastDrop-style probes, and most MCP clients still in the
+  // field as of the 2026-07-28 "modern" era's introduction actually speak --
+  // with an unsupported-protocol-version error. That is the exact external
+  // MCP-interoperability failure class reported against production
+  // (SUN-1222A evidence: reproduced live and in
+  // `transport.test.ts`'s "2025-11-25 legacy handshake compatibility"
+  // suite, which fails against `'reject'` and passes against `'stateless'`).
+  // `'stateless'` is `createMcpHandler`'s own documented default: it serves
+  // 2025-11-25 traffic from a fresh, per-request stateless instance of the
+  // exact same server/tool factory the modern 2026-07-28 envelope path uses
+  // -- no separate tool definitions, no scanner/user-agent/host special
+  // casing, both eras served side by side. Set explicitly (rather than left
+  // to the default) so this choice reads as a decision, not an oversight.
+  const handler = createMcpHandler(() => createSiteborneMcpServer(options), {
+    legacy: 'stateless',
+  });
   return {
     async fetch(request: Request): Promise<Response> {
       if (request.method === 'POST') {

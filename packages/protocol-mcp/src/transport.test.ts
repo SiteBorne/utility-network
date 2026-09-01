@@ -483,6 +483,123 @@ describe('SITEBORNE MCP 2026-07-28 Hono transport', () => {
     expect(serverInstanceIds.length).toBeGreaterThanOrEqual(4);
   });
 
+  describe('2025-11-25 legacy handshake compatibility (SUN-1222A)', () => {
+    // External MCP directories/scanners (MCP Registry client, Odel, Glama,
+    // FastDrop-style probes -- SUN-1222A §1/§6/§44) perform the *original*
+    // MCP HTTP lifecycle: a plain JSON-RPC `initialize` call carrying no
+    // `io.modelcontextprotocol/*` `_meta` envelope and no
+    // `MCP-Protocol-Version` header, followed by `notifications/initialized`
+    // and `tools/list` -- the 2025-11-25 family this SDK's own type system
+    // calls the "legacy" wire era (as opposed to the 2026-07-28+ per-request
+    // envelope "modern" era every other test in this file exercises via a
+    // version-pinned client). `createMcpHandler`'s own default posture for
+    // that era is `legacy: 'stateless'`; SITEBORNE had explicitly opted into
+    // `legacy: 'reject'`, which answers every such request with an
+    // unsupported-protocol-version error -- observed live in production
+    // (`docs/reports/SUN-1222A-post-release-baseline-and-commercial-readiness.md`)
+    // and matching exactly the external failure class this checkpoint's own
+    // brief describes. This block reproduces that failure class directly
+    // against the real Hono app/handler (no envelope, no version header --
+    // an actual 2025-era request), independent of this file's own
+    // `connectClient` helper, which -- like every previously-existing test in
+    // this file -- pins the modern version and therefore could never have
+    // caught this regression.
+    async function legacyRequest(app: ReturnType<typeof createSiteborneMcpHonoApp>, body: unknown) {
+      return app.request('/mcp', {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json, text/event-stream',
+          'Content-Type': 'application/json',
+          Host: 'test.local',
+        },
+        body: JSON.stringify(body),
+      });
+    }
+
+    // The 2025-11-25 streamable-HTTP transport is free to answer a
+    // stateless legacy request as an SSE-framed stream rather than a bare
+    // JSON body -- a real legacy client (and the official SDK's own client
+    // transport) handles both; this test helper parses either so the
+    // assertions below exercise actual response content, not a shape
+    // assumption.
+    async function readJsonRpcResult(response: Response): Promise<{
+      error?: { code: number; message: string };
+      result?: Record<string, unknown>;
+    }> {
+      const contentType = response.headers.get('content-type') ?? '';
+      if (contentType.includes('application/json')) {
+        return response.json();
+      }
+      const text = await response.text();
+      const dataLine = text
+        .split('\n')
+        .find((line) => line.startsWith('data:'))
+        ?.slice('data:'.length)
+        .trim();
+      if (!dataLine) {
+        throw new Error(`no SSE data frame found in response: ${text}`);
+      }
+      return JSON.parse(dataLine) as { error?: { code: number; message: string }; result?: Record<string, unknown> };
+    }
+
+    it('answers a bare 2025-11-25 `initialize` request (no envelope, no version header)', async () => {
+      const { app } = createFixtureApp();
+
+      const response = await legacyRequest(app, {
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'initialize',
+        params: {
+          protocolVersion: '2025-11-25',
+          capabilities: {},
+          clientInfo: { name: 'external-mcp-directory-probe', version: '1.0.0' },
+        },
+      });
+      const payload = (await readJsonRpcResult(response)) as {
+        error?: { code: number; message: string };
+        result?: { protocolVersion?: string; serverInfo?: { name?: string } };
+      };
+
+      expect(payload.error).toBeUndefined();
+      expect(response.status).toBe(200);
+      expect(payload.result?.serverInfo?.name).toBe(MCP_SERVER_NAME);
+      expect(typeof payload.result?.protocolVersion).toBe('string');
+    });
+
+    it('answers a bare legacy `tools/list` request with the six frozen tools', async () => {
+      const { app } = createFixtureApp();
+
+      const response = await legacyRequest(app, {
+        jsonrpc: '2.0',
+        id: 2,
+        method: 'tools/list',
+        params: {},
+      });
+      const payload = (await readJsonRpcResult(response)) as {
+        error?: { code: number };
+        result?: { tools?: Array<{ name: string }> };
+      };
+
+      expect(payload.error).toBeUndefined();
+      expect(response.status).toBe(200);
+      expect(payload.result?.tools?.map((tool) => tool.name).sort()).toEqual(
+        [...MCP_TOOL_NAMES].sort()
+      );
+    });
+
+    it('still serves the modern 2026-07-28 envelope path unchanged alongside legacy', async () => {
+      // Guards against a same-time regression in the opposite direction --
+      // the fix must add legacy compatibility, not replace modern serving.
+      const { app } = createFixtureApp();
+      const client = await connectClient(app);
+      clients.push(client);
+
+      const listed = await client.listTools();
+
+      expect(listed.tools).toHaveLength(6);
+    });
+  });
+
   it('keeps two clients metadata-isolated and reconstructs repeated stateless results', async () => {
     const contexts: McpInvocationContext[] = [];
     const boundary: McpServiceExecutionBoundary = {
