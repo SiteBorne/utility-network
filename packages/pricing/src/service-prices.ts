@@ -122,14 +122,18 @@ export function resolvePricingSourceVersion(): string {
  * this package's own decimal-safe `usdToMicro` (6-decimal micro-USD) and
  * then rescales by integer arithmetic on the micro-USD numerator. */
 export function usdToAtomicUnits(usd: string, assetDecimals: number): string {
-  const micro = usdToMicro(usd); // integer, 6 decimals of USD precision
-  if (assetDecimals === 6) return String(micro);
+  if (!Number.isInteger(assetDecimals) || assetDecimals < 0 || assetDecimals > 255) {
+    throw new TypeError('assetDecimals must be an integer between 0 and 255');
+  }
+
+  const micro = BigInt(usdToMicro(usd)); // integer, 6 decimals of USD precision
+  if (assetDecimals === 6) return micro.toString();
   if (assetDecimals > 6) {
-    return String(micro * 10 ** (assetDecimals - 6));
+    return (micro * 10n ** BigInt(assetDecimals - 6)).toString();
   }
   // Fewer than 6 decimals: truncate remaining micro-USD precision by
   // integer division (never a float division) — deliberately floors
   // rather than rounds, so a converted amount is never overstated.
-  const divisor = 10 ** (6 - assetDecimals);
-  return String(Math.floor(micro / divisor));
+  const divisor = 10n ** BigInt(6 - assetDecimals);
+  return (micro / divisor).toString();
 }

@@ -28,9 +28,18 @@ export interface CostComponentsUsd {
 }
 
 export function usdToMicro(usd: string): number {
-  const [whole, fraction = ''] = usd.split('.');
-  const padded = (fraction + '000000').slice(0, 6);
-  return parseInt(whole) * MICRO_USD_PER_USD + parseInt(padded);
+  const match = /^(0|[1-9][0-9]*)(?:\.([0-9]{1,6}))?$/.exec(usd);
+  if (!match) {
+    throw new TypeError('USD amount must be a canonical non-negative decimal with at most 6 places');
+  }
+
+  const whole = BigInt(match[1]);
+  const fraction = BigInt((match[2] ?? '').padEnd(6, '0'));
+  const micro = whole * BigInt(MICRO_USD_PER_USD) + fraction;
+  if (micro > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw new RangeError('USD amount exceeds the safe micro-USD integer range');
+  }
+  return Number(micro);
 }
 
 export function microToUsd(micro: number): string {
@@ -83,7 +92,7 @@ export function computeMinimumPriceUsd(
   expectedCostUsd: number,
   margin: MarginRational = TARGET_MARGIN
 ): string {
-  const expectedCostMicro = usdToMicro(String(expectedCostUsd));
+  const expectedCostMicro = usdToMicro(expectedCostUsd.toFixed(6));
   const minPriceMicro = computeMinimumPriceMicro(expectedCostMicro, margin);
   return microToUsd(minPriceMicro);
 }

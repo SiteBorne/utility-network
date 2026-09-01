@@ -51,6 +51,17 @@ describe('pricing - decimal-safe arithmetic', () => {
         expect(parseFloat(back)).toBeCloseTo(parseFloat(val), 5);
       }
     });
+
+    it.each(['-1', '+1', '1e-3', ' 1', '1 ', '', '01', '1.2.3', '0.0000001'])(
+      'rejects non-canonical monetary input %j',
+      (value) => {
+        expect(() => usdToMicro(value)).toThrow(TypeError);
+      }
+    );
+
+    it('rejects values that cannot be represented as a safe micro-USD integer', () => {
+      expect(() => usdToMicro('9007199254740992')).toThrow(RangeError);
+    });
   });
 
   describe('computeExpectedCostMicro', () => {

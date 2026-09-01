@@ -96,4 +96,15 @@ describe('usdToAtomicUnits', () => {
     const b = usdToAtomicUnits('0.039', 6);
     expect(a).toBe(b);
   });
+
+  it.each([-1, 1.5, 256, Number.NaN, Number.POSITIVE_INFINITY])(
+    'rejects an invalid asset-decimal count %s',
+    (decimals) => {
+      expect(() => usdToAtomicUnits('0.019', decimals)).toThrow(TypeError);
+    }
+  );
+
+  it('uses integer arithmetic for large decimal scaling', () => {
+    expect(usdToAtomicUnits('0.000001', 24)).toBe('1000000000000000000');
+  });
 });
