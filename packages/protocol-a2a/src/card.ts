@@ -30,34 +30,49 @@ function buildSkill(serviceId: (typeof SITEBORNE_SERVICE_IDS)[number]): AgentSki
   };
 }
 
-/** SUN-1220P2 -- top-level `productionEnabled` remains the pre-existing
- * literal `false`: it has always meant "at least one service is
- * production-active" only in the sense of a blanket disclosure, and no
- * checkpoint before this one proved any service truthfully active; a
- * single service becoming truthfully active does not change what this
- * blanket top-level flag has always conservatively asserted. Only the
- * per-service `productionEnabled` (§11 of SUN-1220P1) is overlaid. */
+/** SUN-1222B (post-release hardening) -- superseding the SUN-1220P2 stance.
+ * That checkpoint hardcoded the top-level `productionEnabled` to a literal
+ * `false` regardless of any per-service value, on the reasoning that it was
+ * a conservative "blanket disclosure" that predated any service being
+ * truthfully active. That reasoning stopped holding the moment SUN-1221G
+ * promoted a real service to production (confirmed live, SUN-1222A §4):
+ * the deployed card now reads top-level `productionEnabled: false` while
+ * `verify_agent_output.v2` and `web_context_verified.v2` underneath it both
+ * read `productionEnabled: true` -- the exact "even if intentional, this
+ * creates machine-consumer ambiguity" case the field exists to prevent, not
+ * cause. A machine client that trusts only the top-level summary (a
+ * reasonable reading of a field named identically to, and positioned above,
+ * the per-service ones) concludes nothing is callable and never discovers
+ * the two services that actually are.
+ *
+ * Fixed by deriving the top-level flag as a true aggregate ("at least one
+ * declared service is production-callable") instead of a hand-set literal,
+ * so it can never again silently disagree with the per-service values it
+ * summarizes -- no separate invariant to remember to keep in sync, because
+ * there is only one source of truth (`effectiveProductionStatusByServiceId`)
+ * and the top-level field is computed from it, not set independently. */
 function buildX402ExtensionParams(
   effectiveProductionStatusByServiceId?: Partial<Record<SiteborneServiceId, boolean>>
 ): Record<string, unknown> {
+  const services = SITEBORNE_SERVICE_IDS.map((serviceId) => {
+    const service = REGISTRY_SERVICES[serviceId];
+    const route = resolveServiceRoute(serviceId);
+    return {
+      serviceId,
+      serviceVersion: service.service_version,
+      scheme: BAZAAR_PAYMENT_POLICY[serviceId].scheme,
+      resource: `${SITEBORNE_A2A_ORIGIN}${route.path}`,
+      inputSchemaUri: service.input_schema_uri,
+      outputSchemaUri: service.output_schema_uri,
+      declaredLimitations: [...service.declared_limitations],
+      productionEnabled: effectiveProductionStatusByServiceId?.[serviceId] ?? false,
+    };
+  });
   return {
     x402Version: 2,
     paymentRequiredForUsefulExecution: true,
-    productionEnabled: false,
-    services: SITEBORNE_SERVICE_IDS.map((serviceId) => {
-      const service = REGISTRY_SERVICES[serviceId];
-      const route = resolveServiceRoute(serviceId);
-      return {
-        serviceId,
-        serviceVersion: service.service_version,
-        scheme: BAZAAR_PAYMENT_POLICY[serviceId].scheme,
-        resource: `${SITEBORNE_A2A_ORIGIN}${route.path}`,
-        inputSchemaUri: service.input_schema_uri,
-        outputSchemaUri: service.output_schema_uri,
-        declaredLimitations: [...service.declared_limitations],
-        productionEnabled: effectiveProductionStatusByServiceId?.[serviceId] ?? false,
-      };
-    }),
+    productionEnabled: services.some((service) => service.productionEnabled),
+    services,
   };
 }
 

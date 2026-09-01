@@ -21,8 +21,13 @@ import type {
   PaidContinuationWorkflowDependencies,
   PaidContinuationWorkflowEvent,
   PaidContinuationWorkflowStep,
-  WorkflowContinuationResult,
 } from './paid-continuation-workflow';
+// `WorkflowContinuationResult` is defined in `../continuation/types` --
+// `paid-continuation-workflow.ts` imports it for its own internal use but
+// never re-exports it, so it must be imported from its actual source here
+// rather than through that module (SUN-1222B typecheck remediation: this
+// was the sole cause of this file's `TS2459` error).
+import type { WorkflowContinuationResult } from '../continuation/types';
 import type { Env } from '../config/env';
 
 const buildDependenciesMock = vi.hoisted(() => vi.fn());
@@ -99,10 +104,19 @@ describe('SUN-1221E6R-H2BF1 PaidContinuationWorkflow.run() real entrypoint wirin
   it('ACTUAL_CLASS_HAPPY_PATH: with a fully-fake dependency set, run() reaches step.do("open-envelope", ...) before returning', async () => {
     const deps = fakeDeps();
     buildDependenciesMock.mockResolvedValue(deps);
+    // `PaidContinuationWorkflowStep['do']` is a generic method
+    // (`do<T>(...): Promise<T>`); `vi.fn`'s inferred mock type is
+    // necessarily non-generic (`Promise<unknown>`), which is why passing
+    // `doSpy` directly as `{ do: doSpy }` fails `tsc` even though the
+    // runtime behavior (always resolve with whatever `cb()` returns) is
+    // exactly generic-correct. Asserting the object's shape at the call
+    // site -- not weakening `doSpy`'s own inferred type, which
+    // `.mock.calls` below still reads normally -- is the narrow, test-only
+    // fix (SUN-1222B typecheck remediation).
     const doSpy = vi.fn(async (_name: string, _config: unknown, cb: () => Promise<unknown>) => cb());
     const workflow = new PaidContinuationWorkflow({} as never, {} as Env);
 
-    await workflow.run(fakeEvent(), { do: doSpy });
+    await workflow.run(fakeEvent(), { do: doSpy } as unknown as PaidContinuationWorkflowStep);
 
     expect(doSpy).toHaveBeenCalled();
     expect(doSpy.mock.calls[0][0]).toBe('open-envelope');
@@ -147,7 +161,8 @@ describe('SUN-1221E6R-H2BF1 PaidContinuationWorkflow.run() real entrypoint wirin
     const doSpy = vi.fn(async (_n: string, _c: unknown, cb: () => Promise<unknown>) => cb());
     const workflow = new PaidContinuationWorkflow({} as never, {} as Env);
 
-    await workflow.run(fakeEvent(), { do: doSpy });
+    // See the identical note in the ACTUAL_CLASS_HAPPY_PATH test above.
+    await workflow.run(fakeEvent(), { do: doSpy } as unknown as PaidContinuationWorkflowStep);
 
     expect(doSpy).toHaveBeenCalled();
   });
