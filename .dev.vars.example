@@ -31,6 +31,17 @@ VOYAGE_API_KEY=
 MODAL_TOKEN_ID=
 MODAL_TOKEN_SECRET=
 
+# SUN-1221E5Q6G/Q6H — dedicated off-Cloudflare safe-egress executor for
+# web_context_verified.v2 (services/webctx-safe-egress, a Modal App
+# SEPARATE from the document-worker one above). MODAL_WEBCTX_PROXY_KEY/
+# SECRET are the Modal-Key/Modal-Secret pair from that app's own Proxy
+# Auth Token (Modal dashboard -> app -> function -> Proxy Auth Tokens),
+# never the account-level MODAL_TOKEN_ID/SECRET above. Never paste real
+# values into chat/logs.
+MODAL_WEBCTX_ENDPOINT_URL=
+MODAL_WEBCTX_PROXY_KEY=
+MODAL_WEBCTX_PROXY_SECRET=
+
 # Sentry error reporting (optional):
 SENTRY_DSN=
 

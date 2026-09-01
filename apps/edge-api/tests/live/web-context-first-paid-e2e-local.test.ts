@@ -537,7 +537,7 @@ function encodeChallenge(challenge: PaymentRequired): string {
 function mockAccount(address = EXPECTED_BUYER): LocalFirstPaidE2EAccount {
   return {
     address,
-    signTypedData: async () => '0x' + '11'.repeat(65),
+    signTypedData: async () => `0x${'11'.repeat(65)}`,
   };
 }
 
@@ -612,14 +612,21 @@ describe('SUN-1221E2 web-context first-paid-e2e local client (unit, always run)'
   });
 
   it('wrong network/asset/amount/payTo/EIP-712-domain are each rejected before signing', async () => {
-    for (const override of [
+    // Explicitly typed as `Partial<PaymentRequirements>[]` -- left as an
+    // inferred array literal, TS unions each element's own single-property
+    // shape and widens `network`/`asset` off their branded template-literal
+    // types (`` `${string}:${string}` `` / `` `0x${string}` ``) to plain
+    // `string`, which `validRequirement` then rejects (SUN-1222B typecheck
+    // remediation; behavior unchanged, this is annotation-only).
+    const overrides: Array<Partial<PaymentRequirements>> = [
       { network: 'eip155:1' },
       { asset: '0x0000000000000000000000000000000000dEaD' },
       { amount: '9001' },
       { amount: '8999' },
       { payTo: '0x0000000000000000000000000000000000dEaD' },
       { extra: { quote_id: 'q' } },
-    ]) {
+    ];
+    for (const override of overrides) {
       const challenge = validChallenge(validRequirement(override));
       const fetchImpl = twoStepFetch(challenge, jsonResponse(200, {}));
       const { result, counters } = await runFirstPaidE2E(baseDeps({ fetchImpl }));
