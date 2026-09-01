@@ -94,10 +94,29 @@ describe('paid-continuation-workflow — step graph (H2AWI-2a)', () => {
   });
 
   it('persists a result before finalizing a receipt, and returns settled with a receipt id and tx reference', async () => {
-    const { result } = await runHappyPath();
+    const { result, deps } = await runHappyPath();
     expect(result.status).toBe('settled');
     expect(result.receipt_id).toBe(`receipt_${TEST_JOB_ID}`);
     expect(result.settlement_transaction_reference).toBe('0xsettledhash');
+
+    const persisted = deps.resultReceiptPersistence.results.get(TEST_JOB_ID)?.cachedResult;
+    expect(persisted).toMatchObject({
+      status: 200,
+      body: {
+        service_id: 'web_context_verified.v2',
+        result_class: 'success',
+        receipt_id: 'receipt_test_0001',
+      },
+      settleResponse: {
+        success: true,
+        transaction: '0xsettledhash',
+        network: 'eip155:84532',
+        amount: '9000',
+      },
+    });
+    expect(persisted?.durableEvidence.payment_service_link.payment_identifier).toBe(
+      'pay_test_0001'
+    );
   });
 });
 
@@ -502,10 +521,9 @@ describe('paid-continuation-workflow — result/receipt persistence + terminal t
     // (simulating a duplicate Workflow-level step retry) and confirm the
     // underlying store still holds exactly one logical result and one
     // logical receipt.
-    const secondResult = await deps.resultReceiptPersistence.persistResult({
-      jobId: TEST_JOB_ID,
-      paymentIdentifier: 'pay_test_0001',
-    });
+    const firstResult = deps.resultReceiptPersistence.results.get(TEST_JOB_ID);
+    expect(firstResult).toBeDefined();
+    const secondResult = await deps.resultReceiptPersistence.persistResult(firstResult!);
     const secondReceipt = await deps.resultReceiptPersistence.persistReceipt({
       jobId: TEST_JOB_ID,
       paymentIdentifier: 'pay_test_0001',

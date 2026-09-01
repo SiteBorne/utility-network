@@ -23,6 +23,7 @@ import type {
   JobRecord,
   JobStatePersistence,
   PaymentAttemptSettlementRepository,
+  PersistResultInput,
 } from '../../src/control-plane/workflows/paid-continuation-workflow';
 import type { ExecutorOutcome, ServiceExecutor } from '../../src/control-plane/routes/x402-service';
 import type { StateEvent } from '../../src/control-plane/state-machine';
@@ -122,6 +123,7 @@ export function buildDecryptedPayload(
 ): DecryptedContinuationPayload {
   return {
     executorInput: { url: 'https://example.test/context' },
+    requestInputHash: 'sha256:' + '1'.repeat(64),
     settlementContext: buildSettlementContext(metadata),
     verificationEvidence: buildVerificationEvidence(metadata),
     actualAmount: metadata.amount_atomic,
@@ -423,17 +425,16 @@ export class FakeJobStatePersistence implements JobStatePersistence {
 }
 
 export class FakeResultReceiptPersistence {
-  readonly results = new Map<string, { jobId: string; paymentIdentifier: string }>();
+  readonly results = new Map<string, PersistResultInput>();
   readonly receipts = new Map<string, string>();
   persistResultCallCount = 0;
   persistReceiptCallCount = 0;
   failResultOnce = false;
   failReceiptOnce = false;
 
-  async persistResult(input: {
-    jobId: string;
-    paymentIdentifier: string;
-  }): Promise<{ status: 'written' | 'already_written' }> {
+  async persistResult(
+    input: PersistResultInput
+  ): Promise<{ status: 'written' | 'already_written' }> {
     this.persistResultCallCount += 1;
     if (this.failResultOnce) {
       this.failResultOnce = false;

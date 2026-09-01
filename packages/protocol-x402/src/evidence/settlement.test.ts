@@ -41,6 +41,23 @@ describe('validateSettlementEvidenceStructureAndBinding — exact', () => {
     const evidence = await syntheticSettlementEvidenceSuccess(ctx, VERIFICATION_HASH, '999999');
     expect(validateSettlementEvidenceStructureAndBinding(evidence, ctx)).toBe('amount_mismatch');
   });
+
+  it('rejects claimed-successful evidence without a usable transaction reference', async () => {
+    const ctx = baseContext();
+    const evidence = await syntheticSettlementEvidenceSuccess(ctx, VERIFICATION_HASH, ctx.amount);
+    expect(
+      validateSettlementEvidenceStructureAndBinding(
+        { ...evidence, transaction_reference: undefined },
+        ctx
+      )
+    ).toBe('malformed_evidence');
+    expect(
+      validateSettlementEvidenceStructureAndBinding(
+        { ...evidence, transaction_reference: '   ' },
+        ctx
+      )
+    ).toBe('malformed_evidence');
+  });
 });
 
 describe('validateSettlementEvidenceStructureAndBinding — upto', () => {

@@ -32,10 +32,7 @@ import { buildProductionCdpChainReceiptChecker } from '../evidence/chain-receipt
 import { D1JobsRepository, D1StateEventsRepository } from '../repositories/d1/jobs';
 import { D1PaymentAttemptRepository } from '../repositories/d1/payment-attempts';
 import { X402ServiceResultRepository } from '../repositories/d1/x402-quotes';
-import {
-  resultPersistenceIdempotencyKey,
-  receiptPersistenceIdempotencyKey,
-} from '../continuation/idempotency-keys';
+import { receiptPersistenceIdempotencyKey } from '../continuation/idempotency-keys';
 import type {
   PaidContinuationWorkflowDependencies,
   PaidContinuationWorkflowHostEnv,
@@ -144,12 +141,7 @@ export class D1ResultReceiptPersistence implements ResultReceiptPersistence {
     await this.results.create(
       input.jobId,
       input.paymentIdentifier,
-      {
-        kind: 'workflow_result',
-        payment_identifier: input.paymentIdentifier,
-        settlement_transaction_reference: input.settlementTransactionReference,
-        idempotency_key: resultPersistenceIdempotencyKey(input.paymentIdentifier),
-      },
+      input.cachedResult,
       new Date().toISOString()
     );
     return { status: 'written' };
@@ -159,7 +151,12 @@ export class D1ResultReceiptPersistence implements ResultReceiptPersistence {
     input: Parameters<ResultReceiptPersistence['persistReceipt']>[0]
   ): Promise<{ status: 'written' | 'already_written'; receiptId: string }> {
     const receiptId = receiptPersistenceIdempotencyKey(input.paymentIdentifier);
-    const existing = await this.results.getByJobId<{ receipt_persisted?: boolean }>(input.jobId);
+    const existing = await this.results.getByJobId<
+      Record<string, unknown> & {
+        receipt_persisted?: boolean;
+        durableEvidence?: Record<string, unknown>;
+      }
+    >(input.jobId);
     if (existing && existing.receipt_persisted === true) {
       return { status: 'already_written', receiptId };
     }
@@ -174,16 +171,24 @@ export class D1ResultReceiptPersistence implements ResultReceiptPersistence {
     // paths) keep compiling; the real production call site always
     // supplies it once `pccResult.valid` is true, which is the only way
     // this step is ever reached.
-    await this.results.finalize(
-      input.jobId,
-      {
-        kind: 'workflow_receipt',
-        receipt_persisted: true,
-        receipt_id: receiptId,
-        pcc: input.pcc ?? null,
-      },
-      new Date().toISOString()
-    );
+    const finalRecord = existing
+      ? {
+          ...existing,
+          receipt_persisted: true,
+          receipt_id: receiptId,
+          pcc: input.pcc ?? null,
+          durableEvidence: {
+            ...(existing.durableEvidence ?? {}),
+            pcc: input.pcc ?? null,
+          },
+        }
+      : {
+          kind: 'workflow_receipt',
+          receipt_persisted: true,
+          receipt_id: receiptId,
+          pcc: input.pcc ?? null,
+        };
+    await this.results.finalize(input.jobId, finalRecord, new Date().toISOString());
     return { status: 'written', receiptId };
   }
 }

@@ -75,6 +75,24 @@ const REAL_PCC = {
   signature: 'AAAA-base64url-signature-bytes-BBBB',
 };
 
+const CANONICAL_CACHED_RESPONSE = {
+  status: 200,
+  body: {
+    service_id: 'web_context_verified.v2',
+    result_class: 'success',
+    output: { title: 'example' },
+    receipt_id: 'rcpt_paid_result',
+    link_id: 'link_paid_result',
+    link_hash: 'sha256:' + 'a'.repeat(64),
+  },
+  settleResponse: {
+    success: true,
+    transaction: '0xsettled',
+    network: 'eip155:8453',
+    amount: '9000',
+  },
+};
+
 describe('SUN-1221E6R-H2B2-R4: D1ResultReceiptPersistence durable PCC persistence', () => {
   let d1: FakeD1;
   let results: X402ServiceResultRepository;
@@ -109,6 +127,27 @@ describe('SUN-1221E6R-H2B2-R4: D1ResultReceiptPersistence durable PCC persistenc
     expect(parsed.kind).toBe('workflow_receipt');
     expect(parsed.receipt_persisted).toBe(true);
     expect(parsed.pcc).toEqual(REAL_PCC);
+  });
+
+  it('preserves the canonical reconstructable HTTP result when adding the durable signed receipt', async () => {
+    await persistence.persistResult({
+      jobId: 'job-canonical-result',
+      paymentIdentifier: 'pay_canonical_result',
+      settlementTransactionReference: '0xsettled',
+      // RED against the pre-fix adapter, which silently ignores this
+      // canonical response and later overwrites the row with a receipt-
+      // only marker.
+      cachedResult: CANONICAL_CACHED_RESPONSE,
+    } as never);
+    await persistence.persistReceipt({
+      jobId: 'job-canonical-result',
+      paymentIdentifier: 'pay_canonical_result',
+      pcc: REAL_PCC,
+    });
+
+    const persisted = await results.getByJobId<Record<string, unknown>>('job-canonical-result');
+    expect(persisted).toMatchObject(CANONICAL_CACHED_RESPONSE);
+    expect(persisted?.pcc).toEqual(REAL_PCC);
   });
 
   it('WORKFLOW_OUTPUT_INDEPENDENCE: the persisted receipt is retrievable and byte-exact via getByJobId alone, with no dependence on Workflow step-history output', async () => {

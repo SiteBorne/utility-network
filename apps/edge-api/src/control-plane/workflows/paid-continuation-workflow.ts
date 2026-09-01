@@ -49,8 +49,17 @@ import type {
   ExternalSettlementEvidence,
   PaymentLifecycleStage,
   PaymentEvidenceMode,
+  PaymentServiceLink,
+  SettleResponse,
 } from '@siteborne/protocol-x402';
-import { canAdvanceToSettled, hashPaymentObject } from '@siteborne/protocol-x402';
+import {
+  CDP_PAYMENT_PROVIDER,
+  buildPaymentServiceLink,
+  canAdvanceToSettled,
+  extendWithSettlement,
+  hashPaymentObject,
+  verifyPaymentServiceLink,
+} from '@siteborne/protocol-x402';
 import type {
   ContinuationEnvelopeMetadata,
   WorkflowContinuationInput,
@@ -152,6 +161,8 @@ export type PaidContinuationWorkflowEvent = {
 export interface DecryptedContinuationPayload {
   /** Forwarded verbatim to `ServiceExecutor` as its `input` argument. */
   readonly executorInput: unknown;
+  /** Exact request-body hash already bound into the server-issued quote. */
+  readonly requestInputHash: string;
   /** The exact `PaymentSettlementContext` `evidenceProvider.settle()`
    * needs — assembled once, at seal time, by the same logic
    * `x402-service.ts` already uses for its own (soon-to-be-removed,
@@ -231,6 +242,26 @@ export interface PersistResultInput {
   readonly jobId: string;
   readonly paymentIdentifier: string;
   readonly settlementTransactionReference?: string;
+  readonly cachedResult: DurableCachedResult;
+}
+
+export interface DurableCachedResult {
+  readonly status: 200;
+  readonly body: {
+    readonly service_id: string;
+    readonly result_class: string;
+    readonly output?: unknown;
+    readonly receipt_id: string;
+    readonly link_id: string;
+    readonly link_hash: string;
+  };
+  readonly settleResponse: SettleResponse;
+  readonly durableEvidence: {
+    readonly pcc: unknown;
+    readonly receipt: unknown;
+    readonly settlement_evidence: unknown;
+    readonly payment_service_link: PaymentServiceLink;
+  };
 }
 
 export interface PersistReceiptInput {
@@ -406,7 +437,13 @@ async function finalizeTerminalState(
 // ---------------------------------------------------------------------
 
 type SettleStepOutcome =
-  | { readonly kind: 'confirmed'; readonly transactionReference?: string }
+  | {
+      readonly kind: 'confirmed';
+      readonly transactionReference?: string;
+      readonly payer?: string;
+      readonly settlementEvidence: unknown;
+      readonly settlementEvidenceHash: string;
+    }
   | { readonly kind: 'rejected'; readonly reason: string }
   | { readonly kind: 'authorization_expired' }
   | { readonly kind: 'ambiguous_unresolved' };
@@ -445,9 +482,17 @@ async function resolveViaReconciliation(
     // direct-success and reconciliation-confirmed paths is safe under
     // resume/retry.
     await deps.settlement.repository.markConsumed(paymentIdentifier);
+    const settlementEvidence = {
+      kind: 'cdp_settlement_reconciled',
+      payment_identifier: paymentIdentifier,
+      transaction_reference: reconciliation.settlement_transaction_reference,
+      checked_at_unix: reconciliation.checked_at_unix,
+    };
     return {
       kind: 'confirmed',
       transactionReference: reconciliation.settlement_transaction_reference,
+      settlementEvidence,
+      settlementEvidenceHash: await hashPaymentObject(settlementEvidence),
     };
   }
   if (reconciliation.outcome === 'not_found') {
@@ -501,9 +546,16 @@ async function runSettlementStep(
     // platform's own step memoization should make this unreachable in
     // practice (step 4 itself would already be memoized once it returns
     // 'confirmed'), but never re-calls settle() even here.
+    const settlementEvidence = {
+      kind: 'cdp_settlement_existing',
+      payment_identifier: paymentIdentifier,
+      transaction_reference: existing.settlementTransactionReference,
+    };
     return {
       kind: 'confirmed',
       transactionReference: existing.settlementTransactionReference ?? undefined,
+      settlementEvidence,
+      settlementEvidenceHash: await hashPaymentObject(settlementEvidence),
     };
   }
   if (existing && existing.lifecycleStage === 'settlement_failed') {
@@ -559,7 +611,13 @@ async function runSettlementStep(
     // OTHER (direct-success, non-reconciliation) confirmed-settlement
     // path, which needs the exact same call.
     await repo.markConsumed(paymentIdentifier);
-    return { kind: 'confirmed', transactionReference: settlementEvidence.transaction_reference };
+    return {
+      kind: 'confirmed',
+      transactionReference: settlementEvidence.transaction_reference,
+      payer: settlementEvidence.payer,
+      settlementEvidence,
+      settlementEvidenceHash: settlementEvidence.raw_evidence_hash,
+    };
   }
 
   await repo.recordCdpSettlementOutcome(
@@ -708,6 +766,79 @@ export async function runPaidContinuationWorkflow(
     return terminal('settlement_rejected', jobId, { error_code: settleOutcome.reason });
   }
 
+  const verificationReceipt = pccResult.pcc;
+  const verificationReceiptId =
+    executorOutcome.result.receipt_id ??
+    (typeof verificationReceipt === 'object' &&
+    verificationReceipt !== null &&
+    typeof (verificationReceipt as { receipt_id?: unknown }).receipt_id === 'string'
+      ? (verificationReceipt as { receipt_id: string }).receipt_id
+      : undefined);
+  if (!verificationReceiptId) {
+    return terminal('persistence_failed_after_settlement', jobId, {
+      error_code: 'missing_verification_receipt_id',
+      settlement_transaction_reference: settleOutcome.transactionReference,
+    });
+  }
+
+  const serviceOutputHash =
+    executorOutcome.result.output_hash ??
+    (await hashPaymentObject({ output: executorOutcome.result.output ?? null }));
+  const verificationEvidenceHash = await hashPaymentObject(decrypted.verificationEvidence);
+  let paymentServiceLink = await buildPaymentServiceLink({
+    link_version: 2,
+    payment_rail: 'cdp',
+    payment_provider: CDP_PAYMENT_PROVIDER,
+    payment_identifier: paymentIdentifier,
+    quote_id: decrypted.settlementContext.quote_id,
+    requirement_id: decrypted.settlementContext.requirement_id,
+    service_id: decrypted.settlementContext.service_id,
+    service_version: decrypted.settlementContext.service_version,
+    request_input_hash: decrypted.requestInputHash,
+    job_id: jobId,
+    service_output_hash: serviceOutputHash,
+    verification_receipt_id: verificationReceiptId,
+    verification_receipt_hash: await hashPaymentObject(verificationReceipt),
+    verification_evidence_hash: verificationEvidenceHash,
+  });
+  paymentServiceLink = await extendWithSettlement(
+    paymentServiceLink,
+    settleOutcome.settlementEvidenceHash
+  );
+  const linkVerification = await verifyPaymentServiceLink(paymentServiceLink);
+  if (!linkVerification.valid) {
+    return terminal('persistence_failed_after_settlement', jobId, {
+      error_code: linkVerification.reason,
+      settlement_transaction_reference: settleOutcome.transactionReference,
+    });
+  }
+
+  const cachedResult: DurableCachedResult = {
+    status: 200,
+    body: {
+      service_id: decrypted.settlementContext.service_id,
+      result_class: executorOutcome.result.result_class,
+      output: executorOutcome.result.output,
+      receipt_id: verificationReceiptId,
+      link_id: paymentServiceLink.link_id,
+      link_hash: paymentServiceLink.link_hash,
+    },
+    settleResponse: {
+      success: true,
+      transaction: settleOutcome.transactionReference ?? 'reconciled:transaction-unavailable',
+      network: decrypted.settlementContext.network,
+      ...(settleOutcome.payer ? { payer: settleOutcome.payer } : {}),
+      amount: decrypted.actualAmount,
+      extra: { link_id: paymentServiceLink.link_id, payment_identifier: paymentIdentifier },
+    },
+    durableEvidence: {
+      pcc: verificationReceipt,
+      receipt: executorOutcome.result.receipt,
+      settlement_evidence: settleOutcome.settlementEvidence,
+      payment_service_link: paymentServiceLink,
+    },
+  };
+
   // STEP 5 — persist-result. Settlement is already confirmed at this
   // point; safe to retry (idempotent UPSERT keyed by payment_identifier).
   let resultStatus: { status: 'written' | 'already_written' };
@@ -717,6 +848,7 @@ export async function runPaidContinuationWorkflow(
         jobId,
         paymentIdentifier,
         settlementTransactionReference: settleOutcome.transactionReference,
+        cachedResult,
       })
     );
   } catch (e) {

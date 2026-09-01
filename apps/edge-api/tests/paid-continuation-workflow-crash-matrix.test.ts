@@ -132,7 +132,10 @@ describe('paid-continuation-workflow — crash/restart determinism matrix (H2AWI
     // but with the settle() call never having produced any response
     // (crash strictly between the two) — no candidate tx ref known.
     const deps = await buildTestDependencies({
-      seedSettlement: { lifecycleStage: 'settlement_pending', settlementTransactionReference: null },
+      seedSettlement: {
+        lifecycleStage: 'settlement_pending',
+        settlementTransactionReference: null,
+      },
     });
     const input = await sealTestInput(metadata, { key: deps.envelopeKey });
     const decrypted = buildDecryptedPayload(metadata);
@@ -269,6 +272,7 @@ describe('paid-continuation-workflow — crash/restart determinism matrix (H2AWI
     await deps.resultReceiptPersistence.persistResult({
       jobId: TEST_JOB_ID,
       paymentIdentifier: TEST_PAYMENT_IDENTIFIER,
+      cachedResult: {} as never,
     });
     deps.resultReceiptPersistence.persistResultCallCount = 0; // reset the counter to isolate THIS restart's own calls
 
@@ -324,7 +328,9 @@ describe('paid-continuation-workflow — crash/restart determinism matrix (H2AWI
     expect(firstResult.status).toBe('settled');
     expect(secondResult.status).toBe('settled'); // second run observes the already-settled outcome
     expect(deps.settle).toHaveBeenCalledTimes(1); // settle() reached exactly once across BOTH runs
-    expect(secondResult.settlement_transaction_reference).toBe(firstResult.settlement_transaction_reference);
+    expect(secondResult.settlement_transaction_reference).toBe(
+      firstResult.settlement_transaction_reference
+    );
   });
 
   it('case 11: executor timeout at the declared step boundary — reports executor_timeout deterministically, no real wait, never hangs', async () => {
@@ -350,7 +356,9 @@ describe('paid-continuation-workflow — crash/restart determinism matrix (H2AWI
 
   it('case 12: settlement rejected pre-broadcast (explicit facilitator no) — zero economic effect, terminal settlement_rejected, draft marked RESOLVED not left ambiguous', async () => {
     const metadata = buildTestMetadata();
-    const deps = await buildTestDependencies({ settleResponse: fakeSettleRejected('insufficient_funds') });
+    const deps = await buildTestDependencies({
+      settleResponse: fakeSettleRejected('insufficient_funds'),
+    });
     const input = await sealTestInput(metadata, { key: deps.envelopeKey });
     const step = new FakeWorkflowStep();
 
@@ -358,7 +366,8 @@ describe('paid-continuation-workflow — crash/restart determinism matrix (H2AWI
 
     expect(result.status).toBe('settlement_rejected');
     expect(deps.settle).toHaveBeenCalledTimes(1);
-    const record = await deps.settlementRepository.getSettlementRecoveryRecord(TEST_PAYMENT_IDENTIFIER);
+    const record =
+      await deps.settlementRepository.getSettlementRecoveryRecord(TEST_PAYMENT_IDENTIFIER);
     // Resolved (settlement_failed), never left dangling at
     // 'settlement_pending' where a future restart could misread it as
     // still-ambiguous.

@@ -105,7 +105,10 @@ import {
   type WorkflowBindingLike,
 } from '../continuation/handoff';
 import { waitForWorkflowResult, type WorkflowWaitOutcome } from '../continuation/waiter';
-import type { ContinuationEnvelopeMetadata, WorkflowContinuationResult } from '../continuation/types';
+import type {
+  ContinuationEnvelopeMetadata,
+  WorkflowContinuationResult,
+} from '../continuation/types';
 import type { DecryptedContinuationPayload } from '../workflows/paid-continuation-workflow';
 
 export interface ExecutorOutcome {
@@ -321,7 +324,9 @@ export class NeverminedEvidenceProviderNotConfiguredError extends Error {
  * than the real Workers/Miniflare one) — this route must keep working
  * unprotected in that case, not crash.
  */
-function safeGetExecutionCtx(c: Context): { waitUntil(promise: Promise<unknown>): void } | undefined {
+function safeGetExecutionCtx(
+  c: Context
+): { waitUntil(promise: Promise<unknown>): void } | undefined {
   try {
     return c.executionCtx;
   } catch {
@@ -1177,7 +1182,9 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
      * resolve through — one response-construction implementation, never
      * two competing ones.
      */
-    async function respondFromWorkflowResult(result: WorkflowContinuationResult): Promise<Response> {
+    async function respondFromWorkflowResult(
+      result: WorkflowContinuationResult
+    ): Promise<Response> {
       switch (result.status) {
         case 'settled': {
           const reconstructed = await reconstructFromJob({ requireDelivered: false });
@@ -1374,6 +1381,7 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
 
       const continuationPayload: DecryptedContinuationPayload = {
         executorInput: body,
+        requestInputHash: inputHash,
         settlementContext,
         verificationEvidence,
         actualAmount: stored.quote.amount,
@@ -1414,33 +1422,33 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
     }
 
     async function runProtectedExecutionPipeline(): Promise<Response> {
-    await transition(jobId, 'PAYMENT_VERIFIED', 'LOCKED', 'RESOURCE_LOCKED');
-    await audit('service_execution_started', { job_id: jobId });
+      await transition(jobId, 'PAYMENT_VERIFIED', 'LOCKED', 'RESOURCE_LOCKED');
+      await audit('service_execution_started', { job_id: jobId });
 
-    if (config.scheme === 'upto') {
-      // SUN-1221E6R-H2AWI-3: the durable continuation Workflow (H2AWI-2,
-      // frozen) computes its settlement context entirely from the
-      // envelope sealed at handoff time — before the executor (which now
-      // runs INSIDE the Workflow) ever produces a post-execution
-      // actualAmountAtomic/resourceMetrics measurement. `upto` scheme's
-      // authorization-exceeded protection depends on exactly that
-      // post-execution measurement, which the frozen H2AWI-1/H2AWI-2
-      // interfaces have no room for. No route in production today uses
-      // `scheme: 'upto'` (both real paid routes are `exact` — verified
-      // this checkpoint), so this fails closed rather than silently
-      // dropping the overage protection a real `upto` route would need;
-      // extending the Workflow to support it is explicitly out of this
-      // checkpoint's scope (see the evidence report).
-      await transition(jobId, 'LOCKED', 'REJECTED', 'QUARANTINE_POLICY');
-      return jsonError(
-        c,
-        500,
-        'service_execution_failed',
-        'upto-scheme services are not supported by the durable payment continuation pipeline (SUN-1221E6R-H2AWI-3)'
-      );
-    }
+      if (config.scheme === 'upto') {
+        // SUN-1221E6R-H2AWI-3: the durable continuation Workflow (H2AWI-2,
+        // frozen) computes its settlement context entirely from the
+        // envelope sealed at handoff time — before the executor (which now
+        // runs INSIDE the Workflow) ever produces a post-execution
+        // actualAmountAtomic/resourceMetrics measurement. `upto` scheme's
+        // authorization-exceeded protection depends on exactly that
+        // post-execution measurement, which the frozen H2AWI-1/H2AWI-2
+        // interfaces have no room for. No route in production today uses
+        // `scheme: 'upto'` (both real paid routes are `exact` — verified
+        // this checkpoint), so this fails closed rather than silently
+        // dropping the overage protection a real `upto` route would need;
+        // extending the Workflow to support it is explicitly out of this
+        // checkpoint's scope (see the evidence report).
+        await transition(jobId, 'LOCKED', 'REJECTED', 'QUARANTINE_POLICY');
+        return jsonError(
+          c,
+          500,
+          'service_execution_failed',
+          'upto-scheme services are not supported by the durable payment continuation pipeline (SUN-1221E6R-H2AWI-3)'
+        );
+      }
 
-    return await driveDurableContinuation('create_or_join');
+      return await driveDurableContinuation('create_or_join');
     } // end runProtectedExecutionPipeline
 
     // Exactly one promise represents this request's post-verification

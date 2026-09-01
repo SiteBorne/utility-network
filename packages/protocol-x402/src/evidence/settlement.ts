@@ -64,6 +64,13 @@ export function validateSettlementEvidenceStructureAndBinding(
   if (evidence.asset !== context.asset) return 'asset_mismatch';
   if (evidence.payee !== context.payee) return 'payee_mismatch';
   if (!evidence.success && !evidence.reason) return 'malformed_evidence';
+  if (
+    evidence.success &&
+    (typeof evidence.transaction_reference !== 'string' ||
+      evidence.transaction_reference.trim().length === 0)
+  ) {
+    return 'malformed_evidence';
+  }
   if (!isCanonicalAtomicAmount(evidence.actual_amount)) return 'malformed_evidence';
 
   // Amount semantics only apply to a claimed-successful settlement — a
