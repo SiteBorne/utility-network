@@ -131,7 +131,7 @@ class D1JobStatePersistence implements JobStatePersistence {
  * primitive. `receiptId` is deterministic
  * (`receiptPersistenceIdempotencyKey`, an H2AWI-1 frozen helper reused
  * verbatim — never a random id, which would break idempotent re-entry). */
-class D1ResultReceiptPersistence implements ResultReceiptPersistence {
+export class D1ResultReceiptPersistence implements ResultReceiptPersistence {
   constructor(private readonly results: X402ServiceResultRepository) {}
 
   async persistResult(
@@ -161,9 +161,25 @@ class D1ResultReceiptPersistence implements ResultReceiptPersistence {
     if (existing && existing.receipt_persisted === true) {
       return { status: 'already_written', receiptId };
     }
+    // SUN-1221E6R-H2B2-R4: durably persist the actual signed PCC/receipt
+    // document (`input.pcc`) alongside the completion marker, in the
+    // same existing `result_json` column `finalize()` already writes to
+    // -- no schema change. Before this fix only `{kind, receipt_persisted,
+    // receipt_id}` was written and the real signed artifact was lost the
+    // moment the Workflow instance's step-history output was truncated
+    // by Cloudflare's API (proven in H2B2-R3A). `input.pcc` is optional
+    // only so callers that never had a PCC to persist (defensive/legacy
+    // paths) keep compiling; the real production call site always
+    // supplies it once `pccResult.valid` is true, which is the only way
+    // this step is ever reached.
     await this.results.finalize(
       input.jobId,
-      { kind: 'workflow_receipt', receipt_persisted: true, receipt_id: receiptId },
+      {
+        kind: 'workflow_receipt',
+        receipt_persisted: true,
+        receipt_id: receiptId,
+        pcc: input.pcc ?? null,
+      },
       new Date().toISOString()
     );
     return { status: 'written', receiptId };

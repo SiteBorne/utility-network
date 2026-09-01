@@ -228,6 +228,16 @@ export interface PersistResultInput {
 export interface PersistReceiptInput {
   readonly jobId: string;
   readonly paymentIdentifier: string;
+  /** SUN-1221E6R-H2B2-R4: the actual signed PCC/receipt document
+   * (`PccValidationResult.pcc` when `valid: true`) — durably persisted
+   * verbatim so the cryptographically signed artifact survives past
+   * Workflow completion. Cloudflare's Workflow instance-describe API
+   * truncates large step outputs (proven in H2B2-R3A/R4), so the
+   * Workflow's own step-history log is never a durable source of
+   * truth for this document; this is the only durable copy. Optional
+   * only so existing fakes that don't model PCC content keep compiling
+   * unchanged. */
+  readonly pcc?: unknown;
 }
 
 /** Idempotent (UPSERT-shaped) result/receipt persistence port — `status:
@@ -660,7 +670,11 @@ export async function runPaidContinuationWorkflow(
       'persist-receipt-and-finalize',
       STEP_CONFIG.PERSIST_RECEIPT_AND_FINALIZE,
       async () => {
-        const receipt = await deps.persistence.resultReceipt.persistReceipt({ jobId, paymentIdentifier });
+        const receipt = await deps.persistence.resultReceipt.persistReceipt({
+          jobId,
+          paymentIdentifier,
+          pcc: pccResult.valid ? pccResult.pcc : undefined,
+        });
         await finalizeTerminalState(jobId, deps.persistence.job);
         return receipt;
       }
