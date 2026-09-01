@@ -142,4 +142,45 @@ describe('SUN-1221E6R-H2BF4 dedicated Workflow-host wrangler config', () => {
       expect(tomlText).toMatch(/CDP_WALLET_SECRET[^\n]*never (be )?(required|provisioned)/);
     }
   });
+
+  // SUN-1221E6R-H2BF5-FINAL / H2BF5-C1B (evidence ae46400): dependency
+  // closure proved these four ADR-0055 governance vars are required on
+  // this host before `open-envelope` can be reached -- they gate
+  // `resolveCdpPaymentEvidenceProvider`'s evidence-mode selection the
+  // same way they gate the public API Worker's routes. Set under
+  // explicit, standalone H2BF5-FINAL human authorization, scoped only to
+  // this non-public dedicated host.
+  it('HOST_ADR0055_VARS_EXACT: declares all four required ADR-0055 governance vars with the exact authorized values', () => {
+    const required: Record<string, string> = {
+      PAYMENT_ENVIRONMENT: 'production',
+      PRODUCTION_ENABLED: 'true',
+      HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP: 'true',
+      PRODUCTION_CDP_CREDENTIALS_APPROVED: 'true',
+    };
+    for (const [name, expected] of Object.entries(required)) {
+      const match = tomlText.match(new RegExp(`^\\s*${name}\\s*=\\s*"([^"]*)"`, 'm'));
+      expect(match, `expected ${name} to be present in ${HOST_WRANGLER_TOML}`).toBeDefined();
+      expect(match?.[1]).toBe(expected);
+    }
+  });
+
+  it('does not declare any ADR-0055 var outside the exact authorized four', () => {
+    // Guards against silent scope creep: only these four names, never a
+    // fifth governance var slipped in alongside them.
+    const varsStart = tomlText.search(/^\[vars\]\n/m);
+    expect(varsStart).toBeGreaterThanOrEqual(0);
+    const afterVars = tomlText.slice(varsStart).replace(/^\[vars\]\n/, '');
+    const nextSectionOffset = afterVars.search(/\n\[/);
+    const varsBlock = nextSectionOffset === -1 ? afterVars : afterVars.slice(0, nextSectionOffset);
+    const assignedNames = [...varsBlock.matchAll(/^\s*([A-Z0-9_]+)\s*=/gm)].map((m) => m[1]);
+    expect(new Set(assignedNames)).toEqual(
+      new Set([
+        'SELLER_WALLET_ADDRESS',
+        'PAYMENT_ENVIRONMENT',
+        'PRODUCTION_ENABLED',
+        'HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP',
+        'PRODUCTION_CDP_CREDENTIALS_APPROVED',
+      ]),
+    );
+  });
 });

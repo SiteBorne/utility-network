@@ -62,12 +62,20 @@ database_id = "efe23c42-cbcc-47c2-9b28-922a541bdcdd"
 SELLER_WALLET_ADDRESS = "0x7f44a2dd237938F18632d4CcA40f4c690295E6E1"
 # PAYMENT_ENVIRONMENT / PRODUCTION_ENABLED /
 # HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP / PRODUCTION_CDP_CREDENTIALS_APPROVED
-# are deliberately ABSENT here, exactly mirroring the public `wrangler.toml`'s
-# own SUN-1205 checkpoint K stance ("deliberately absent from the frozen
-# pre-upload candidate... every consumer is fail-closed on absence"). A
-# later, separately authorized cutover sets the exact bounded values it
-# needs in its own reviewed commit/version -- never this file, never by
-# default.
+# were deliberately ABSENT prior to SUN-1221E6R-H2BF5-FINAL, mirroring the
+# public `wrangler.toml`'s own SUN-1205 checkpoint K stance. That
+# checkpoint's dependency-closure trace (H2BF5-C1B, evidence commit
+# ae46400) proved these four ADR-0055 governance vars are required, on
+# this host, before `open-envelope` can be reached (they gate
+# `resolveCdpPaymentEvidenceProvider`'s evidence-mode selection the same
+# way they gate the public API Worker's routes). Set here under explicit,
+# standalone H2BF5-FINAL human authorization, scoped ONLY to this
+# non-public dedicated Workflow host -- never propagated to the public
+# `wrangler.toml`/any API candidate's `[vars]` by this checkpoint.
+PAYMENT_ENVIRONMENT = "production"
+PRODUCTION_ENABLED = "true"
+HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP = "true"
+PRODUCTION_CDP_CREDENTIALS_APPROVED = "true"
 
 # The following are real secrets and must NEVER be added to [vars] above
 # or committed anywhere in this repo -- provisioned with
