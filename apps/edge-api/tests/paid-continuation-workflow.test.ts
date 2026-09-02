@@ -514,6 +514,33 @@ describe('paid-continuation-workflow — result/receipt persistence + terminal t
     expect(jobAfterRetry?.current_state).toBe('DELIVERED');
   });
 
+  it('settled-then-pcc-undefined: fails closed with a clean terminal state, never an opaque crash, and never re-settles (SUN-1222B-S2 guard)', async () => {
+    // A `validatePcc` implementation that (buggily, or via a malformed
+    // external validator response) claims `valid: true` but resolves
+    // `pcc` to `undefined` -- exactly the shape that used to reach
+    // `hashPaymentObject(undefined)` and throw an opaque, uncaught
+    // 'canonical-json returned undefined' after settlement had *already*
+    // succeeded (see paid-continuation-workflow.ts's own guard comment).
+    const deps = await buildTestDependencies({
+      validatePcc: () => ({ valid: true, pcc: undefined }),
+    });
+    const metadata = buildTestMetadata();
+    const input = await sealTestInput(metadata, { key: deps.envelopeKey });
+    const step = new FakeWorkflowStep();
+
+    const result = await runPaidContinuationWorkflow({ payload: input }, step, deps);
+
+    expect(result.status).toBe('persistence_failed_after_settlement');
+    if (result.status === 'persistence_failed_after_settlement') {
+      expect(result.error_code).toBe('missing_verification_receipt');
+      expect(result.settlement_transaction_reference).toBeTruthy();
+    }
+    // Settlement already happened and is never repeated, exactly like the
+    // proof #11 persistence-failure siblings above.
+    expect(deps.settle).toHaveBeenCalledTimes(1);
+    expect(deps.resultReceiptPersistence.persistReceiptCallCount).toBe(0);
+  });
+
   it('result/receipt/terminal-event idempotency: repeated persistence never creates a second logical record (proof #12)', async () => {
     const { deps } = await runHappyPath();
 
