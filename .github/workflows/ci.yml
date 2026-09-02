@@ -41,6 +41,9 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      - name: Build
+        run: pnpm build
+
       - name: Test
         run: pnpm test
 
@@ -53,6 +56,39 @@ jobs:
       - name: Tasks validation
         run: pnpm tasks:validate
 
+      - name: PCC schema generation drift check
+        run: pnpm pcc:generate:check
+
+      - name: Service input-validator generation drift check
+        run: pnpm schemas:check
+
+      - name: Service metadata generation drift check
+        run: pnpm services:generate:check
+
+      - name: OpenAPI generation drift check
+        run: pnpm openapi:generate:check
+
+      - name: Embedded pricing drift check (governance/RISK_LIMITS.yaml)
+        run: pnpm pricing:check
+
+      - name: Registry pricing drift check (governance/RISK_LIMITS.yaml)
+        run: pnpm pricing:registry:check
+
+      - name: Contract frozen-baseline verification
+        run: pnpm contracts:baseline:verify
+
+      - name: Contract compatibility check
+        run: pnpm contracts:compat:check
+
+      - name: Contract release verification
+        run: pnpm contracts:release:verify
+
+      - name: D1 migration verification
+        run: pnpm migrations:verify
+
+      - name: Production configuration preflight (offline)
+        run: pnpm production:preflight --config-only
+
       - name: Adapter checks (format, lint, typecheck, tests, property tests, fixtures, manifests)
         run: pnpm adapters:check
 
@@ -61,6 +97,21 @@ jobs:
 
       - name: Service runtime checks (format, lint, typecheck, tests, property tests, fixtures)
         run: pnpm services-runtime:check
+
+      - name: x402 protocol checks (format, lint, typecheck, tests, property tests, fixtures)
+        run: pnpm x402:check
+
+      - name: MCP protocol checks
+        run: pnpm mcp:check
+
+      - name: A2A protocol checks
+        run: pnpm a2a:check
+
+      - name: Nevermined protocol checks
+        run: pnpm nevermined:check
+
+      - name: Real workerd and Wrangler dry-run release harness
+        run: pnpm test:worker-runtime
 
   python-validate:
     name: Validate (Python)
