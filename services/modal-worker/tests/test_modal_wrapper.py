@@ -8,9 +8,12 @@ import base64
 import importlib
 import os
 import uuid
+from collections.abc import Callable
 from pathlib import Path
+from typing import cast
 
 import pytest
+from fastapi.responses import JSONResponse
 
 FIXTURES_DIR = Path(__file__).parent.parent / "fixtures"
 
@@ -49,9 +52,9 @@ class TestProcessDocumentHttpCore:
     + `execute()` request/response mapping is genuinely correct -- not just
     that the module imports."""
 
-    def _core(self):
+    def _core(self) -> Callable[[dict[str, object]], JSONResponse]:
         module = importlib.import_module("modal_worker.modal_app")
-        return module.process_document_http_core
+        return cast(Callable[[dict[str, object]], JSONResponse], module.process_document_http_core)
 
     def _valid_payload(self, data: bytes, media_type: str = "application/pdf") -> dict[str, object]:
         return {
@@ -69,7 +72,7 @@ class TestProcessDocumentHttpCore:
         body = response.body
         import json
 
-        parsed = json.loads(body)
+        parsed = json.loads(bytes(body))
         assert parsed["status"] == "success"
         assert "Native Text Document" in parsed["pages"][0]["normalized_text"]
         assert parsed["document"]["byte_length"] == len(data)
