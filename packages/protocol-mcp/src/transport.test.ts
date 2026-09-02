@@ -76,6 +76,36 @@ afterEach(async () => {
   await Promise.all(clients.splice(0).map((client) => client.close()));
 });
 
+// The 2025-11-25 streamable-HTTP transport is free to answer a stateless
+// legacy request as an SSE-framed stream rather than a bare JSON body -- a
+// real legacy client (and the official SDK's own client transport) handles
+// both; this helper parses either so assertions exercise actual response
+// content, not a shape assumption. Hoisted to module scope (SUN-1222B-S3-R3-
+// RS) so both the SUN-1222A legacy-handshake suite and the R3-RS
+// interoperability matrix below share one implementation.
+async function readJsonRpcResult(response: Response): Promise<{
+  error?: { code: number; message: string };
+  result?: Record<string, unknown>;
+}> {
+  const contentType = response.headers.get('content-type') ?? '';
+  if (contentType.includes('application/json')) {
+    return response.json();
+  }
+  const text = await response.text();
+  const dataLine = text
+    .split('\n')
+    .find((line) => line.startsWith('data:'))
+    ?.slice('data:'.length)
+    .trim();
+  if (!dataLine) {
+    throw new Error(`no SSE data frame found in response: ${text}`);
+  }
+  return JSON.parse(dataLine) as {
+    error?: { code: number; message: string };
+    result?: Record<string, unknown>;
+  };
+}
+
 describe('SITEBORNE MCP 2026-07-28 Hono transport', () => {
   it('constructs a complete isolated server instance', () => {
     expect(createSiteborneMcpServer).not.toThrow();
@@ -516,35 +546,6 @@ describe('SITEBORNE MCP 2026-07-28 Hono transport', () => {
       });
     }
 
-    // The 2025-11-25 streamable-HTTP transport is free to answer a
-    // stateless legacy request as an SSE-framed stream rather than a bare
-    // JSON body -- a real legacy client (and the official SDK's own client
-    // transport) handles both; this test helper parses either so the
-    // assertions below exercise actual response content, not a shape
-    // assumption.
-    async function readJsonRpcResult(response: Response): Promise<{
-      error?: { code: number; message: string };
-      result?: Record<string, unknown>;
-    }> {
-      const contentType = response.headers.get('content-type') ?? '';
-      if (contentType.includes('application/json')) {
-        return response.json();
-      }
-      const text = await response.text();
-      const dataLine = text
-        .split('\n')
-        .find((line) => line.startsWith('data:'))
-        ?.slice('data:'.length)
-        .trim();
-      if (!dataLine) {
-        throw new Error(`no SSE data frame found in response: ${text}`);
-      }
-      return JSON.parse(dataLine) as {
-        error?: { code: number; message: string };
-        result?: Record<string, unknown>;
-      };
-    }
-
     it('answers a bare 2025-11-25 `initialize` request (no envelope, no version header)', async () => {
       const { app } = createFixtureApp();
 
@@ -642,5 +643,257 @@ describe('SITEBORNE MCP 2026-07-28 Hono transport', () => {
     expect(healthReplay.structuredContent).toEqual(healthA.structuredContent);
     expect(JSON.stringify(healthA)).not.toContain('isolated-client-b');
     expect(JSON.stringify(healthReplay)).not.toContain('isolated-client-b');
+  });
+
+  // SUN-1222B-S3-R3-RS: repo/spec-derived interoperability hardening matrix.
+  // A prior checkpoint (SUN-1222B-S3-R3) was BLOCKED because the traffic
+  // capture it was meant to validate against was never persisted anywhere
+  // retrievable this session -- no file in docs/, no bookmark holding its
+  // raw content. This block does NOT reconstruct that missing dataset or
+  // any client identity/count from it. Every case below was derived from,
+  // and executed against, only: the installed @modelcontextprotocol/server
+  // 2.0.0 SDK's own type contract (classifyInboundRequest,
+  // validateStandardRequestHeaders, SEP-2243) and this file's existing
+  // fixture app -- each expectation was captured by running the actual
+  // request through the real Hono app first, not assumed.
+  describe('protocol interoperability hardening matrix (SUN-1222B-S3-R3-RS)', () => {
+    it.each(['GET', 'HEAD', 'OPTIONS'] as const)(
+      'answers %s /mcp with 405 Method Not Allowed, no dispatch',
+      async (method) => {
+        const { app, boundary } = createFixtureApp();
+        const response = await app.request('/mcp', { method, headers: { Host: 'test.local' } });
+        expect(response.status).toBe(405);
+        expect(boundary.execute).not.toHaveBeenCalled();
+      }
+    );
+
+    it('rejects a POST with no Content-Type as 415 before dispatch', async () => {
+      const { app, boundary } = createFixtureApp();
+      const response = await app.request('/mcp', {
+        method: 'POST',
+        headers: { Accept: 'application/json, text/event-stream', Host: 'test.local' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }),
+      });
+      expect(response.status).toBe(415);
+      expect(boundary.execute).not.toHaveBeenCalled();
+    });
+
+    it('rejects a POST with a non-JSON Content-Type as 415 before dispatch', async () => {
+      const { app, boundary } = createFixtureApp();
+      const response = await app.request('/mcp', {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json, text/event-stream',
+          'Content-Type': 'text/plain',
+          Host: 'test.local',
+        },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }),
+      });
+      expect(response.status).toBe(415);
+      expect(boundary.execute).not.toHaveBeenCalled();
+    });
+
+    it('accepts a charset-qualified application/json Content-Type', async () => {
+      const { app } = createFixtureApp();
+      const response = await app.request('/mcp', {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json, text/event-stream',
+          'Content-Type': 'application/json; charset=utf-8',
+          Host: 'test.local',
+        },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }),
+      });
+      expect(response.status).toBe(200);
+    });
+
+    // Distinct from the existing "%s disagrees with the JSON-RPC body" case
+    // (transport.test.ts line ~307), which sends a WRONG Mcp-Method value.
+    // This proves the header's ABSENCE alone is fail-closed on a
+    // modern-classified request -- direct evidence for this checkpoint's
+    // §8/§10 Mcp-Method audit. Per the installed SDK's own
+    // `validateStandardRequestHeaders` (SEP-2243 standard-header rung),
+    // this is enforced by the SDK itself; SITEBORNE neither weakens nor
+    // reimplements it, so no source change accompanies this test -- it
+    // locks in already-correct, already-shipped behavior only.
+    it('fails closed when the required Mcp-Method header is entirely absent on a modern request', async () => {
+      const { app, boundary } = createFixtureApp();
+      const body = {
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'tools/list',
+        params: {
+          _meta: {
+            'io.modelcontextprotocol/protocolVersion': MCP_PROTOCOL_VERSION,
+            'io.modelcontextprotocol/clientInfo': { name: 'raw-test', version: '1.0.0' },
+            'io.modelcontextprotocol/clientCapabilities': {},
+          },
+        },
+      };
+      const response = await app.request('/mcp', {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json, text/event-stream',
+          'Content-Type': 'application/json',
+          'MCP-Protocol-Version': MCP_PROTOCOL_VERSION,
+          Host: 'test.local',
+          // Mcp-Method deliberately omitted.
+        },
+        body: JSON.stringify(body),
+      });
+      const payload = (await response.json()) as { error: { code: number } };
+
+      expect(response.status).toBe(400);
+      expect(payload.error.code).toBe(-32020);
+      expect(boundary.execute).not.toHaveBeenCalled();
+    });
+
+    it('accepts a bodyless notification with 202 and never dispatches to the boundary', async () => {
+      const { app, boundary } = createFixtureApp();
+      const response = await app.request('/mcp', {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json, text/event-stream',
+          'Content-Type': 'application/json',
+          'MCP-Protocol-Version': MCP_PROTOCOL_VERSION,
+          'Mcp-Method': 'notifications/initialized',
+          Host: 'test.local',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'notifications/initialized',
+          params: {
+            _meta: {
+              'io.modelcontextprotocol/protocolVersion': MCP_PROTOCOL_VERSION,
+              'io.modelcontextprotocol/clientInfo': { name: 'raw-test', version: '1.0.0' },
+              'io.modelcontextprotocol/clientCapabilities': {},
+            },
+          },
+        }),
+      });
+      expect(response.status).toBe(202);
+      expect(boundary.execute).not.toHaveBeenCalled();
+    });
+
+    it('rejects a wrong JSON-RPC version string before dispatch', async () => {
+      const { app, boundary } = createFixtureApp();
+      const response = await app.request('/mcp', {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json, text/event-stream',
+          'Content-Type': 'application/json',
+          Host: 'test.local',
+        },
+        body: JSON.stringify({ jsonrpc: '1.0', id: 1, method: 'tools/list', params: {} }),
+      });
+      const payload = (await response.json()) as { error: { code: number } };
+
+      expect(response.status).toBe(400);
+      expect(payload.error.code).toBe(-32600);
+      expect(boundary.execute).not.toHaveBeenCalled();
+    });
+
+    it('rejects non-object params before dispatch', async () => {
+      const { app, boundary } = createFixtureApp();
+      const response = await app.request('/mcp', {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json, text/event-stream',
+          'Content-Type': 'application/json',
+          Host: 'test.local',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'tools/call',
+          params: 'not-an-object',
+        }),
+      });
+      const payload = (await response.json()) as { error: { code: number } };
+
+      expect(response.status).toBe(400);
+      expect(payload.error.code).toBe(-32600);
+      expect(boundary.execute).not.toHaveBeenCalled();
+    });
+
+    it('rejects a JSON-RPC null id before dispatch', async () => {
+      const { app, boundary } = createFixtureApp();
+      const response = await app.request('/mcp', {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json, text/event-stream',
+          'Content-Type': 'application/json',
+          Host: 'test.local',
+        },
+        body: JSON.stringify({ jsonrpc: '2.0', id: null, method: 'tools/list', params: {} }),
+      });
+      const payload = (await response.json()) as { error: { code: number } };
+
+      expect(response.status).toBe(400);
+      expect(payload.error.code).toBe(-32600);
+      expect(boundary.execute).not.toHaveBeenCalled();
+    });
+
+    it('rejects a malformed (non-string) legacy protocolVersion without dispatching', async () => {
+      const { app, boundary } = createFixtureApp();
+      const response = await app.request('/mcp', {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json, text/event-stream',
+          'Content-Type': 'application/json',
+          Host: 'test.local',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'initialize',
+          params: {
+            protocolVersion: 12345,
+            capabilities: {},
+            clientInfo: { name: 'p', version: '1' },
+          },
+        }),
+      });
+      const payload = (await readJsonRpcResult(response)) as { error?: { code: number } };
+
+      expect(payload.error).toBeDefined();
+      expect(boundary.execute).not.toHaveBeenCalled();
+    });
+
+    // A well-formed but unrecognized legacy protocolVersion is NOT rejected
+    // -- the SDK's documented legacy-initialize posture is to counter-offer
+    // its own first supported 2025-era version rather than error, matching
+    // how a real legacy client/server pair negotiates (SUN-1222A's own
+    // "MCP directories/scanners" class relies on exactly this: they send
+    // whatever legacy version they were built against and expect a usable
+    // counter-offer, not a hard rejection).
+    it('counter-offers the supported legacy version for an unrecognized but well-formed protocolVersion', async () => {
+      const { app } = createFixtureApp();
+      const response = await app.request('/mcp', {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json, text/event-stream',
+          'Content-Type': 'application/json',
+          Host: 'test.local',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'initialize',
+          params: {
+            protocolVersion: '1999-01-01',
+            capabilities: {},
+            clientInfo: { name: 'p', version: '1' },
+          },
+        }),
+      });
+      const payload = (await readJsonRpcResult(response)) as {
+        error?: unknown;
+        result?: { protocolVersion?: string };
+      };
+
+      expect(payload.error).toBeUndefined();
+      expect(typeof payload.result?.protocolVersion).toBe('string');
+    });
   });
 });
