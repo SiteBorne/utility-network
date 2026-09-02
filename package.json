@@ -24,6 +24,7 @@
     "test:public-preview-policy": "tsx scripts/test-public-preview-policy-caught.mts",
     "test:production-fixture-reintroduction": "tsx scripts/test-production-fixture-reintroduction-caught.mts",
     "pricing:check": "tsx scripts/check-embedded-pricing-drift.mts",
+    "pricing:registry:check": "tsx scripts/check-registry-pricing-drift.mts",
     "contracts:baseline:verify": "pnpm --filter @siteborne/contracts contracts:baseline:verify",
     "contracts:compat": "pnpm --filter @siteborne/contracts contracts:compat",
     "contracts:compat:check": "pnpm --filter @siteborne/contracts contracts:compat:check",
