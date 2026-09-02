@@ -92,6 +92,31 @@ export interface Env {
    * means the route is not reachable, matching every other paid-route
    * gate's fail-closed convention. */
   WEB_CONTEXT_V2_CDP_ROUTE_ENABLED?: string;
+  /** SUN-1222B-S3R — the route-specific activation gate for
+   * `company_evidence_graph.v2` / CDP, mirroring
+   * `WEB_CONTEXT_V2_CDP_ROUTE_ENABLED` exactly: required IN ADDITION TO
+   * `PAID_ROUTES_ENABLED` (both must be the exact literal `'true'`).
+   * Independent of the other two services' own flags. Absent/unset means
+   * the route is not reachable, matching every other paid-route gate's
+   * fail-closed convention. */
+  COMPANY_EVIDENCE_GRAPH_V2_CDP_ROUTE_ENABLED?: string;
+  /** SUN-1222B-S3R — the route-specific activation gate for
+   * `document_evidence_json.v2` / CDP, mirroring
+   * `COMPANY_EVIDENCE_GRAPH_V2_CDP_ROUTE_ENABLED` exactly. Setting this
+   * `'true'` alone does NOT make the route reachable in production today
+   * -- the route's own composition also requires `env.ARTIFACTS` (R2,
+   * commented out of `wrangler.toml` since SUN-0800B checkpoint 3) and
+   * `MODAL_DOCWORKER_*` (undeployed, SUN-0400B) to be present; absent
+   * either, the composition returns `unavailable: true` and the route
+   * 404s exactly like every other missing-credential case. */
+  DOCUMENT_EVIDENCE_JSON_V2_CDP_ROUTE_ENABLED?: string;
+  /** SUN-1222B-S3R — dedicated Modal App/credential set for
+   * `siteborne-document-worker`'s new `process_document_http` endpoint.
+   * Deliberately NOT `MODAL_WEBCTX_*` -- a different Modal App with its
+   * own proxy-auth token pair once deployed (SUN-0400B, not yet run). */
+  MODAL_DOCWORKER_ENDPOINT_URL?: string;
+  MODAL_DOCWORKER_PROXY_KEY?: string;
+  MODAL_DOCWORKER_PROXY_SECRET?: string;
   /** Additive Nevermined route-family gate. Checkpoint 2 still has no
    * authenticated sandbox provider, so setting this alone fails closed. */
   NEVERMINED_ROUTES_ENABLED?: string;

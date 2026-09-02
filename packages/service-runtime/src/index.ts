@@ -11,6 +11,7 @@ export * from './services/web-context/types';
 export * from './services/document-evidence/service';
 export * from './services/document-evidence/types';
 export * from './services/document-evidence/worker-bridge';
+export * from './services/document-evidence/worker-bridge-http';
 export * from './services/document-evidence/worker-result-types';
 export * from './services/agent-verification/service';
 export * from './services/agent-verification/types';

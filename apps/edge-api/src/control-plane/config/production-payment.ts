@@ -280,6 +280,96 @@ export function resolveWebContextV2CdpEffectiveDiscoveryStatus(
   return true;
 }
 
+/** SUN-1222B-S3R — mirrors `isWebContextV2CdpRouteFlagEnabled` exactly for
+ * `company_evidence_graph.v2` / CDP. Independent of the other routes' own
+ * flags: any of the three services can be active while the others are
+ * not. */
+export function isCompanyEvidenceGraphV2CdpRouteFlagEnabled(
+  env: Pick<Env, 'PAID_ROUTES_ENABLED' | 'COMPANY_EVIDENCE_GRAPH_V2_CDP_ROUTE_ENABLED'>
+): boolean {
+  return (
+    env.PAID_ROUTES_ENABLED === 'true' && env.COMPANY_EVIDENCE_GRAPH_V2_CDP_ROUTE_ENABLED === 'true'
+  );
+}
+
+/** Mirrors `WebContextV2CdpDiscoveryEnv` exactly, substituting the
+ * company-evidence route flag. */
+export type CompanyEvidenceGraphV2CdpDiscoveryEnv = Pick<
+  Env,
+  | 'PAID_ROUTES_ENABLED'
+  | 'COMPANY_EVIDENCE_GRAPH_V2_CDP_ROUTE_ENABLED'
+  | 'PAYMENT_ENVIRONMENT'
+  | 'PRODUCTION_ENABLED'
+  | 'HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP'
+  | 'PRODUCTION_CDP_CREDENTIALS_APPROVED'
+  | 'PAID_RECEIPT_SIGNING_PRIVATE_KEY'
+  | 'PAID_RECEIPT_SIGNING_KEY_ID'
+  | 'SELLER_WALLET_ADDRESS'
+  | 'CDP_API_KEY_ID'
+  | 'CDP_API_KEY_SECRET'
+>;
+
+/** Mirrors `resolveWebContextV2CdpEffectiveDiscoveryStatus` exactly -- see
+ * that function's own doc comment for the full reasoning. */
+export function resolveCompanyEvidenceGraphV2CdpEffectiveDiscoveryStatus(
+  env: CompanyEvidenceGraphV2CdpDiscoveryEnv,
+  hasDb: boolean
+): boolean {
+  if (!hasDb) return false;
+  if (!isCompanyEvidenceGraphV2CdpRouteFlagEnabled(env)) return false;
+  if (!isProductionPaymentAuthorized(resolveProductionAuthorizationInput(env))) return false;
+  if (!env.PAID_RECEIPT_SIGNING_PRIVATE_KEY || !env.PAID_RECEIPT_SIGNING_KEY_ID) return false;
+  if (!checkProductionBindingsPresent(env).ok) return false;
+  return true;
+}
+
+/** SUN-1222B-S3R — mirrors `isCompanyEvidenceGraphV2CdpRouteFlagEnabled`
+ * exactly for `document_evidence_json.v2` / CDP. */
+export function isDocumentEvidenceJsonV2CdpRouteFlagEnabled(
+  env: Pick<Env, 'PAID_ROUTES_ENABLED' | 'DOCUMENT_EVIDENCE_JSON_V2_CDP_ROUTE_ENABLED'>
+): boolean {
+  return (
+    env.PAID_ROUTES_ENABLED === 'true' &&
+    env.DOCUMENT_EVIDENCE_JSON_V2_CDP_ROUTE_ENABLED === 'true'
+  );
+}
+
+/** Mirrors `CompanyEvidenceGraphV2CdpDiscoveryEnv` exactly, substituting
+ * the document-evidence route flag. */
+export type DocumentEvidenceJsonV2CdpDiscoveryEnv = Pick<
+  Env,
+  | 'PAID_ROUTES_ENABLED'
+  | 'DOCUMENT_EVIDENCE_JSON_V2_CDP_ROUTE_ENABLED'
+  | 'PAYMENT_ENVIRONMENT'
+  | 'PRODUCTION_ENABLED'
+  | 'HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP'
+  | 'PRODUCTION_CDP_CREDENTIALS_APPROVED'
+  | 'PAID_RECEIPT_SIGNING_PRIVATE_KEY'
+  | 'PAID_RECEIPT_SIGNING_KEY_ID'
+  | 'SELLER_WALLET_ADDRESS'
+  | 'CDP_API_KEY_ID'
+  | 'CDP_API_KEY_SECRET'
+>;
+
+/** Mirrors `resolveCompanyEvidenceGraphV2CdpEffectiveDiscoveryStatus`
+ * exactly -- see that function's own doc comment for the full reasoning.
+ * Deliberately does NOT (and cannot, without a live network probe) check
+ * `env.ARTIFACTS`/R2 presence or MODAL_DOCWORKER_* -- consistent with
+ * every other resolver here, discovery reflects synchronous
+ * signing-key/CDP-binding presence only; the route itself is the sole
+ * authority on whether a real request can actually succeed. */
+export function resolveDocumentEvidenceJsonV2CdpEffectiveDiscoveryStatus(
+  env: DocumentEvidenceJsonV2CdpDiscoveryEnv,
+  hasDb: boolean
+): boolean {
+  if (!hasDb) return false;
+  if (!isDocumentEvidenceJsonV2CdpRouteFlagEnabled(env)) return false;
+  if (!isProductionPaymentAuthorized(resolveProductionAuthorizationInput(env))) return false;
+  if (!env.PAID_RECEIPT_SIGNING_PRIVATE_KEY || !env.PAID_RECEIPT_SIGNING_KEY_ID) return false;
+  if (!checkProductionBindingsPresent(env).ok) return false;
+  return true;
+}
+
 /** SUN-1221C — a small, additive per-service discovery-resolver registry
  * (SUN-1221CD §22: "prefer generic... rather than adding another chain
  * of hardcoded single-service special cases"). Each existing per-service
@@ -290,13 +380,24 @@ export function resolveWebContextV2CdpEffectiveDiscoveryStatus(
  * composition have an entry; every other `SiteborneServiceId` is simply
  * absent (never truthfully claimable as active). */
 export type EffectiveDiscoveryEnv = VerifyAgentOutputV2CdpDiscoveryEnv &
-  WebContextV2CdpDiscoveryEnv;
+  WebContextV2CdpDiscoveryEnv &
+  CompanyEvidenceGraphV2CdpDiscoveryEnv &
+  DocumentEvidenceJsonV2CdpDiscoveryEnv;
 
 export const EFFECTIVE_DISCOVERY_RESOLVERS: Partial<
   Record<SiteborneServiceId, (env: EffectiveDiscoveryEnv, hasDb: boolean) => boolean>
 > = {
   'verify_agent_output.v2': resolveVerifyAgentOutputV2CdpEffectiveDiscoveryStatus,
   'web_context_verified.v2': resolveWebContextV2CdpEffectiveDiscoveryStatus,
+  // SUN-1222B-S3R — company_evidence_graph.v2 and document_evidence_json.v2
+  // now have real production compositions; added the same way the first
+  // two were. Neither resolver checks env.ARTIFACTS/MODAL_DOCWORKER_*/
+  // MODAL_WEBCTX_* presence (a live-call-avoidance limitation this
+  // registry already accepted for the first two) -- the route itself
+  // remains the sole authority on whether a real request actually
+  // succeeds.
+  'company_evidence_graph.v2': resolveCompanyEvidenceGraphV2CdpEffectiveDiscoveryStatus,
+  'document_evidence_json.v2': resolveDocumentEvidenceJsonV2CdpEffectiveDiscoveryStatus,
 };
 
 /** The single surface-neutral runtime status consumed by every public

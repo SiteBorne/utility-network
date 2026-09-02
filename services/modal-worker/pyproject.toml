@@ -24,6 +24,7 @@ dev = [
 ]
 modal = [
     "modal>=1.5,<2",
+    "fastapi>=0.110",
 ]
 
 [tool.pytest.ini_options]

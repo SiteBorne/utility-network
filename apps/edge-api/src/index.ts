@@ -27,6 +27,8 @@ import { AuditLogger } from './control-plane/audit/events';
 import { productionServiceExecutorUnavailable } from './control-plane/routes/production-paid-services';
 import { verifyAgentOutputV2CdpProductionRoute } from './control-plane/routes/production-verify-v2-cdp-route';
 import { webContextVerifiedV2CdpProductionRoute } from './control-plane/routes/production-web-context-v2-cdp-route';
+import { companyEvidenceGraphV2CdpProductionRoute } from './control-plane/routes/production-company-evidence-v2-cdp-route';
+import { documentEvidenceJsonV2CdpProductionRoute } from './control-plane/routes/production-document-evidence-v2-cdp-route';
 import type { Env } from './control-plane/config/env';
 
 export type { ControlPlaneConfig };
@@ -178,6 +180,32 @@ app.post('/v2/verify/agent-output', verifyAgentOutputV2CdpProductionRoute);
  * `VERIFY_V2_CDP_ROUTE_ENABLED`; default-absent on either -> 404.
  */
 app.post('/v2/web/context', webContextVerifiedV2CdpProductionRoute);
+
+/**
+ * SUN-1222B-S3R — the third real, bundle-reachable production paid-service
+ * composition (`company_evidence_graph.v2` / CDP), mirroring
+ * `web_context_verified.v2`'s exact registration pattern above: registered
+ * for exactly `POST`, mounted before the generic `/v2/*` wildcard below so
+ * Hono matches this route first for this one path only. Every other
+ * method on this path, and every other paid route, falls through
+ * unchanged to the wildcard handlers that follow. Gated independently by
+ * `PAID_ROUTES_ENABLED` AND `COMPANY_EVIDENCE_GRAPH_V2_CDP_ROUTE_ENABLED`
+ * -- unrelated to the other two services' flags; default-absent on either
+ * -> 404.
+ */
+app.post('/v2/company/evidence-graph', companyEvidenceGraphV2CdpProductionRoute);
+
+/**
+ * SUN-1222B-S3R — the fourth real, bundle-reachable production
+ * paid-service composition (`document_evidence_json.v2` / CDP), mirroring
+ * `company_evidence_graph.v2`'s exact registration pattern above. Gated
+ * independently by `PAID_ROUTES_ENABLED` AND
+ * `DOCUMENT_EVIDENCE_JSON_V2_CDP_ROUTE_ENABLED`; the route ALSO requires
+ * `env.ARTIFACTS` and `MODAL_DOCWORKER_*` to be genuinely present (both
+ * absent in the deployed production Worker today) or the composition
+ * returns `unavailable: true` -- see that route module's own doc comment.
+ */
+app.post('/v2/document/evidence-json', documentEvidenceJsonV2CdpProductionRoute);
 
 // SUN-1218 checkpoint X: see the `/v1/*` wildcard's own doc comment
 // above -- same correction, same reasoning, unconditional 404.

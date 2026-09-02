@@ -425,11 +425,21 @@ describe('SUN-1221E1 — MCP production-discovery coherence', () => {
     }
   );
 
-  it('does not advertise either represented unsupported service as production-active', async () => {
+  it('does not advertise either company_evidence_graph.v2 or document_evidence_json.v2 as production-active even though both now have real production compositions (SUN-1222B-S3R)', async () => {
+    // Before SUN-1222B-S3R these two had no production composition at all
+    // (`implementation: 'local_fixture_verified'`, `hasProductionExecutor:
+    // false`). Both now have real ones -- `EFFECTIVE_DISCOVERY_RESOLVERS`
+    // correctly reports `implementation: 'real_executor'` -- but BOTH_ACTIVE_ENV
+    // only sets the two ORIGINAL route flags (verify/web-context), not
+    // COMPANY_EVIDENCE_GRAPH_V2_CDP_ROUTE_ENABLED/DOCUMENT_EVIDENCE_JSON_V2_
+    // CDP_ROUTE_ENABLED, so `production: 'production_disabled'` and
+    // `external: 'not_live'` correctly remain unchanged -- the invariant
+    // this test exists to prove (neither is ever falsely advertised as
+    // production-active) still holds.
     const health = await getMcpHealth(createFakeD1(), BOTH_ACTIVE_ENV);
     for (const serviceId of ['company_evidence_graph.v2', 'document_evidence_json.v2']) {
       expect(health.services[serviceId]).toEqual({
-        implementation: 'local_fixture_verified',
+        implementation: 'real_executor',
         production: 'production_disabled',
         external: 'not_live',
       });

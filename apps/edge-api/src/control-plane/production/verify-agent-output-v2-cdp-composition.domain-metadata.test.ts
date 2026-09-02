@@ -270,7 +270,7 @@ describe('SUN-1220L: verify_agent_output.v2/CDP real requirement carries EIP-712
     expect(recorder.calls).toBe(1);
   });
 
-  it('route isolation: paymentRequirementExtra is SET (as an object key, not the interface\'s optional declaration) only in the two real production CDP compositions -- never automatically added to any Nevermined or fixture-only route composition. SUN-1221C added the second entry (web_context_verified.v2, its own real CDP composition, the exact same pattern) -- this assertion was updated from "exactly one file" to this explicit two-file allowlist for that reason, not weakened to a wildcard', async () => {
+  it('route isolation: paymentRequirementExtra is SET (as an object key, not the interface\'s optional declaration) only in the four real production CDP compositions -- never automatically added to any Nevermined or fixture-only route composition. SUN-1221C added the second entry (web_context_verified.v2); SUN-1222B-S3R added the third and fourth (company_evidence_graph.v2, document_evidence_json.v2, each its own real CDP composition, the exact same pattern) -- this assertion was updated from "exactly one file" to this explicit four-file allowlist for that reason, not weakened to a wildcard', async () => {
     const { execFileSync } = await import('node:child_process');
     const repoRoot = fileURLToPath(new URL('../../../../../', import.meta.url));
     // Matches an actual object-literal key assignment (`paymentRequirementExtra:`
@@ -296,6 +296,8 @@ describe('SUN-1220L: verify_agent_output.v2/CDP real requirement carries EIP-712
       [
         'apps/edge-api/src/control-plane/production/verify-agent-output-v2-cdp-composition.ts',
         'apps/edge-api/src/control-plane/production/web-context-v2-cdp-composition.ts',
+        'apps/edge-api/src/control-plane/production/company-evidence-graph-v2-cdp-composition.ts',
+        'apps/edge-api/src/control-plane/production/document-evidence-json-v2-cdp-composition.ts',
       ].sort()
     );
   });
