@@ -84,7 +84,8 @@ function mainnetAuthorizedTestEnv() {
     HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP: 'true',
     PRODUCTION_CDP_CREDENTIALS_APPROVED: 'true',
     DOCUMENT_EVIDENCE_JSON_V2_CDP_ROUTE_ENABLED: 'true',
-    MODAL_DOCWORKER_ENDPOINT_URL: 'https://test-workspace--siteborne-document-worker-process-document-http.modal.run',
+    MODAL_DOCWORKER_ENDPOINT_URL:
+      'https://test-workspace--siteborne-document-worker-process-document-http.modal.run',
     MODAL_DOCWORKER_PROXY_KEY: 'test-modal-docworker-proxy-key',
     MODAL_DOCWORKER_PROXY_SECRET: 'test-modal-docworker-proxy-secret',
   };
@@ -107,6 +108,9 @@ function inMemoryArtifactStoreStandin(): ArtifactStore {
       return store.get(id) ?? null;
     },
     async getByContentHash() {
+      return null;
+    },
+    async getContentByContentHash() {
       return null;
     },
     async delete() {

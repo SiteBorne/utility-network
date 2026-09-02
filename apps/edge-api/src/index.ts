@@ -29,6 +29,7 @@ import { verifyAgentOutputV2CdpProductionRoute } from './control-plane/routes/pr
 import { webContextVerifiedV2CdpProductionRoute } from './control-plane/routes/production-web-context-v2-cdp-route';
 import { companyEvidenceGraphV2CdpProductionRoute } from './control-plane/routes/production-company-evidence-v2-cdp-route';
 import { documentEvidenceJsonV2CdpProductionRoute } from './control-plane/routes/production-document-evidence-v2-cdp-route';
+import { documentArtifactUploadRoute } from './control-plane/routes/document-artifact-upload-route';
 import type { Env } from './control-plane/config/env';
 
 export type { ControlPlaneConfig };
@@ -206,6 +207,18 @@ app.post('/v2/company/evidence-graph', companyEvidenceGraphV2CdpProductionRoute)
  * returns `unavailable: true` -- see that route module's own doc comment.
  */
 app.post('/v2/document/evidence-json', documentEvidenceJsonV2CdpProductionRoute);
+
+/**
+ * SUN-1222B-S3-R2 — the buyer-facing document upload endpoint that closes
+ * `document_evidence_json.v2`'s `upload_reference` input-mode gap (see
+ * `document-artifact-upload-route.ts`'s own doc comment). Deliberately
+ * mounted as its own route, never behind `x402-service.ts`'s paid-route
+ * machinery -- this handler performs no payment/PCC/settlement work, only
+ * validate-hash-store, gated by `PAID_ROUTES_ENABLED` AND
+ * `DOCUMENT_ARTIFACT_UPLOAD_ROUTE_ENABLED` (both `'true'`) plus real
+ * `DB`/`ARTIFACTS` bindings, or it 404s.
+ */
+app.post('/v2/artifacts/documents', documentArtifactUploadRoute);
 
 // SUN-1218 checkpoint X: see the `/v1/*` wildcard's own doc comment
 // above -- same correction, same reasoning, unconditional 404.

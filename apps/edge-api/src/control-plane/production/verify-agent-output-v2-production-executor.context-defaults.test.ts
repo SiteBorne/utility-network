@@ -194,7 +194,10 @@ describe('SUN-1216 residual adjudication: buildServiceContext fixture-default re
     const callBody = callMatch![1];
 
     const auditFieldMatch = callBody.match(new RegExp('audit:\\s*([a-zA-Z0-9_]+\\(\\))'));
-    expect(auditFieldMatch, 'field "audit" must be a direct nullary call expression').not.toBeNull();
+    expect(
+      auditFieldMatch,
+      'field "audit" must be a direct nullary call expression'
+    ).not.toBeNull();
 
     // `clock` is passed as a shorthand property here, exactly like
     // web_context_verified.v2's own executor.
@@ -206,18 +209,48 @@ describe('SUN-1216 residual adjudication: buildServiceContext fixture-default re
       'clock must be bound via an unconditional, non-nullable nullary-call const declaration'
     ).toMatch(/const clock = [a-zA-Z0-9_]+\(\);/);
 
-    // `artifact_store` is a real, argument-taking call expression here
-    // (`serviceRuntimeArtifactStore(edgeApiArtifactStore)`) -- still an
-    // unconditional, non-nullable direct call expression (never a bare
-    // identifier, ternary, or omission), so the `??` fixture-default
-    // right-hand side still can never evaluate at this call site.
-    const artifactStoreMatch = callBody.match(
-      /artifact_store:\s*[a-zA-Z0-9_]+\([a-zA-Z0-9_]+\)/
+    // SUN-1222B-S3-R2: `artifact_store` is now a bare identifier
+    // (`resolvedArtifactStore`) at the call site itself, not an inline
+    // call expression -- the buyer-upload resolution path needs to
+    // substitute a different real store ahead of this call (see
+    // `resolveUploadReference`'s own doc comment), so the previous
+    // "call expression directly at the site" shape no longer holds
+    // structurally. What must still hold -- and is checked explicitly
+    // below rather than assumed -- is that the identifier is (a) declared
+    // with the non-nullable `ArtifactStore` type, initialized from a real
+    // call expression, and (b) NEVER reassigned to `undefined`/`null`/a
+    // conditional-with-nullable-branch anywhere in the file, so the `??`
+    // fixture-default right-hand side still can never evaluate.
+    const artifactStoreFieldMatch = callBody.match(/artifact_store:\s*([a-zA-Z0-9_]+)\s*,/);
+    expect(
+      artifactStoreFieldMatch,
+      'artifact_store must be present as either a direct call expression or a bare identifier'
+    ).not.toBeNull();
+    const artifactStoreIdentifier = artifactStoreFieldMatch![1];
+
+    const declarationMatch = source.match(
+      new RegExp(
+        `let ${artifactStoreIdentifier}: ArtifactStore = ([a-zA-Z0-9_]+)\\(([a-zA-Z0-9_]+)\\);`
+      )
     );
     expect(
-      artifactStoreMatch,
-      'artifact_store must be a direct call expression taking the injected real store'
+      declarationMatch,
+      `${artifactStoreIdentifier} must be declared with the non-nullable ArtifactStore type, ` +
+        'initialized from a real call expression taking the injected store'
     ).not.toBeNull();
+
+    // Every OTHER assignment to this identifier in the file (the
+    // buyer-upload resolution branch's override) must also be a real
+    // object literal or call expression -- never `undefined`, `null`, or
+    // anything that could make the `??` fixture-default fallback reachable.
+    const reassignmentPattern = new RegExp(`${artifactStoreIdentifier}\\s*=\\s*([^;]+);`, 'g');
+    const reassignments = [...source.matchAll(reassignmentPattern)].map((m) => m[1].trim());
+    expect(reassignments.length).toBeGreaterThan(0);
+    for (const rhs of reassignments) {
+      expect(rhs, `${artifactStoreIdentifier} reassignment must never be nullable`).not.toMatch(
+        /^(undefined|null)$/
+      );
+    }
   });
 
   it('no OTHER production-reachable source file (excluding paid-services.ts, tests, and scripts) calls buildServiceContext with clock/artifact_store/audit omitted', () => {

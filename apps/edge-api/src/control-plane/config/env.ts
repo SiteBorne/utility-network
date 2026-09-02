@@ -117,6 +117,13 @@ export interface Env {
   MODAL_DOCWORKER_ENDPOINT_URL?: string;
   MODAL_DOCWORKER_PROXY_KEY?: string;
   MODAL_DOCWORKER_PROXY_SECRET?: string;
+  /** SUN-1222B-S3-R2 — the route-specific activation gate for the
+   * buyer-facing `POST /v2/artifacts/documents` upload endpoint, mirroring
+   * `DOCUMENT_EVIDENCE_JSON_V2_CDP_ROUTE_ENABLED`'s convention exactly:
+   * required IN ADDITION TO `PAID_ROUTES_ENABLED`, and the route's own
+   * handler additionally fails closed (404, never 500) if `DB`/`ARTIFACTS`
+   * are not bound, regardless of this flag. */
+  DOCUMENT_ARTIFACT_UPLOAD_ROUTE_ENABLED?: string;
   /** Additive Nevermined route-family gate. Checkpoint 2 still has no
    * authenticated sandbox provider, so setting this alone fails closed. */
   NEVERMINED_ROUTES_ENABLED?: string;

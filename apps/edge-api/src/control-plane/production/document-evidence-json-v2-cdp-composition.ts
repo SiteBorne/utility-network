@@ -191,7 +191,8 @@ export async function buildDocumentEvidenceJsonV2CdpProductionRouteConfig(
     signer,
     registry,
     worker,
-    artifactStore
+    artifactStore,
+    db
   );
 
   const asset = resolvePaymentAsset(network);

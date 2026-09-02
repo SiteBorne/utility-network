@@ -61,6 +61,15 @@ export class InMemoryArtifactStore implements ArtifactStore {
     return metadata;
   }
 
+  /** SUN-1222B-S3-R2: content-addressed fetch, used by the buyer-upload
+   * resolution path (`upload_reference`) so the caller never needs to
+   * know the store's internal `id` vs. `content_hash` keying convention. */
+  async getContentByContentHash(hash: string): Promise<Uint8Array | null> {
+    const record = this.store.get(hash);
+    if (!record) return null;
+    return record.content;
+  }
+
   async delete(id: string): Promise<boolean> {
     const record = this.store.get(id);
     if (!record) return false;
@@ -179,6 +188,22 @@ export class R2ArtifactStoreAdapter implements ArtifactStore {
     return this.getMetadata(key);
   }
 
+  /** SUN-1222B-S3-R2: content-addressed fetch, using the exact same key
+   * derivation `put()`/`getByContentHash()` already use internally
+   * (`prefix + hash-without-"sha256:"`). Deliberately NOT built on the raw
+   * `getContent(id)` above — that method treats `id` as an already-fully-
+   * qualified R2 key (the pre-existing `artifact_reference` mode's own
+   * contract, unchanged by this checkpoint; see this file's `getContent`
+   * doc note in the SUN-1222B-S3-R2 evidence report for the trace proving
+   * that contract). This is the one new, additive method the buyer-upload
+   * resolution path actually calls. */
+  async getContentByContentHash(hash: string): Promise<Uint8Array | null> {
+    const key = `${this.prefix}${hash.replace('sha256:', '')}`;
+    const object = await this.bucket.get(key);
+    if (!object) return null;
+    return new Uint8Array(await object.arrayBuffer());
+  }
+
   async delete(id: string): Promise<boolean> {
     const object = await this.bucket.head(id);
     if (!object) return false;
@@ -203,6 +228,8 @@ export interface ArtifactStore {
   getMetadata(id: string): Promise<ArtifactRecord | null>;
   getContent(id: string): Promise<Uint8Array | null>;
   getByContentHash(hash: string): Promise<ArtifactRecord | null>;
+  /** SUN-1222B-S3-R2 addition — see both implementations' own doc comments. */
+  getContentByContentHash(hash: string): Promise<Uint8Array | null>;
   delete(id: string): Promise<boolean>;
   exists(id: string): Promise<boolean>;
   existsByContentHash(hash: string): Promise<boolean>;
