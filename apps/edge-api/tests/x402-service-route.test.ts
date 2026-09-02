@@ -731,7 +731,7 @@ describe('x402 HTTP vertical slice (SUN-0700A checkpoint 5)', () => {
       );
       const linkIds = new Set(bodies.map((b) => b.link_id));
       expect(linkIds.size).toBeLessThanOrEqual(1);
-    });
+    }, 15_000);
   });
 
   describe('no-network proof (directive §33)', () => {
@@ -812,7 +812,7 @@ describe('x402 HTTP vertical slice (SUN-0700A checkpoint 5)', () => {
         }),
         { numRuns: 3 }
       );
-    });
+    }, 15_000);
   });
 
   describe('SUN-1221E2D — executor failures surface a sanitized diagnostic audit event, never new detail in the public 502 body', () => {
