@@ -539,7 +539,10 @@ describe('SITEBORNE MCP 2026-07-28 Hono transport', () => {
       if (!dataLine) {
         throw new Error(`no SSE data frame found in response: ${text}`);
       }
-      return JSON.parse(dataLine) as { error?: { code: number; message: string }; result?: Record<string, unknown> };
+      return JSON.parse(dataLine) as {
+        error?: { code: number; message: string };
+        result?: Record<string, unknown>;
+      };
     }
 
     it('answers a bare 2025-11-25 `initialize` request (no envelope, no version header)', async () => {
