@@ -414,7 +414,7 @@ scenarios:
     expected_provenance: n/a
     expected_audit: n/a
     test_file: src/tests/terms-rate-cache-circuit.test.ts
-    test_anchor: 'no provider is production_verified'
+    test_anchor: 'no provider except the deliberately-reviewed direct-public-http is production_verified'
 
   - scenario_id: terms-adapter-zero-calls-when-unrecorded
     provider_id: sec-edgar
