@@ -141,10 +141,17 @@ binding = "DB"
 database_name = "siteborne-utility"
 database_id = "efe23c42-cbcc-47c2-9b28-922a541bdcdd"
 
-# SUN-0800B checkpoint 3: R2 bucket commented out - needs dashboard enablement first
-# [[r2_buckets]]
-# binding = "ARTIFACTS"
-# bucket_name = "siteborne-artifacts"
+# SUN-0800B checkpoint 3: R2 bucket was commented out pending dashboard
+# enablement. SUN-1222C-R1 confirmed R2 enabled at the account level and
+# created the real bucket below (private, no managed/custom domain).
+# SUN-1222C-1 uncomments this binding -- document_evidence_json.v2's
+# production composition (and the buyer document-upload route) require
+# `env.ARTIFACTS` to be bound to reach real (non-`unavailable: true`)
+# behavior; see env.ts's DOCUMENT_EVIDENCE_JSON_V2_CDP_ROUTE_ENABLED doc
+# comment.
+[[r2_buckets]]
+binding = "ARTIFACTS"
+bucket_name = "siteborne-artifacts"
 
 # SUN-0800B checkpoint 2: `id` cannot be a placeholder/empty string --
 # wrangler rejects that as an invalid string id (unlike `d1_databases`'
