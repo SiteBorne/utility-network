@@ -172,15 +172,40 @@ export function createBodySizeMiddleware() {
   };
 }
 
+/**
+ * SUN-1222C-1-REMEDIATION §4 — the exact, narrow list of route+method pairs
+ * that intentionally accept a body that is not `application/json`. Every
+ * such route is responsible for validating its OWN accepted content/media
+ * types itself (`document-artifact-upload-route.ts` -> `document-upload.ts`
+ * already does, with its own 38-case test suite) — this list exists only
+ * to stop the global JSON-only check from rejecting those requests BEFORE
+ * the route ever runs. Adding an entry here does not relax any other
+ * route's JSON-only enforcement, and must never be used to broadly accept
+ * "any content type" — see this checkpoint's evidence report §4 for why a
+ * path-scoped exemption was chosen over restructuring mount order (which
+ * would also drop error/security/audit/idempotency/body-size middleware
+ * for the exempted route) or weakening `AllowedContentTypes` globally
+ * (which would remove JSON-only protection from every other endpoint).
+ */
+const NON_JSON_BODY_ROUTES: ReadonlyArray<{ method: string; path: string }> = [
+  { method: 'POST', path: '/v2/artifacts/documents' },
+];
+
+function isNonJsonBodyRoute(method: string, path: string): boolean {
+  return NON_JSON_BODY_ROUTES.some((route) => route.method === method && route.path === path);
+}
+
 export function createContentTypeMiddleware() {
   return async (c: Context, next: Next) => {
     if (c.req.method !== 'GET' && c.req.method !== 'HEAD') {
-      const contentType = c.req.header('Content-Type');
-      if (!validateContentType(contentType)) {
-        return c.json(
-          { code: 'UNSUPPORTED_MEDIA_TYPE', message: 'Content-Type must be application/json' },
-          415
-        );
+      if (!isNonJsonBodyRoute(c.req.method, c.req.path)) {
+        const contentType = c.req.header('Content-Type');
+        if (!validateContentType(contentType)) {
+          return c.json(
+            { code: 'UNSUPPORTED_MEDIA_TYPE', message: 'Content-Type must be application/json' },
+            415
+          );
+        }
       }
     }
     await next();
