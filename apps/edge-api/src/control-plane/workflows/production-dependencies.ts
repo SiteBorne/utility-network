@@ -15,18 +15,28 @@
  * Deliberately a separate module from `paid-continuation-workflow.ts`
  * (plan's own "no giant orchestration file" principle, §4) and kept thin:
  * every real dependency it builds is a REUSED, already-audited
- * production primitive — the exact two composition functions the real
+ * production primitive — the exact four composition functions the real
  * HTTP routes already call (`buildWebContextV2CdpProductionRouteConfig`,
- * `buildVerifyAgentOutputV2CdpProductionRouteConfig`), the real D1
- * repository classes (`D1JobsRepository`, `D1StateEventsRepository`,
- * `X402ServiceResultRepository`, `D1PaymentAttemptRepository`), and the
- * real chain-receipt checker (`buildProductionCdpChainReceiptChecker`).
- * Nothing here reimplements executor logic, PCC generation, D1 access,
- * or CDP/facilitator wiring — it only adapts already-real pieces to the
- * narrow port shapes `PaidContinuationWorkflowDependencies` declares.
+ * `buildVerifyAgentOutputV2CdpProductionRouteConfig`,
+ * `buildCompanyEvidenceGraphV2CdpProductionRouteConfig`,
+ * `buildDocumentEvidenceJsonV2CdpProductionRouteConfig` — the latter two
+ * added by SUN-1222D-PRE-WORKFLOW-DISPATCH-FIX, closing the gap that
+ * checkpoint's own read-only predecessor discovered: both services'
+ * composition functions and production executors already existed, but
+ * neither was ever reachable from this Workflow's dependency-construction
+ * plane), the real D1 repository classes (`D1JobsRepository`,
+ * `D1StateEventsRepository`, `X402ServiceResultRepository`,
+ * `D1PaymentAttemptRepository`), and the real chain-receipt checker
+ * (`buildProductionCdpChainReceiptChecker`). Nothing here reimplements
+ * executor logic, PCC generation, D1 access, or CDP/facilitator wiring —
+ * it only adapts already-real pieces to the narrow port shapes
+ * `PaidContinuationWorkflowDependencies` declares.
  */
 import { buildWebContextV2CdpProductionRouteConfig } from '../production/web-context-v2-cdp-composition';
 import { buildVerifyAgentOutputV2CdpProductionRouteConfig } from '../production/verify-agent-output-v2-cdp-composition';
+import { buildCompanyEvidenceGraphV2CdpProductionRouteConfig } from '../production/company-evidence-graph-v2-cdp-composition';
+import { buildDocumentEvidenceJsonV2CdpProductionRouteConfig } from '../production/document-evidence-json-v2-cdp-composition';
+import { R2ArtifactStoreAdapter } from '../artifacts/store';
 import { importContinuationEnvelopeKey } from '../continuation/envelope';
 import { buildProductionCdpChainReceiptChecker } from '../evidence/chain-receipt-checker';
 import { D1JobsRepository, D1StateEventsRepository } from '../repositories/d1/jobs';
@@ -41,20 +51,143 @@ import type {
   ResultReceiptPersistence,
   PccValidator,
 } from './paid-continuation-workflow';
-import type { ExecutorOutcome } from '../routes/x402-service';
+import type { ExecutorOutcome, X402ServiceRouteConfig } from '../routes/x402-service';
 
 export interface ProductionDependenciesUnavailable {
   readonly unavailable: true;
   readonly reason: string;
 }
 
+interface RouteConfigUnavailable {
+  readonly unavailable: true;
+  readonly reason: string;
+}
+
 /**
- * The two real production services this Workflow ever serves. Any other
- * `metadata.service` value is a genuine configuration error (a route
- * this Workflow was never wired for) — fails closed, never a silent
- * default to one service's dependencies for another's payload.
+ * SUN-1222D-PRE-WORKFLOW-DISPATCH-FIX — one dependency builder per
+ * production service, keyed by the exact `service` string a real
+ * continuation envelope's `metadata.service` carries. Deliberately a
+ * `Record`, not a `switch`/if-else chain: `SUPPORTED_SERVICES` below is
+ * MECHANICALLY DERIVED from `Object.keys(...)` of this same object, so
+ * "a service is supported" and "a service has a builder" can never drift
+ * apart (`production-dependencies.test.ts`'s registry-coherence suite
+ * proves this for real, not by convention). Each entry calls the exact
+ * same, already-audited production composition function the real HTTP
+ * route for that service already calls — this file never reimplements
+ * gate logic, executor construction, or evidence resolution; it only
+ * adapts each composition's `X402ServiceRouteConfig` output to the one
+ * narrow shape `buildProductionPaidContinuationWorkflowDependencies`
+ * needs below (`.executor`, `.evidenceProvider`, `.network`).
  */
-const SUPPORTED_SERVICES = new Set(['web_context_verified.v2', 'verify_agent_output.v2']);
+const ROUTE_CONFIG_BUILDERS: Record<
+  string,
+  (env: PaidContinuationWorkflowHostEnv) => Promise<X402ServiceRouteConfig | RouteConfigUnavailable>
+> = {
+  'web_context_verified.v2': (env) =>
+    buildWebContextV2CdpProductionRouteConfig(
+      {
+        PAID_RECEIPT_SIGNING_PRIVATE_KEY: env.PAID_RECEIPT_SIGNING_PRIVATE_KEY,
+        PAID_RECEIPT_SIGNING_KEY_ID: env.PAID_RECEIPT_SIGNING_KEY_ID,
+        SELLER_WALLET_ADDRESS: env.SELLER_WALLET_ADDRESS,
+        CDP_API_KEY_ID: env.CDP_API_KEY_ID,
+        CDP_API_KEY_SECRET: env.CDP_API_KEY_SECRET,
+        PAYMENT_ENVIRONMENT: env.PAYMENT_ENVIRONMENT,
+        PRODUCTION_ENABLED: env.PRODUCTION_ENABLED,
+        HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP: env.HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP,
+        PRODUCTION_CDP_CREDENTIALS_APPROVED: env.PRODUCTION_CDP_CREDENTIALS_APPROVED,
+        MODAL_WEBCTX_ENDPOINT_URL: env.MODAL_WEBCTX_ENDPOINT_URL,
+        MODAL_WEBCTX_PROXY_KEY: env.MODAL_WEBCTX_PROXY_KEY,
+        MODAL_WEBCTX_PROXY_SECRET: env.MODAL_WEBCTX_PROXY_SECRET,
+      },
+      env.DB
+    ),
+  'verify_agent_output.v2': (env) =>
+    buildVerifyAgentOutputV2CdpProductionRouteConfig(
+      {
+        PAID_RECEIPT_SIGNING_PRIVATE_KEY: env.PAID_RECEIPT_SIGNING_PRIVATE_KEY,
+        PAID_RECEIPT_SIGNING_KEY_ID: env.PAID_RECEIPT_SIGNING_KEY_ID,
+        SELLER_WALLET_ADDRESS: env.SELLER_WALLET_ADDRESS,
+        CDP_API_KEY_ID: env.CDP_API_KEY_ID,
+        CDP_API_KEY_SECRET: env.CDP_API_KEY_SECRET,
+        PAYMENT_ENVIRONMENT: env.PAYMENT_ENVIRONMENT,
+        PRODUCTION_ENABLED: env.PRODUCTION_ENABLED,
+        HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP: env.HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP,
+        PRODUCTION_CDP_CREDENTIALS_APPROVED: env.PRODUCTION_CDP_CREDENTIALS_APPROVED,
+      },
+      env.DB
+    ),
+  // SUN-1222D-PRE-WORKFLOW-DISPATCH-FIX — genuinely new. Reuses the real
+  // `company_evidence_graph.v2` production composition (SUN-1222B-S3R)
+  // unmodified; that composition's own MODAL_WEBCTX_*/signing-key gates
+  // are the only thing standing between this and a real execution.
+  'company_evidence_graph.v2': (env) =>
+    buildCompanyEvidenceGraphV2CdpProductionRouteConfig(
+      {
+        PAID_RECEIPT_SIGNING_PRIVATE_KEY: env.PAID_RECEIPT_SIGNING_PRIVATE_KEY,
+        PAID_RECEIPT_SIGNING_KEY_ID: env.PAID_RECEIPT_SIGNING_KEY_ID,
+        SELLER_WALLET_ADDRESS: env.SELLER_WALLET_ADDRESS,
+        CDP_API_KEY_ID: env.CDP_API_KEY_ID,
+        CDP_API_KEY_SECRET: env.CDP_API_KEY_SECRET,
+        PAYMENT_ENVIRONMENT: env.PAYMENT_ENVIRONMENT,
+        PRODUCTION_ENABLED: env.PRODUCTION_ENABLED,
+        HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP: env.HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP,
+        PRODUCTION_CDP_CREDENTIALS_APPROVED: env.PRODUCTION_CDP_CREDENTIALS_APPROVED,
+        MODAL_WEBCTX_ENDPOINT_URL: env.MODAL_WEBCTX_ENDPOINT_URL,
+        MODAL_WEBCTX_PROXY_KEY: env.MODAL_WEBCTX_PROXY_KEY,
+        MODAL_WEBCTX_PROXY_SECRET: env.MODAL_WEBCTX_PROXY_SECRET,
+      },
+      env.DB
+    ),
+  // SUN-1222D-PRE-WORKFLOW-DISPATCH-FIX — genuinely new. Reuses the real
+  // `document_evidence_json.v2` production composition (SUN-1222B-S3R)
+  // unmodified, including its own real `!artifactStore` fail-closed gate
+  // -- `env.ARTIFACTS` constructed into a real `R2ArtifactStoreAdapter`
+  // ONLY when actually bound, mirroring
+  // `production-document-evidence-v2-cdp-route.ts`'s own
+  // `c.env.ARTIFACTS ? new R2ArtifactStoreAdapter(...) : undefined`
+  // pattern exactly -- never a fabricated/in-memory store standing in for
+  // a real one on this host.
+  'document_evidence_json.v2': (env) =>
+    buildDocumentEvidenceJsonV2CdpProductionRouteConfig(
+      {
+        PAID_RECEIPT_SIGNING_PRIVATE_KEY: env.PAID_RECEIPT_SIGNING_PRIVATE_KEY,
+        PAID_RECEIPT_SIGNING_KEY_ID: env.PAID_RECEIPT_SIGNING_KEY_ID,
+        SELLER_WALLET_ADDRESS: env.SELLER_WALLET_ADDRESS,
+        CDP_API_KEY_ID: env.CDP_API_KEY_ID,
+        CDP_API_KEY_SECRET: env.CDP_API_KEY_SECRET,
+        PAYMENT_ENVIRONMENT: env.PAYMENT_ENVIRONMENT,
+        PRODUCTION_ENABLED: env.PRODUCTION_ENABLED,
+        HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP: env.HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP,
+        PRODUCTION_CDP_CREDENTIALS_APPROVED: env.PRODUCTION_CDP_CREDENTIALS_APPROVED,
+        MODAL_DOCWORKER_ENDPOINT_URL: env.MODAL_DOCWORKER_ENDPOINT_URL,
+        MODAL_DOCWORKER_PROXY_KEY: env.MODAL_DOCWORKER_PROXY_KEY,
+        MODAL_DOCWORKER_PROXY_SECRET: env.MODAL_DOCWORKER_PROXY_SECRET,
+      },
+      env.DB,
+      env.ARTIFACTS ? new R2ArtifactStoreAdapter(env.ARTIFACTS) : undefined
+    ),
+};
+
+/**
+ * The real production services this Workflow ever serves — MECHANICALLY
+ * derived from `ROUTE_CONFIG_BUILDERS`'s own keys (never a hand-maintained
+ * second list that could silently drift from the builder map: see this
+ * module's own registry-coherence test). Any other `metadata.service`
+ * value is a genuine configuration error (a route this Workflow was never
+ * wired for) — fails closed, never a silent default to one service's
+ * dependencies for another's payload.
+ */
+const SUPPORTED_SERVICES = new Set(Object.keys(ROUTE_CONFIG_BUILDERS));
+
+/**
+ * Test-only read view of `SUPPORTED_SERVICES` — exported solely so
+ * `production-dependencies.test.ts`'s registry-coherence suite can assert
+ * against the real set this module actually dispatches on, rather than a
+ * copied/hand-maintained literal that could silently drift from it. Not
+ * used by any production code path; `ReadonlySet` so a test cannot mutate
+ * the module's real dispatch table through this reference.
+ */
+export const __TEST_ONLY_SUPPORTED_SERVICES: ReadonlySet<string> = SUPPORTED_SERVICES;
 
 /**
  * The one real PCC gate this codebase has ever had: `@siteborne/
@@ -195,14 +328,15 @@ export class D1ResultReceiptPersistence implements ResultReceiptPersistence {
 
 /**
  * Builds the real `PaidContinuationWorkflowDependencies` for exactly one
- * of the two real production services, from `this.env` alone — the only
- * thing a real `WorkflowEntrypoint.run()` ever has access to. Fails
- * closed (never throws, never falls back) for: an unsupported/unknown
- * `service`, a missing `PAYMENT_CONTINUATION_ENCRYPTION_KEY`, a missing
- * `DB` binding, or the underlying composition function reporting
- * `unavailable` (the exact same MODAL_WEBCTX_ / CDP / receipt-signing
- * gates the real HTTP routes already enforce — reused, never
- * re-implemented).
+ * of the four real production services (`ROUTE_CONFIG_BUILDERS`'s own
+ * keys), from `this.env` alone — the only thing a real
+ * `WorkflowEntrypoint.run()` ever has access to. Fails closed (never
+ * throws, never falls back) for: an unsupported/unknown `service`, a
+ * missing `PAYMENT_CONTINUATION_ENCRYPTION_KEY`, a missing `DB` binding,
+ * or the underlying composition function reporting `unavailable` (the
+ * exact same MODAL_WEBCTX_ / MODAL_DOCWORKER_ / ARTIFACTS / CDP /
+ * receipt-signing gates the real HTTP routes already enforce — reused,
+ * never re-implemented).
  *
  * SUN-1221E6R-H2BF4 — `env` is deliberately typed as the minimal
  * `PaidContinuationWorkflowHostEnv` (`Pick<Env, ...>`, defined in
@@ -216,7 +350,8 @@ export async function buildProductionPaidContinuationWorkflowDependencies(
   env: PaidContinuationWorkflowHostEnv,
   service: string
 ): Promise<PaidContinuationWorkflowDependencies | ProductionDependenciesUnavailable> {
-  if (!SUPPORTED_SERVICES.has(service)) {
+  const buildRouteConfig = ROUTE_CONFIG_BUILDERS[service];
+  if (!buildRouteConfig) {
     return { unavailable: true, reason: `unsupported service: ${service}` };
   }
   if (!env.DB) {
@@ -226,39 +361,7 @@ export async function buildProductionPaidContinuationWorkflowDependencies(
     return { unavailable: true, reason: 'PAYMENT_CONTINUATION_ENCRYPTION_KEY is missing' };
   }
 
-  const routeConfig =
-    service === 'web_context_verified.v2'
-      ? await buildWebContextV2CdpProductionRouteConfig(
-          {
-            PAID_RECEIPT_SIGNING_PRIVATE_KEY: env.PAID_RECEIPT_SIGNING_PRIVATE_KEY,
-            PAID_RECEIPT_SIGNING_KEY_ID: env.PAID_RECEIPT_SIGNING_KEY_ID,
-            SELLER_WALLET_ADDRESS: env.SELLER_WALLET_ADDRESS,
-            CDP_API_KEY_ID: env.CDP_API_KEY_ID,
-            CDP_API_KEY_SECRET: env.CDP_API_KEY_SECRET,
-            PAYMENT_ENVIRONMENT: env.PAYMENT_ENVIRONMENT,
-            PRODUCTION_ENABLED: env.PRODUCTION_ENABLED,
-            HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP: env.HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP,
-            PRODUCTION_CDP_CREDENTIALS_APPROVED: env.PRODUCTION_CDP_CREDENTIALS_APPROVED,
-            MODAL_WEBCTX_ENDPOINT_URL: env.MODAL_WEBCTX_ENDPOINT_URL,
-            MODAL_WEBCTX_PROXY_KEY: env.MODAL_WEBCTX_PROXY_KEY,
-            MODAL_WEBCTX_PROXY_SECRET: env.MODAL_WEBCTX_PROXY_SECRET,
-          },
-          env.DB
-        )
-      : await buildVerifyAgentOutputV2CdpProductionRouteConfig(
-          {
-            PAID_RECEIPT_SIGNING_PRIVATE_KEY: env.PAID_RECEIPT_SIGNING_PRIVATE_KEY,
-            PAID_RECEIPT_SIGNING_KEY_ID: env.PAID_RECEIPT_SIGNING_KEY_ID,
-            SELLER_WALLET_ADDRESS: env.SELLER_WALLET_ADDRESS,
-            CDP_API_KEY_ID: env.CDP_API_KEY_ID,
-            CDP_API_KEY_SECRET: env.CDP_API_KEY_SECRET,
-            PAYMENT_ENVIRONMENT: env.PAYMENT_ENVIRONMENT,
-            PRODUCTION_ENABLED: env.PRODUCTION_ENABLED,
-            HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP: env.HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP,
-            PRODUCTION_CDP_CREDENTIALS_APPROVED: env.PRODUCTION_CDP_CREDENTIALS_APPROVED,
-          },
-          env.DB
-        );
+  const routeConfig = await buildRouteConfig(env);
 
   if ('unavailable' in routeConfig) {
     return { unavailable: true, reason: routeConfig.reason };

@@ -79,24 +79,26 @@ import { buildProductionPaidContinuationWorkflowDependencies } from './productio
 // ---------------------------------------------------------------------
 // SUN-1221E6R-H2BF4 — minimum-privilege host env type.
 //
-// `PaidContinuationWorkflow.run()`'s ONLY access to the ambient platform
-// is `this.env`, resolved (per Cloudflare's Workflow/Durable Object RPC
-// entrypoint model) against whichever Worker SCRIPT actually exports this
-// class -- after H2BF4's dedicated-host split, that is
-// `workflow-host-entrypoint.ts` / `wrangler.paid-continuation-runtime.toml`,
-// never the public API Worker's `index.ts`/`wrangler.toml` (H2BF4 design
-// doc §Host Env Dependency Trace). The public `Env` interface
-// (`../config/env.ts`) describes the PUBLIC API WORKER's full binding
-// surface -- ARTIFACTS/JOBS/EVENTS/CATALOG/AI/BROWSER, every route-family
-// flag, every credential not this Workflow's concern (VOYAGE_API_KEY,
-// MODAL_TOKEN_ID/SECRET, NVM_*, AGENT_CARD_SIGNING_*, SENTRY_DSN, ...).
-// None of that belongs on the dedicated Workflow-host script, which exists
-// only to run this one class. `PaidContinuationWorkflowHostEnv` is the
-// exact, narrow `Pick<Env, ...>` this file's own dependency trace proves
-// `buildProductionPaidContinuationWorkflowDependencies` reads and nothing
-// more (see that function's body in `production-dependencies.ts` -- every
-// field below is dereferenced there at least once; none of the omitted
-// `Env` fields are referenced anywhere in this module or that one).
+// SUN-1222D-PRE-WORKFLOW-DISPATCH-FIX: widened (never loosened) to also
+// cover `company_evidence_graph.v2`/`document_evidence_json.v2`'s own real
+// dependency needs. `company_evidence_graph.v2` needs nothing new --
+// SUN-1222B-S3R deliberately reuses the already-listed `MODAL_WEBCTX_*`
+// safe-egress endpoint (see `company-evidence-graph-v2-cdp-composition.ts`'s
+// own doc comment). `document_evidence_json.v2` needs two genuinely new
+// members: `MODAL_DOCWORKER_*` (a dedicated, still-undeployed Modal App's
+// credentials, SUN-0400B) and `ARTIFACTS` (an R2 bucket binding, commented
+// out of the public `wrangler.toml` since SUN-0800B checkpoint 3 pending
+// Cloudflare dashboard enablement). `ARTIFACTS` is deliberately added as
+// its own OPTIONAL member below, not folded into the `Pick<Env, ...>` --
+// `Env['ARTIFACTS']` is a required `R2Bucket` there (the public API
+// Worker's declared shape), but on THIS dedicated host the real
+// `wrangler.paid-continuation-runtime.toml` binds no `[[r2_buckets]]` at
+// all today; typing it as required here would be a static lie about a
+// binding this script does not actually have. Every field below (old and
+// new) is a member this file's own dependency trace in
+// `production-dependencies.ts` proves is actually dereferenced; none of
+// the omitted `Env` fields are referenced anywhere in this module or that
+// one.
 export type PaidContinuationWorkflowHostEnv = Pick<
   Env,
   | 'DB'
@@ -113,9 +115,20 @@ export type PaidContinuationWorkflowHostEnv = Pick<
   | 'MODAL_WEBCTX_ENDPOINT_URL'
   | 'MODAL_WEBCTX_PROXY_KEY'
   | 'MODAL_WEBCTX_PROXY_SECRET'
+  | 'MODAL_DOCWORKER_ENDPOINT_URL'
+  | 'MODAL_DOCWORKER_PROXY_KEY'
+  | 'MODAL_DOCWORKER_PROXY_SECRET'
   | 'BASE_RPC_URL'
   | 'BASE_SEPOLIA_RPC_URL'
->;
+> & {
+  /** Optional -- see this block's own doc comment for why this is not a
+   * `Pick<Env, 'ARTIFACTS'>` member. Absent (the real, current state of
+   * `wrangler.paid-continuation-runtime.toml`) means
+   * `document_evidence_json.v2`'s own composition-level `!artifactStore`
+   * gate fails closed, exactly like every other missing-credential case --
+   * never a crash, never a fixture fallback. */
+  readonly ARTIFACTS?: Env['ARTIFACTS'];
+};
 
 // ---------------------------------------------------------------------
 // Structural WorkflowStep/WorkflowEvent typing
