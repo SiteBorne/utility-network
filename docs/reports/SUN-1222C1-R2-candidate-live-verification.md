@@ -193,7 +193,7 @@ C2_PAYMENT_QUALIFICATION_FUNDING_READY=YES
 C2_DETERMINISTIC_ROUTING_PLAN=temporarily route candidate to 100% per one-shot payment with production as immediate rollback; never split traffic during a signed payment
 PRODUCTION_MUTATIONS=2
 ECONOMIC_TRANSACTIONS=0
-SUN1222C1_R2_EVIDENCE_COMMIT_SHA=<set on commit, see follow-up correction commit>
+SUN1222C1_R2_EVIDENCE_COMMIT_SHA=1e3ca292f0e892b19fea1b44d280f158c38b4dce
 WORKING_TREE=clean
 NEXT_REQUIRED_CHECKPOINT=SUN-1222C2-FOUR-SERVICE-PAID-QUALIFICATION
 ```
