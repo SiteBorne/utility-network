@@ -34,6 +34,21 @@ import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { resolveServiceMaxPriceUsd, usdToAtomicUnits } from '../packages/pricing/src/service-prices';
+
+/** Phase 6's real-production-composition price assertion (SUN-1222D-
+ * RESUME §3) must track `governance/RISK_LIMITS.yaml`'s own
+ * `verify_agent_output_standard_v2` key -- the same authoritative source
+ * `verify-agent-output-v2-cdp-composition.ts` reads via `pricingKey` --
+ * rather than a second, independently-drifting literal. A prior literal
+ * (`'19000'`, `verify_agent_output_standard`'s pre-SUN-1222C-R3 v1 price)
+ * silently stopped tracking the real v2 price when SUN-1222C-R3 froze
+ * `verify_agent_output_standard_v2` at 0.017/17000, producing exactly
+ * the false-positive-red this constant closes. */
+const VERIFY_AGENT_OUTPUT_V2_EXPECTED_ATOMIC = usdToAtomicUnits(
+  resolveServiceMaxPriceUsd('verify_agent_output_standard_v2'),
+  6
+);
 
 /** A fresh, local, throwaway Ed25519 seed for exercising the real
  * production entrypoint's signing composition under this script's own
@@ -1163,8 +1178,8 @@ async function runPhase6() {
     const actualAmount = challenge.accepts?.[0]?.amount;
     record(
       'PHASE 6 (1): verify-production unsigned request -> real 402 with canonical production price',
-      actualAmount === '19000',
-      `expected=19000 actual=${actualAmount}`
+      actualAmount === VERIFY_AGENT_OUTPUT_V2_EXPECTED_ATOMIC,
+      `expected=${VERIFY_AGENT_OUTPUT_V2_EXPECTED_ATOMIC} actual=${actualAmount}`
     );
 
     // Scenario 2: successful synthetic payment -> real production
