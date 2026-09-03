@@ -136,7 +136,7 @@ and the live candidate token were not touched — confirmed no other
 ```
 SUN1222D_R2=PASS
 D_R2_START_HEAD=62e7974fc160a244221967822aeaaee6766b4e98
-D_R2_END_HEAD=<this commit's parent, bb2b37e>
+D_R2_END_HEAD=6060494
 R2_BINDING_ADDED=YES
 R2_BUCKET_REUSED=siteborne-artifacts
 ORPHANED_TOKEN_DELETED=wk-6LcEUTuEzcQBsQ7oIPSmMj
@@ -160,7 +160,7 @@ PAYMENT_MATERIAL_CREATED=NO
 REAL_402=NO
 SETTLEMENT=NO
 ECONOMIC_TRANSACTIONS=0
-EVIDENCE_COMMIT_SHA=<this commit>
+EVIDENCE_COMMIT_SHA=6060494
 WORKING_TREE=clean
 SUN1222B_S3=AUTHORIZATION_ABSENT (bare runbook, no standalone authorization message; not acted on)
 NEXT_REQUIRED_CHECKPOINT=SUN-1222D-CANDIDATE-QUALIFICATION (document-worker/R2 dependency now fully closed on the Workflow host; public API candidate 3a74686d still requires its own separately authorized promotion/traffic-mutation checkpoint before real buyer qualification)
