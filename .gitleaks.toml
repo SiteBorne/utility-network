@@ -65,4 +65,22 @@ regexes = [
   # after `privateKeyJwk:` in a parameter type annotation — no key
   # material, no literal secret, present at all on that line.
   '''PrivateEs256Jwk''',
+  # SUN-1222D-R1/R2/SUN-1222B-S3: three Modal workspace proxy-token
+  # RESOURCE IDs (`wk-...`), quoted verbatim in forensic/provisioning
+  # evidence reports (SUN-1222D-R1, SUN-1222D-R2) purely to record which
+  # token was deleted/created/left untouched. Proven non-secret by
+  # Modal's own credential model: a workspace proxy-auth credential is an
+  # ID/secret PAIR (`modal workspace proxy-tokens create --json` returns
+  # `token_id` + `token_secret`) — the resource ID alone authorizes
+  # nothing and is what `modal workspace proxy-tokens list` already shows
+  # in plaintext to anyone with read access to the workspace. The actual
+  # secret half of every pair created in this lineage was staged only to
+  # a gitignored chmod-600 scratch file and securely wiped after
+  # injection — never printed, logged, or committed (see those reports'
+  # own `*_SECRET_PRINTED_LOGGED_OR_COMMITTED=NO` fields). Allowlisted as
+  # three exact one-off values, not a `wk-[A-Za-z0-9]+` pattern, so a real
+  # Modal token SECRET that happened to appear would still be caught.
+  '''wk-6LcEUTuEzcQBsQ7oIPSmMj''',
+  '''wk-lSGM4IuoAogKV3CTZX5xHj''',
+  '''wk-jozfRBPfBFAJbWbQoXV88z''',
 ]
