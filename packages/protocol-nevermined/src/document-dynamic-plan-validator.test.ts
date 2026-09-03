@@ -306,11 +306,11 @@ describe('validateNeverminedDocumentDynamicPlan', () => {
     ).toEqual({ state: 'CONFLICT', reason: 'REGISTRY_TIMEOUT' });
   });
 
-  it('U: fixed Nevermined service declarations remain unchanged', () => {
+  it('U: fixed Nevermined service declarations match their governed version-specific prices', () => {
     // SUN-1000 checkpoint 1M: excludes both document_evidence_json majors
     // (its dynamic plan is this suite's own subject, tested separately
-    // below); v2's fixed-price declarations are byte-identical economics
-    // to v1 (SAME_ECONOMICS_NEW_SERVICE_MAJOR, checkpoint 1L section 9).
+    // below). Company v2 is the sole version-specific S3 price experiment;
+    // every other fixed-price declaration remains unchanged.
     expect(
       Object.fromEntries(
         Object.entries(NEVERMINED_DECLARATIONS)
@@ -342,7 +342,7 @@ describe('validateNeverminedDocumentDynamicPlan', () => {
       },
       'company_evidence_graph.v2': {
         semantics: 'exact',
-        amount: '39000',
+        amount: '31200',
         registration_allowed: true,
       },
       'web_context_verified.v2': {

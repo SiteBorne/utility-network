@@ -10,6 +10,7 @@ import {
   computeMarginMicro,
   marginToPercent,
   validateMargin,
+  validateAtomicPriceChange,
   validatePriceChange,
   applyScarcityMultiplier,
   applyFailureRiskMultiplier,
@@ -183,7 +184,7 @@ describe('pricing - decimal-safe arithmetic', () => {
   describe('validatePriceChange', () => {
     it('accepts changes within 20%', () => {
       expect(validatePriceChange('0.039', '0.046')).toBe(true);
-      expect(validatePriceChange('0.039', '0.0312')).toBe(true); // ~20% exactly
+      expect(validatePriceChange('0.039', '0.0312')).toBe(true);
     });
 
     it('rejects changes over 20%', () => {
@@ -193,6 +194,15 @@ describe('pricing - decimal-safe arithmetic', () => {
 
     it('handles zero old price', () => {
       expect(validatePriceChange('0', '0.039')).toBe(false);
+    });
+
+    it('enforces the company-v2 experiment boundary in integer atomic USDC', () => {
+      expect(validateAtomicPriceChange(39_000, 31_200)).toBe(true);
+      expect(validateAtomicPriceChange(39_000, 31_199)).toBe(false);
+      expect(validateAtomicPriceChange(39_000, 23_000)).toBe(false);
+      expect(validateAtomicPriceChange(39_000, 39_000)).toBe(true);
+      expect(validateAtomicPriceChange(39_000, 46_800)).toBe(true);
+      expect(validateAtomicPriceChange(39_000, 46_801)).toBe(false);
     });
   });
 

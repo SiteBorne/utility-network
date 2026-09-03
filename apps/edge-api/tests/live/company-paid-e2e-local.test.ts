@@ -61,7 +61,7 @@ const TARGET_URL = `${PRODUCTION_ORIGIN}${TARGET_PATH}`;
 
 const EXPECTED_NETWORK = 'eip155:8453';
 const EXPECTED_ASSET = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
-const EXPECTED_AMOUNT_ATOMIC = '39000';
+const EXPECTED_AMOUNT_ATOMIC = '31200';
 const EXPECTED_PAYTO = '0x7f44a2dd237938F18632d4CcA40f4c690295E6E1';
 const EXPECTED_BUYER = '0x516F57e1fB800ccEB2E70C42607Fb93E2abEcB99';
 // Canonical Base-mainnet USDC EIP-712 domain (public, well-known — Circle's
@@ -629,7 +629,7 @@ describe('SUN-1222C-COMPANY-E2E-HARNESS company-paid-e2e local client (unit, alw
   it('wrong confirmation string is rejected (generic "yes" insufficient)', () => {
     expect(
       hasExplicitLiveConfirmation({
-        SITEBORNE_LIVE_COMPANY_EVIDENCE_GRAPH_V2_PAYMENT_CONFIRMATION_39000: 'yes',
+        SITEBORNE_LIVE_COMPANY_EVIDENCE_GRAPH_V2_PAYMENT_CONFIRMATION_31200: 'yes',
       })
     ).toBe(false);
   });
@@ -637,7 +637,7 @@ describe('SUN-1222C-COMPANY-E2E-HARNESS company-paid-e2e local client (unit, alw
   it('a DIFFERENT service/amount confirmation string is rejected (no cross-service reuse)', () => {
     expect(
       hasExplicitLiveConfirmation({
-        SITEBORNE_LIVE_COMPANY_EVIDENCE_GRAPH_V2_PAYMENT_CONFIRMATION_39000:
+        SITEBORNE_LIVE_COMPANY_EVIDENCE_GRAPH_V2_PAYMENT_CONFIRMATION_31200:
           'I_UNDERSTAND_THIS_SPENDS_REAL_USDC_ON_BASE_MAINNET', // the document harness's string
       })
     ).toBe(false);
@@ -646,8 +646,8 @@ describe('SUN-1222C-COMPANY-E2E-HARNESS company-paid-e2e local client (unit, alw
   it('the exact service- and amount-specific confirmation string is accepted', () => {
     expect(
       hasExplicitLiveConfirmation({
-        SITEBORNE_LIVE_COMPANY_EVIDENCE_GRAPH_V2_PAYMENT_CONFIRMATION_39000:
-          'I_AUTHORIZE_ONE_COMPANY_EVIDENCE_GRAPH_V2_PAYMENT_39000',
+        SITEBORNE_LIVE_COMPANY_EVIDENCE_GRAPH_V2_PAYMENT_CONFIRMATION_31200:
+          'I_AUTHORIZE_ONE_COMPANY_EVIDENCE_GRAPH_V2_PAYMENT_31200',
       })
     ).toBe(true);
   });
@@ -709,14 +709,14 @@ describe('SUN-1222C-COMPANY-E2E-HARNESS company-paid-e2e local client (unit, alw
     expect(counters.paymentSignTypedDataCalls).toBe(0);
   });
 
-  it('wrong amount is rejected before signing (no <= tolerance, either direction)', async () => {
-    const challenge = validChallenge(validRequirement({ amount: '39001' }));
+  it('stale and underpaid amounts are rejected before signing (exact 31200 only)', async () => {
+    const challenge = validChallenge(validRequirement({ amount: '39000' }));
     const fetchImpl = twoStepFetch(challenge, jsonResponse(200, {}));
     const { result, counters } = await runCompanyPaidE2E(baseDeps({ fetchImpl }));
     expect(result.ok).toBe(false);
     expect(result.failure_reason).toMatch(/amount mismatch/);
     expect(counters.paymentSignTypedDataCalls).toBe(0);
-    const smaller = validChallenge(validRequirement({ amount: '38999' }));
+    const smaller = validChallenge(validRequirement({ amount: '31199' }));
     const fetchImpl2 = twoStepFetch(smaller, jsonResponse(200, {}));
     const { result: result2 } = await runCompanyPaidE2E(baseDeps({ fetchImpl: fetchImpl2 }));
     expect(result2.ok).toBe(false);
@@ -1008,7 +1008,7 @@ describe('SUN-1222C-COMPANY-E2E-HARNESS company-paid-e2e local client (unit, alw
   it('the target URL, body, amount, payTo, network, and buyer are fixed module constants, not parameters', () => {
     expect(TARGET_URL).toBe(`${PRODUCTION_ORIGIN}${TARGET_PATH}`);
     expect(CANONICAL_REQUEST_BODY).toEqual({ domain: 'openai.com' });
-    expect(EXPECTED_AMOUNT_ATOMIC).toBe('39000');
+    expect(EXPECTED_AMOUNT_ATOMIC).toBe('31200');
     expect(EXPECTED_PAYTO).toBe('0x7f44a2dd237938F18632d4CcA40f4c690295E6E1');
     expect(EXPECTED_NETWORK).toBe('eip155:8453');
     expect(EXPECTED_BUYER).toBe('0x516F57e1fB800ccEB2E70C42607Fb93E2abEcB99');

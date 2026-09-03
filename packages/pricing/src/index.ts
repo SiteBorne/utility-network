@@ -30,7 +30,9 @@ export interface CostComponentsUsd {
 export function usdToMicro(usd: string): number {
   const match = /^(0|[1-9][0-9]*)(?:\.([0-9]{1,6}))?$/.exec(usd);
   if (!match) {
-    throw new TypeError('USD amount must be a canonical non-negative decimal with at most 6 places');
+    throw new TypeError(
+      'USD amount must be a canonical non-negative decimal with at most 6 places'
+    );
   }
 
   const whole = BigInt(match[1]);
@@ -124,9 +126,34 @@ export function validatePriceChange(
 ): boolean {
   const oldMicro = usdToMicro(oldPriceUsd);
   const newMicro = usdToMicro(newPriceUsd);
-  if (oldMicro === 0) return false;
-  const changePct = Math.abs(((newMicro - oldMicro) * 100) / oldMicro);
-  return changePct <= maxPct + 1e-9;
+  return validateAtomicPriceChange(oldMicro, newMicro, maxPct);
+}
+
+/**
+ * Exact price-experiment guard for integer payment units. The comparison is
+ * performed by cross multiplication, so an exact boundary such as
+ * 39_000 -> 31_200 never depends on binary floating-point division or an
+ * epsilon. Both amounts must be non-negative safe integers; the policy
+ * percentage is deliberately an integer because governance currently
+ * expresses this cap as an integer percentage.
+ */
+export function validateAtomicPriceChange(
+  oldAtomic: number,
+  newAtomic: number,
+  maxPct: number = MAX_PRICE_CHANGE_PCT
+): boolean {
+  if (
+    !Number.isSafeInteger(oldAtomic) ||
+    !Number.isSafeInteger(newAtomic) ||
+    !Number.isSafeInteger(maxPct) ||
+    oldAtomic <= 0 ||
+    newAtomic < 0 ||
+    maxPct < 0
+  ) {
+    return false;
+  }
+  const delta = Math.abs(newAtomic - oldAtomic);
+  return BigInt(delta) * 100n <= BigInt(oldAtomic) * BigInt(maxPct);
 }
 
 export function applyScarcityMultiplier(baseCostMicro: number, remainingQuotaPct: number): number {

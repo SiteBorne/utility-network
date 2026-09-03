@@ -32,6 +32,7 @@ describe('four canonical Nevermined declarations', () => {
 
   it.each([
     ['company_evidence_graph.v1', '39000'],
+    ['company_evidence_graph.v2', '31200'],
     ['web_context_verified.v1', '9000'],
     ['verify_agent_output.v1', '19000'],
   ] as const)('%s derives its exact gross buyer amount from canonical pricing', (id, amount) => {

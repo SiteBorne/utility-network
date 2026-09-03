@@ -52,7 +52,7 @@ describe.skipIf(!RECONCILE_ONLY && !REGISTER)(
       const model = NEVERMINED_FIXED_PAYG_PERSISTENCE_MODEL;
 
       expect(declaration.plan.registration_allowed).toBe(true);
-      expect(declaration.plan.gross_buyer_amount_atomic).toBe('39000');
+      expect(declaration.plan.gross_buyer_amount_atomic).toBe('31200');
       expect(declaration.plan.siteborne_payment_semantics).toBe('exact');
       expect(declaration.plan.dynamic_actual_settlement_required).toBe(false);
 

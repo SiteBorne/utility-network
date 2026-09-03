@@ -192,7 +192,7 @@ export async function buildCompanyEvidenceGraphV2CdpProductionRouteConfig(
   return {
     serviceId: 'company_evidence_graph.v2',
     scheme: 'exact',
-    pricingKey: 'company_evidence_graph',
+    pricingKey: 'company_evidence_graph_v2',
     rail: 'cdp',
     network,
     asset: asset.address,

@@ -22,7 +22,7 @@
  *             no credentials and performs no signing, no network payment.
  *
  *   live    — requires every credential below AND
- *             `SITEBORNE_LIVE_COMPANY_EVIDENCE_GRAPH_V2_PAYMENT_CONFIRMATION_39000=I_AUTHORIZE_ONE_COMPANY_EVIDENCE_GRAPH_V2_PAYMENT_39000`
+ *             `SITEBORNE_LIVE_COMPANY_EVIDENCE_GRAPH_V2_PAYMENT_CONFIRMATION_31200=I_AUTHORIZE_ONE_COMPANY_EVIDENCE_GRAPH_V2_PAYMENT_31200`
  *             to be set, in addition to `RUN_LIVE_COMPANY_PAYMENT=1`.
  *             SUN-1222C-COMPANY-E2E-HARNESS itself does NOT authorize
  *             running this — invoking `live` requires a separate, later,
@@ -36,9 +36,9 @@ import { pathToFileURL } from 'node:url';
 
 const REQUIRED_ENV_VARS = ['CDP_API_KEY_ID', 'CDP_API_KEY_SECRET', 'CDP_WALLET_SECRET'] as const;
 
-const LIVE_CONFIRMATION_VALUE = 'I_AUTHORIZE_ONE_COMPANY_EVIDENCE_GRAPH_V2_PAYMENT_39000';
+const LIVE_CONFIRMATION_VALUE = 'I_AUTHORIZE_ONE_COMPANY_EVIDENCE_GRAPH_V2_PAYMENT_31200';
 const LIVE_CONFIRMATION_ENV_VAR =
-  'SITEBORNE_LIVE_COMPANY_EVIDENCE_GRAPH_V2_PAYMENT_CONFIRMATION_39000';
+  'SITEBORNE_LIVE_COMPANY_EVIDENCE_GRAPH_V2_PAYMENT_CONFIRMATION_31200';
 const RUN_LIVE_ENV_VAR = 'RUN_LIVE_COMPANY_PAYMENT';
 
 /** Presence-only check — never reads or echoes a value, only whether one

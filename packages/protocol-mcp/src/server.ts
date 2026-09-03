@@ -115,8 +115,7 @@ const healthOutputSchema = z
   })
   .strict();
 
-// SUN-1000 checkpoint 1M: v2 entries are byte-identical pricing keys
-// (SAME_ECONOMICS_NEW_SERVICE_MAJOR, checkpoint 1L section 9).
+// SUN-1222B-S3: company v2 is the sole version-specific pricing experiment.
 const EXACT_PRICING_KEYS: Readonly<
   Record<SiteborneServiceId, Parameters<typeof resolveServiceMaxPriceUsd>[0]>
 > = {
@@ -124,7 +123,7 @@ const EXACT_PRICING_KEYS: Readonly<
   'web_context_verified.v1': 'web_context_verified_direct',
   'document_evidence_json.v1': 'document_evidence_json_native',
   'verify_agent_output.v1': 'verify_agent_output_standard',
-  'company_evidence_graph.v2': 'company_evidence_graph',
+  'company_evidence_graph.v2': 'company_evidence_graph_v2',
   'web_context_verified.v2': 'web_context_verified_direct',
   'document_evidence_json.v2': 'document_evidence_json_native',
   'verify_agent_output.v2': 'verify_agent_output_standard',
@@ -137,7 +136,7 @@ const UPTO_PRICING_KEYS: Readonly<
   'web_context_verified.v1': 'web_context_verified_rendered',
   'document_evidence_json.v1': 'document_evidence_json_max_job',
   'verify_agent_output.v1': 'verify_agent_output_reproduction',
-  'company_evidence_graph.v2': 'company_evidence_graph',
+  'company_evidence_graph.v2': 'company_evidence_graph_v2',
   'web_context_verified.v2': 'web_context_verified_rendered',
   'document_evidence_json.v2': 'document_evidence_json_max_job',
   'verify_agent_output.v2': 'verify_agent_output_reproduction',

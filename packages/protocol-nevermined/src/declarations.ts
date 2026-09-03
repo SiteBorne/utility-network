@@ -69,10 +69,9 @@ export interface NeverminedServiceDeclaration {
   plan: NeverminedPlanDeclaration;
 }
 
-// SUN-1000 checkpoint 1M: keyed by base service name (major suffix
-// stripped) rather than the full .v1-literal string, so v2 declarations
-// (SAME_ECONOMICS_NEW_SERVICE_MAJOR, checkpoint 1L section 9) reuse the
-// identical pricing keys without a second hardcoded table.
+// Most service majors reuse the base-family pricing key. Company v2 is the
+// single governed exception: its S3 experiment has a version-specific key so
+// v1 remains frozen at its existing economics.
 const FIXED_PRICING_KEYS = {
   company_evidence_graph: 'company_evidence_graph',
   web_context_verified: 'web_context_verified_direct',
@@ -157,7 +156,9 @@ function buildDeclaration(serviceId: SiteborneServiceId): NeverminedServiceDecla
   const document = base === 'document_evidence_json';
   const fixedKey = document
     ? undefined
-    : FIXED_PRICING_KEYS[base as keyof typeof FIXED_PRICING_KEYS];
+    : serviceId === 'company_evidence_graph.v2'
+      ? 'company_evidence_graph_v2'
+      : FIXED_PRICING_KEYS[base as keyof typeof FIXED_PRICING_KEYS];
   const amount = document ? atomic('document_evidence_json_max_job') : atomic(fixedKey!);
   const serviceVersion = serviceId.endsWith('.v2') ? 'v2' : 'v1';
   const registered = V2_REGISTERED_IDS[serviceId];

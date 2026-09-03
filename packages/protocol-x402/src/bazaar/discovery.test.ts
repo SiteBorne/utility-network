@@ -5,7 +5,7 @@ import {
   BAZAAR_PAYMENT_POLICY,
   PAYTO_NOT_CONFIGURED,
 } from './discovery';
-import { ALL_BAZAAR_SERVICE_IDS } from './registry-source';
+import { ALL_BAZAAR_SERVICE_IDS, REGISTRY_SERVICES } from './registry-source';
 import { validateSiteborneDiscoveryResource } from './validator';
 
 const NOW = '2026-08-10T00:00:00.000Z';
@@ -66,6 +66,33 @@ describe('buildSiteborneDiscoveryDeclaration', () => {
       });
       expect(resource.accepts[0].scheme).toBe('exact');
     }
+  });
+
+  it('isolates company v2 pricing from v1 across Bazaar requirements and registry discovery', async () => {
+    const v1 = await buildSiteborneDiscoveryDeclaration({
+      serviceId: 'company_evidence_graph.v1',
+      nowIso: NOW,
+      expiresInSeconds: 300,
+      maxTimeoutSeconds: 120,
+    });
+    const v2 = await buildSiteborneDiscoveryDeclaration({
+      serviceId: 'company_evidence_graph.v2',
+      nowIso: NOW,
+      expiresInSeconds: 300,
+      maxTimeoutSeconds: 120,
+    });
+
+    expect(v1.accepts[0]).toMatchObject({ amount: '39000' });
+    expect(BAZAAR_PAYMENT_POLICY['company_evidence_graph.v1'].pricing_key).toBe(
+      'company_evidence_graph'
+    );
+    expect(v2.accepts[0]).toMatchObject({ amount: '31200' });
+    expect(BAZAAR_PAYMENT_POLICY['company_evidence_graph.v2'].pricing_key).toBe(
+      'company_evidence_graph_v2'
+    );
+    expect(REGISTRY_SERVICES['company_evidence_graph.v1'].base_price.amount).toBe('0.039');
+    expect(REGISTRY_SERVICES['company_evidence_graph.v2'].base_price.amount).toBe('0.0312');
+    expect(REGISTRY_SERVICES['company_evidence_graph.v2'].maximum_price.amount).toBe('0.0312');
   });
 
   it('is deterministic: identical inputs produce identical quote/requirement identity (directive §34)', async () => {

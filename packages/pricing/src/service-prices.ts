@@ -20,6 +20,7 @@ import { usdToMicro } from './index';
  * must be kept in sync (validated by scripts/validate-governance.ts). */
 const EMBEDDED_PRICING: Readonly<Record<string, number>> = {
   company_evidence_graph: 0.039,
+  company_evidence_graph_v2: 0.0312,
   web_context_verified_direct: 0.009,
   web_context_verified_rendered: 0.029,
   document_evidence_json_native: 0.012,
@@ -44,6 +45,7 @@ function getRiskLimitsPath(): string {
 
 export type PricingKey =
   | 'company_evidence_graph'
+  | 'company_evidence_graph_v2'
   | 'web_context_verified_direct'
   | 'web_context_verified_rendered'
   | 'document_evidence_json_native'
@@ -62,17 +64,37 @@ interface RiskLimitsDocument {
 
 let cachedLimits: RiskLimitsDocument | undefined;
 
+function embeddedRiskLimits(): RiskLimitsDocument {
+  return {
+    version: EMBEDDED_VERSION,
+    financial_limits: { max_price_usd_per_service: { ...EMBEDDED_PRICING } },
+  };
+}
+
 function loadRiskLimits(): RiskLimitsDocument {
   if (!cachedLimits) {
     const path = getRiskLimitsPath();
     if (!path) {
       // Worker environment: use embedded data
-      cachedLimits = {
-        version: EMBEDDED_VERSION,
-        financial_limits: { max_price_usd_per_service: { ...EMBEDDED_PRICING } },
-      };
+      cachedLimits = embeddedRiskLimits();
     } else {
-      cachedLimits = parse(readFileSync(path, 'utf-8')) as RiskLimitsDocument;
+      try {
+        cachedLimits = parse(readFileSync(path, 'utf-8')) as RiskLimitsDocument;
+      } catch (error) {
+        // Published/bundled consumers do not ship the repository's governance
+        // directory beside their executable. In that specific filesystem
+        // layout, fall back to the mechanically validated embedded mirror.
+        // Parse errors and all other I/O failures still fail closed.
+        if (
+          error instanceof Error &&
+          'code' in error &&
+          (error.code === 'ENOENT' || error.code === 'ENOTDIR')
+        ) {
+          cachedLimits = embeddedRiskLimits();
+        } else {
+          throw error;
+        }
+      }
     }
   }
   return cachedLimits;

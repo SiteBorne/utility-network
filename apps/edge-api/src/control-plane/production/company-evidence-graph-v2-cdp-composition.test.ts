@@ -1,8 +1,8 @@
 /**
  * SUN-1222B-S3R — proves `company_evidence_graph.v2`/CDP's real production
  * requirement pipeline produces the actual, currently-enforced economic
- * contract: `resolveServiceMaxPriceUsd('company_evidence_graph')` reads
- * $0.039 from `governance/RISK_LIMITS.yaml` (via `@siteborne/pricing`) --
+ * contract: `resolveServiceMaxPriceUsd('company_evidence_graph_v2')` reads
+ * $0.0312 from `governance/RISK_LIMITS.yaml` (via `@siteborne/pricing`) --
  * NOT the `registry/services/company_evidence_graph.v2.json` `maximum_price`
  * field (`0.19`), which SUN-1222B-S3 already found drifted from the
  * governance source and is purely informational metadata, never consulted
@@ -69,7 +69,7 @@ function randomPrivateKeyHex(): string {
 }
 
 // SUN-1222B-S3R: derived from `governance/RISK_LIMITS.yaml`'s
-// `company_evidence_graph: 0.039` entry (the real, enforced pricing
+// `company_evidence_graph_v2: 0.0312` entry (the real, enforced pricing
 // source `resolveServiceMaxPriceUsd` reads) -- never invented, never
 // copied from the drifted `registry/services/*.json` `maximum_price`
 // field.
@@ -79,7 +79,7 @@ const CANONICAL_REQUEST_BODY = {
 
 const EXPECTED_NETWORK = 'eip155:8453';
 const EXPECTED_ASSET = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
-const EXPECTED_AMOUNT_ATOMIC = '39000';
+const EXPECTED_AMOUNT_ATOMIC = '31200';
 const EXPECTED_PAYTO = '0x7f44a2dd237938F18632d4CcA40f4c690295E6E1';
 const EXPECTED_EIP712_NAME = 'USD Coin';
 const EXPECTED_EIP712_VERSION = '2';
@@ -100,7 +100,8 @@ function mainnetAuthorizedTestEnv() {
     // economic-contract shape, not real Modal connectivity (the
     // httpClient itself is never invoked by any test in this file -- no
     // test here reaches the actual paid-execution path).
-    MODAL_WEBCTX_ENDPOINT_URL: 'https://test-workspace--siteborne-webctx-safe-egress-fetch.modal.run',
+    MODAL_WEBCTX_ENDPOINT_URL:
+      'https://test-workspace--siteborne-webctx-safe-egress-fetch.modal.run',
     MODAL_WEBCTX_PROXY_KEY: 'test-modal-webctx-proxy-key',
     MODAL_WEBCTX_PROXY_SECRET: 'test-modal-webctx-proxy-secret',
   };
@@ -159,7 +160,7 @@ describe('SUN-1222B-S3R: company_evidence_graph.v2/CDP real requirement matches 
     return get402Requirement(app, config.path);
   }
 
-  it('produces the actual governance-enforced economic contract: 39000 atomic USDC on Base mainnet, correct payTo/scheme/domain-metadata', async () => {
+  it('produces the governance-bounded v2 experiment: 31200 atomic USDC on Base mainnet, correct payTo/scheme/domain-metadata', async () => {
     const requirement = await buildRealMainnetRequirement();
     const extra = requirement.extra as Record<string, unknown> | undefined;
     expect(requirement.network).toBe(EXPECTED_NETWORK);

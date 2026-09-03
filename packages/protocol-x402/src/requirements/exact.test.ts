@@ -93,6 +93,55 @@ describe('buildExactPaymentRequirement', () => {
 });
 
 describe('validateExactRequirementBinding', () => {
+  it.each([
+    ['underpayment', { amount: '31199' }, 'amount_mismatch'],
+    ['stale pre-experiment payment', { amount: '39000' }, 'amount_mismatch'],
+    ['wrong network', { network: 'eip155:1' }, 'network_mismatch'],
+    ['wrong asset', { asset: '0xWrongAsset' }, 'asset_mismatch'],
+    ['wrong payTo', { payTo: '0xSomeoneElse' }, 'payee_mismatch'],
+  ] as const)(
+    'company v2 rejects %s against its exact 31200-atomic requirement',
+    async (_label, patch, expectedFailure) => {
+      const q = await quote({
+        service_id: 'company_evidence_graph.v2',
+        service_version: 'v2',
+        contract_release: '2.0.0',
+        pricing_key: 'company_evidence_graph_v2',
+        amount: '31200',
+      });
+      const { requirement } = await buildExactPaymentRequirement({
+        quote: q,
+        resource_id: 'https://utility.siteborne.net/v2/company/evidence-graph',
+        maxTimeoutSeconds: 60,
+      });
+      const result = validateExactRequirementBinding(
+        { ...requirement, ...patch },
+        q,
+        '2026-08-09T00:01:00.000Z'
+      );
+      expect(result.valid).toBe(false);
+      expect(result.failures).toContain(expectedFailure);
+    }
+  );
+
+  it('company v2 rejects its exact requirement once the authorization quote expires', async () => {
+    const q = await quote({
+      service_id: 'company_evidence_graph.v2',
+      service_version: 'v2',
+      contract_release: '2.0.0',
+      pricing_key: 'company_evidence_graph_v2',
+      amount: '31200',
+    });
+    const { requirement } = await buildExactPaymentRequirement({
+      quote: q,
+      resource_id: 'https://utility.siteborne.net/v2/company/evidence-graph',
+      maxTimeoutSeconds: 60,
+    });
+    const result = validateExactRequirementBinding(requirement, q, '2026-08-09T00:05:00.000Z');
+    expect(result.valid).toBe(false);
+    expect(result.failures).toContain('quote_expired');
+  });
+
   it('is valid for a requirement built from the same quote, checked before expiry', async () => {
     const q = await quote();
     const { requirement } = await buildExactPaymentRequirement({

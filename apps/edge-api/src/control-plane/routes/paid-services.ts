@@ -626,7 +626,7 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
   createX402ServiceRouteWithContinuation(app, {
     serviceId: 'company_evidence_graph.v2',
     scheme: 'exact',
-    pricingKey: 'company_evidence_graph',
+    pricingKey: 'company_evidence_graph_v2',
     ...v2CdpRoute('/v2/company/evidence-graph'),
     inputSchema: BUNDLED_SERVICE_INPUT_SCHEMAS['company_evidence_graph.v2'] as Record<
       string,
@@ -667,7 +667,7 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
     createX402ServiceRouteWithContinuation(app, {
       serviceId: 'company_evidence_graph.v2',
       scheme: 'exact',
-      pricingKey: 'company_evidence_graph',
+      pricingKey: 'company_evidence_graph_v2',
       ...v2NeverminedRoute('company_evidence_graph.v2'),
       inputSchema: BUNDLED_SERVICE_INPUT_SCHEMAS['company_evidence_graph.v2'] as Record<
         string,

@@ -3,12 +3,23 @@
 **Status: PASS.** All four v2 services (`company_evidence_graph`,
 `web_context_verified`, `document_evidence_json`, `verify_agent_output`) have
 real, tested production executors with bounded external fan-out and comfortable
-margins at their current, unchanged, frozen prices. One real defect was found —
-a display-only registry price mismatch — and correctly **not** fixed
-in-checkpoint once tracing showed the fix cascades into a frozen-contract
-major-version bump outside repo-only/no-economic-action scope. A CI release-gate
-audit found real, material gaps and closed the safe ones; the full repository
-gate is green.
+margins at their governed prices. The later S3 price-governance correction
+changes only `company_evidence_graph.v2`, from $0.039 to the exact one-step
+governance boundary of $0.0312; every other service price remains unchanged. A
+display-only registry price mismatch was found, and the frozen contract JSON was
+correctly **not** rewritten after tracing showed that doing so requires a
+contract major-version governance decision. Instead, runtime discovery now
+projects the governed v2 price without mutating historical contract metadata.
+
+**SUN-1222B-S3 price-governance correction (2026-09-02):** the original
+`company_evidence_graph.v2` $0.023 hypothesis was rejected for this experiment
+because it would reduce the frozen 39,000-atomic price by 41.025641%, exceeding
+the pre-existing 20% `price_change_per_experiment_pct` cap. The authorized
+single-step boundary is therefore **$0.0312 / 31,200 atomic USDC**, exactly a
+20% reduction. This is the optimal current governance-permitted single-step
+price, not a claim that $0.0312 is the permanent market-clearing price. The
+$0.023 hypothesis is retained only as a possible future target requiring fresh
+evidence and a separately governed experiment.
 
 **Correction note:** an earlier attempt to publish this report accidentally
 wrote a stale internal placeholder string instead of real content (a
@@ -198,18 +209,15 @@ provisioning new CI secrets is outside repo-only scope.
   (§13) now passes **222/222 test files, 0 failures** — including the exact
   sequence that previously reproduced the flake.
 
-## 10. Registry pricing drift — found, traced, correctly left unfixed
+## 10. Registry pricing drift — frozen snapshot preserved, v2 runtime corrected
 
 `pnpm pricing:registry:check` (a guard script from a prior checkpoint,
 `b75d91f`) reports: `registry/services/company_evidence_graph.{v1,v2}.json`'s
 `maximum_price` is `0.19` — copy-paste drift from
 `document_evidence_json_max_job`'s value, matching neither
 `company_evidence_graph`'s own `base_price` ($0.039) nor any real governance
-ceiling for this family (governance has no distinct `maximum_price` tier for
-`company_evidence_graph` at all). The real charged amount is unaffected — every
-quote-minting call site reads `governance/RISK_LIMITS.yaml` live via
-`resolveServiceMaxPriceUsd()`, never this field — but it is exactly what
-`/catalog` serves back to a buyer verbatim.
+ceiling for this family (governance previously had no distinct v2 tier). The
+real charged amount always came from `resolveServiceMaxPriceUsd()`.
 
 Attempted the direct fix (correcting `maximum_price` to `0.039` in both registry
 files) and immediately re-ran the full generation/contract-check chain.
@@ -225,8 +233,15 @@ its own explicit authorization (matching `governance:validate`'s own "Schema
 changes require human approval" rule) and is well outside this checkpoint's
 repo-only, no-economic-action authorization, the registry edit was **reverted**
 (confirmed via `git status` showing a clean tree and `contracts:compat:check`
-passing again) rather than pushed through. Left as a tracked, real, unfixed
-finding — not silently corrected, not silently ignored.
+passing again) rather than pushed through.
+
+The S3 price-governance correction preserves those frozen JSON and 2.0.0 release
+objects, but projects the governed `company_evidence_graph_v2` amount onto
+`REGISTRY_SERVICES` before catalog/D1 seed consumers see it. The runtime v2 base
+and maximum display now both resolve to $0.0312, and `pricing:registry:check`
+verifies that projection. The historical v1 unwired `upto` ceiling remains a
+separately tracked hardening issue; v1's exact price remains $0.039 / 39,000
+atomic.
 
 ## 11. Fresh market research (live, this session)
 
@@ -244,27 +259,27 @@ finding — not silently corrected, not silently ignored.
   from the prior checkpoint's research, confirming no material market drift in
   the ~1–2 weeks since.
 
-## 12. Final price card — FROZEN, unchanged
+## 12. Final price card — FROZEN for this experiment
 
 With real executors and bounded-cost evidence now in hand for all four services
 (previously only two had real executors), the responsible recommendation is to
-**keep the current, already-governance-frozen prices exactly as they are** — not
-to adopt any of the lower speculative hypotheses that predated real-executor
-cost evidence:
+change only company v2 to the exact governance-permitted one-step boundary; the
+other service economics remain unchanged:
 
 | Service                     | Price(s)                                                  | Atomic (USDC, 6dp)                 |
 | --------------------------- | --------------------------------------------------------- | ---------------------------------- |
-| `company_evidence_graph.v2` | $0.039                                                    | 39,000                             |
+| `company_evidence_graph.v2` | $0.0312 (20% governed single-step experiment)             | 31,200                             |
 | `web_context_verified.v2`   | $0.009 direct / $0.029 rendered                           | 9,000 / 29,000                     |
 | `document_evidence_json.v2` | $0.012 native / $0.019 OCR / $0.029 table / $0.19 max job | 12,000 / 19,000 / 29,000 / 190,000 |
 | `verify_agent_output.v2`    | $0.019 standard / $0.049 reproduction                     | 19,000 / 49,000                    |
 
-All four clear the governance 60% minimum / 70% target margin floor by a wide
-margin given the now-measured near-zero variable compute cost plus the fixed
-~$0.001 facilitator fee. `PRICE_SINGLE_SOURCE_OF_TRUTH`: embedded pricing
-matches `governance/RISK_LIMITS.yaml` exactly (`pricing:check` PASS) — the one
-known display-only exception is §10's registry drift, tracked and unfixed for
-the stated reason.
+At $0.0312, the current replacement-cost model gives company v2 a modelled P50
+variable cost of approximately $0.0011 and conservative P95 of approximately
+$0.0015 (the $0.001 facilitator fee plus bounded low Worker/Modal/D1 overhead).
+That implies an approximately **95.19% P95 variable gross margin**, above the
+60% floor. These are model estimates, not a measured live paid-execution
+distribution. Embedded pricing matches `governance/RISK_LIMITS.yaml` exactly,
+and the v2 runtime registry projection is derived from the same governed key.
 
 ## 13. Buyer qualification funding (read-only)
 
@@ -277,20 +292,20 @@ signature, no write call.
 `QUALIFICATION_BUYER_BALANCE_ATOMIC = 19,197` (0.019197 USDC) — **unchanged**
 from the prior checkpoint's reading.
 
-At current frozen prices, the smallest qualifying request per service costs
-39,000 / 9,000 / 12,000 / 19,000 atomic respectively —
-`FOUR_SERVICE_QUALIFICATION_TOTAL_ATOMIC = 79,000`.
-`QUALIFICATION_HEADROOM_ATOMIC = -59,803` (still insufficient).
-`ADDITIONAL_FUNDING_REQUIRED_ATOMIC = 59,803` minimum (more once gas/facilitator
+At the corrected governed prices, the smallest qualifying request per service
+costs 31,200 / 9,000 / 12,000 / 19,000 atomic respectively —
+`FOUR_SERVICE_QUALIFICATION_TOTAL_ATOMIC = 71,200`.
+`QUALIFICATION_HEADROOM_ATOMIC = -52,003` (still insufficient).
+`ADDITIONAL_FUNDING_REQUIRED_ATOMIC = 52,003` minimum (more once gas/facilitator
 overhead is included). Prices were not lowered to fit the wallet, per
 instruction. Unlike the prior checkpoint, company/document qualification
 payments are no longer blocked by "no production executor" — only by funding and
 by the production-activation gaps in §15.
 
-## 14. Full repository gate — GREEN
+## 14. Full substantive repository gate — GREEN; global format baseline remains red
 
-- **Tests**: `pnpm test` (root vitest, full monorepo glob) — **222/244 test
-  files passed, 22 correctly skipped (live/paid); 2690/2764 tests passed, 74
+- **Tests**: `pnpm test` (root vitest, full monorepo glob) — **227/249 test
+  files passed, 22 correctly skipped (live/paid); 2785/2862 tests passed, 77
   correctly skipped; 0 failed.** (An earlier run in this same session hit
   exactly 1 flaky timeout in `x402-service-route.test.ts` immediately after the
   100-request load campaign; §9's `e11e1bf` fix resolved it — this final run,
@@ -299,15 +314,18 @@ by the production-activation gaps in §15.
 - **Lint**: `pnpm lint` (turbo, 16 packages) — all pass.
 - **Build**: `pnpm build` — all 12 buildable packages pass (this is the gate
   §9's `4139746` fix made truthful).
-- **Format**: `.github/workflows/ci.yml` and this report both pass
-  `prettier --check`.
-- **Secrets**: `gitleaks detect --source . --log-opts="--all"` — **659 commits
-  scanned, no leaks found.**
+- **Format**: every S3 price-correction file passes focused `prettier --check`.
+  The canonical root `pnpm format:check` remains red on 449 pre-existing files,
+  including two nested historical worktrees and unrelated main-worktree files.
+  This checkpoint did not conceal the debt by adding ignores or rewrite those
+  unrelated files.
+- **Secrets**: complete tracked/history/working-tree scan — **675 commits** and
+  1,335 tracked/non-ignored working-tree files scanned, no leaks found.
 - **Production preflight**: `pnpm production:preflight --config-only` — PASS
   (all four v2 CDP route flags confirmed absent from `wrangler.toml`, correctly
   resolving every one of the 12 paid-route configurations to a governed
   pre-economic unavailable state).
-- **Wrangler dry-run**: `wrangler deploy --dry-run` succeeds, 6420.47 KiB
+- **Wrangler dry-run**: `wrangler deploy --dry-run` succeeds, 6421.63 KiB
   upload, exits before any actual upload.
 
 ## 15. Immutable candidate manifest (designed, not built or uploaded)
@@ -366,30 +384,34 @@ CRYPTO_JWKS_RELEASE_GATE=PASS (AGENT_CARD_SIGNING_PRIVATE_KEY and PAID_RECEIPT_S
 SUPPLY_CHAIN_RELEASE_GATE=PASS (0 critical/high; 5 moderate + 2 low, all traced -- 2 confirmed unreachable via unused @a2a-js/sdk/server/express subpath and types-only uuid, 2 bundled-but-not-attacker-reachable via governance-file-only yaml parse and CDP-SDK-internal ajv usage)
 CI_RELEASE_GATE_MATERIAL_GAPS_FOUND=YES (build/schema/OpenAPI/PCC/contract-drift/protocol-composite/migration/preflight/worker-runtime checks were all previously unenforced)
 CI_RELEASE_GATE_STEPS_ADDED=15 (build, pcc:generate:check, schemas:check, services:generate:check, openapi:generate:check, pricing:check, contracts:baseline:verify, contracts:compat:check, contracts:release:verify, migrations:verify, production:preflight --config-only, x402:check, mcp:check, a2a:check, nevermined:check, test:worker-runtime)
-CI_STEP_ADDED_THEN_REMOVED=pricing:registry:check (verified still failing for a real, tracked, out-of-scope reason; would have permanently broken CI)
+CI_STEP_ADDED_THEN_REMOVED=pricing:registry:check (historical checkpoint state; the later S3 price-governance correction now makes the runtime projection check pass)
 PRODUCTION_PREFLIGHT_CONFIG_ONLY_FLAG_ADDED=YES (new, verified, needs zero Cloudflare credentials)
 PRE_EXISTING_COMMITS_INDEPENDENTLY_REVERIFIED=3 (4139746, c126c86, e11e1bf -- each re-run and re-confirmed passing this session, not merely trusted)
 MYPY_MODAL_WORKER=PASS (36/36 source files, 0 issues -- previously-known untyped-call gap now closed)
 X402_FLAKE_ROOT_CAUSED_AND_FIXED=YES (15s explicit timeout on 2 property tests, confirmed via a clean full-suite rerun)
 REGISTRY_PRICE_DRIFT_FOUND=YES (company_evidence_graph.{v1,v2} maximum_price=0.19, expected 0.039)
-REGISTRY_PRICE_DRIFT_FIXED=NO (correcting it is a MAJOR frozen-contract compatibility break per contracts:compat:check -- requires its own governance authorization + version bump; reverted, tracked, not silently fixed or ignored)
+REGISTRY_PRICE_DRIFT_FIXED=RUNTIME_V2_ONLY (frozen contract JSON unchanged; company v2 runtime catalog projection derives from governance; historical v1 unwired maximum remains tracked)
 LIVE_CHARGED_PRICE_AFFECTED_BY_DRIFT=NO (every quote-minting call site reads governance/RISK_LIMITS.yaml live, never the registry display field)
 MARKET_RESEARCH_FRESH=YES (Modal pricing, Exa pricing -- both live-fetched this session, Exa confirmed unchanged from prior checkpoint)
-FINAL_PRICE_CARD=FROZEN, UNCHANGED (company=$0.039, web=$0.009/$0.029, document=$0.012/$0.019/$0.029/$0.19, verify=$0.019/$0.049)
-PRICE_SINGLE_SOURCE_OF_TRUTH=PASS (embedded pricing matches governance/RISK_LIMITS.yaml exactly; registry display-only exception tracked separately above)
+FINAL_PRICE_CARD=FROZEN (company v2=$0.0312; web=$0.009/$0.029, document=$0.012/$0.019/$0.029/$0.19, verify=$0.019/$0.049 unchanged)
+COMPANY_V2_EXPERIMENT_CHANGE_PERCENT=20
+COMPANY_V2_GOVERNANCE_CAP_PERCENT=20
+COMPANY_V2_GOVERNANCE_COMPLIANT=YES
+OLD_0_023_TARGET=REJECTED_FOR_CURRENT_EXPERIMENT
+PRICE_SINGLE_SOURCE_OF_TRUTH=PASS_FOR_COMPANY_V2_RUNTIME (governance source + mechanically checked Worker mirror; runtime registry projection derived; frozen historical metadata is not an economic authority)
 QUALIFICATION_BUYER_BALANCE_ATOMIC=19197 (unchanged, live-reconfirmed via read-only eth_call, Base mainnet chain id 8453)
-FOUR_SERVICE_QUALIFICATION_TOTAL_ATOMIC=79000
-QUALIFICATION_HEADROOM_ATOMIC=-59803
-ADDITIONAL_FUNDING_REQUIRED_ATOMIC=59803 (minimum; prices not lowered to fit wallet, per instruction)
-FULL_REPO_TEST_FILES=222 passed, 22 skipped, 0 failed (244 total)
-FULL_REPO_TESTS=2690 passed, 74 skipped, 0 failed (2764 total)
+FOUR_SERVICE_QUALIFICATION_TOTAL_ATOMIC=71200
+QUALIFICATION_HEADROOM_ATOMIC=-52003
+ADDITIONAL_FUNDING_REQUIRED_ATOMIC=52003 (minimum against the prior read-only balance; no fresh balance query in the price-correction task)
+FULL_REPO_TEST_FILES=227 passed, 22 skipped, 0 failed (249 total)
+FULL_REPO_TESTS=2785 passed, 77 skipped, 0 failed (2862 total)
 TYPECHECK=PASS (23/23 packages)
 LINT=PASS (16/16 packages)
 BUILD=PASS (12/12 packages)
-FORMAT_CHECK=PASS (files touched this checkpoint)
-SECRETS_SCAN=PASS (gitleaks, 659 commits, 0 leaks)
+FORMAT_CHECK=PASS_FOR_CHANGED_FILES; ROOT_BASELINE_FAILS_ON_449_PRE_EXISTING_FILES
+SECRETS_SCAN=PASS (gitleaks, 675 commits + working tree, 0 leaks)
 PRODUCTION_PREFLIGHT=PASS (--config-only, offline)
-WRANGLER_DRY_RUN=PASS (6420.47 KiB, exits before upload)
+WRANGLER_DRY_RUN=PASS (6421.63 KiB, exits before upload)
 CANDIDATE_SOURCE_HEAD=HEAD (this commit)
 CANDIDATE_COMMITS=88078b9..HEAD (this commit) (26 commits)
 CANDIDATE_CONFIG_CHANGES=none live

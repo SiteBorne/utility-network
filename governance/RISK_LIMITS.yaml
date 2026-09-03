@@ -10,6 +10,7 @@ financial_limits:
   price_change_per_experiment_pct: 20
   max_price_usd_per_service:
     company_evidence_graph: 0.039
+    company_evidence_graph_v2: 0.0312
     web_context_verified_direct: 0.009
     web_context_verified_rendered: 0.029
     document_evidence_json_native: 0.012

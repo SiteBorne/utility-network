@@ -114,7 +114,7 @@ const RUN_LIVE = process.env.RUN_LIVE_NEVERMINED === '1';
 
 const NETWORK = 'eip155:84532' as const;
 const SERVICE_ID = 'company_evidence_graph.v2' as const;
-const AMOUNT = '39000';
+const AMOUNT = '31200';
 const COMPANY_INPUT = {
   identifiers: { cik: '0000320193' },
   requested_field_groups: ['identity', 'sec_submissions'],
@@ -391,7 +391,7 @@ describe.skipIf(!RUN_LIVE)(
       createX402ServiceRoute(app, {
         serviceId: SERVICE_ID,
         scheme: 'exact',
-        pricingKey: 'company_evidence_graph',
+        pricingKey: 'company_evidence_graph_v2',
         network: NETWORK,
         asset: 'nevermined:credits',
         path: NEVERMINED_ROUTES[SERVICE_ID],

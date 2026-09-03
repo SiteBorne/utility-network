@@ -84,12 +84,11 @@ const BAZAAR_PAYMENT_POLICY: Readonly<
     network: PREPRODUCTION_NETWORK,
     asset: '0xUSDC',
   },
-  // SUN-1000 checkpoint 1M: v2 policy entries are byte-identical to their
-  // v1 counterparts — SAME_ECONOMICS_NEW_SERVICE_MAJOR per checkpoint 1L
-  // section 9; defect B/checkpoint 1K-B never authorized a pricing change.
+  // SUN-1222B-S3: company v2 is the sole version-specific pricing experiment.
+  // All other v2 entries retain their previously frozen pricing keys.
   'company_evidence_graph.v2': {
     scheme: 'exact',
-    pricing_key: 'company_evidence_graph',
+    pricing_key: 'company_evidence_graph_v2',
     network: PREPRODUCTION_NETWORK,
     asset: '0xUSDC',
   },

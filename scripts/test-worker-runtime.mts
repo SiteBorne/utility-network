@@ -757,7 +757,7 @@ async function runPhase4() {
           identifiers: { cik: '0000320193' },
           requested_field_groups: ['identity', 'sec_submissions'],
         },
-        expectedAmount: '39000', // 0.039 USD * 1e6
+        expectedAmount: '31200', // 0.0312 USD * 1e6
       },
       {
         name: 'web_context_verified.v2',
@@ -957,7 +957,7 @@ async function runPhase5() {
           identifiers: { cik: '0000320193' },
           requested_field_groups: ['identity', 'sec_submissions'],
         },
-        expectedAmount: '39000',
+        expectedAmount: '31200',
       },
       {
         name: 'web_context_verified.v2 (Nevermined)',
@@ -1205,8 +1205,7 @@ async function runPhase6() {
     } catch {
       /* leave {} */
     }
-    const failsClosedNotConfigured =
-      result.status === 500 && parsed.error === 'repository_failure';
+    const failsClosedNotConfigured = result.status === 500 && parsed.error === 'repository_failure';
     record(
       'PHASE 6 (2): verify-production synthetic payment -> fails closed (durable continuation not yet wired, H2AWI-4 scope) through the real production composition',
       failsClosedNotConfigured,
@@ -1687,7 +1686,9 @@ async function runPhase10() {
     // never fabricates them.
     record(
       'PHASE 10: web-context-production composition fails closed (configuration_error) without MODAL_WEBCTX_* credentials -- SafeSocket is no longer the production transport (SUN-1221E5Q6G)',
-      res.status === 500 && parsed.error === 'configuration_error' && /MODAL_WEBCTX/.test(parsed.message ?? ''),
+      res.status === 500 &&
+        parsed.error === 'configuration_error' &&
+        /MODAL_WEBCTX/.test(parsed.message ?? ''),
       `status=${res.status} error=${parsed.error} message=${parsed.message}`
     );
   });
@@ -1801,9 +1802,10 @@ async function runBundleIsolationCheck() {
     // docs/design/SUN-1221E6R-H2BF4-dedicated-workflow-host-architecture.md
     // and docs/reports/SUN-1221E6R-H2BF4-dedicated-workflow-host-local-
     // qualification.md).
-    const reachableContinuationMarkers = ['siteborne-wf-', 'paymentIdentifier must be a non-empty string'].filter(
-      (marker) => bundle.includes(marker)
-    );
+    const reachableContinuationMarkers = [
+      'siteborne-wf-',
+      'paymentIdentifier must be a non-empty string',
+    ].filter((marker) => bundle.includes(marker));
     const workflowRunOnlyMarkers = [
       'Continuation envelope decryption failed',
       'Continuation envelope associated data does not match',
@@ -1822,7 +1824,9 @@ async function runBundleIsolationCheck() {
     // Y`, never a literal `class X` token -- this marker matches esbuild's
     // actual emitted form (confirmed by direct inspection of both bundles
     // this checkpoint), not the TypeScript source syntax.
-    const containsWorkflowClassBody = bundle.includes('PaidContinuationWorkflow = class extends WorkflowEntrypoint');
+    const containsWorkflowClassBody = bundle.includes(
+      'PaidContinuationWorkflow = class extends WorkflowEntrypoint'
+    );
     record(
       'bundle isolation (SUN-1221E6R-H2BF4): real wrangler.toml (public API Worker) dry-run bundle does NOT contain the PaidContinuationWorkflow class body itself',
       !containsWorkflowClassBody &&
@@ -1995,7 +1999,11 @@ async function runWorkflowHostBundleIsolationCheck() {
   // Worker's own dry-run stdout (not its bundled JS -- the binding table
   // is CLI output, never part of the JS bundle itself).
   try {
-    const apiDryRunOutput = await runCommandCapture(WRANGLER_BIN, ['deploy', '--dry-run'], REPO_ROOT);
+    const apiDryRunOutput = await runCommandCapture(
+      WRANGLER_BIN,
+      ['deploy', '--dry-run'],
+      REPO_ROOT
+    );
     const bindingLineMatch = apiDryRunOutput
       .split('\n')
       .find((line) => line.includes('PAID_CONTINUATION_WORKFLOW'));
@@ -2022,7 +2030,14 @@ async function runWorkflowHostBundleIsolationCheck() {
   try {
     await runCommand(
       WRANGLER_BIN,
-      ['deploy', '--dry-run', '--config', 'wrangler.paid-continuation-runtime.toml', '--outdir', outDir],
+      [
+        'deploy',
+        '--dry-run',
+        '--config',
+        'wrangler.paid-continuation-runtime.toml',
+        '--outdir',
+        outDir,
+      ],
       REPO_ROOT
     );
     const hostBundlePath = join(outDir, 'workflow-host-entrypoint.js');
@@ -2031,12 +2046,16 @@ async function runWorkflowHostBundleIsolationCheck() {
     const requiredPresentMarkers = {
       // esbuild lowers `export class X extends Y` to `var X = class extends
       // Y` -- matches the actual emitted form, not TS source syntax.
-      WORKFLOW_CLASS: bundle.includes('PaidContinuationWorkflow = class extends WorkflowEntrypoint'),
+      WORKFLOW_CLASS: bundle.includes(
+        'PaidContinuationWorkflow = class extends WorkflowEntrypoint'
+      ),
       REAL_ORCHESTRATION: bundle.includes('async function runPaidContinuationWorkflow'),
       PRODUCTION_DEPENDENCY_BUILDER: bundle.includes(
         'async function buildProductionPaidContinuationWorkflowDependencies'
       ),
-      ENVELOPE_OPEN: bundle.includes('openContinuationEnvelope') || bundle.includes('Continuation envelope decryption failed'),
+      ENVELOPE_OPEN:
+        bundle.includes('openContinuationEnvelope') ||
+        bundle.includes('Continuation envelope decryption failed'),
       D1_JOBS_REPOSITORY: bundle.includes('D1JobsRepository'),
       D1_PAYMENT_ATTEMPT_REPOSITORY: bundle.includes('D1PaymentAttemptRepository'),
       X402_RESULT_REPOSITORY: bundle.includes('X402ServiceResultRepository'),
@@ -2069,8 +2088,11 @@ async function runWorkflowHostBundleIsolationCheck() {
       OPENAPI_ROUTE: bundle.includes('openapiRoute'),
       WORKER_RUNTIME_TEST_ENTRYPOINT: bundle.includes('worker-runtime-test-entrypoint'),
       TEST_ENTRYPOINT_MARKER: bundle.includes('SUN-1201-WORKER-RUNTIME-TEST-ENTRYPOINT-b7f2c4'),
-      FIXTURE_PAYMENT_PROVIDER_IMPORT: /\bimport\b[^\n]*FixturePaymentEvidenceProvider/.test(bundle),
-      NEVERMINED_TEST_CLIENTS: bundle.includes('successNeverminedClient') || bundle.includes('denyingNeverminedClient'),
+      FIXTURE_PAYMENT_PROVIDER_IMPORT: /\bimport\b[^\n]*FixturePaymentEvidenceProvider/.test(
+        bundle
+      ),
+      NEVERMINED_TEST_CLIENTS:
+        bundle.includes('successNeverminedClient') || bundle.includes('denyingNeverminedClient'),
       WEB_CONTEXT_HTTP_ROUTE: bundle.includes('webContextVerifiedV2CdpProductionRoute'),
       VERIFY_HTTP_ROUTE: bundle.includes('verifyAgentOutputV2CdpProductionRoute'),
     };

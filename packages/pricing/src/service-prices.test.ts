@@ -36,9 +36,17 @@ describe('resolveServiceMaxPriceUsd', () => {
     expect(resolveServiceMaxPriceUsd('company_evidence_graph')).toBe('0.039');
   });
 
-  it('resolves all nine pricing keys the current governance file defines', () => {
+  it('isolates the company_evidence_graph.v2 experiment from the frozen v1 price', () => {
+    expect(resolveServiceMaxPriceUsd('company_evidence_graph_v2')).toBe('0.0312');
+    expect(usdToAtomicUnits(resolveServiceMaxPriceUsd('company_evidence_graph_v2'), 6)).toBe(
+      '31200'
+    );
+  });
+
+  it('resolves all ten pricing keys the current governance file defines', () => {
     const keys = [
       'company_evidence_graph',
+      'company_evidence_graph_v2',
       'web_context_verified_direct',
       'web_context_verified_rendered',
       'document_evidence_json_native',

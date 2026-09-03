@@ -182,6 +182,33 @@ describe('SITEBORNE MCP 2026-07-28 Hono transport', () => {
     expect(uptoQuote.actual_amount).toBeNull();
   });
 
+  it('quotes company v2 at 31200 atomic without repricing company v1', async () => {
+    const { app } = createFixtureApp();
+    const client = await connectClient(app);
+    clients.push(client);
+
+    const quote = async (service_id: 'company_evidence_graph.v1' | 'company_evidence_graph.v2') =>
+      client.callTool({
+        name: 'siteborne_get_quote',
+        arguments: {
+          service_id,
+          scheme: 'exact',
+          input: frozenInputExample(service_id),
+        },
+      });
+    const v1 = await quote('company_evidence_graph.v1');
+    const v2 = await quote('company_evidence_graph.v2');
+
+    expect(v1.structuredContent).toMatchObject({
+      amount: '39000',
+      pricing_key: 'company_evidence_graph',
+    });
+    expect(v2.structuredContent).toMatchObject({
+      amount: '31200',
+      pricing_key: 'company_evidence_graph_v2',
+    });
+  });
+
   it('reports production false and local protocol readiness truthfully', async () => {
     const { app } = createFixtureApp();
     const client = await connectClient(app);

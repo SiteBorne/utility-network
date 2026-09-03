@@ -50,7 +50,7 @@
       "service_id": "company_evidence_graph.v2",
       "endpoint": "/v2/nevermined/company/evidence-graph",
       "payment_semantics": "exact",
-      "gross_buyer_amount_atomic": "39000",
+      "gross_buyer_amount_atomic": "31200",
       "dynamic_actual_settlement_required": false,
       "registration_allowed": true,
       "sandbox_capability_verified": false,
