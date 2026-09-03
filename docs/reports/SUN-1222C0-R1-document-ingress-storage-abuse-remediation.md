@@ -176,7 +176,7 @@ One pre-existing failure was found and fixed *during* this checkpoint (see §13.
 ```
 SUN1222C0_R1=PASS
 C0R1_START_HEAD=de9af60
-C0R1_END_HEAD=<see EVIDENCE_COMMIT_SHA below>
+C0R1_END_HEAD=d11ab52c9867b3860d046a17bf48f7ad3b88de21
 DOCUMENT_INGRESS_SOURCE_KEY=normalizeSourceKey(CF-Connecting-IP)
 SOURCE_KEY_SPOOFABLE_BY_CALLER=NO
 SELECTED_RATE_LIMIT_PRIMITIVE=D1 (existing DB binding), atomic INSERT..ON CONFLICT DO UPDATE..WHERE
@@ -248,7 +248,7 @@ FINAL_CANDIDATE_ALL_CHANGED_PLANES_ISOLATED=YES for code/bindings; NOT STRICTLY 
 ZERO_PERCENT_QUALIFICATION_DOES_NOT_CHANGE_NORMAL_PRODUCTION_BEHAVIOR=YES (migration is additive; current 100% candidate code never references the new table)
 SUN1222C1_CANDIDATE_PROVISIONING_ELIGIBLE=YES
 C1_AUTHORIZATION_DRAFT_UPDATED=NOT DONE THIS CHECKPOINT -- out of R1's own stated scope (R1 = remediation + gate + eligibility recompute only); recommend doing this as the first step of SUN-1222C1 itself, sourced from C0's original draft plus this report's §14 delta
-C0R1_EVIDENCE_COMMIT_SHA=<this commit>
+C0R1_EVIDENCE_COMMIT_SHA=d11ab52c9867b3860d046a17bf48f7ad3b88de21
 WORKING_TREE=clean after commit
 PRODUCTION_MUTATIONS=0
 EXTERNAL_MUTATIONS=0
