@@ -23,6 +23,7 @@ import type {
   SecurityRepository,
   ServicesRepository,
   ServiceVersionsRepository,
+  DocumentIngressAdmissionRepository,
 } from './interfaces';
 import { ok, err } from './interfaces';
 
@@ -686,6 +687,57 @@ export class InMemoryServiceVersionsRepository implements ServiceVersionsReposit
   clear(): void {
     this.store.clear();
     this.byServiceId.clear();
+  }
+}
+
+/** SUN-1222C0-R1 — deterministic in-process double for
+ * `DocumentIngressAdmissionRepository`. Genuinely atomic under concurrent
+ * callers for the same reason the real D1 implementation is: JS's
+ * single-threaded event loop never interleaves execution mid-function
+ * when there is no `await` between the read and the write below, so
+ * `Promise.all([...])` calls racing the same `windowKey` are still
+ * strictly sequential at the point the guard is checked — this is what
+ * lets this double prove the exact same "no overshoot" property the real
+ * repository's SQL statement proves, not merely simulate it. */
+export class InMemoryDocumentIngressAdmissionRepository
+  implements DocumentIngressAdmissionRepository
+{
+  private windows = new Map<string, { count: number; window_start_ms: number; scope: string }>();
+
+  async admitAndIncrement(
+    windowKey: string,
+    scope: string,
+    windowStartMs: number,
+    limit: number
+  ): ReturnType<DocumentIngressAdmissionRepository['admitAndIncrement']> {
+    const existing = this.windows.get(windowKey);
+    if (!existing) {
+      this.windows.set(windowKey, { count: 1, window_start_ms: windowStartMs, scope });
+      return ok({ admitted: true });
+    }
+    if (existing.count < limit) {
+      existing.count += 1;
+      return ok({ admitted: true });
+    }
+    return ok({ admitted: false });
+  }
+
+  async deleteWindowsOlderThan(
+    cutoffMs: number
+  ): ReturnType<DocumentIngressAdmissionRepository['deleteWindowsOlderThan']> {
+    let deleted = 0;
+    for (const [key, value] of this.windows) {
+      if (value.window_start_ms < cutoffMs) {
+        this.windows.delete(key);
+        deleted += 1;
+      }
+    }
+    return ok(deleted);
+  }
+
+  /** Test-only introspection — never used by production/route code. */
+  size(): number {
+    return this.windows.size;
   }
 }
 

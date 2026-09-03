@@ -147,3 +147,32 @@ export interface ServiceVersionsRepository {
   ): Promise<RepositoryResponse<ServiceVersion | null>>;
   listByServiceId(serviceId: string): Promise<RepositoryResponse<ServiceVersion[]>>;
 }
+
+/** SUN-1222C0-R1 — the distributed admission-control primitive behind
+ * `document-ingress-admission-control.ts`'s two-axis (per-source/global)
+ * storage-abuse guard. See that module's doc comment for why this is
+ * D1-backed rather than Cloudflare's native Rate Limiting binding. */
+export interface DocumentIngressAdmissionRepository {
+  /** Atomically increments the counter for `windowKey` if and only if its
+   * current count is strictly below `limit`, creating the row (count=1)
+   * if this is the window's first request. `admitted: true` iff the
+   * increment actually happened — a single SQL statement (the D1
+   * implementation's own doc comment explains why this is genuinely
+   * atomic under concurrent callers, not merely "eventually
+   * consistent"). `scope` and `windowStartMs` are stored alongside for
+   * `deleteWindowsOlderThan` and observability; they play no role in the
+   * admission decision itself. */
+  admitAndIncrement(
+    windowKey: string,
+    scope: string,
+    windowStartMs: number,
+    limit: number
+  ): Promise<RepositoryResponse<{ admitted: boolean }>>;
+  /** Opportunistic cleanup of expired window rows — keeps this table's
+   * own storage bounded (a rate limiter that itself accumulated
+   * unbounded rows would not actually close the invariant this
+   * checkpoint exists to prove). Failure here must never fail the
+   * admission decision that triggered it; callers treat this as
+   * best-effort. */
+  deleteWindowsOlderThan(cutoffMs: number): Promise<RepositoryResponse<number>>;
+}

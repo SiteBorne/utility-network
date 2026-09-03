@@ -12,7 +12,7 @@ import { readFileSync, readdirSync, rmSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { Miniflare } from 'miniflare';
 import type { D1Database, R2Bucket } from '@cloudflare/workers-types';
 import { Hono } from 'hono';
@@ -22,6 +22,10 @@ import {
   isDocumentArtifactUploadRouteFlagEnabled,
 } from './document-artifact-upload-route';
 import { DOCUMENT_UPLOAD_MAX_BYTES } from '../artifacts/document-upload';
+import {
+  DOCUMENT_INGRESS_PER_SOURCE_LIMIT,
+  DOCUMENT_INGRESS_ADMISSION_WINDOW_SECONDS,
+} from '../artifacts/document-ingress-admission-control';
 
 const MIGRATIONS_DIR = fileURLToPath(new URL('../../../../../migrations', import.meta.url));
 
@@ -225,7 +229,7 @@ describe('POST /v2/artifacts/documents', () => {
     // checking for the whole init object.
     const init = {
       method: 'POST',
-      headers: { 'content-type': 'application/pdf' },
+      headers: { 'content-type': 'application/pdf', 'cf-connecting-ip': '203.0.113.10' },
       body: stream,
       duplex: 'half',
     } as unknown as RequestInit;
@@ -237,7 +241,11 @@ describe('POST /v2/artifacts/documents', () => {
     const app = appWithRoute();
     const res = await app.request(
       '/v2/artifacts/documents',
-      { method: 'POST', headers: { 'content-type': 'application/zip' }, body: pdfBytes() },
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/zip', 'cf-connecting-ip': '203.0.113.11' },
+        body: pdfBytes(),
+      },
       enabledEnv()
     );
     expect(res.status).toBe(415);
@@ -250,7 +258,11 @@ describe('POST /v2/artifacts/documents', () => {
     const notActuallyPdf = new TextEncoder().encode('this is not a real pdf file');
     const res = await app.request(
       '/v2/artifacts/documents',
-      { method: 'POST', headers: { 'content-type': 'application/pdf' }, body: notActuallyPdf },
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/pdf', 'cf-connecting-ip': '203.0.113.12' },
+        body: notActuallyPdf,
+      },
       enabledEnv()
     );
     expect(res.status).toBe(415);
@@ -262,7 +274,11 @@ describe('POST /v2/artifacts/documents', () => {
     const app = appWithRoute();
     const res = await app.request(
       '/v2/artifacts/documents',
-      { method: 'POST', headers: { 'content-type': 'application/pdf' }, body: new Uint8Array(0) },
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/pdf', 'cf-connecting-ip': '203.0.113.13' },
+        body: new Uint8Array(0),
+      },
       enabledEnv()
     );
     expect(res.status).toBe(400);
@@ -275,7 +291,11 @@ describe('POST /v2/artifacts/documents', () => {
     const bytes = pdfBytes('leak-test unique content');
     const res = await app.request(
       '/v2/artifacts/documents',
-      { method: 'POST', headers: { 'content-type': 'application/pdf' }, body: bytes },
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/pdf', 'cf-connecting-ip': '203.0.113.14' },
+        body: bytes,
+      },
       enabledEnv()
     );
     expect(res.status).toBe(201);
@@ -310,12 +330,20 @@ describe('POST /v2/artifacts/documents', () => {
     const bytes = pdfBytes('idempotency-route-test');
     const first = await app.request(
       '/v2/artifacts/documents',
-      { method: 'POST', headers: { 'content-type': 'application/pdf' }, body: bytes },
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/pdf', 'cf-connecting-ip': '203.0.113.15' },
+        body: bytes,
+      },
       enabledEnv()
     );
     const second = await app.request(
       '/v2/artifacts/documents',
-      { method: 'POST', headers: { 'content-type': 'application/pdf' }, body: bytes },
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/pdf', 'cf-connecting-ip': '203.0.113.15' },
+        body: bytes,
+      },
       enabledEnv()
     );
     expect(first.status).toBe(201);
@@ -336,4 +364,147 @@ describe('POST /v2/artifacts/documents', () => {
       /protocol-x402|service-runtime|x402-service|createX402ServiceRoute|ServiceRegistry/
     );
   });
+
+  // -------------------------------------------------------------------
+  // SUN-1222C0-R1 -- distributed admission control (storage-abuse fix).
+  // -------------------------------------------------------------------
+
+  async function countArtifactRows(): Promise<number> {
+    const result = await db.prepare('SELECT COUNT(*) as c FROM job_artifacts').all();
+    return (result.results[0] as { c: number }).c;
+  }
+
+  async function countR2Objects(): Promise<number> {
+    const listed = await bucket.list();
+    return listed.objects.length;
+  }
+
+  beforeEach(async () => {
+    await db.exec('DELETE FROM job_artifacts');
+    await db.exec('DELETE FROM document_ingress_admission_windows');
+  });
+
+  it('§7 fails closed (503) when CF-Connecting-IP is absent -- never falls back to X-Forwarded-For or an unlimited shared identity', async () => {
+    const app = appWithRoute();
+    const beforeArtifacts = await countArtifactRows();
+    const beforeObjects = await countR2Objects();
+    const res = await app.request(
+      '/v2/artifacts/documents',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/pdf', 'x-forwarded-for': '9.9.9.9' },
+        body: pdfBytes('no-source-identity'),
+      },
+      enabledEnv()
+    );
+    expect(res.status).toBe(503);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.error).toBe('temporarily_unavailable');
+    // §12: zero storage side effects on a rejected request.
+    expect(await countArtifactRows()).toBe(beforeArtifacts);
+    expect(await countR2Objects()).toBe(beforeObjects);
+  });
+
+  it('§21 admits a genuine upload once a trusted CF-Connecting-IP is present', async () => {
+    const app = appWithRoute();
+    const res = await app.request(
+      '/v2/artifacts/documents',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/pdf', 'cf-connecting-ip': '203.0.113.50' },
+        body: pdfBytes('admitted-with-real-source'),
+      },
+      enabledEnv()
+    );
+    expect(res.status).toBe(201);
+  });
+
+  it('§16/§17/§12 exceeding the per-source limit returns 429 with Retry-After and performs ZERO R2/D1 writes for the rejected request', async () => {
+    const app = appWithRoute();
+    const sourceIp = '198.51.100.77';
+    // Exhaust the per-source window with distinct content each time (so
+    // content-hash dedup never short-circuits admission accounting).
+    for (let i = 0; i < DOCUMENT_INGRESS_PER_SOURCE_LIMIT; i++) {
+      const res = await app.request(
+        '/v2/artifacts/documents',
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/pdf', 'cf-connecting-ip': sourceIp },
+          body: pdfBytes(`quota-fill-${i}`),
+        },
+        enabledEnv()
+      );
+      expect(res.status).toBe(201);
+    }
+
+    const beforeArtifacts = await countArtifactRows();
+    const beforeObjects = await countR2Objects();
+
+    const rejected = await app.request(
+      '/v2/artifacts/documents',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/pdf', 'cf-connecting-ip': sourceIp },
+        body: pdfBytes('over-the-limit'),
+      },
+      enabledEnv()
+    );
+    expect(rejected.status).toBe(429);
+    expect(rejected.headers.get('Retry-After')).toBe(
+      String(DOCUMENT_INGRESS_ADMISSION_WINDOW_SECONDS)
+    );
+    const rejectedBody = (await rejected.json()) as Record<string, unknown>;
+    expect(rejectedBody.error).toBe('rate_limited');
+    // §13: the public error shape never reveals the internal scope
+    // (per_source vs. global), the raw source key, or any infra detail.
+    expect(JSON.stringify(rejectedBody)).not.toMatch(/198\.51\.100\.77/);
+    expect(JSON.stringify(rejectedBody)).not.toMatch(/per_source|global|d1|r2|sqlite/i);
+
+    // §12/§25: the rejected request minted no artifact and wrote nothing
+    // to R2 or D1 -- structural proof, not just an assertion on intent.
+    expect(await countArtifactRows()).toBe(beforeArtifacts);
+    expect(await countR2Objects()).toBe(beforeObjects);
+
+    // A different, independent source is unaffected by the first
+    // source's exhausted quota.
+    const otherSource = await app.request(
+      '/v2/artifacts/documents',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/pdf', 'cf-connecting-ip': '198.51.100.200' },
+        body: pdfBytes('independent-source'),
+      },
+      enabledEnv()
+    );
+    expect(otherSource.status).toBe(201);
+  }, 30_000);
+
+  it('two different textual representations of the same real address share one quota (IPv4 leading-zero normalization)', async () => {
+    const app = appWithRoute();
+    const canonical = '203.0.113.99';
+    const leadingZeros = '203.000.113.099';
+    for (let i = 0; i < DOCUMENT_INGRESS_PER_SOURCE_LIMIT; i++) {
+      const ip = i % 2 === 0 ? canonical : leadingZeros;
+      const res = await app.request(
+        '/v2/artifacts/documents',
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/pdf', 'cf-connecting-ip': ip },
+          body: pdfBytes(`shared-quota-${i}`),
+        },
+        enabledEnv()
+      );
+      expect(res.status).toBe(201);
+    }
+    const overLimit = await app.request(
+      '/v2/artifacts/documents',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/pdf', 'cf-connecting-ip': canonical },
+        body: pdfBytes('shared-quota-over'),
+      },
+      enabledEnv()
+    );
+    expect(overLimit.status).toBe(429);
+  }, 30_000);
 });

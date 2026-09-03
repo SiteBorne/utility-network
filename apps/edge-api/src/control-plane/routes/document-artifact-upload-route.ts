@@ -12,11 +12,25 @@
  * sibling files is gated: an explicit `'true'` flag AND both bindings
  * (`DB`, `ARTIFACTS`) present, else `c.notFound()` — never a 500, never a
  * fixture fallback.
+ *
+ * SUN-1222C0-R1 — distributed admission control (per-source + global,
+ * see `../artifacts/document-ingress-admission-control.ts`) runs AFTER
+ * the cheap declared-Content-Length pre-check (a guaranteed-413 request
+ * costs the caller nothing and consumes no distributed state either) but
+ * BEFORE any bounded body read, R2 write, or D1 artifact write. A
+ * rejected request never reaches `storeDocumentUpload` at all —
+ * structurally, not just by convention — so `R2_PUT_CALLS=0` and
+ * `D1_ARTIFACT_INSERTS=0` hold for every admission-rejected request.
  */
 import type { Context } from 'hono';
 import type { Env } from '../config/env';
 import { R2ArtifactStoreAdapter } from '../artifacts/store';
 import { D1ArtifactsRepository } from '../repositories/d1/artifacts';
+import { D1DocumentIngressAdmissionRepository } from '../repositories/d1/document-ingress-admission';
+import {
+  checkDocumentIngressAdmission,
+  extractDocumentIngressSourceKey,
+} from '../artifacts/document-ingress-admission-control';
 import {
   storeDocumentUpload,
   readBoundedBody,
@@ -72,6 +86,47 @@ export async function documentArtifactUploadRoute(
         413
       );
     }
+  }
+
+  // SUN-1222C0-R1 §7/§12: the only trusted source identity is
+  // Cloudflare's own CF-Connecting-IP, never a caller-suppliable
+  // forwarding header. Its absence should never happen through
+  // Cloudflare's real edge; fail closed exactly like a limiter-
+  // unavailable outcome rather than guessing at a shared identity.
+  const sourceKey = extractDocumentIngressSourceKey((name) => c.req.header(name));
+  if (sourceKey === null) {
+    return c.json(
+      { error: 'temporarily_unavailable', message: 'unable to verify request source' },
+      503
+    );
+  }
+
+  // SUN-1222C0-R1 §12/§14: admission control runs BEFORE any bounded body
+  // read, R2 write, or D1 artifact write — a rejected request performs
+  // none of those (structural proof, not just convention: the function
+  // returns here). A repository failure fails closed (503), never open.
+  const admission = await checkDocumentIngressAdmission(
+    { repository: new D1DocumentIngressAdmissionRepository(c.env.DB), nowMs: () => Date.now() },
+    sourceKey
+  );
+  if (!admission.allowed) {
+    const unavailable = admission.scope === 'limiter_unavailable';
+    const status = unavailable ? 503 : 429;
+    // §13: never expose the internal quota scope, the raw source key, or
+    // any infrastructure detail — the public shape is identical
+    // regardless of which axis (per-source vs. global) rejected it.
+    return c.json(
+      {
+        error: unavailable ? 'temporarily_unavailable' : 'rate_limited',
+        message: unavailable
+          ? 'document ingress is temporarily unavailable'
+          : 'too many document uploads from this source; try again later',
+      },
+      status,
+      admission.retryAfterSeconds !== undefined
+        ? { 'Retry-After': String(admission.retryAfterSeconds) }
+        : undefined
+    );
   }
 
   // §12/§15: bounded read regardless of whether Content-Length was sent —

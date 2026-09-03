@@ -54,11 +54,21 @@ function baseEnv(overrides: Partial<Env> = {}): Env {
 /** A minimal fake D1Database — enough surface for D1ArtifactsRepository's
  * insert path; the assertion under test is whether the request reaches
  * this seam at all, not D1 semantics themselves (those are covered by the
- * isolated route/store tests). */
+ * isolated route/store tests).
+ *
+ * SUN-1222C0-R1: `run()` now also returns `meta.changes: 1` — unconditionally
+ * "admitted" — so `D1DocumentIngressAdmissionRepository.admitAndIncrement`
+ * (consulted before any R2/D1 write, per that checkpoint's fix) never
+ * fails closed against this fake for these tests' purpose. Genuine quota
+ * edge cases (limit reached, concurrency, window rollover) are exercised
+ * against the REAL D1/SQLite engine in
+ * `repositories/d1/document-ingress-admission.test.ts`, not here — this
+ * file's own stated purpose is proving requests reach the R2 seam through
+ * the real app, not D1/admission-control semantics. */
 function fakeDb(): Env['DB'] {
   const stmt = {
     bind: vi.fn().mockReturnThis(),
-    run: vi.fn().mockResolvedValue({ success: true }),
+    run: vi.fn().mockResolvedValue({ success: true, meta: { changes: 1 } }),
     first: vi.fn().mockResolvedValue(null),
     all: vi.fn().mockResolvedValue({ results: [] }),
   };
@@ -88,7 +98,7 @@ describe('SUN-1222C-1-REMEDIATION — POST /v2/artifacts/documents through the r
       '/v2/artifacts/documents',
       {
         method: 'POST',
-        headers: { 'content-type': 'application/pdf' },
+        headers: { 'content-type': 'application/pdf', 'cf-connecting-ip': '203.0.113.20' },
         body: MINIMAL_PDF_BYTES,
       },
       baseEnv({ DB: fakeDb(), ARTIFACTS })
@@ -104,7 +114,7 @@ describe('SUN-1222C-1-REMEDIATION — POST /v2/artifacts/documents through the r
       '/v2/artifacts/documents',
       {
         method: 'POST',
-        headers: { 'content-type': 'application/pdf' },
+        headers: { 'content-type': 'application/pdf', 'cf-connecting-ip': '203.0.113.20' },
         body: MINIMAL_PDF_BYTES,
       },
       baseEnv({ DB: fakeDb(), ARTIFACTS })
@@ -128,7 +138,11 @@ describe('SUN-1222C-1-REMEDIATION — POST /v2/artifacts/documents through the r
     const { binding: ARTIFACTS, putCalls } = fakeArtifacts();
     const res = await app.request(
       '/v2/artifacts/documents',
-      { method: 'POST', headers: { 'content-type': 'image/png' }, body: png },
+      {
+        method: 'POST',
+        headers: { 'content-type': 'image/png', 'cf-connecting-ip': '203.0.113.21' },
+        body: png,
+      },
       baseEnv({ DB: fakeDb(), ARTIFACTS })
     );
     expect(res.status).toBe(201);
@@ -161,7 +175,7 @@ describe('SUN-1222C-1-REMEDIATION — POST /v2/artifacts/documents through the r
       '/v2/artifacts/documents',
       {
         method: 'POST',
-        headers: { 'content-type': 'application/pdf' },
+        headers: { 'content-type': 'application/pdf', 'cf-connecting-ip': '203.0.113.22' },
         body: MINIMAL_PDF_BYTES,
       },
       baseEnv({ DB: fakeDb(), ARTIFACTS, DOCUMENT_ARTIFACT_UPLOAD_ROUTE_ENABLED: undefined })
@@ -179,6 +193,7 @@ describe('SUN-1222C-1-REMEDIATION — POST /v2/artifacts/documents through the r
         headers: {
           'content-type': 'application/pdf',
           'content-length': String(10_485_760 + 1),
+          'cf-connecting-ip': '203.0.113.23',
         },
         body: MINIMAL_PDF_BYTES,
       },
@@ -194,7 +209,7 @@ describe('SUN-1222C-1-REMEDIATION — POST /v2/artifacts/documents through the r
       '/v2/artifacts/documents',
       {
         method: 'POST',
-        headers: { 'content-type': 'application/pdf' },
+        headers: { 'content-type': 'application/pdf', 'cf-connecting-ip': '203.0.113.24' },
         body: new Uint8Array(0),
       },
       baseEnv({ DB: fakeDb(), ARTIFACTS })
@@ -209,7 +224,7 @@ describe('SUN-1222C-1-REMEDIATION — POST /v2/artifacts/documents through the r
       '/v2/artifacts/documents',
       {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', 'cf-connecting-ip': '203.0.113.25' },
         body: '{"not":"a document"}',
       },
       baseEnv({ DB: fakeDb(), ARTIFACTS })
@@ -224,7 +239,11 @@ describe('SUN-1222C-1-REMEDIATION — POST /v2/artifacts/documents through the r
     const res = await app.request(
       '/v2/artifacts/documents',
       // declares PDF, but the bytes are actually a PNG signature
-      { method: 'POST', headers: { 'content-type': 'application/pdf' }, body: png },
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/pdf', 'cf-connecting-ip': '203.0.113.26' },
+        body: png,
+      },
       baseEnv({ DB: fakeDb(), ARTIFACTS })
     );
     expect(res.status).toBe(415);

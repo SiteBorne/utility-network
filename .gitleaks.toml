@@ -83,4 +83,19 @@ regexes = [
   '''wk-6LcEUTuEzcQBsQ7oIPSmMj''',
   '''wk-lSGM4IuoAogKV3CTZX5xHj''',
   '''wk-jozfRBPfBFAJbWbQoXV88z''',
+  # SUN-1222C0-R1: the public API Worker's own Cloudflare Version ID,
+  # quoted in the C0 evidence report as `PUBLIC_API_ACTIVE_VERSION=
+  # db7054c9-76ee-4830-aabe-8a4542261b6a @ 100%`. A Worker Version ID is
+  # a public identifier (visible via `wrangler deployments status`/
+  # `versions view` to anyone with account read access, analogous to a
+  # git commit SHA) — never credential material, and authorizes nothing
+  # by itself. Proven a match-context artifact of the generic-api-key
+  # rule (triggers on the `KEY=value` shape), not something inherent to
+  # the value: the identical UUID appears, unflagged, in 19 other already-
+  # committed evidence reports that don't happen to use this exact
+  # `KEY=value @ N%` line shape. Same false-positive class as the Modal
+  # `wk-...` resource IDs above; allowlisted as one exact value, not a
+  # UUID-shaped pattern, so a real secret that happened to be UUID-shaped
+  # would still be caught.
+  '''db7054c9-76ee-4830-aabe-8a4542261b6a''',
 ]
