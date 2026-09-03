@@ -22,12 +22,17 @@ const EMBEDDED_PRICING: Readonly<Record<string, number>> = {
   company_evidence_graph: 0.039,
   company_evidence_graph_v2: 0.0312,
   web_context_verified_direct: 0.009,
+  web_context_verified_direct_v2: 0.008,
   web_context_verified_rendered: 0.029,
   document_evidence_json_native: 0.012,
+  document_evidence_json_native_v2: 0.0098,
   document_evidence_json_ocr: 0.019,
+  document_evidence_json_ocr_v2: 0.0156,
   document_evidence_json_table: 0.029,
+  document_evidence_json_table_v2: 0.0238,
   document_evidence_json_max_job: 0.19,
   verify_agent_output_standard: 0.019,
+  verify_agent_output_standard_v2: 0.017,
   verify_agent_output_reproduction: 0.049,
 } as const;
 
@@ -47,12 +52,17 @@ export type PricingKey =
   | 'company_evidence_graph'
   | 'company_evidence_graph_v2'
   | 'web_context_verified_direct'
+  | 'web_context_verified_direct_v2'
   | 'web_context_verified_rendered'
   | 'document_evidence_json_native'
+  | 'document_evidence_json_native_v2'
   | 'document_evidence_json_ocr'
+  | 'document_evidence_json_ocr_v2'
   | 'document_evidence_json_table'
+  | 'document_evidence_json_table_v2'
   | 'document_evidence_json_max_job'
   | 'verify_agent_output_standard'
+  | 'verify_agent_output_standard_v2'
   | 'verify_agent_output_reproduction';
 
 interface RiskLimitsDocument {

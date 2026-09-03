@@ -172,8 +172,15 @@ export async function buildWebContextV2CdpProductionRouteConfig(
   }
   // SUN-1221E5Q6G — fail closed, never fall back to SafeSocketHttpClient
   // (Approach C: unconditional, no hybrid/CIDR-based routing split).
-  if (!env.MODAL_WEBCTX_ENDPOINT_URL || !env.MODAL_WEBCTX_PROXY_KEY || !env.MODAL_WEBCTX_PROXY_SECRET) {
-    return { unavailable: true, reason: 'MODAL_WEBCTX_* safe-egress executor credentials are missing' };
+  if (
+    !env.MODAL_WEBCTX_ENDPOINT_URL ||
+    !env.MODAL_WEBCTX_PROXY_KEY ||
+    !env.MODAL_WEBCTX_PROXY_SECRET
+  ) {
+    return {
+      unavailable: true,
+      reason: 'MODAL_WEBCTX_* safe-egress executor credentials are missing',
+    };
   }
 
   let signer: Awaited<ReturnType<typeof buildProductionSigner>>['signer'];
@@ -255,7 +262,7 @@ export async function buildWebContextV2CdpProductionRouteConfig(
   return {
     serviceId: 'web_context_verified.v2',
     scheme: 'exact',
-    pricingKey: 'web_context_verified_direct',
+    pricingKey: 'web_context_verified_direct_v2',
     rail: 'cdp',
     network,
     asset: asset.address,

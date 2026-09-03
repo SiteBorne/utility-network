@@ -53,14 +53,26 @@ export const REGISTRY_SERVICES: Readonly<Record<SiteborneServiceId, RegistryServ
   'web_context_verified.v1': webContextVerified as RegistryServiceEntry,
   'document_evidence_json.v1': documentEvidenceJson as RegistryServiceEntry,
   'verify_agent_output.v1': verifyAgentOutput as RegistryServiceEntry,
-  // SUN-1000 checkpoint 1M.
+  // SUN-1000 checkpoint 1M / SUN-1222C-R3: all four v2 services now project
+  // their dedicated governed experiment price onto the frozen registry
+  // contract JSON at runtime (rather than mutating the JSON itself, which
+  // would trigger a major-version contract-compat break).
   'company_evidence_graph.v2': withGovernedRegistryPrice(
     companyEvidenceGraphV2 as RegistryServiceEntry,
     resolveServiceMaxPriceUsd('company_evidence_graph_v2')
   ),
-  'web_context_verified.v2': webContextVerifiedV2 as RegistryServiceEntry,
-  'document_evidence_json.v2': documentEvidenceJsonV2 as RegistryServiceEntry,
-  'verify_agent_output.v2': verifyAgentOutputV2 as RegistryServiceEntry,
+  'web_context_verified.v2': withGovernedRegistryPrice(
+    webContextVerifiedV2 as RegistryServiceEntry,
+    resolveServiceMaxPriceUsd('web_context_verified_direct_v2')
+  ),
+  'document_evidence_json.v2': withGovernedRegistryPrice(
+    documentEvidenceJsonV2 as RegistryServiceEntry,
+    resolveServiceMaxPriceUsd('document_evidence_json_native_v2')
+  ),
+  'verify_agent_output.v2': withGovernedRegistryPrice(
+    verifyAgentOutputV2 as RegistryServiceEntry,
+    resolveServiceMaxPriceUsd('verify_agent_output_standard_v2')
+  ),
 };
 
 export const ALL_BAZAAR_SERVICE_IDS: readonly SiteborneServiceId[] = [

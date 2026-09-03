@@ -96,7 +96,7 @@ const CANONICAL_REQUEST_BODY = {
 
 const EXPECTED_NETWORK = 'eip155:8453';
 const EXPECTED_ASSET = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
-const EXPECTED_AMOUNT_ATOMIC = '19000';
+const EXPECTED_AMOUNT_ATOMIC = '17000'; // SUN-1222C-R3: verify_agent_output.v2 experiment price
 const EXPECTED_PAYTO = '0x7f44a2dd237938F18632d4CcA40f4c690295E6E1';
 const EXPECTED_EIP712_NAME = 'USD Coin';
 const EXPECTED_EIP712_VERSION = '2';
@@ -243,7 +243,7 @@ describe('SUN-1220L: verify_agent_output.v2/CDP real requirement carries EIP-712
     expect(recorder.calls).toBe(0);
   });
 
-  it('N/O: the official ExactEvmScheme checks only PRESENCE, not exact value, of name/version -- documents the split with SUN-1220J\'s separate hard invariant', async () => {
+  it("N/O: the official ExactEvmScheme checks only PRESENCE, not exact value, of name/version -- documents the split with SUN-1220J's separate hard invariant", async () => {
     const requirement = await buildRealMainnetRequirement();
     const wrongValues: PaymentRequirements = {
       ...requirement,

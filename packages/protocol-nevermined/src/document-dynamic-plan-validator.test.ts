@@ -307,10 +307,10 @@ describe('validateNeverminedDocumentDynamicPlan', () => {
   });
 
   it('U: fixed Nevermined service declarations match their governed version-specific prices', () => {
-    // SUN-1000 checkpoint 1M: excludes both document_evidence_json majors
-    // (its dynamic plan is this suite's own subject, tested separately
-    // below). Company v2 is the sole version-specific S3 price experiment;
-    // every other fixed-price declaration remains unchanged.
+    // SUN-1000 checkpoint 1M / SUN-1222C-R3: excludes both
+    // document_evidence_json majors (its dynamic plan is this suite's own
+    // subject, tested separately below). All four v2 services now carry
+    // dedicated, isolated experiment prices; v1 remains unchanged.
     expect(
       Object.fromEntries(
         Object.entries(NEVERMINED_DECLARATIONS)
@@ -347,12 +347,12 @@ describe('validateNeverminedDocumentDynamicPlan', () => {
       },
       'web_context_verified.v2': {
         semantics: 'exact',
-        amount: '9000',
+        amount: '8000',
         registration_allowed: true,
       },
       'verify_agent_output.v2': {
         semantics: 'exact',
-        amount: '19000',
+        amount: '17000',
         registration_allowed: true,
       },
     });

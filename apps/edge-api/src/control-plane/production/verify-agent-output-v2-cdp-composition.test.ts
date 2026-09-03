@@ -59,7 +59,7 @@ describe('buildVerifyAgentOutputV2CdpProductionRouteConfig', () => {
     if ('unavailable' in result) throw new Error('unreachable');
     expect(result.serviceId).toBe('verify_agent_output.v2');
     expect(result.path).toBe('/v2/verify/agent-output');
-    expect(result.pricingKey).toBe('verify_agent_output_standard');
+    expect(result.pricingKey).toBe('verify_agent_output_standard_v2');
     expect(result.contractRelease).toBe('2.0.0');
     expect(result.pccDependency).toBe('1.1.0');
     expect(typeof result.executor).toBe('function');

@@ -217,7 +217,7 @@ export async function buildVerifyAgentOutputV2CdpProductionRouteConfig(
   return {
     serviceId: 'verify_agent_output.v2',
     scheme: 'exact',
-    pricingKey: 'verify_agent_output_standard',
+    pricingKey: 'verify_agent_output_standard_v2',
     rail: 'cdp',
     network,
     asset: asset.address,

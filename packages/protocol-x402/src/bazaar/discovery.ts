@@ -84,8 +84,11 @@ const BAZAAR_PAYMENT_POLICY: Readonly<
     network: PREPRODUCTION_NETWORK,
     asset: '0xUSDC',
   },
-  // SUN-1222B-S3: company v2 is the sole version-specific pricing experiment.
-  // All other v2 entries retain their previously frozen pricing keys.
+  // SUN-1222B-S3 / SUN-1222C-R3: all four v2 services now carry dedicated,
+  // isolated experiment pricing keys, split from the frozen v1 keys.
+  // document_evidence_json.v2's `upto` ceiling stays on the unchanged
+  // max_job safety cap (not itself a competitive list price) — only the
+  // per-tier *settlement* prices moved (see packages/pricing/src/document-usage.ts).
   'company_evidence_graph.v2': {
     scheme: 'exact',
     pricing_key: 'company_evidence_graph_v2',
@@ -94,7 +97,7 @@ const BAZAAR_PAYMENT_POLICY: Readonly<
   },
   'web_context_verified.v2': {
     scheme: 'exact',
-    pricing_key: 'web_context_verified_direct',
+    pricing_key: 'web_context_verified_direct_v2',
     network: PREPRODUCTION_NETWORK,
     asset: '0xUSDC',
   },
@@ -106,7 +109,7 @@ const BAZAAR_PAYMENT_POLICY: Readonly<
   },
   'verify_agent_output.v2': {
     scheme: 'exact',
-    pricing_key: 'verify_agent_output_standard',
+    pricing_key: 'verify_agent_output_standard_v2',
     network: PREPRODUCTION_NETWORK,
     asset: '0xUSDC',
   },

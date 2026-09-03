@@ -154,11 +154,22 @@ function buildDeclaration(serviceId: SiteborneServiceId): NeverminedServiceDecla
   const service = REGISTRY_SERVICES[serviceId];
   const base = serviceId.replace(/\.v\d+$/, '');
   const document = base === 'document_evidence_json';
+  const isV2 = serviceId.endsWith('.v2');
+  // SUN-1222C-R3: all four v2 services now have dedicated, isolated
+  // experiment pricing keys (document's headline `amount` stays on the
+  // unchanged max_job ceiling — see actual_tiers_atomic below for its
+  // per-tier v2 settlement prices).
+  const V2_PRICING_KEY_OVERRIDES: Readonly<
+    Partial<Record<SiteborneServiceId, Parameters<typeof resolveServiceMaxPriceUsd>[0]>>
+  > = {
+    'company_evidence_graph.v2': 'company_evidence_graph_v2',
+    'web_context_verified.v2': 'web_context_verified_direct_v2',
+    'verify_agent_output.v2': 'verify_agent_output_standard_v2',
+  };
   const fixedKey = document
     ? undefined
-    : serviceId === 'company_evidence_graph.v2'
-      ? 'company_evidence_graph_v2'
-      : FIXED_PRICING_KEYS[base as keyof typeof FIXED_PRICING_KEYS];
+    : (V2_PRICING_KEY_OVERRIDES[serviceId] ??
+      FIXED_PRICING_KEYS[base as keyof typeof FIXED_PRICING_KEYS]);
   const amount = document ? atomic('document_evidence_json_max_job') : atomic(fixedKey!);
   const serviceVersion = serviceId.endsWith('.v2') ? 'v2' : 'v1';
   const registered = V2_REGISTERED_IDS[serviceId];
@@ -222,11 +233,17 @@ function buildDeclaration(serviceId: SiteborneServiceId): NeverminedServiceDecla
       registration_allowed: true,
       ...(document
         ? {
-            actual_tiers_atomic: {
-              native: atomic('document_evidence_json_native'),
-              ocr: atomic('document_evidence_json_ocr'),
-              table: atomic('document_evidence_json_table'),
-            },
+            actual_tiers_atomic: isV2
+              ? {
+                  native: atomic('document_evidence_json_native_v2'),
+                  ocr: atomic('document_evidence_json_ocr_v2'),
+                  table: atomic('document_evidence_json_table_v2'),
+                }
+              : {
+                  native: atomic('document_evidence_json_native'),
+                  ocr: atomic('document_evidence_json_ocr'),
+                  table: atomic('document_evidence_json_table'),
+                },
           }
         : {}),
     },

@@ -29,16 +29,26 @@ function tierForPage(page: DocumentPageUsageMetrics): DocumentPageCostTier {
   return 'native';
 }
 
+// SUN-1222C-R3: document_evidence_json has no v1 production executor (only
+// the v2 composition/executor files exist under
+// apps/edge-api/src/control-plane/production/) — this resolver is
+// exclusively on the v2 real-executor settlement path, so it resolves
+// directly to the dedicated v2 experiment tier keys rather than the frozen
+// v1 tier keys (document_evidence_json_native/_ocr/_table), which remain
+// unchanged in governance/RISK_LIMITS.yaml for any future v1 use.
 function pricingKeyForTier(
   tier: DocumentPageCostTier
-): 'document_evidence_json_native' | 'document_evidence_json_ocr' | 'document_evidence_json_table' {
+):
+  | 'document_evidence_json_native_v2'
+  | 'document_evidence_json_ocr_v2'
+  | 'document_evidence_json_table_v2' {
   switch (tier) {
     case 'native':
-      return 'document_evidence_json_native';
+      return 'document_evidence_json_native_v2';
     case 'ocr':
-      return 'document_evidence_json_ocr';
+      return 'document_evidence_json_ocr_v2';
     case 'table':
-      return 'document_evidence_json_table';
+      return 'document_evidence_json_table_v2';
   }
 }
 

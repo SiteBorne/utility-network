@@ -115,7 +115,8 @@ const healthOutputSchema = z
   })
   .strict();
 
-// SUN-1222B-S3: company v2 is the sole version-specific pricing experiment.
+// SUN-1222B-S3 / SUN-1222C-R3: all four v2 services now have dedicated,
+// isolated experiment pricing keys, split from the frozen v1 keys.
 const EXACT_PRICING_KEYS: Readonly<
   Record<SiteborneServiceId, Parameters<typeof resolveServiceMaxPriceUsd>[0]>
 > = {
@@ -124,9 +125,9 @@ const EXACT_PRICING_KEYS: Readonly<
   'document_evidence_json.v1': 'document_evidence_json_native',
   'verify_agent_output.v1': 'verify_agent_output_standard',
   'company_evidence_graph.v2': 'company_evidence_graph_v2',
-  'web_context_verified.v2': 'web_context_verified_direct',
-  'document_evidence_json.v2': 'document_evidence_json_native',
-  'verify_agent_output.v2': 'verify_agent_output_standard',
+  'web_context_verified.v2': 'web_context_verified_direct_v2',
+  'document_evidence_json.v2': 'document_evidence_json_native_v2',
+  'verify_agent_output.v2': 'verify_agent_output_standard_v2',
 };
 
 const UPTO_PRICING_KEYS: Readonly<

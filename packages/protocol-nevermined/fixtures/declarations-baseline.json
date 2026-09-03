@@ -60,7 +60,7 @@
       "service_id": "web_context_verified.v2",
       "endpoint": "/v2/nevermined/web/context",
       "payment_semantics": "exact",
-      "gross_buyer_amount_atomic": "9000",
+      "gross_buyer_amount_atomic": "8000",
       "dynamic_actual_settlement_required": false,
       "registration_allowed": true,
       "sandbox_capability_verified": false,
@@ -76,16 +76,16 @@
       "sandbox_capability_verified": true,
       "dynamic_live_allowed": true,
       "actual_tiers_atomic": {
-        "native": "12000",
-        "ocr": "19000",
-        "table": "29000"
+        "native": "9800",
+        "ocr": "15600",
+        "table": "23800"
       }
     },
     {
       "service_id": "verify_agent_output.v2",
       "endpoint": "/v2/nevermined/verify/agent-output",
       "payment_semantics": "exact",
-      "gross_buyer_amount_atomic": "19000",
+      "gross_buyer_amount_atomic": "17000",
       "dynamic_actual_settlement_required": false,
       "registration_allowed": true,
       "sandbox_capability_verified": false,

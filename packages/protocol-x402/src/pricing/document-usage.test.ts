@@ -12,7 +12,7 @@ describe('calculateDocumentUsage', () => {
       {
         page_number: 1,
         tier: 'native',
-        price_usd_micro: usdToMicro(resolveServiceMaxPriceUsd('document_evidence_json_native')),
+        price_usd_micro: usdToMicro(resolveServiceMaxPriceUsd('document_evidence_json_native_v2')),
       },
     ]);
     expect(result.capped).toBe(false);
@@ -23,7 +23,7 @@ describe('calculateDocumentUsage', () => {
     const result = calculateDocumentUsage(pages);
     expect(result.page_costs[0]!.tier).toBe('ocr');
     expect(result.page_costs[0]!.price_usd_micro).toBe(
-      usdToMicro(resolveServiceMaxPriceUsd('document_evidence_json_ocr'))
+      usdToMicro(resolveServiceMaxPriceUsd('document_evidence_json_ocr_v2'))
     );
   });
 
@@ -41,9 +41,9 @@ describe('calculateDocumentUsage', () => {
     ];
     const result = calculateDocumentUsage(pages);
     const expectedSubtotal =
-      usdToMicro(resolveServiceMaxPriceUsd('document_evidence_json_native')) +
-      usdToMicro(resolveServiceMaxPriceUsd('document_evidence_json_ocr')) +
-      usdToMicro(resolveServiceMaxPriceUsd('document_evidence_json_table'));
+      usdToMicro(resolveServiceMaxPriceUsd('document_evidence_json_native_v2')) +
+      usdToMicro(resolveServiceMaxPriceUsd('document_evidence_json_ocr_v2')) +
+      usdToMicro(resolveServiceMaxPriceUsd('document_evidence_json_table_v2'));
     expect(result.subtotal_usd_micro).toBe(expectedSubtotal);
   });
 

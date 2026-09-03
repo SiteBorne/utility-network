@@ -70,7 +70,7 @@ const CANONICAL_REQUEST_BODY = {
 
 const EXPECTED_NETWORK = 'eip155:8453';
 const EXPECTED_ASSET = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
-const EXPECTED_AMOUNT_ATOMIC = '9000';
+const EXPECTED_AMOUNT_ATOMIC = '8000'; // SUN-1222C-R3: web_context_verified.v2 experiment price
 const EXPECTED_PAYTO = '0x7f44a2dd237938F18632d4CcA40f4c690295E6E1';
 const EXPECTED_EIP712_NAME = 'USD Coin';
 const EXPECTED_EIP712_VERSION = '2';
@@ -95,7 +95,8 @@ function mainnetAuthorizedTestEnv() {
     // tests exercise the economic-contract shape, not real Modal
     // connectivity (the httpClient itself is never invoked by any test in
     // this file -- no test here reaches the actual paid-execution path).
-    MODAL_WEBCTX_ENDPOINT_URL: 'https://test-workspace--siteborne-webctx-safe-egress-fetch.modal.run',
+    MODAL_WEBCTX_ENDPOINT_URL:
+      'https://test-workspace--siteborne-webctx-safe-egress-fetch.modal.run',
     MODAL_WEBCTX_PROXY_KEY: 'test-modal-webctx-proxy-key',
     MODAL_WEBCTX_PROXY_SECRET: 'test-modal-webctx-proxy-secret',
   };
@@ -141,11 +142,9 @@ describe('SUN-1221C: web_context_verified.v2/CDP real requirement matches the ex
   });
 
   async function buildRealMainnetRequirement(): Promise<PaymentRequirements> {
-    const config = await buildWebContextV2CdpProductionRouteConfig(
-      mainnetAuthorizedTestEnv(),
-      db,
-      { evidenceMode: 'fixture' }
-    );
+    const config = await buildWebContextV2CdpProductionRouteConfig(mainnetAuthorizedTestEnv(), db, {
+      evidenceMode: 'fixture',
+    });
     if ('unavailable' in config) {
       throw new Error(`composition unexpectedly unavailable: ${config.reason}`);
     }
@@ -168,17 +167,15 @@ describe('SUN-1221C: web_context_verified.v2/CDP real requirement matches the ex
   });
 
   it('is served at exactly POST /v2/web/context', async () => {
-    const config = await buildWebContextV2CdpProductionRouteConfig(
-      mainnetAuthorizedTestEnv(),
-      db,
-      { evidenceMode: 'fixture' }
-    );
+    const config = await buildWebContextV2CdpProductionRouteConfig(mainnetAuthorizedTestEnv(), db, {
+      evidenceMode: 'fixture',
+    });
     if ('unavailable' in config) throw new Error(`unexpectedly unavailable: ${config.reason}`);
     expect(config.path).toBe('/v2/web/context');
     expect(config.serviceId).toBe('web_context_verified.v2');
   });
 
-  it('never charges verify_agent_output.v2\'s amount (19000) -- proves the two services are economically distinct, not accidentally sharing a price', async () => {
+  it("never charges verify_agent_output.v2's amount (19000) -- proves the two services are economically distinct, not accidentally sharing a price", async () => {
     const requirement = await buildRealMainnetRequirement();
     expect(requirement.amount).not.toBe('19000');
   });
