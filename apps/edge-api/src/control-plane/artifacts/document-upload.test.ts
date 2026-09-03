@@ -296,6 +296,7 @@ describe('storeDocumentUpload — adversarial matrix', () => {
       getByJobId: (jobId: string) => realRepo.getByJobId(jobId),
       delete: (id: string) => realRepo.delete(id),
       deleteExpired: () => realRepo.deleteExpired(),
+      listReclaimable: (olderThanIso: string) => realRepo.listReclaimable(olderThanIso),
     };
     const deps = freshDeps({ artifactsRepository: racingRepo, randomId: () => 'never-used-id' });
     const result = await storeDocumentUpload(bytes, 'application/pdf', deps);
@@ -316,6 +317,7 @@ describe('storeDocumentUpload — adversarial matrix', () => {
         getByContentHash: async () => null,
         getContentByContentHash: async () => null,
         delete: async () => false,
+        deleteByContentHash: async () => false,
         exists: async () => false,
         existsByContentHash: async () => false,
       },
@@ -340,6 +342,7 @@ describe('storeDocumentUpload — adversarial matrix', () => {
         getByJobId: async () => ({ ok: true as const, value: [] }),
         delete: async () => ({ ok: true as const, value: false }),
         deleteExpired: async () => ({ ok: true as const, value: 0 }),
+        listReclaimable: async () => ({ ok: true as const, value: [] }),
       },
     });
     const result = await storeDocumentUpload(pdfBytes(), 'application/pdf', deps);

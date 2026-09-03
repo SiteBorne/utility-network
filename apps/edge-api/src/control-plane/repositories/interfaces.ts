@@ -87,6 +87,14 @@ export interface ArtifactsRepository {
   getByJobId(jobId: string): Promise<RepositoryResponse<ArtifactRecord[]>>;
   delete(id: string): Promise<RepositoryResponse<boolean>>;
   deleteExpired(): Promise<RepositoryResponse<number>>;
+  /** SUN-1222C0 — physical reclamation's own read: every artifact record
+   * created strictly before `olderThanIso`, regardless of `expires_at`
+   * (which only gates whether a buyer can still SUBMIT a fresh paid
+   * request against an upload -- a separate, much shorter concern from
+   * "is it now safe to physically delete the bytes"). Returns full
+   * records (not just ids) because the caller needs `content_hash` to
+   * delete the matching R2 object before removing this row. */
+  listReclaimable(olderThanIso: string): Promise<RepositoryResponse<ArtifactRecord[]>>;
 }
 
 export interface QueueDispatchRepository {

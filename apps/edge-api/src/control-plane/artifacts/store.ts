@@ -78,6 +78,18 @@ export class InMemoryArtifactStore implements ArtifactStore {
     return true;
   }
 
+  /** SUN-1222C0 — physical reclamation's own entry point: mirrors
+   * `delete()` but keyed the same way `getContentByContentHash` already
+   * is (this store indexes by both `id` and `content_hash`, so either
+   * key reaches the same record; deleting removes both index entries). */
+  async deleteByContentHash(hash: string): Promise<boolean> {
+    const record = this.store.get(hash);
+    if (!record) return false;
+    this.store.delete(record.id);
+    this.store.delete(record.content_hash);
+    return true;
+  }
+
   async exists(id: string): Promise<boolean> {
     return this.store.has(id);
   }
@@ -211,6 +223,19 @@ export class R2ArtifactStoreAdapter implements ArtifactStore {
     return true;
   }
 
+  /** SUN-1222C0 — physical reclamation's own entry point: same
+   * content-hash-derived key `getContentByContentHash`/`existsByContentHash`
+   * already use. `head()` first (matches `delete()`'s own idempotent
+   * pattern above) so a missing object is a clean `false`, never a
+   * `bucket.delete()` call on a key that was never there. */
+  async deleteByContentHash(hash: string): Promise<boolean> {
+    const key = `${this.prefix}${hash.replace('sha256:', '')}`;
+    const object = await this.bucket.head(key);
+    if (!object) return false;
+    await this.bucket.delete(key);
+    return true;
+  }
+
   async exists(id: string): Promise<boolean> {
     const object = await this.bucket.head(id);
     return object !== null;
@@ -231,6 +256,8 @@ export interface ArtifactStore {
   /** SUN-1222B-S3-R2 addition — see both implementations' own doc comments. */
   getContentByContentHash(hash: string): Promise<Uint8Array | null>;
   delete(id: string): Promise<boolean>;
+  /** SUN-1222C0 addition — see both implementations' own doc comments. */
+  deleteByContentHash(hash: string): Promise<boolean>;
   exists(id: string): Promise<boolean>;
   existsByContentHash(hash: string): Promise<boolean>;
 }

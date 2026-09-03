@@ -103,6 +103,16 @@ export class D1ArtifactsRepository implements ArtifactsRepository {
       return err('DATABASE_ERROR', e instanceof Error ? e.message : 'Unknown error');
     }
   }
+
+  async listReclaimable(olderThanIso: string): Promise<RepositoryResponse<ArtifactRecord[]>> {
+    try {
+      const stmt = this.db.prepare(`SELECT * FROM job_artifacts WHERE created_at < ?`);
+      const result = await stmt.bind(olderThanIso).all();
+      return toRepositoryResponse(result, mapArtifactRecord);
+    } catch (e) {
+      return err('DATABASE_ERROR', e instanceof Error ? e.message : 'Unknown error');
+    }
+  }
 }
 
 export class D1QueueDispatchRepository implements QueueDispatchRepository {

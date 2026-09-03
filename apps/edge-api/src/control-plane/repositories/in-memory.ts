@@ -370,6 +370,16 @@ export class InMemoryArtifactsRepository implements ArtifactsRepository {
     return ok(count);
   }
 
+  async listReclaimable(olderThanIso: string): ReturnType<ArtifactsRepository['listReclaimable']> {
+    const matches: ArtifactRecord[] = [];
+    for (const [, artifact] of this.store.entries()) {
+      if (artifact.created_at < olderThanIso) {
+        matches.push(artifact);
+      }
+    }
+    return ok(matches);
+  }
+
   clear(): void {
     this.store.clear();
     this.byContentHash.clear();
