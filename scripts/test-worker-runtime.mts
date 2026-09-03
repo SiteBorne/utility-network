@@ -34,7 +34,10 @@ import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { resolveServiceMaxPriceUsd, usdToAtomicUnits } from '../packages/pricing/src/service-prices';
+import {
+  resolveServiceMaxPriceUsd,
+  usdToAtomicUnits,
+} from '../packages/pricing/src/service-prices';
 
 /** Phase 6's real-production-composition price assertion (SUN-1222D-
  * RESUME §3) must track `governance/RISK_LIMITS.yaml`'s own
