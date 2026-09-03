@@ -53,6 +53,22 @@ binding = "DB"
 database_name = "siteborne-utility"
 database_id = "efe23c42-cbcc-47c2-9b28-922a541bdcdd"
 
+# SUN-1222D-R2-CREDENTIAL-CONFIGURATION: same existing bucket the public
+# API Worker's own `wrangler.toml` binds (`siteborne-artifacts`, created
+# SUN-1222C-R1) -- no new bucket, no rename. `document_evidence_json.v2`'s
+# production composition (`buildProductionPaidContinuationWorkflowDependencies`,
+# `apps/edge-api/src/control-plane/workflows/production-dependencies.ts`)
+# constructs a real `R2ArtifactStoreAdapter` from `env.ARTIFACTS` on THIS
+# host directly -- the durable Workflow re-fetches artifact bytes
+# independently of the public API Worker's own request-scoped R2 access,
+# so this binding is required here too, not only on the public Worker.
+# Without it, `document_evidence_json.v2` fails closed
+# (`buildDocumentEvidenceJsonV2Dependencies`'s own artifact-store guard)
+# before the executor ever runs.
+[[r2_buckets]]
+binding = "ARTIFACTS"
+bucket_name = "siteborne-artifacts"
+
 # Non-secret public receiving address (SUN-1200 checkpoint E) --
 # `buildProductionPaidContinuationWorkflowDependencies` reads this via the
 # same two composition functions the public API Worker's HTTP routes
@@ -105,6 +121,10 @@ PRODUCTION_CDP_CREDENTIALS_APPROVED = "true"
 # already enforces):
 #   MODAL_WEBCTX_ENDPOINT_URL, MODAL_WEBCTX_PROXY_KEY,
 #   MODAL_WEBCTX_PROXY_SECRET
+# Optional (only for `document_evidence_json.v2`; both-or-neither, same
+# fail-closed convention -- SUN-1222D-R2-CREDENTIAL-CONFIGURATION):
+#   MODAL_DOCWORKER_ENDPOINT_URL, MODAL_DOCWORKER_PROXY_KEY,
+#   MODAL_DOCWORKER_PROXY_SECRET
 # Optional, non-secret (chain-receipt reconciliation only; absent falls
 # back to viem's built-in default Base RPC, identical to the public API
 # Worker's own behavior):
