@@ -157,6 +157,23 @@ explicitly selects 100%.
 5. Stop on any payment ambiguity, price mismatch, duplicate execution, or
    request-time dynamic-code-generation error.
 
+### 7.1 Zero-percent versions and version overrides
+
+A version assigned 0% of normal traffic is not necessarily unreachable while
+it remains a member of the current deployment. Cloudflare's documented
+`Cloudflare-Workers-Version-Overrides` request header can explicitly select a
+current-deployment version, including one assigned 0%, on the normal production
+custom domain. This mechanism does not require a preview URL or traffic-weight
+change.
+
+Treat a 0% current-deployment version as externally targetable by a caller who
+knows the Worker name and version UUID. A bounded release test may use the
+override only with explicit authorization, non-economic request shapes, and
+authoritative request-to-version attribution (for example, matching the
+response Ray ID to a Cloudflare event whose `scriptVersion.id` is the intended
+version). Removing a version from the current deployment closes this override
+path; merely assigning it 0% does not.
+
 ## 8. Economic smoke test
 
 **NOT EXECUTED THROUGH SUN-1207 M3. Requires a separate, explicit, rail-specific
