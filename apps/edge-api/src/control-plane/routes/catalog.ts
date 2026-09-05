@@ -7,10 +7,11 @@ import {
   resolveEffectiveServiceRuntimeStatus,
   type EffectiveDiscoveryEnv,
 } from '../config/production-payment';
-import type { SiteborneServiceId } from '@siteborne/protocol-x402';
+import { REGISTRY_SERVICES, type SiteborneServiceId } from '@siteborne/protocol-x402';
 
 interface DiscoveryServiceLike {
   service_id: string;
+  price_usd: string;
   production_enabled: boolean;
   production_ready: boolean;
   protocol_status: 'preproduction' | 'production';
@@ -40,21 +41,41 @@ interface DiscoveryServiceLike {
  * overriding in both directions instead means a stale/drifted D1 value
  * can never leak through as "active" on a version whose runtime gates
  * are off, for ANY registered service, independently of every other
- * registered service's own gate state. */
+ * registered service's own gate state.
+ *
+ * SUN-1222C2-CANDIDATE-DISCOVERY-ECONOMICS-RECONCILIATION: `price_usd` is
+ * seeded onto the same shared D1 row once (`seedServices`, insert-only, no
+ * caller ever updates it) and had drifted from the governed price by the
+ * time SUN-1000 checkpoint 1M/SUN-1222C-R3 later reduced the `.v2` services'
+ * economics in `REGISTRY_SERVICES` -- `production_enabled`/
+ * `protocol_status` already had a live overlay for exactly this "the static
+ * D1 value can drift" reason, but `price_usd` did not. Every one of this
+ * repository's four `SiteborneServiceId`s has a `REGISTRY_SERVICES` entry,
+ * so this overlay applies unconditionally per-service (not gated on
+ * `hasProductionExecutor`, since a stale advertised price is a discovery
+ * defect regardless of production-executor status); a service_id absent
+ * from the registry is returned with its D1 price unchanged. */
 function overlayEffectiveDiscoveryStatus<T extends DiscoveryServiceLike>(
   service: T,
   env: EffectiveDiscoveryEnv | undefined,
   hasDb: boolean
 ): T {
+  const registryEntry = REGISTRY_SERVICES[service.service_id as SiteborneServiceId] as
+    | (typeof REGISTRY_SERVICES)[SiteborneServiceId]
+    | undefined;
+  const governedPriceUsd = registryEntry?.maximum_price.amount;
+  const withGovernedPrice: T =
+    governedPriceUsd !== undefined ? { ...service, price_usd: governedPriceUsd } : service;
+
   const effectiveStatus = resolveEffectiveServiceRuntimeStatus(
     service.service_id as SiteborneServiceId,
     env,
     hasDb
   );
-  if (!effectiveStatus.hasProductionExecutor) return service;
+  if (!effectiveStatus.hasProductionExecutor) return withGovernedPrice;
   const effectivelyActive = effectiveStatus.productionEnabled;
   return {
-    ...service,
+    ...withGovernedPrice,
     production_enabled: effectivelyActive,
     production_ready: effectivelyActive,
     protocol_status: effectivelyActive ? 'production' : 'preproduction',
