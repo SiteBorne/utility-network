@@ -224,7 +224,24 @@ export function filterFilings(
   return filtered;
 }
 
+/**
+ * SUN-1222C2-Q1-R1: `cik.padStart(10, '0')` only left-pads a string
+ * *shorter* than 10 characters -- a `cik` already >= 10 characters (e.g. a
+ * path-traversal payload) passed through completely unvalidated into this
+ * URL template, and the WHATWG `URL` parser's dot-segment normalization
+ * could then escape the intended `/submissions/CIK*.json` endpoint family
+ * entirely (proven in sec-edgar-cik-request-validation.test.ts). The
+ * production x402 request path already rejects any non-10-digit `cik` at
+ * the AJV contract-schema layer
+ * (`schemas/services/company-evidence-input.schema.json`:
+ * `identifiers.cik` pattern `^[0-9]{10}$`) before it ever reaches here --
+ * this is defense-in-depth for this function itself, which has no such
+ * caller-independent guarantee.
+ */
 export function buildSubmissionsUrl(cik: string): string {
+  if (!/^[0-9]{1,10}$/.test(cik)) {
+    throw new Error(`Invalid CIK format: expected 1-10 ASCII digits, got ${JSON.stringify(cik)}`);
+  }
   const normalized = cik.padStart(10, '0');
   return `https://data.sec.gov/submissions/CIK${normalized}.json`;
 }

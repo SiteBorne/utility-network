@@ -38,6 +38,31 @@ import {
 import { toAdapterResult, PolicyBlockedError } from '../errors';
 import { computeContentHash } from '../evidence/source-observation';
 
+/**
+ * SUN-1222C2-Q1-R1: SEC's Fair Access guidance
+ * (https://www.sec.gov/os/accessing-edgar-data,
+ * https://www.sec.gov/developer -- both reviewed 2026-09-06) asks automated
+ * clients to declare a User-Agent identifying the requesting organization
+ * and an administrative contact, sample format "Sample Company Name
+ * AdminContact@<sample company domain>.com". No source in this repository's
+ * own tracked files (source, docs, config) records an administrative
+ * contact email -- but `git log --format='%an <%ae>'` shows `SiteBorne
+ * <hello@siteborne.com>` as the sole author identity across this
+ * repository's entire real commit history, pushed to the public
+ * `github.com/SiteBorne/utility-network`. That address is therefore already
+ * public (visible to anyone viewing the repository's commit history) and is
+ * SITEBORNE's own canonical identity, not a value this checkpoint invented.
+ * The organization name matches the same one already published verbatim in
+ * the production Agent Card (`packages/protocol-a2a/src/card.ts`:
+ * `provider: { organization: 'SITEBORNE', url: 'https://siteborne.com' }`).
+ * Duplicated as a literal here rather than imported: `provider-adapters`
+ * intentionally has no runtime dependency on `protocol-a2a` (see this
+ * package's own `package.json` -- zero `@siteborne/*` dependencies), and
+ * this string is small enough that adding a cross-package coupling for it
+ * would cost more than it saves.
+ */
+export const SEC_EDGAR_DECLARED_USER_AGENT = 'SITEBORNE hello@siteborne.com';
+
 export const SEC_EDGAR_MANIFEST: ProviderManifest = {
   provider_id: 'sec-edgar',
   source_class: 'authoritative',
@@ -263,7 +288,9 @@ export class SecSubmissionsAdapter
     _context: AdapterExecutionContext
   ): Promise<SecSubmissionsAdapterResult & { contentHash: string }> {
     const url = buildSubmissionsUrl(input.cik);
-    const response = await this.httpClient.fetchJson<SecSubmissionsResponse>(url);
+    const response = await this.httpClient.fetchJson<SecSubmissionsResponse>(url, {
+      headers: { 'User-Agent': SEC_EDGAR_DECLARED_USER_AGENT },
+    });
 
     const entity = normalizeEntity(response.data);
     let filings = normalizeFilings(response.data);
