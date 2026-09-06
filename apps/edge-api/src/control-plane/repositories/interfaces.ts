@@ -152,6 +152,28 @@ export interface ServiceVersionsRepository {
  * `document-ingress-admission-control.ts`'s two-axis (per-source/global)
  * storage-abuse guard. See that module's doc comment for why this is
  * D1-backed rather than Cloudflare's native Rate Limiting binding. */
+/** SUN-1222C2-Q1-R2 — the aggregate, cross-isolate SEC fair-access
+ * sliding-window rate primitive behind
+ * `../rate-limit/sec-d1-rate-coordinator.ts`. Structural sibling of
+ * `DocumentIngressAdmissionRepository` immediately below (same D1-backed,
+ * single-atomic-statement admission pattern), but a genuine SLIDING
+ * window (one row per admitted request) rather than a fixed-window
+ * counter — see migration 0009's own doc comment for why. */
+export interface SecRateWindowRepository {
+  /** Atomically admits one request for `providerId` if and only if fewer
+   * than `ceiling` rows exist for that provider with `requested_at_ms >=
+   * windowStartMs` (i.e. within the trailing window ending at `nowMs`).
+   * Also deletes rows older than `windowStartMs` for this provider in the
+   * same call, so the table never grows unbounded. `admitted: true` iff
+   * the row was actually inserted. */
+  tryAdmit(
+    providerId: string,
+    nowMs: number,
+    windowStartMs: number,
+    ceiling: number
+  ): Promise<RepositoryResponse<{ admitted: boolean }>>;
+}
+
 export interface DocumentIngressAdmissionRepository {
   /** Atomically increments the counter for `windowKey` if and only if its
    * current count is strictly below `limit`, creating the row (count=1)

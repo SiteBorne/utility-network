@@ -184,7 +184,8 @@ export async function buildCompanyEvidenceGraphV2CdpProductionRouteConfig(
   const executor: ServiceExecutor = buildCompanyEvidenceGraphV2ProductionExecutor(
     signer,
     registry,
-    httpClient
+    httpClient,
+    db
   );
 
   const asset = resolvePaymentAsset(network);

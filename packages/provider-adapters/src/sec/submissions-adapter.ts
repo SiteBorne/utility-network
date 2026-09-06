@@ -37,6 +37,8 @@ import {
 } from './normalizers';
 import { toAdapterResult, PolicyBlockedError, RateLimitedError } from '../errors';
 import { computeContentHash } from '../evidence/source-observation';
+import type { RateCoordinator } from '../rate-limit/aggregate-coordinator';
+import { NullRateCoordinator } from '../rate-limit/aggregate-coordinator';
 
 /**
  * SUN-1222C2-Q1-R1: SEC's Fair Access guidance
@@ -102,13 +104,23 @@ export class SecSubmissionsAdapter
   private backoff: ReturnType<typeof createBackoffFromManifest>;
   private circuitBreaker: ReturnType<typeof createCircuitBreakerFromManifest>;
   private cache: InMemoryCache;
+  private rateCoordinator: RateCoordinator;
 
   constructor(
     httpClient: InjectedHttpClient,
     clock: InjectedClock,
     _artifactStore: ArtifactStore,
-    _auditSink: AuditEventSink
+    _auditSink: AuditEventSink,
+    // SUN-1222C2-Q1-R2: optional and defaulted so every existing call site
+    // (tests, scripts, other adapters) needs zero changes. The one real
+    // production call site (company-evidence-graph-v2-production-executor.ts)
+    // passes a real D1-backed coordinator; `NullRateCoordinator` (always
+    // admits) is correct here ONLY because this parameter's absence must
+    // never silently change existing behavior -- see that class's own doc
+    // comment for why it is named to make this obvious at every call site.
+    rateCoordinator: RateCoordinator = new NullRateCoordinator()
   ) {
+    this.rateCoordinator = rateCoordinator;
     this.httpClient = new SecureHttpClient(DEFAULT_HTTP_CONFIG, httpClient, clock);
     this.rateLimiter = createRateLimiter(
       {
@@ -182,6 +194,25 @@ export class SecSubmissionsAdapter
 
     while (true) {
       try {
+        // SUN-1222C2-Q1-R2 section 22: re-checked on every attempt
+        // (initial + each retry), never bypassed -- a retry that skipped
+        // this would defeat the entire point of aggregate coordination.
+        // Thrown as a RateLimitedError so it flows through the exact same
+        // already-correct bounded-backoff/terminal-result handling below
+        // as a real SEC-side 429, rather than a parallel code path.
+        const decision = await this.rateCoordinator.tryAcquire(
+          this.providerId,
+          context.injected_clock.nowMs()
+        );
+        if (!decision.allowed) {
+          throw new RateLimitedError(
+            decision.reason === 'coordinator_unavailable'
+              ? 'SEC aggregate rate coordinator unavailable (failing closed)'
+              : 'SEC aggregate rate ceiling reached',
+            decision.retryAfterMs
+          );
+        }
+
         const result = await this.circuitBreaker.execute(async () => {
           return await this.fetchAndNormalize(input, context);
         });

@@ -40,7 +40,11 @@ import {
   CompanyEvidenceGraphService,
   type ServiceAuditEventSink,
 } from '@siteborne/service-runtime';
-import { PublicHttpAdapter, SecSubmissionsAdapter, FederalRegisterAdapter } from '@siteborne/provider-adapters';
+import {
+  PublicHttpAdapter,
+  SecSubmissionsAdapter,
+  FederalRegisterAdapter,
+} from '@siteborne/provider-adapters';
 import type {
   ArtifactStore,
   AuditEventSink,
@@ -48,7 +52,9 @@ import type {
   InjectedHttpClient,
 } from '@siteborne/provider-adapters';
 import type { KeyRegistry, Signer } from '@siteborne/verification';
+import type { D1Database } from '@cloudflare/workers-types';
 import type { ServiceExecutor } from '../routes/x402-service';
+import { buildSecD1RateCoordinator } from '../rate-limit/sec-d1-rate-coordinator';
 
 function unreachableArtifactStore(): ArtifactStore {
   const fail = (method: string) => (): never => {
@@ -136,7 +142,8 @@ function unusedAuditSink(): AuditEventSink {
 export function buildCompanyEvidenceGraphV2ProductionExecutor(
   signer: Signer,
   keyRegistry: KeyRegistry,
-  httpClient: InjectedHttpClient
+  httpClient: InjectedHttpClient,
+  db: D1Database
 ): ServiceExecutor {
   return async (input, ctx) => {
     const clock = realClock();
@@ -150,11 +157,18 @@ export function buildCompanyEvidenceGraphV2ProductionExecutor(
       execution_mode: 'live',
     });
 
+    // SUN-1222C2-Q1-R2: a real, D1-backed, cross-isolate aggregate rate
+    // coordinator against SEC's own published fair-access ceiling --
+    // see sec-d1-rate-coordinator.ts's own doc comment for the full
+    // coordination-scope analysis. `db` is already this route's own
+    // required dependency (buildCompanyEvidenceGraphV2CdpProductionRouteConfig
+    // 404s without it) -- no new binding introduced.
     const secSubmissions = new SecSubmissionsAdapter(
       httpClient,
       clock,
       unreachableArtifactStore(),
-      unusedAuditSink()
+      unusedAuditSink(),
+      buildSecD1RateCoordinator(db)
     );
     const publicHttp = new PublicHttpAdapter(
       httpClient,
@@ -188,12 +202,7 @@ export function buildCompanyEvidenceGraphV2ProductionExecutor(
       implementationStatus: 'local_fixture_verified',
     });
 
-    const result = await executeLocalService(
-      registry,
-      'company_evidence_graph.v2',
-      input,
-      context
-    );
+    const result = await executeLocalService(registry, 'company_evidence_graph.v2', input, context);
     return { result };
   };
 }

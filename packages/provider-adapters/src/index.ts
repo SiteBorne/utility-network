@@ -52,6 +52,7 @@ export * from './policy/source-policy';
 export * from './rate-limit/limiter';
 export * from './rate-limit/backoff';
 export * from './rate-limit/circuit-breaker';
+export * from './rate-limit/aggregate-coordinator';
 export * from './cache/interface';
 export * from './cache/in-memory';
 export * from './evidence/source-observation';
