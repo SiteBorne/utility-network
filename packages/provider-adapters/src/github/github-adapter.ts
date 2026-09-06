@@ -17,7 +17,7 @@ import type {
 } from '../context';
 import { globalTermsGuard } from '../policy/terms-guard';
 import { createRateLimiter } from '../rate-limit/limiter';
-import { createBackoffFromManifest, parseRetryAfterMs } from '../rate-limit/backoff';
+import { createBackoffFromManifest } from '../rate-limit/backoff';
 import { createCircuitBreakerFromManifest } from '../rate-limit/circuit-breaker';
 import { InMemoryCache } from '../cache/in-memory';
 import type { CacheEntry } from '../cache/interface';
@@ -26,7 +26,13 @@ import { SecureHttpClient, DEFAULT_HTTP_CONFIG } from '../http/client';
 import { createSourceObservation, createProvenanceStep } from '../evidence/source-observation';
 import { createLocator } from '../evidence/locators';
 import { computeContentHash } from '../evidence/source-observation';
-import { toAdapterResult, PolicyBlockedError } from '../errors';
+import {
+  toAdapterResult,
+  PolicyBlockedError,
+  NotFoundError,
+  RateLimitedError,
+  PermanentFailureError,
+} from '../errors';
 
 export interface GitHubAdapterInput {
   mode: 'repository' | 'releases' | 'languages' | 'topics';
@@ -274,56 +280,60 @@ export class GitHubAdapter implements ProviderAdapter<GitHubAdapterInput, GitHub
           };
         }
 
-        if (error instanceof Response) {
-          if (error.status === 403) {
-            return {
-              resultClass: 'permanent_failure',
-              provider_id: this.providerId,
-              capability: `github_${input.mode}`,
-              cache_status: 'miss',
-              freshness_status: 'unknown',
-              warnings: [],
-              limitations: [],
-              error: {
-                code: 'FORBIDDEN',
-                message: 'Access forbidden - may be rate limited or private repo',
-              },
-            };
+        // SUN-1222C2-Q1-R2: SecureHttpClient now throws these AdapterError
+        // subclasses for a real 403/404/429 (it previously never threw
+        // Response at all -- this whole `error instanceof Response` block
+        // was unreachable dead code). `NotFoundError` is checked first
+        // because it's the exact-match subclass for 404; `PermanentFailureError`
+        // also covers 401 and other unexpected 4xx, so it maps to this
+        // adapter's existing (already slightly generic) "forbidden" message.
+        if (error instanceof NotFoundError) {
+          return {
+            resultClass: 'not_found',
+            provider_id: this.providerId,
+            capability: `github_${input.mode}`,
+            cache_status: 'miss',
+            freshness_status: 'unknown',
+            warnings: [],
+            limitations: [],
+            error: { code: 'NOT_FOUND', message: 'Repository not found' },
+          };
+        }
+        if (error instanceof RateLimitedError) {
+          const retryAfterMs = error.retryAfterMs;
+          if (this.backoff.canRetry()) {
+            await this.backoff.wait(retryAfterMs);
+            continue;
           }
-          if (error.status === 404) {
-            return {
-              resultClass: 'not_found',
-              provider_id: this.providerId,
-              capability: `github_${input.mode}`,
-              cache_status: 'miss',
-              freshness_status: 'unknown',
-              warnings: [],
-              limitations: [],
-              error: { code: 'NOT_FOUND', message: 'Repository not found' },
-            };
-          }
-          if (error.status === 429) {
-            const retryAfter = error.headers.get('retry-after');
-            const retryAfterMs = parseRetryAfterMs(retryAfter, context.injected_clock.nowMs());
-            if (this.backoff.canRetry()) {
-              await this.backoff.wait(retryAfterMs);
-              continue;
-            }
-            return {
-              resultClass: 'rate_limited',
-              provider_id: this.providerId,
-              capability: `github_${input.mode}`,
-              cache_status: 'miss',
-              freshness_status: 'unknown',
-              warnings: [],
-              limitations: [],
-              error: {
-                code: 'RATE_LIMITED',
-                message: 'Rate limited',
-                retry_after_ms: retryAfterMs,
-              },
-            };
-          }
+          return {
+            resultClass: 'rate_limited',
+            provider_id: this.providerId,
+            capability: `github_${input.mode}`,
+            cache_status: 'miss',
+            freshness_status: 'unknown',
+            warnings: [],
+            limitations: [],
+            error: {
+              code: 'RATE_LIMITED',
+              message: 'Rate limited',
+              retry_after_ms: retryAfterMs,
+            },
+          };
+        }
+        if (error instanceof PermanentFailureError) {
+          return {
+            resultClass: 'permanent_failure',
+            provider_id: this.providerId,
+            capability: `github_${input.mode}`,
+            cache_status: 'miss',
+            freshness_status: 'unknown',
+            warnings: [],
+            limitations: [],
+            error: {
+              code: 'FORBIDDEN',
+              message: 'Access forbidden - may be rate limited or private repo',
+            },
+          };
         }
 
         if (this.backoff.canRetry() && this.isRetryableError(error)) {

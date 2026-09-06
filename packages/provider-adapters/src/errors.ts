@@ -19,7 +19,16 @@ export class PolicyBlockedError extends AdapterError {
 }
 
 export class RateLimitedError extends AdapterError {
-  constructor(message: string, retryAfterMs: number, details?: unknown) {
+  /**
+   * SUN-1222C2-Q1-R2: `retryAfterMs` widened from required to optional --
+   * this class had zero real construction sites before this checkpoint
+   * (grep-confirmed), so widening is a pure addition, not a behavior
+   * change for any existing caller. A 429 with no (or a malformed)
+   * `Retry-After` header must not fabricate a wait time -- see
+   * `classifyTerminalHttpStatus` in `http/client.ts`, the first real
+   * caller.
+   */
+  constructor(message: string, retryAfterMs?: number, details?: unknown) {
     super(message, 'RATE_LIMITED', 'rate_limited', details, retryAfterMs);
     this.name = 'RateLimitedError';
   }
@@ -120,7 +129,10 @@ const WEBCTX_DIAGNOSTIC_REASON_PATTERNS: ReadonlyArray<{ pattern: RegExp; reason
   { pattern: /^WEBCTX_REQUEST_WRITE_FAILED:/, reason: 'WEBCTX_REQUEST_WRITE_FAILED' },
   { pattern: /^WEBCTX_RESPONSE_READ_FAILED:/, reason: 'WEBCTX_RESPONSE_READ_FAILED' },
   { pattern: /^WEBCTX_HTTP_PREMATURE_EOF:/, reason: 'WEBCTX_HTTP_PREMATURE_EOF' },
-  { pattern: /^WEBCTX_HTTP_INVALID_RESPONSE_STATUS:/, reason: 'WEBCTX_HTTP_INVALID_RESPONSE_STATUS' },
+  {
+    pattern: /^WEBCTX_HTTP_INVALID_RESPONSE_STATUS:/,
+    reason: 'WEBCTX_HTTP_INVALID_RESPONSE_STATUS',
+  },
   { pattern: /^DNS resolution failed safety policy/, reason: 'WEBCTX_DNS_RESOLUTION_FAILED' },
   { pattern: /^URL validation failed/, reason: 'WEBCTX_URL_VALIDATION_FAILED' },
   { pattern: /^Redirect without Location header/, reason: 'WEBCTX_REDIRECT_POLICY_BLOCKED' },

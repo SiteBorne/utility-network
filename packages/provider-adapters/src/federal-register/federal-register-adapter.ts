@@ -17,7 +17,7 @@ import type {
 } from '../context';
 import { globalTermsGuard } from '../policy/terms-guard';
 import { createRateLimiter } from '../rate-limit/limiter';
-import { createBackoffFromManifest, parseRetryAfterMs } from '../rate-limit/backoff';
+import { createBackoffFromManifest } from '../rate-limit/backoff';
 import { createCircuitBreakerFromManifest } from '../rate-limit/circuit-breaker';
 import { InMemoryCache } from '../cache/in-memory';
 import type { CacheEntry } from '../cache/interface';
@@ -26,7 +26,7 @@ import { SecureHttpClient, DEFAULT_HTTP_CONFIG } from '../http/client';
 import { createSourceObservation, createProvenanceStep } from '../evidence/source-observation';
 import { createLocator } from '../evidence/locators';
 import { computeContentHash } from '../evidence/source-observation';
-import { toAdapterResult, PolicyBlockedError } from '../errors';
+import { toAdapterResult, PolicyBlockedError, RateLimitedError } from '../errors';
 
 export interface FederalRegisterAdapterInput {
   mode: 'document' | 'search' | 'agency';
@@ -256,9 +256,12 @@ export class FederalRegisterAdapter
           };
         }
 
-        if (error instanceof Response && error.status === 429) {
-          const retryAfter = error.headers.get('retry-after');
-          const retryAfterMs = parseRetryAfterMs(retryAfter, context.injected_clock.nowMs());
+        if (error instanceof RateLimitedError) {
+          // SUN-1222C2-Q1-R2: SecureHttpClient now throws RateLimitedError
+          // for a real 429 (it previously never threw Response at all --
+          // this branch was unreachable dead code). retryAfterMs is
+          // already parsed and bounded by classifyTerminalHttpStatus.
+          const retryAfterMs = error.retryAfterMs;
           if (this.backoff.canRetry()) {
             await this.backoff.wait(retryAfterMs);
             continue;

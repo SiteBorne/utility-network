@@ -8,6 +8,13 @@ import {
 } from '../policy/network-policy';
 import { computeContentHash } from '../evidence/source-observation';
 import { createHTTPMetadata } from '../evidence/source-observation';
+import { parseRetryAfterMs } from '../rate-limit/backoff';
+import {
+  NotFoundError,
+  PermanentFailureError,
+  RateLimitedError,
+  RetryableFailureError,
+} from '../errors';
 
 export interface HttpClientConfig {
   maxResponseBytes: number;
@@ -39,6 +46,81 @@ export interface HttpResponse<T = unknown> {
   metadata: HTTPMetadata;
   contentHash: string;
   truncated: boolean;
+}
+
+/**
+ * SUN-1222C2-Q1-R2: before this checkpoint, `SecureHttpClient.fetch()`
+ * never inspected `response.status` beyond the five 3xx redirect codes --
+ * every other status (200, 429, 403, 500, ...) fell through to
+ * `readBoundedBody`/JSON parsing and was returned as an ordinary
+ * successful `HttpResponse` as long as the body was JSON-parseable and the
+ * media type allowed. A JSON-shaped 429/403/5xx body was therefore
+ * indistinguishable from real provider data to every caller
+ * (`sec-edgar-user-agent-compliance.test.ts`'s sibling
+ * `secure-http-client-status-semantics.test.ts` proves this both before
+ * and after this fix).
+ *
+ * Deliberately reuses this package's own existing `AdapterError` subclass
+ * taxonomy (`errors.ts`) instead of inventing a new one:
+ * `toAdapterResult()` already gives each subclass's `resultClass` special
+ * handling, so every adapter built on `SecureHttpClient` gets the correct
+ * result classification for free, with zero per-adapter changes needed.
+ * Conservative, existing-architecture-derived mapping (SUN-1222C2-Q1-R2
+ * §4/§7 -- no code path here was invented without a documented rationale):
+ *  - 2xx: success, unchanged.
+ *  - 404: `NotFoundError` (an existing, exact-match subclass).
+ *  - 429: `RateLimitedError`, honoring a valid `Retry-After` if present
+ *    (`parseRetryAfterMs` -- same bounded parser `ExponentialBackoff`
+ *    already uses, so behavior is consistent repo-wide). Never fabricates
+ *    a wait time when the header is absent or malformed.
+ *  - 401/403: `PermanentFailureError` -- retrying the identical request
+ *    cannot succeed without a credential/authorization change.
+ *  - 408: `RetryableFailureError` -- a request timeout is transient by
+ *    definition.
+ *  - 5xx: `RetryableFailureError`, honoring `Retry-After` the same way as
+ *    429 (503 in particular commonly carries one).
+ *  - every other non-2xx status (other 4xx, and any 3xx this function
+ *    would only see if the redirect loop above did NOT already consume
+ *    it): `PermanentFailureError` -- fails closed rather than silently
+ *    treating an unrecognized status as success.
+ * Never includes the response body in the thrown error's message --
+ * `readBoundedBody` is never called for a rejected status, so there is
+ * nothing to leak, and the message text itself names only the status
+ * code.
+ */
+function classifyTerminalHttpStatus(
+  response: Response,
+  clock: InjectedClock
+): PermanentFailureError | RateLimitedError | RetryableFailureError | NotFoundError | null {
+  const status = response.status;
+  if (status >= 200 && status < 300) return null;
+  // SUN-1222C2-Q1-R2 section 11 (cross-adapter regression): `304 Not
+  // Modified` is an intentional SUCCESS outcome for a conditional GET
+  // (If-None-Match/If-Modified-Since) -- `PublicHttpAdapter.fetchAndProcess`
+  // deliberately depends on receiving a normal `HttpResponse` for it
+  // (checks `response.metadata.status === 304` itself). Confirmed the only
+  // such caller repo-wide (grep for `metadata.status ===` across every
+  // SecureHttpClient consumer before this fix).
+  if (status === 304) return null;
+
+  const retryAfterMs = parseRetryAfterMs(response.headers.get('retry-after'), clock.nowMs());
+
+  if (status === 404) {
+    return new NotFoundError(`HTTP 404: resource not found`);
+  }
+  if (status === 429) {
+    return new RateLimitedError(`HTTP 429: rate limited`, retryAfterMs);
+  }
+  if (status === 401 || status === 403) {
+    return new PermanentFailureError(`HTTP ${status}: forbidden or unauthorized`);
+  }
+  if (status === 408) {
+    return new RetryableFailureError(`HTTP 408: request timeout`, retryAfterMs);
+  }
+  if (status >= 500 && status < 600) {
+    return new RetryableFailureError(`HTTP ${status}: server error`, retryAfterMs);
+  }
+  return new PermanentFailureError(`HTTP ${status}: unexpected status`);
 }
 
 export class SecureHttpClient {
@@ -105,6 +187,11 @@ export class SecureHttpClient {
       );
       if (!chainValidation.valid) {
         throw new Error(`Redirect chain validation failed: ${chainValidation.reason}`);
+      }
+
+      const statusError = classifyTerminalHttpStatus(finalResponse, this.clock);
+      if (statusError) {
+        throw statusError;
       }
 
       const contentType = finalResponse.headers.get('content-type') || '';
