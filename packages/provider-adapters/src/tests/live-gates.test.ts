@@ -15,12 +15,13 @@ import {
 
 /**
  * Optional live gates. Each is disabled by default (`RUN_LIVE_*` unset). For
- * 5 of the 6 providers here, every shipped manifest's terms review is still
+ * 4 of the 6 providers here, every shipped manifest's terms review is still
  * `pending_review`, so even a forced-on run performs zero network requests
  * and reports `policy_blocked` — TermsGuard is checked before any HTTP call
- * regardless of the gate's enabled state. `direct-public-http` is the
- * exception since SUN-1221E2T (see `skipForcedExecutionProof` below). No
- * credentials are used anywhere in this file.
+ * regardless of the gate's enabled state. `direct-public-http` (SUN-1221E2T)
+ * and `sec-edgar` (SUN-1222C2-Q1-R3-SEC-TERMS-REGISTRATION) are the two
+ * exceptions, both via `skipForcedExecutionProof` below. No credentials are
+ * used anywhere in this file.
  */
 interface LiveGate {
   envVar: string;
@@ -66,6 +67,21 @@ const GATES: LiveGate[] = [
       });
       return adapter.execute({ cik: '0000320193', forms: [], maxFilings: 1 }, context);
     },
+    // SUN-1222C2-Q1-R3-SEC-TERMS-REGISTRATION: sec-edgar now has an
+    // operator-recorded terms review (see terms-guard.ts's
+    // SEC_EDGAR_TERMS_REVIEW), so -- like direct-public-http above -- it no
+    // longer gets policy_blocked before any network access. Unlike
+    // direct-public-http, SecSubmissionsAdapter's transport DOES go through
+    // the injected httpClient fake, so forcing this gate in THIS test
+    // process would still hit unreachableHttpClient's intentional throw,
+    // not a real socket -- but that is a different, weaker property than
+    // "policy_blocked with zero attempted calls," and this checkpoint is a
+    // governance registration, not a live-network proof checkpoint (its own
+    // authorization explicitly prohibits any real SEC request). No
+    // equivalent-to-direct-public-http's-own real-network proof exists yet
+    // for sec-edgar in scripts/test-worker-runtime.mts -- that is a real,
+    // disclosed gap for a future checkpoint, not something claimed here.
+    skipForcedExecutionProof: true,
   },
   {
     envVar: 'RUN_LIVE_OPENALEX',

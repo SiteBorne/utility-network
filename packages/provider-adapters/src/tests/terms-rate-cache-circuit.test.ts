@@ -8,6 +8,7 @@ import { InMemoryCache } from '../cache/in-memory';
 import { createCacheKey } from '../cache/interface';
 import { SecSubmissionsAdapter } from '../sec/submissions-adapter';
 import { PublicHttpAdapter } from '../http/public-http-adapter';
+import { OpenAlexAdapter } from '../openalex/openalex-adapter';
 import type { ProviderManifest } from '../types';
 import {
   fakeClock,
@@ -125,19 +126,24 @@ describe('TermsGuard', () => {
     );
   });
 
-  it('no provider except the deliberately-reviewed direct-public-http is production_verified', () => {
+  it('no provider except the deliberately-reviewed direct-public-http and sec-edgar is production_verified', () => {
     // SUN-1221E2T recorded exactly one operator-approved review, scoped to
     // direct-public-http alone (see direct-public-http-terms-review.test.ts
     // and docs/reports/SUN-1221E2T-direct-public-http-governance-review.md).
-    // Every other provider must remain unreviewed until deliberately
-    // reviewed -- this narrowed invariant is the regression guard for that.
-    expect(globalTermsGuard.getReview('sec-edgar')).toBeUndefined();
+    // SUN-1222C2-Q1-R3-SEC-TERMS-REGISTRATION later recorded a second,
+    // separately-authorized one for sec-edgar (see
+    // sec-edgar-terms-review-local-validation.test.ts and
+    // docs/reports/SUN-1222C2-Q1-R3-sec-terms-registration.md). Every OTHER
+    // provider must remain unreviewed until deliberately reviewed -- this
+    // narrowed invariant is the regression guard for that.
     expect(globalTermsGuard.getReview('openalex')).toBeUndefined();
     expect(globalTermsGuard.getReview('crossref')).toBeUndefined();
     expect(globalTermsGuard.getReview('github-public')).toBeUndefined();
     expect(globalTermsGuard.getReview('federal-register')).toBeUndefined();
     expect(globalTermsGuard.getReview('direct-public-http')).toBeDefined();
     expect(globalTermsGuard.getReview('direct-public-http')?.status).toBe('verified');
+    expect(globalTermsGuard.getReview('sec-edgar')).toBeDefined();
+    expect(globalTermsGuard.getReview('sec-edgar')?.status).toBe('verified');
   });
 
   it('raw resale remains disabled on every shipped manifest capability check', () => {
@@ -147,22 +153,22 @@ describe('TermsGuard', () => {
     expect(testManifest().raw_access_resale_allowed).toBe(false);
   });
 
+  // SUN-1222C2-Q1-R3-SEC-TERMS-REGISTRATION: sec-edgar (SecSubmissionsAdapter's
+  // own provider_id) is now deliberately reviewed, so this invariant is
+  // re-proven against OpenAlexAdapter instead, which remains genuinely
+  // unreviewed -- same substitution as adapter-execution.test.ts's sibling
+  // test, for the identical reason.
   it('adapters perform zero network calls when live terms review is unrecorded', async () => {
     const clock = fakeClock();
     const httpClient = unreachableHttpClient();
-    const adapter = new SecSubmissionsAdapter(
-      httpClient,
-      clock,
-      fakeArtifactStore(),
-      fakeAuditSink()
-    );
+    const adapter = new OpenAlexAdapter(httpClient, clock, fakeArtifactStore(), fakeAuditSink());
     const context = buildContext({
       injected_clock: clock,
       injected_http_client: httpClient,
       execution_mode: 'live',
     });
 
-    const result = await adapter.execute({ cik: '0000320193', forms: [], maxFilings: 10 }, context);
+    const result = await adapter.execute({ mode: 'work', identifier: 'W2741809807' }, context);
 
     expect(result.resultClass).toBe('policy_blocked');
     expect(httpClient.callCount).toBe(0);

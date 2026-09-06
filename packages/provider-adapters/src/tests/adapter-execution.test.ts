@@ -78,22 +78,28 @@ describe('Adapter execution — SecSubmissionsAdapter', () => {
     expect(normalized.filings.length).toBeLessThanOrEqual(1);
   });
 
+  // SUN-1222C2-Q1-R3-SEC-TERMS-REGISTRATION: `sec-edgar` (this adapter's own
+  // provider_id) is now deliberately, legitimately reviewed in
+  // globalTermsGuard (see terms-guard.ts's own SEC_EDGAR_TERMS_REVIEW) --
+  // this exact scenario now genuinely passes checkAccess for THIS provider,
+  // so the invariant this test protects ("an unreviewed provider stays
+  // policy_blocked in live mode") is re-proven here against OpenAlexAdapter
+  // instead, which remains genuinely unreviewed. See
+  // sec-edgar-terms-review-gap.test.ts and
+  // terms-rate-cache-circuit.test.ts for the equivalent update, and
+  // docs/reports/SUN-1222C2-Q1-R3-sec-terms-registration.md for the full
+  // registration record.
   it('returns policy_blocked and performs zero network calls when live terms are unreviewed', async () => {
     const clock = fakeClock();
     const httpClient = unreachableHttpClient();
-    const adapter = new SecSubmissionsAdapter(
-      httpClient,
-      clock,
-      fakeArtifactStore(),
-      fakeAuditSink()
-    );
+    const adapter = new OpenAlexAdapter(httpClient, clock, fakeArtifactStore(), fakeAuditSink());
     const context = buildContext({
       injected_clock: clock,
       injected_http_client: httpClient,
       execution_mode: 'live',
     });
 
-    const result = await adapter.execute({ cik: '0000320193', forms: [], maxFilings: 10 }, context);
+    const result = await adapter.execute({ mode: 'work', identifier: 'W2741809807' }, context);
 
     expect(result.resultClass).toBe('policy_blocked');
     expect(httpClient.callCount).toBe(0);

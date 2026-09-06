@@ -7,15 +7,24 @@ import { PolicyBlockedError } from '../errors';
  * SUN-1222C2-Q1-R2 sections 31-33: local governance validation of the
  * FINAL PROPOSED sec-edgar TermsReview -- exercised only against a
  * throwaway LOCAL `TermsGuard` instance constructed inside this test
- * file, NEVER `globalTermsGuard`. Nothing here registers this review
- * anywhere real; `packages/provider-adapters/src/policy/terms-guard.ts`
- * is untouched by this checkpoint (confirmed by this checkpoint's own
- * diff). SEC_TERMS_REVIEW_REGISTERED remains NO after this file exists
- * and after every test in it passes.
+ * file, NEVER `globalTermsGuard`. Nothing in THIS FILE registers this
+ * review anywhere real -- this file itself makes no edit to
+ * `packages/provider-adapters/src/policy/terms-guard.ts` and never did.
+ *
+ * SUN-1222C2-Q1-R3-SEC-TERMS-REGISTRATION UPDATE: a SEPARATE, later,
+ * standalone-authorized checkpoint DID subsequently register this exact
+ * object (by content) into `globalTermsGuard` directly in terms-guard.ts
+ * -- see that file's own `SEC_EDGAR_TERMS_REVIEW` export and
+ * docs/reports/SUN-1222C2-Q1-R3-sec-terms-registration.md. The final test
+ * below was updated accordingly (was: asserts NOT registered; now:
+ * asserts registered AND content-matches this frozen constant) --
+ * everything else in this file (the frozen object itself, and every
+ * other test exercising only the isolated local guard) is unchanged from
+ * R2, since none of it depends on global registration state.
  *
  * This is the FROZEN, PROPOSED object (matches the evidence report's own
- * copy verbatim) -- truthful only to what SUN-1222C2-Q1-R1/R2 actually
- * proved, no unproven claims:
+ * copy verbatim, and matches what was actually registered) -- truthful
+ * only to what SUN-1222C2-Q1-R1/R2 actually proved, no unproven claims:
  */
 export const PROPOSED_SEC_EDGAR_TERMS_REVIEW: TermsReview = {
   providerId: 'sec-edgar',
@@ -91,8 +100,21 @@ describe('SUN-1222C2-Q1-R2: sec-edgar TermsReview local validation (never global
     expect(() => blocked.checkAccess(SEC_EDGAR_MANIFEST, 'live')).toThrow(PolicyBlockedError);
   });
 
-  it('SEC_TERMS_REVIEW_REGISTERED=NO: globalTermsGuard (the real, live-wired guard) still has no sec-edgar review after this entire file runs', async () => {
+  it('SUN-1222C2-Q1-R3: globalTermsGuard (the real, live-wired guard) now has the sec-edgar review registered, and its content matches this frozen object exactly (reviewedAt/reviewer aside, which the frozen object always left as placeholders for registration time to fill)', async () => {
     const { globalTermsGuard } = await import('../policy/terms-guard');
-    expect(globalTermsGuard.getReview('sec-edgar')).toBeUndefined();
+    const registered = globalTermsGuard.getReview('sec-edgar');
+    expect(registered).toBeDefined();
+    expect(registered?.providerId).toBe(PROPOSED_SEC_EDGAR_TERMS_REVIEW.providerId);
+    expect(registered?.termsUri).toBe(PROPOSED_SEC_EDGAR_TERMS_REVIEW.termsUri);
+    expect(registered?.termsHash).toBe(PROPOSED_SEC_EDGAR_TERMS_REVIEW.termsHash);
+    expect(registered?.status).toBe(PROPOSED_SEC_EDGAR_TERMS_REVIEW.status);
+    expect(registered?.reviewBasis).toBe(PROPOSED_SEC_EDGAR_TERMS_REVIEW.reviewBasis);
+    expect(registered?.notes).toBe(PROPOSED_SEC_EDGAR_TERMS_REVIEW.notes);
+    // The two fields the frozen object always left as placeholders
+    // (reviewedAt: null, reviewer: 'PENDING_OPERATOR_APPROVAL') are now
+    // filled in with real values -- that is the expected, correct
+    // difference, not a content mismatch.
+    expect(registered?.reviewedAt).not.toBeNull();
+    expect(registered?.reviewer).not.toBe('PENDING_OPERATOR_APPROVAL');
   });
 });

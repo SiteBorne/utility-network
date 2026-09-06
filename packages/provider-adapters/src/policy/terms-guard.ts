@@ -208,4 +208,52 @@ export const DIRECT_PUBLIC_HTTP_TERMS_REVIEW: TermsReview = {
     'applicable legal/contractual restrictions.',
 };
 
-export const globalTermsGuard = new TermsGuard([DIRECT_PUBLIC_HTTP_TERMS_REVIEW]);
+/**
+ * SUN-1222C2-Q1-R3-SEC-TERMS-REGISTRATION — the frozen, locally-validated
+ * `sec-edgar` TermsReview from SUN-1222C2-Q1-R1/R2 (proven RED/GREEN/
+ * mutation-tested at the code level: declared User-Agent, CIK request
+ * validation, HTTP status semantics, aggregate D1-backed rate
+ * coordination -- see those checkpoints' own evidence reports and
+ * `sec-edgar-terms-review-local-validation.test.ts`'s frozen
+ * `PROPOSED_SEC_EDGAR_TERMS_REVIEW` constant, which this object matches
+ * byte-for-byte on every content field). `reviewedAt`/`reviewer` are the
+ * two fields that constant's own doc comment says get set "only if/when
+ * they actually register this" -- filled in now, in the same format
+ * `DIRECT_PUBLIC_HTTP_TERMS_REVIEW` above already uses, per
+ * SUN-1222C2-Q1-R3-SEC-TERMS-REGISTRATION's own standalone authorization.
+ * This is a repo-only source change: registration here does not deploy,
+ * does not mutate Cloudflare, does not touch credentials/secrets/
+ * production traffic, and cannot itself trigger any request to SEC --
+ * `SecSubmissionsAdapter.execute()` must still be separately invoked by a
+ * real request for this record to ever matter at runtime.
+ */
+export const SEC_EDGAR_TERMS_REVIEW: TermsReview = {
+  providerId: 'sec-edgar',
+  termsUri: 'https://www.sec.gov/os/accessing-edgar-data',
+  termsHash: null,
+  reviewedAt: '2026-09-06T00:00:00.000Z',
+  status: 'verified',
+  reviewBasis: 'provider_terms_review',
+  reviewer: 'operator (SITEBORNE, recorded via chat 2026-09-06)',
+  notes:
+    'SEC EDGAR company_submissions API (data.sec.gov/submissions/CIK*.json), no ' +
+    "authentication required, per SEC's own published Fair Access policy " +
+    '(sec.gov/os/accessing-edgar-data, sec.gov/developer -- reviewed 2026-09-06, ' +
+    'no material change from the same-day re-check). SITEBORNE now (SUN-1222C2-Q1-R1/R2): ' +
+    'declares a compliant User-Agent (SITEBORNE hello@siteborne.com) on every real ' +
+    'request; validates CIK format before constructing any request URL (no SSRF/path ' +
+    'escape); evaluates HTTP status before treating any response as data -- 404/429/' +
+    '401/403/408/5xx are never fabricated into a success; retries are bounded (max 3), ' +
+    'honor a valid Retry-After, and are coordinated through the same aggregate limiter ' +
+    'as every other attempt; enforces an aggregate, D1-backed, cross-isolate sliding-' +
+    'window rate coordinator capped at 8 req/s (20% headroom below the published 10 ' +
+    'req/s ceiling), fails closed (denies) if that coordinator is itself unavailable, ' +
+    'proven under real SQLite concurrency up to 100 simultaneous callers. This review ' +
+    "does not claim any enforcement mechanism beyond what these two checkpoints' own " +
+    'tests actually proved.',
+};
+
+export const globalTermsGuard = new TermsGuard([
+  DIRECT_PUBLIC_HTTP_TERMS_REVIEW,
+  SEC_EDGAR_TERMS_REVIEW,
+]);
