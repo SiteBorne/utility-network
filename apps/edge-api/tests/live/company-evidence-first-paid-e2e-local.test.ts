@@ -11,8 +11,11 @@
  * SUN-1222C2-Q1's own authorization message and this checkpoint's own
  * pre-payment gates:
  *
- *   - candidate `efc5a287-d807-4b07-957f-ebbdf471e439` (SUN-1222C2-
- *     CANDIDATE-DISCOVERY-ECONOMICS-RECONCILIATION's corrected candidate —
+ *   - candidate `a064477f-7b74-46c5-a5b6-799df114b252` (SUN-1222C-Q1R2-
+ *     CANDIDATE-REFRESH's candidate — replaces the prior, policy-blocked
+ *     `efc5a287` candidate with one carrying SUN-1222C2-Q1-R1
+ *     (SecureHttpClient status semantics), -R2 (D1 SEC aggregate rate
+ *     coordinator), and -R3 (registered `sec-edgar` TermsReview) —
  *     `/services/company_evidence_graph.v2` and a real, independently
  *     decoded 402 both confirm 31200 atomic on this exact version, via
  *     Ray-ID-to-`scriptVersion.id` attribution against an unfiltered
@@ -75,7 +78,7 @@ const WORKER_SCRIPT_NAME = 'siteborne-utility-edge';
 const WORKER_ORIGIN = 'https://utility.siteborne.net';
 const TARGET_PATH = '/v2/company/evidence-graph';
 const TARGET_URL = `${WORKER_ORIGIN}${TARGET_PATH}`;
-const CANDIDATE_VERSION_ID = 'efc5a287-d807-4b07-957f-ebbdf471e439';
+const CANDIDATE_VERSION_ID = 'a064477f-7b74-46c5-a5b6-799df114b252';
 const VERSION_OVERRIDE_HEADER = 'Cloudflare-Workers-Version-Overrides';
 const VERSION_OVERRIDE_HEADER_VALUE = `${WORKER_SCRIPT_NAME}="${CANDIDATE_VERSION_ID}"`;
 

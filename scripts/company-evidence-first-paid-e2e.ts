@@ -15,7 +15,8 @@
  * for exactly one company_evidence_graph.v2 / CDP payment (31200 atomic
  * USDC, Base mainnet, buyer 0x516F57e1fB800ccEB2E70C42607Fb93E2abEcB99,
  * seller/payTo 0x7f44a2dd237938F18632d4CcA40f4c690295E6E1), against
- * candidate efc5a287-d807-4b07-957f-ebbdf471e439. The 402 challenge is
+ * candidate a064477f-7b74-46c5-a5b6-799df114b252 (SUN-1222C-Q1R2-
+ * CANDIDATE-REFRESH, carrying the R1/R2/R3 fixes). The 402 challenge is
  * fetched fresh, atomically, inside this one run — never a pre-fetched or
  * reused quote — so it can never expire between preparation and
  * submission.
