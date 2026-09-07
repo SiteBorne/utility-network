@@ -89,6 +89,40 @@ describe('CompanyEvidenceGraphService', () => {
     expect(verification.status).toBe('valid');
   });
 
+  // SUN-1222C-R10: `SecSubmissionsAdapter.execute()` already classifies a
+  // rejected SEC response into a specific `error.code`/`error.message`
+  // (e.g. "HTTP 403: forbidden or unauthorized" from `SecureHttpClient`'s
+  // `classifyTerminalHttpStatus`) — but this call site previously read
+  // only `result.resultClass` when building the `limitations` entry,
+  // silently discarding that detail. The only surviving trace of a real
+  // rejected SEC call was then the generic string "... returned
+  // permanent_failure for CIK ...", indistinguishable from every other
+  // possible rejection reason (401 vs 403 vs an unrecognized status vs a
+  // network-classified generic error) — a genuine, proven observability
+  // gap discovered while diagnosing five identical-looking real SEC
+  // rejections in production (docs/reports/SUN-1222C-R10-*.md).
+  it('preserves the adapter-classified error code/message in the SEC-submissions limitation, not just resultClass', async () => {
+    const httpClient = jsonHttpClient({}, { status: 403 });
+    const context = await buildTestServiceContext('company_evidence_graph.v1');
+    const service = await buildService(httpClient, context, signer, registry);
+
+    const result = await service.execute(
+      {
+        identifiers: { cik: '0000320193' },
+        requested_field_groups: ['identity', 'sec_submissions'],
+      },
+      context
+    );
+
+    const limitation = result.limitations.find((l) => l.includes('sec-edgar company_submissions'));
+    expect(limitation).toContain('permanent_failure');
+    // The precise, safe (status-code-derived, never-raw-body) detail must
+    // survive into the limitation text so a real rejection is diagnosable
+    // from persisted/returned state alone, without Modal/Workflow log
+    // archaeology.
+    expect(limitation).toContain('HTTP 403');
+  });
+
   it('produces a truthful limitation when website_evidence is requested without buyer_urls', async () => {
     const context = await buildTestServiceContext('company_evidence_graph.v1');
     const service = await buildService(jsonHttpClient({}), context, signer, registry);

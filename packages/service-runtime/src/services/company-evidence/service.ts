@@ -140,8 +140,18 @@ export class CompanyEvidenceGraphService
             source_count: 0,
           };
           fieldGroups.recent_filings = fieldGroups.sec_submissions;
+          // SUN-1222C-R10: `result.error.code`/`.message` are already the
+          // safe, status-code-derived classification `SecureHttpClient`/
+          // `SecSubmissionsAdapter` computed (e.g. "HTTP 403: forbidden or
+          // unauthorized") -- never a raw response body, never a secret.
+          // Discarding them here (keeping only `resultClass`) was a proven
+          // observability gap: every real SEC rejection collapsed to the
+          // same indistinguishable "... returned permanent_failure ..."
+          // text regardless of which specific status SEC actually
+          // returned (docs/reports/SUN-1222C-R10-*.md).
           limitations.push(
-            `sec-edgar company_submissions returned ${result.resultClass} for CIK ${identity.cik}`
+            `sec-edgar company_submissions returned ${result.resultClass} for CIK ${identity.cik}` +
+              (result.error ? ` (${result.error.code}: ${result.error.message})` : '')
           );
           secCovered = true;
           continue;
