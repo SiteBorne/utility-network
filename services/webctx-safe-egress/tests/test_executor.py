@@ -21,6 +21,7 @@ def request(target_url: str, **overrides) -> WebctxFetchRequest:
         deadline_ms=overrides.pop("deadline_ms", 5000),
         max_response_bytes=overrides.pop("max_response_bytes", 65536),
         single_hop=overrides.pop("single_hop", False),
+        approved_headers=overrides.pop("approved_headers", {}),
     )
 
 
@@ -206,3 +207,73 @@ class TestSingleHopMode:
         assert result.result_class == "failure"
         assert result.reason_code == "WEBCTX_URL_VALIDATION_FAILED"
         mock_fetch.assert_not_called()
+
+
+class TestApprovedHeaderForwarding:
+    """SUN-1222C-Q1R6 — closes the SUN-1222C-Q1R5 gap: an approved caller
+    header must actually reach the outbound request the executor makes,
+    overriding this executor's own default of the same name; anything not
+    on the allowlist (enforced upstream by `WebctxFetchRequest`'s own
+    validator, so it can never even reach `execute()`) must never appear."""
+
+    def test_approved_user_agent_overrides_default(self):
+        with patch("webctx_safe_egress.executor.fetch_pinned") as mock_fetch:
+            mock_fetch.return_value = RawResponse(status=200, headers={}, body=b"ok", truncated=False)
+            result = execute(
+                request(
+                    "https://public.example/",
+                    approved_headers={"user-agent": "SITEBORNE hello@siteborne.com"},
+                ),
+                resolver=resolver_returning(ResolvedAddress("8.8.8.8", 4)),
+            )
+        assert result.result_class == "success"
+        sent_headers = mock_fetch.call_args.kwargs["headers"]
+        assert sent_headers["user-agent"] == "SITEBORNE hello@siteborne.com"
+
+    def test_no_approved_headers_keeps_default_user_agent(self):
+        with patch("webctx_safe_egress.executor.fetch_pinned") as mock_fetch:
+            mock_fetch.return_value = RawResponse(status=200, headers={}, body=b"ok", truncated=False)
+            execute(
+                request("https://public.example/"),
+                resolver=resolver_returning(ResolvedAddress("8.8.8.8", 4)),
+            )
+        sent_headers = mock_fetch.call_args.kwargs["headers"]
+        assert sent_headers["user-agent"] == "SITEBORNE-webctx-safe-egress/1"
+
+    def test_conditional_get_headers_forwarded(self):
+        with patch("webctx_safe_egress.executor.fetch_pinned") as mock_fetch:
+            mock_fetch.return_value = RawResponse(status=304, headers={}, body=b"", truncated=False)
+            execute(
+                request(
+                    "https://public.example/",
+                    approved_headers={"if-none-match": '"abc123"', "if-modified-since": "Wed, 21 Oct 2015 07:28:00 GMT"},
+                ),
+                resolver=resolver_returning(ResolvedAddress("8.8.8.8", 4)),
+            )
+        sent_headers = mock_fetch.call_args.kwargs["headers"]
+        assert sent_headers["if-none-match"] == '"abc123"'
+        assert sent_headers["if-modified-since"] == "Wed, 21 Oct 2015 07:28:00 GMT"
+
+    def test_reserved_keys_are_never_overridable_even_if_smuggled_in(self):
+        """Defense-in-depth: even if `_RESERVED_HEADER_KEYS` were somehow
+        reached with a reserved key (the schema validator should already
+        make this unreachable via the public API), the executor's own merge
+        must still refuse to let it override host/connection/accept-encoding."""
+        from webctx_safe_egress.executor import _RESERVED_HEADER_KEYS, _fetch_one_hop
+        from webctx_safe_egress.security.url_validate import DEFAULT_NETWORK_POLICY
+
+        assert {"host", "connection", "accept-encoding"} == set(_RESERVED_HEADER_KEYS)
+
+        with patch("webctx_safe_egress.executor.fetch_pinned") as mock_fetch:
+            mock_fetch.return_value = RawResponse(status=200, headers={}, body=b"ok", truncated=False)
+            _fetch_one_hop(
+                "https://public.example/",
+                policy=DEFAULT_NETWORK_POLICY,
+                resolver=resolver_returning(ResolvedAddress("8.8.8.8", 4)),
+                deadline_ms_remaining=5000,
+                max_response_bytes=65536,
+                approved_headers={"host": "attacker.example", "connection": "keep-alive"},
+            )
+        sent_headers = mock_fetch.call_args.kwargs["headers"]
+        assert sent_headers["host"] == "public.example"
+        assert sent_headers["connection"] == "close"

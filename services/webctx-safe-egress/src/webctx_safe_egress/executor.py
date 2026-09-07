@@ -31,6 +31,13 @@ from .transport import (
 
 _REDIRECT_STATUSES = {301, 302, 303, 307, 308}
 
+# SUN-1222C-Q1R6 — never overridable by `request.approved_headers`, even
+# though `WebctxFetchRequest`'s own validator already restricts the field to
+# `schemas.APPROVED_FORWARD_HEADERS` (which doesn't include these): belt-
+# and-suspenders so a future allowlist change can never accidentally let a
+# caller override this executor's own transport-management headers.
+_RESERVED_HEADER_KEYS = frozenset({"host", "connection", "accept-encoding"})
+
 
 class ExecutorFailure(Exception):
     def __init__(self, reason_code: str, stage: str, message: str):
@@ -97,6 +104,7 @@ def _fetch_one_hop(
     resolver: Resolver,
     deadline_ms_remaining: int,
     max_response_bytes: int,
+    approved_headers: dict[str, str],
 ) -> HopResult:
     _reject_userinfo(url)
 
@@ -118,6 +126,15 @@ def _fetch_one_hop(
         "accept-encoding": "identity",
         "connection": "close",
     }
+    # SUN-1222C-Q1R6 — an approved caller-supplied header (e.g. a
+    # SEC-EDGAR-compliant `User-Agent`) overrides this executor's own
+    # default of the same name; `WebctxFetchRequest`'s validator already
+    # restricts keys to `schemas.APPROVED_FORWARD_HEADERS`, and
+    # `_RESERVED_HEADER_KEYS` is excluded here regardless as defense in
+    # depth against a future allowlist change.
+    for key, value in approved_headers.items():
+        if key not in _RESERVED_HEADER_KEYS:
+            headers[key] = value
 
     try:
         raw = fetch_pinned(
@@ -180,6 +197,7 @@ def execute(
                 resolver=resolver,
                 deadline_ms_remaining=remaining_ms,
                 max_response_bytes=request.max_response_bytes,
+                approved_headers=request.approved_headers,
             )
 
             if hop.raw.status in _REDIRECT_STATUSES and not request.single_hop:

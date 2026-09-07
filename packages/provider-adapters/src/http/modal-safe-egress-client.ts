@@ -30,8 +30,96 @@
  * `WebctxFetchFailure.reason_code`, e.g. `WEBCTX_HTTP_PREMATURE_EOF`) —
  * `toAdapterResult`'s existing classification pipeline requires zero
  * changes to recognize either.
+ *
+ * SUN-1222C-Q1R6 — `RequestInit.headers` outbound-header contract. Only the
+ * caller-supplied headers listed in `APPROVED_FORWARD_HEADERS` below are
+ * ever sent to the executor (as `WebctxFetchRequest.approved_headers`); every
+ * other header is silently dropped, the same fail-closed posture the Fetch
+ * spec itself uses for forbidden headers. The allowlist is scoped to
+ * PROVEN, currently-exercised callers only, not speculative future need:
+ *   - `user-agent` — `SecSubmissionsAdapter` (SEC EDGAR's declared-identity
+ *     Fair Access requirement, SUN-1222C2-Q1-R1).
+ *   - `if-none-match` / `if-modified-since` — `PublicHttpAdapter`'s
+ *     conditional-GET / 304 pass-through (SUN-1222C-Q1R2 HTTP status fix).
+ * Never on this list, deliberately: `Authorization`, `Cookie`,
+ * `Proxy-Authorization`, `Host`, `Connection`, `Transfer-Encoding`,
+ * `Upgrade`, `Forwarded`/`X-Forwarded-*`, `Origin`, `Referer`, `Range`,
+ * `Sec-*` — any of these crossing into the executor's own outbound request
+ * could leak credentials, override its transport framing, or let a caller
+ * forge the executor's own IP-pinned connection semantics. The executor
+ * (`services/webctx-safe-egress`) independently re-validates this same
+ * allowlist server-side (`schemas.py`) — this client is defense-in-depth,
+ * not the sole boundary.
  */
 import type { InjectedHttpClient } from '../types';
+
+// Case-insensitive; lowercase is the canonical form sent to the executor.
+// Keep in exact sync with `schemas.py`'s `APPROVED_FORWARD_HEADERS`.
+const APPROVED_FORWARD_HEADERS = new Set(['user-agent', 'if-none-match', 'if-modified-since']);
+const MAX_HEADER_COUNT = 8;
+const MAX_HEADER_NAME_BYTES = 64;
+const MAX_HEADER_VALUE_BYTES = 512;
+const MAX_TOTAL_HEADER_BYTES = 2048;
+// Deliberately matching control chars (incl. CR/LF) to reject
+// header-injection attempts before they ever leave this process.
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHAR_PATTERN = /[\x00-\x1f\x7f]/;
+
+function byteLength(value: string): number {
+  return new TextEncoder().encode(value).length;
+}
+
+/** Extracts only the allowlisted headers from a caller's `RequestInit`,
+ * normalized to lowercase keys. Throws on injection attempts or bounds
+ * violations (a caller bug, not a runtime condition to swallow); silently
+ * drops anything not on the allowlist (same posture as `fetch()` itself
+ * dropping forbidden headers). */
+function extractApprovedHeaders(init: RequestInit | undefined): Record<string, string> {
+  const approved: Record<string, string> = {};
+  if (!init?.headers) return approved;
+
+  let normalized: Headers;
+  try {
+    // The platform's own `Headers` constructor already rejects some
+    // injection attempts (e.g. an embedded CRLF in a plain-object value)
+    // before our own `CONTROL_CHAR_PATTERN` check below ever runs —
+    // re-wrapped here so every rejection path carries the same
+    // `WEBCTX_URL_VALIDATION_FAILED` prefix regardless of which layer
+    // actually caught it.
+    normalized = new Headers(init.headers);
+  } catch (err) {
+    throw new Error(
+      `WEBCTX_URL_VALIDATION_FAILED: invalid request header: ${err instanceof Error ? err.message : String(err)}`
+    );
+  }
+
+  let totalBytes = 0;
+  for (const [rawKey, rawValue] of normalized.entries()) {
+    const key = rawKey.toLowerCase();
+    if (!APPROVED_FORWARD_HEADERS.has(key)) continue; // not an error — just not forwarded
+
+    if (CONTROL_CHAR_PATTERN.test(rawKey) || CONTROL_CHAR_PATTERN.test(rawValue)) {
+      throw new Error(`WEBCTX_URL_VALIDATION_FAILED: header '${key}' contains a control character`);
+    }
+    if (byteLength(key) > MAX_HEADER_NAME_BYTES) {
+      throw new Error(`WEBCTX_URL_VALIDATION_FAILED: header name '${key}' exceeds ${MAX_HEADER_NAME_BYTES} bytes`);
+    }
+    if (byteLength(rawValue) > MAX_HEADER_VALUE_BYTES) {
+      throw new Error(`WEBCTX_URL_VALIDATION_FAILED: header '${key}' value exceeds ${MAX_HEADER_VALUE_BYTES} bytes`);
+    }
+
+    approved[key] = rawValue;
+    totalBytes += byteLength(key) + byteLength(rawValue);
+  }
+
+  if (Object.keys(approved).length > MAX_HEADER_COUNT) {
+    throw new Error(`WEBCTX_URL_VALIDATION_FAILED: more than ${MAX_HEADER_COUNT} approved headers supplied`);
+  }
+  if (totalBytes > MAX_TOTAL_HEADER_BYTES) {
+    throw new Error(`WEBCTX_URL_VALIDATION_FAILED: approved headers exceed ${MAX_TOTAL_HEADER_BYTES} bytes total`);
+  }
+  return approved;
+}
 
 export interface ModalSafeEgressClientConfig {
   /** The deployed Web Function's URL, e.g.
@@ -113,6 +201,7 @@ export class ModalSafeEgressClient implements InjectedHttpClient {
     const targetUrl = input instanceof URL ? input.toString() : input.toString();
     const doFetch = this.config.fetchImpl ?? globalThis.fetch;
     const deadlineMs = this.config.deadlineMs ?? DEFAULT_DEADLINE_MS;
+    const approvedHeaders = extractApprovedHeaders(init);
 
     const body = JSON.stringify({
       request_version: REQUEST_VERSION,
@@ -125,6 +214,11 @@ export class ModalSafeEgressClient implements InjectedHttpClient {
       // Always true -- see this file's own doc comment: SecureHttpClient
       // owns the redirect loop, this client performs exactly one hop.
       single_hop: true,
+      // SUN-1222C-Q1R6 — only ever the allowlisted subset; see
+      // `extractApprovedHeaders`/`APPROVED_FORWARD_HEADERS` above. Omitted
+      // entirely (not sent as `{}`) when empty, matching the pre-fix wire
+      // shape exactly for every caller that never sets an approved header.
+      ...(Object.keys(approvedHeaders).length > 0 ? { approved_headers: approvedHeaders } : {}),
     });
 
     let response: Response;

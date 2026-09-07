@@ -98,3 +98,85 @@ def _is_fastapi_endpoint_call(node: ast.Call) -> bool:
     if isinstance(func, ast.Name) and func.id == "fastapi_endpoint":
         return True
     return False
+
+
+class TestApprovedHeaders:
+    """SUN-1222C-Q1R6 — `approved_headers` closes the outbound-header-loss
+    gap (SUN-1222C-Q1R5). Independently re-validated here, not merely
+    trusted from the Worker-side TypeScript client."""
+
+    def test_omitted_defaults_to_empty(self):
+        req = WebctxFetchRequest.model_validate(valid_payload())
+        assert req.approved_headers == {}
+
+    def test_allowlisted_header_accepted(self):
+        req = WebctxFetchRequest.model_validate(
+            valid_payload(approved_headers={"user-agent": "SITEBORNE hello@siteborne.com"})
+        )
+        assert req.approved_headers == {"user-agent": "SITEBORNE hello@siteborne.com"}
+
+    def test_all_three_allowlisted_headers_accepted_together(self):
+        req = WebctxFetchRequest.model_validate(
+            valid_payload(
+                approved_headers={
+                    "user-agent": "SITEBORNE hello@siteborne.com",
+                    "if-none-match": '"abc123"',
+                    "if-modified-since": "Wed, 21 Oct 2015 07:28:00 GMT",
+                }
+            )
+        )
+        assert len(req.approved_headers) == 3
+
+    def test_non_allowlisted_header_rejected(self):
+        with pytest.raises(ValidationError):
+            WebctxFetchRequest.model_validate(valid_payload(approved_headers={"authorization": "Bearer x"}))
+
+    @pytest.mark.parametrize(
+        "dangerous_key",
+        [
+            "authorization",
+            "cookie",
+            "proxy-authorization",
+            "host",
+            "connection",
+            "transfer-encoding",
+            "upgrade",
+            "forwarded",
+            "x-forwarded-for",
+            "x-forwarded-host",
+            "x-forwarded-proto",
+            "origin",
+            "referer",
+            "range",
+            "sec-fetch-mode",
+        ],
+    )
+    def test_dangerous_header_names_rejected(self, dangerous_key):
+        with pytest.raises(ValidationError):
+            WebctxFetchRequest.model_validate(valid_payload(approved_headers={dangerous_key: "x"}))
+
+    def test_uppercase_key_rejected(self):
+        with pytest.raises(ValidationError):
+            WebctxFetchRequest.model_validate(valid_payload(approved_headers={"User-Agent": "x"}))
+
+    def test_crlf_in_value_rejected(self):
+        with pytest.raises(ValidationError):
+            WebctxFetchRequest.model_validate(
+                valid_payload(approved_headers={"user-agent": "evil\r\nX-Injected: true"})
+            )
+
+    def test_crlf_in_key_rejected(self):
+        with pytest.raises(ValidationError):
+            WebctxFetchRequest.model_validate(valid_payload(approved_headers={"user-agent\r\nx-injected": "true"}))
+
+    def test_oversized_value_rejected(self):
+        with pytest.raises(ValidationError):
+            WebctxFetchRequest.model_validate(valid_payload(approved_headers={"user-agent": "a" * 513}))
+
+    def test_too_many_headers_rejected(self):
+        with pytest.raises(ValidationError):
+            WebctxFetchRequest.model_validate(
+                valid_payload(approved_headers={"user-agent": "a", "if-none-match": "b", "if-modified-since": "c",
+                                                 "extra1": "d", "extra2": "e", "extra3": "f", "extra4": "g",
+                                                 "extra5": "h", "extra6": "i"})
+            )
