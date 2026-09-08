@@ -397,6 +397,35 @@ function boundedDetail(detail: string): string {
     : detail;
 }
 
+// SUN-1222C-R4-D10 — the observational-only counterpart to the D5/D6/D7
+// evidence_ref threading: `settlement_ambiguous` deliberately makes NO
+// job-state-machine transition (see the call site below and design §13 —
+// forcing one would either duplicate `REFUND_REQUIRED`'s no-DELIVERED-path
+// problem D7 already ruled out for the sibling `persistence_failed_after_
+// settlement` branches, or misrepresent an inconclusive economic outcome
+// as a definitive one). The durable fact of the ambiguity already survives
+// independently, in `payment_attempts.lifecycle_stage = 'settlement_pending'`
+// (queryable via the new `listUnresolvedSettlements`,
+// `../repositories/d1/payment-attempts.ts`) — this call adds only the
+// active-signal half D10's audit found missing (`D10_ALERTING_CLASS=D`):
+// a structured, correlation-only log emitted at the exact point automated
+// reconciliation gives up. Carries no economic authority whatsoever — it
+// is a `console.warn` call and nothing else (statically proven zero
+// settle/verify/executor/chain callsites in
+// `paid-continuation-workflow-observability.test.ts`) — and no secret:
+// `job_id`/`payment_identifier` are the same two non-secret correlation
+// identifiers already used throughout this file's own terminal results
+// and every prior SUN-1222C-R4 evidence report.
+function logSettlementAmbiguous(jobId: string, paymentIdentifier: string): void {
+  console.warn(
+    JSON.stringify({
+      event: 'settlement_ambiguous_unresolved',
+      job_id: jobId,
+      payment_identifier: paymentIdentifier,
+    })
+  );
+}
+
 // SUN-1222C-R4-D1 proved: a legitimate `result_class !== 'success'`
 // executor result need not carry a `failure` object at all -- e.g.
 // `CompanyEvidenceGraphService` returns `failure: undefined` whenever its
@@ -883,6 +912,11 @@ export async function runPaidContinuationWorkflow(
     // Design §13: the job legitimately stays non-terminal, pending
     // ops/human reconciliation — never forced into a REJECTED-family
     // state merely because settlement is inconclusive.
+    // SUN-1222C-R4-D10: emit the durable-detection/operator-escalation
+    // signal at this single convergence point — every `ambiguous_unresolved`
+    // origin (pre-settle CAS contention, post-settle-throw reconciliation
+    // exhaustion, prior-pending reconciliation exhaustion) reaches here.
+    logSettlementAmbiguous(jobId, paymentIdentifier);
     return terminal('settlement_ambiguous', jobId);
   }
   if (settleOutcome.kind === 'rejected') {

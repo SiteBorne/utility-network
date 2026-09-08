@@ -540,6 +540,96 @@ export class D1PaymentAttemptRepository implements PaymentAttemptRepository {
     };
   }
 
+  /**
+   * SUN-1222C-R4-D10 — operator discovery surface for economic ambiguity
+   * that automated reconciliation could not resolve (design §13 /
+   * `reconcileAmbiguousSettlement`'s `inconclusive` outcome, and the
+   * pre-settle CAS-contention `ambiguous_unresolved` case in
+   * `paid-continuation-workflow.ts`'s `runSettlementStep`). Both converge
+   * on exactly one durable fact this method reads: a row still sitting at
+   * `lifecycle_stage = 'settlement_pending'`.
+   *
+   * Read-only, non-economic, and additive: no new column (reuses
+   * `settlement_pending_at`, already indexed by
+   * `idx_payment_attempts_settlement_pending`, migration
+   * 0006_settlement_recovery.sql), no new table, no write path. Returns
+   * only fields already surfaced elsewhere in this repository
+   * (`mapRow`/`getSettlementRecoveryRecord`) — no secret, private key,
+   * wallet material, authorization header, or raw payment signature is
+   * ever a column on this table, so none can leak through this method
+   * either (see `payment-attempts-unresolved-settlements.test.ts`'s
+   * dedicated forbidden-field assertion).
+   *
+   * `olderThanMs`/`nowUnixMs` let a caller restrict the result to rows
+   * that have been pending longer than a given age — deliberately NOT a
+   * default threshold invented by this method: D10's audit found no
+   * existing authoritative concept of reconciliation-attempt-count or
+   * retry-exhaustion to derive one from (`reconcileAmbiguousSettlement`'s
+   * bounded 5-retry loop is entirely in-memory, per-Workflow-invocation,
+   * never persisted), so age filtering is left to the caller/runbook
+   * rather than guessed here.
+   */
+  async listUnresolvedSettlements(options?: {
+    readonly olderThanMs?: number;
+    readonly nowUnixMs?: number;
+    readonly limit?: number;
+  }): Promise<
+    ReadonlyArray<{
+      readonly paymentIdentifier: string;
+      readonly jobId: string | null;
+      readonly serviceId: string;
+      readonly serviceVersion: string;
+      readonly resourceId: string;
+      readonly network: string;
+      readonly amount: string;
+      readonly payee: string;
+      readonly settlementPendingAt: string | null;
+      readonly settlementTransactionReference: string | null;
+      readonly settlementOutcomeKind: 'explicit_rejection' | 'ambiguous' | null;
+      readonly cdpFacilitatorSettleAttemptCount: number;
+    }>
+  > {
+    const limit = options?.limit ?? 100;
+    const conditions = [`lifecycle_stage = 'settlement_pending'`];
+    const params: unknown[] = [];
+    if (options?.olderThanMs !== undefined) {
+      const threshold = new Date(
+        (options.nowUnixMs ?? Date.now()) - options.olderThanMs
+      ).toISOString();
+      conditions.push(`settlement_pending_at IS NOT NULL AND settlement_pending_at < ?`);
+      params.push(threshold);
+    }
+    const result = await this.db
+      .prepare(
+        `SELECT payment_identifier, job_id, service_id, service_version, resource_id,
+                network, amount, payee, settlement_pending_at,
+                settlement_transaction_reference, settlement_outcome_kind,
+                cdp_facilitator_settle_attempt_count
+           FROM payment_attempts
+          WHERE ${conditions.join(' AND ')}
+          ORDER BY settlement_pending_at ASC
+          LIMIT ?`
+      )
+      .bind(...params, limit)
+      .all();
+    if (!result.success) return [];
+    return result.results.map((row) => ({
+      paymentIdentifier: row.payment_identifier as string,
+      jobId: (row.job_id as string | null) ?? null,
+      serviceId: row.service_id as string,
+      serviceVersion: row.service_version as string,
+      resourceId: row.resource_id as string,
+      network: row.network as string,
+      amount: row.amount as string,
+      payee: row.payee as string,
+      settlementPendingAt: (row.settlement_pending_at as string | null) ?? null,
+      settlementTransactionReference: (row.settlement_transaction_reference as string | null) ?? null,
+      settlementOutcomeKind:
+        (row.settlement_outcome_kind as 'explicit_rejection' | 'ambiguous' | null) ?? null,
+      cdpFacilitatorSettleAttemptCount: Number(row.cdp_facilitator_settle_attempt_count ?? 0),
+    }));
+  }
+
   /** Records the settlement transaction reference once external
    * reconciliation (or a normal synchronous settle response) confirms
    * `SETTLED`/`settled_external`. Additive to `recordSettlementPending` —
