@@ -54,7 +54,20 @@ export interface WorkflowContinuationResult {
   readonly job_id: string;
   readonly receipt_id?: string;
   readonly settlement_transaction_reference?: string;
+  /** Stable, bounded, machine-readable code — unchanged behavior for every
+   * existing caller (still `failure?.code ?? result_class` on the
+   * `executor_rejected` path; see `error_detail` below for what's new). */
   readonly error_code?: string;
+  /** SUN-1222C-R4 — a specific, sanitized, human/operator-readable detail
+   * (e.g. a provider rejection reason) that `error_code` alone cannot carry
+   * without either overloading a stable machine code or losing the detail
+   * entirely (SUN-1222C-R4-D1's proven gap: a legitimate `result_class:
+   * 'partial'` executor result — verification mesh passed, so no `failure`
+   * object — carries its only informative detail in the service's
+   * `limitations` array, which the pre-R4 terminal mapping silently
+   * dropped). Bounded length; never raw upstream response bodies, headers,
+   * or credentials — see `deriveErrorDetail`'s own doc comment. */
+  readonly error_detail?: string;
 }
 
 export interface SettlementReconciliationResult {

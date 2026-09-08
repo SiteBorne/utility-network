@@ -126,6 +126,14 @@ export interface ExecutorOutcome {
     // may now attach on a non-success result -- internal-only, never
     // read into the public `jsonError` response below.
     failure?: { code: string; message: string; details?: unknown };
+    // SUN-1222C-R4 -- widened (additive, optional) to declare the
+    // sanitized, human-readable detail strings a real executor (e.g.
+    // `CompanyEvidenceGraphService`) may attach to a non-`failure` partial
+    // result, so `paid-continuation-workflow.ts`'s terminal mapping can
+    // read `result.limitations` without an unsafe cast. Every other
+    // executor is unaffected: this field stays `undefined` for them, same
+    // as before this change.
+    limitations?: readonly string[];
   };
   /** Required when the route's scheme is `upto`: the atomic-unit actual
    * amount to charge, computed by the caller from the service's real
@@ -1207,12 +1215,16 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
           );
         case 'executor_rejected':
           // Matches the pre-H2AWI-3 contract's resolved-but-unsuccessful
-          // executor branch (502 service_execution_failed).
+          // executor branch (502 service_execution_failed). SUN-1222C-R4:
+          // `result.error_detail`, when present, is now surfaced as the
+          // response's `details` field — the stable `message` (still
+          // `error_code`) is unchanged for every existing caller.
           return jsonError(
             c,
             502,
             'service_execution_failed',
-            result.error_code ?? 'executor_rejected'
+            result.error_code ?? 'executor_rejected',
+            result.error_detail
           );
         case 'pcc_failed':
           return jsonError(c, 500, 'service_execution_failed', result.error_code ?? 'pcc_failed');

@@ -144,6 +144,78 @@ describe('paid-continuation-workflow — executor integration (H2AWI-2b)', () =>
     expect(deps.settle).not.toHaveBeenCalled();
   });
 
+  it('SUN-1222C-R4: preserves the specific rejection detail for a legitimate "partial" result (verification passed, no `failure` object, detail only in `limitations`) instead of collapsing it to the generic result_class', async () => {
+    // Exact shape SUN-1222C-R4-D1 proved CompanyEvidenceGraphService returns
+    // for a real SEC EDGAR rejection: the verification mesh itself PASSED
+    // (so `failure` is `undefined` — see service.ts's own `failure:
+    // signed.verdict.decision === 'pass' ? undefined : {...}`), and the only
+    // place the specific, sanitized reason lives is `limitations`.
+    const metadata = buildTestMetadata();
+    const deps = await buildTestDependencies({
+      executor: async () => ({
+        result: {
+          result_class: 'partial',
+          limitations: [
+            'sec-edgar company_submissions returned permanent_failure for CIK 0000320193',
+          ],
+        },
+      }),
+    });
+    const input = await sealTestInput(metadata, { key: deps.envelopeKey });
+    const step = new FakeWorkflowStep();
+
+    const result = await runPaidContinuationWorkflow({ payload: input }, step, deps);
+
+    expect(result.status).toBe('executor_rejected');
+    // The stable machine-readable code is unchanged (existing callers rely
+    // on this exact fallback-to-result_class behavior for a `failure`-less
+    // rejection) —
+    expect(result.error_code).toBe('partial');
+    // — but the specific, sanitized reason is now ALSO preserved, not
+    // silently dropped.
+    expect(result.error_detail).toBe(
+      'sec-edgar company_submissions returned permanent_failure for CIK 0000320193'
+    );
+  });
+
+  it('SUN-1222C-R4: error_detail prefers a populated `failure.message` over `limitations` when both exist', async () => {
+    const metadata = buildTestMetadata();
+    const deps = await buildTestDependencies({
+      executor: async () => ({
+        result: {
+          result_class: 'rejected',
+          failure: { code: 'bad_input', message: 'the specific bad-input reason' },
+          limitations: ['a different, less specific limitation string'],
+        },
+      }),
+    });
+    const input = await sealTestInput(metadata, { key: deps.envelopeKey });
+    const step = new FakeWorkflowStep();
+
+    const result = await runPaidContinuationWorkflow({ payload: input }, step, deps);
+
+    expect(result.status).toBe('executor_rejected');
+    expect(result.error_code).toBe('bad_input');
+    expect(result.error_detail).toBe('the specific bad-input reason');
+  });
+
+  it('SUN-1222C-R4: error_detail is undefined (not a stray empty string) when neither failure.message nor limitations exist', async () => {
+    const metadata = buildTestMetadata();
+    const deps = await buildTestDependencies({
+      executor: async () => ({
+        result: { result_class: 'rejected' },
+      }),
+    });
+    const input = await sealTestInput(metadata, { key: deps.envelopeKey });
+    const step = new FakeWorkflowStep();
+
+    const result = await runPaidContinuationWorkflow({ payload: input }, step, deps);
+
+    expect(result.status).toBe('executor_rejected');
+    expect(result.error_code).toBe('rejected');
+    expect(result.error_detail).toBeUndefined();
+  });
+
   it('surfaces a thrown executor error as executor_timeout, never calling PCC or settle', async () => {
     const metadata = buildTestMetadata();
     const deps = await buildTestDependencies({

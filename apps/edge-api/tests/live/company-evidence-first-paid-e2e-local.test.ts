@@ -124,7 +124,13 @@ export type FirstPaidE2EStage =
   | 'PAID_REQUEST_SUBMITTED'
   | 'RESULT_OBSERVED';
 
-export type SubmissionResult = 'success' | 'rejected' | 'ambiguous';
+// SUN-1222C-R4: 'application_error' is a NEW, distinct value from
+// 'ambiguous' -- see `classifySubmissionOutcome`'s own doc comment. It is
+// NOT a synonym for 'rejected' (which stays reserved for the payment-layer
+// 402 case): a 5xx-with-a-parseable-SITEBORNE-body is an authoritative
+// service-execution failure, a different economic/operational signal than
+// a settlement-layer rejection.
+export type SubmissionResult = 'success' | 'rejected' | 'ambiguous' | 'application_error';
 
 export interface FirstPaidE2ESanitizedResult {
   ok: boolean;
@@ -140,6 +146,13 @@ export interface FirstPaidE2ESanitizedResult {
   settlement_observed?: boolean;
   transaction_hash?: string;
   receipt_id?: string;
+  // SUN-1222C-R4: surfaced for ANY authoritative HTTP response whose body
+  // parses as SITEBORNE's `{error, message, details?}` shape -- not gated
+  // on `submission_result === 'success'` (SUN-1222C-R4-D1's proven gap: a
+  // real application-generated 502 body was being parsed and then silently
+  // discarded, never reaching this printed result at all).
+  application_error_code?: string;
+  application_error_detail?: string;
 }
 
 export interface CallBudgetCounters {
@@ -399,7 +412,6 @@ export async function runFirstPaidE2E(
   }
   stage = 'PAID_REQUEST_SUBMITTED';
 
-  const submissionResult = classifySubmissionOutcome(paidRes.status);
   let serviceExecutionObserved: boolean | undefined;
   let settlementObserved: boolean | undefined;
   let transactionHash: string | undefined;
@@ -410,6 +422,38 @@ export async function runFirstPaidE2E(
     responseBody = (await paidRes.clone().json()) as Record<string, unknown>;
   } catch {
     responseBody = undefined;
+  }
+
+  // SUN-1222C-R4: a body that parses as JSON AND matches SITEBORNE's own
+  // `{error, message, details?}` shape (`jsonError` in `x402-service.ts`)
+  // is an AUTHORITATIVE application response, not transport ambiguity --
+  // regardless of HTTP status. A response that fails to parse, or parses
+  // but has neither field, stays conservatively 'ambiguous' for any 5xx
+  // (§12: protect true ambiguity).
+  const hasApplicationErrorShape =
+    responseBody !== undefined &&
+    (typeof responseBody.error === 'string' || typeof responseBody.message === 'string');
+  const submissionResult = classifySubmissionOutcome(paidRes.status, hasApplicationErrorShape);
+
+  const applicationErrorCode =
+    hasApplicationErrorShape && typeof responseBody?.error === 'string'
+      ? responseBody.error
+      : undefined;
+  let applicationErrorDetail =
+    hasApplicationErrorShape && typeof responseBody?.details === 'string'
+      ? responseBody.details
+      : hasApplicationErrorShape && typeof responseBody?.message === 'string'
+        ? responseBody.message
+        : undefined;
+  // Harness-side belt-and-suspenders bound, mirroring the Workflow-side
+  // `ERROR_DETAIL_MAX_LENGTH` bound -- this harness must never print an
+  // unbounded upstream body even if some future response shape changes.
+  const APPLICATION_ERROR_DETAIL_MAX_LENGTH = 500;
+  if (
+    applicationErrorDetail !== undefined &&
+    applicationErrorDetail.length > APPLICATION_ERROR_DETAIL_MAX_LENGTH
+  ) {
+    applicationErrorDetail = `${applicationErrorDetail.slice(0, APPLICATION_ERROR_DETAIL_MAX_LENGTH)}…(truncated)`;
   }
 
   if (submissionResult === 'success') {
@@ -447,15 +491,35 @@ export async function runFirstPaidE2E(
       ...(settlementObserved !== undefined ? { settlement_observed: settlementObserved } : {}),
       ...(transactionHash ? { transaction_hash: transactionHash } : {}),
       ...(receiptId ? { receipt_id: receiptId } : {}),
+      ...(applicationErrorCode !== undefined
+        ? { application_error_code: applicationErrorCode }
+        : {}),
+      ...(applicationErrorDetail !== undefined
+        ? { application_error_detail: applicationErrorDetail }
+        : {}),
     },
   };
 }
 
-export function classifySubmissionOutcome(httpStatus: number): SubmissionResult {
+/**
+ * SUN-1222C-R4: `hasApplicationErrorShape` distinguishes an authoritative
+ * application response (a received HTTP response whose body parses as
+ * SITEBORNE's own `{error, message, details?}` JSON shape) from genuine
+ * transport-level ambiguity (no HTTP response at all — the caller's own
+ * `catch` block for a thrown network error never reaches this function;
+ * or a response that fails to parse as JSON, or parses but matches neither
+ * field). A 5xx with a recognized application body is a known,
+ * classifiable failure — it must not collapse into the same 'ambiguous'
+ * bucket as a socket failure or truncated response.
+ */
+export function classifySubmissionOutcome(
+  httpStatus: number,
+  hasApplicationErrorShape = false
+): SubmissionResult {
   if (httpStatus === 200) return 'success';
   if (httpStatus === 402) return 'rejected';
-  if (httpStatus >= 500) return 'ambiguous';
-  return 'ambiguous';
+  if (httpStatus >= 500) return hasApplicationErrorShape ? 'application_error' : 'ambiguous';
+  return hasApplicationErrorShape ? 'application_error' : 'ambiguous';
 }
 
 function buildRealDeps(credentials: LocalFirstPaidE2ECredentials): FirstPaidE2EDeps {
@@ -676,6 +740,60 @@ describe('SUN-1222C2-Q1 company-evidence first-paid-e2e local client (unit, alwa
     const { result } = await runFirstPaidE2E(baseDeps({ fetchImpl }));
     expect(result.submission_result).toBe('rejected');
     expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  // SUN-1222C-R4-D1 proved: an application-generated 502 with a valid,
+  // parseable SITEBORNE JSON body (exactly x402-service.ts's own
+  // `jsonError` shape) was being bucketed as 'ambiguous' and its body
+  // silently discarded -- indistinguishable from a genuine transport
+  // failure. It is an authoritative application response, not ambiguity.
+  it('SUN-1222C-R4: a 502 with a parseable SITEBORNE error body classifies as application_error and preserves the specific detail, not ambiguous', async () => {
+    const fetchImpl = twoStepFetch(
+      validChallenge(),
+      jsonResponse(502, {
+        error: 'service_execution_failed',
+        message: 'partial',
+        details: 'sec-edgar company_submissions returned permanent_failure for CIK 0000320193',
+      })
+    );
+    const { result } = await runFirstPaidE2E(baseDeps({ fetchImpl }));
+    expect(result.submission_result).toBe('application_error');
+    expect(result.http_status).toBe(502);
+    expect(result.application_error_code).toBe('service_execution_failed');
+    expect(result.application_error_detail).toBe(
+      'sec-edgar company_submissions returned permanent_failure for CIK 0000320193'
+    );
+  });
+
+  // §4/§13 sanitization + no-message-fallback edge case: `details` absent,
+  // only the generic `message` present -- still surfaced (better than
+  // nothing), still NOT 'ambiguous'.
+  it('SUN-1222C-R4: a 502 with only a generic `message` (no `details`) still classifies as application_error and surfaces the generic message', async () => {
+    const fetchImpl = twoStepFetch(
+      validChallenge(),
+      jsonResponse(502, { error: 'service_execution_failed', message: 'partial' })
+    );
+    const { result } = await runFirstPaidE2E(baseDeps({ fetchImpl }));
+    expect(result.submission_result).toBe('application_error');
+    expect(result.application_error_code).toBe('service_execution_failed');
+    expect(result.application_error_detail).toBe('partial');
+  });
+
+  // §12's own explicit requirement: true transport-level ambiguity (a
+  // received-but-unparseable body) must remain conservatively classified,
+  // never overcorrected into a false 'application_error'.
+  it('SUN-1222C-R4: a 5xx with a non-JSON/unparseable body remains classified ambiguous (protects true ambiguity)', async () => {
+    const fetchImpl = twoStepFetch(
+      validChallenge(),
+      new Response('<html>Bad Gateway</html>', {
+        status: 502,
+        headers: { 'content-type': 'text/html' },
+      })
+    );
+    const { result } = await runFirstPaidE2E(baseDeps({ fetchImpl }));
+    expect(result.submission_result).toBe('ambiguous');
+    expect(result.application_error_code).toBeUndefined();
+    expect(result.application_error_detail).toBeUndefined();
   });
 
   it('payment material never appears in the returned result', async () => {

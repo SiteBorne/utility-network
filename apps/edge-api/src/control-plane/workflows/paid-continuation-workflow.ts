@@ -369,7 +369,7 @@ function terminal(
   extra?: Partial<
     Pick<
       WorkflowContinuationResult,
-      'receipt_id' | 'settlement_transaction_reference' | 'error_code'
+      'receipt_id' | 'settlement_transaction_reference' | 'error_code' | 'error_detail'
     >
   >
 ): WorkflowContinuationResult {
@@ -380,6 +380,44 @@ function errorCode(e: unknown): string {
   if (e instanceof EnvelopeOpenError) return e.code;
   if (e instanceof Error) return e.name || 'error';
   return 'unknown_error';
+}
+
+// SUN-1222C-R4 -- bounds how much of an executor-provided string ever
+// reaches a terminal result. These are already sanitized, service-authored
+// strings (e.g. `CompanyEvidenceGraphService`'s `limitations` entries are
+// built from a fixed set of provider/result_class names and a validated
+// CIK, never raw upstream response bodies, headers, or credentials) -- this
+// is defense-in-depth against an unexpectedly long or malformed string ever
+// reaching an HTTP response, not the primary sanitization boundary.
+const ERROR_DETAIL_MAX_LENGTH = 500;
+
+function boundedDetail(detail: string): string {
+  return detail.length > ERROR_DETAIL_MAX_LENGTH
+    ? `${detail.slice(0, ERROR_DETAIL_MAX_LENGTH)}…(truncated)`
+    : detail;
+}
+
+// SUN-1222C-R4-D1 proved: a legitimate `result_class !== 'success'`
+// executor result need not carry a `failure` object at all -- e.g.
+// `CompanyEvidenceGraphService` returns `failure: undefined` whenever its
+// own internal verification mesh decision is `'pass'` (a `'partial'`
+// result_class, not a mesh rejection), and in that case the only specific,
+// informative detail lives in `limitations`. `error_code` (the stable,
+// bounded machine code every existing caller already relies on) is
+// deliberately left untouched by this function -- it still falls back to
+// `result_class` exactly as before; this only adds a SEPARATE, additive
+// `error_detail` for the specific reason.
+function deriveErrorDetail(result: ExecutorOutcome['result']): string | undefined {
+  if (result.failure?.message) return boundedDetail(result.failure.message);
+  const limitations = result.limitations;
+  if (limitations && limitations.length > 0) {
+    // The last entry is the most specific (services append broader
+    // context first, e.g. a `sec_submissions`-group-level note, then the
+    // precise provider rejection last) -- matches SUN-1222C-R4-D1's
+    // observed `CompanyEvidenceGraphService` ordering exactly.
+    return boundedDetail(limitations[limitations.length - 1]);
+  }
+  return undefined;
 }
 
 // ---------------------------------------------------------------------
@@ -721,6 +759,7 @@ export async function runPaidContinuationWorkflow(
     await transitionJobState(jobId, 'REJECTED', 'QUARANTINE_POLICY', deps.persistence.job);
     return terminal('executor_rejected', jobId, {
       error_code: executorOutcome.result.failure?.code ?? executorOutcome.result.result_class,
+      error_detail: deriveErrorDetail(executorOutcome.result),
     });
   }
   await transitionJobState(jobId, 'VERIFYING', 'EXECUTION_COMPLETED', deps.persistence.job);
