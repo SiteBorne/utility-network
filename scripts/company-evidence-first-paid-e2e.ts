@@ -40,6 +40,12 @@ export function hasAllRequiredCredentials(env: Record<string, string | undefined
   return REQUIRED_ENV_VARS.every((name) => typeof env[name] === 'string' && env[name]!.length > 0);
 }
 
+// SUN-1222C-R6: candidate targeting is no longer a hardcoded literal in the
+// test file this script drives -- it must be supplied explicitly here too,
+// read fresh from live deployment state, never carried over from a
+// previous run.
+const CANDIDATE_VERSION_ENV_VAR = 'COMPANY_EVIDENCE_CANDIDATE_VERSION_ID';
+
 function main(): number {
   const missing = REQUIRED_ENV_VARS.filter((name) => !process.env[name]);
   if (missing.length > 0) {
@@ -47,6 +53,15 @@ function main(): number {
       `[company-evidence-first-paid-e2e] missing required environment variable(s): ${missing.join(', ')}\n` +
         '[company-evidence-first-paid-e2e] set CDP_API_KEY_ID, CDP_API_KEY_SECRET, and CDP_WALLET_SECRET ' +
         'in your local shell before running this tool.'
+    );
+    return 1;
+  }
+  if (!process.env[CANDIDATE_VERSION_ENV_VAR]) {
+    console.error(
+      `[company-evidence-first-paid-e2e] missing required environment variable: ${CANDIDATE_VERSION_ENV_VAR}\n` +
+        '[company-evidence-first-paid-e2e] set it to the exact candidate version under qualification, ' +
+        'read fresh from `wrangler deployments list --name siteborne-utility-edge` -- ' +
+        "never assume a previous run's candidate is still current (SUN-1222C-R5/R6)."
     );
     return 1;
   }

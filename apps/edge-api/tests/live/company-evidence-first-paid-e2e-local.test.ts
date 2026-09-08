@@ -78,9 +78,52 @@ const WORKER_SCRIPT_NAME = 'siteborne-utility-edge';
 const WORKER_ORIGIN = 'https://utility.siteborne.net';
 const TARGET_PATH = '/v2/company/evidence-graph';
 const TARGET_URL = `${WORKER_ORIGIN}${TARGET_PATH}`;
-const CANDIDATE_VERSION_ID = 'a064477f-7b74-46c5-a5b6-799df114b252';
 const VERSION_OVERRIDE_HEADER = 'Cloudflare-Workers-Version-Overrides';
-const VERSION_OVERRIDE_HEADER_VALUE = `${WORKER_SCRIPT_NAME}="${CANDIDATE_VERSION_ID}"`;
+
+// SUN-1222C-R6: the candidate under qualification used to be a hardcoded
+// module constant here. SUN-1222C-R4-DEPLOYMENT-RETRY superseded it
+// (a064477f -> ade29047) without this file ever being updated, and the
+// harness had no way to notice -- it would have silently kept targeting a
+// stale, possibly-decommissioned immutable version indefinitely. There is
+// deliberately no fallback default: whoever runs this must supply the
+// exact candidate read fresh from live deployment state (`wrangler
+// deployments list --name siteborne-utility-edge`), every run.
+const CANDIDATE_VERSION_ENV_VAR = 'COMPANY_EVIDENCE_CANDIDATE_VERSION_ID';
+const CLOUDFLARE_VERSION_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// Known current production version (SUN-1221G promotion) -- a safety rail,
+// not an operating default: this harness must refuse outright if ever
+// pointed at production instead of a 0%-traffic candidate, rather than
+// silently sending a real payment through 100% live traffic.
+const KNOWN_PRODUCTION_VERSION_ID = 'db7054c9-76ee-4830-aabe-8a4542261b6a';
+
+/**
+ * SUN-1222C-R6: resolve the candidate version ID explicitly from the
+ * environment at the moment of the run -- never a hardcoded literal. Throws
+ * (fails closed, before any network call) if unset or shaped wrong.
+ */
+export function resolveCandidateVersionId(env: Record<string, string | undefined>): string {
+  const raw = env[CANDIDATE_VERSION_ENV_VAR];
+  if (!raw || raw.trim().length === 0) {
+    throw new Error(
+      `${CANDIDATE_VERSION_ENV_VAR} must be set to the exact candidate version under ` +
+        'qualification, read fresh from `wrangler deployments list --name ' +
+        'siteborne-utility-edge` -- never assume a previous run\'s candidate is still current.'
+    );
+  }
+  const value = raw.trim();
+  if (!CLOUDFLARE_VERSION_ID_PATTERN.test(value)) {
+    throw new Error(
+      `${CANDIDATE_VERSION_ENV_VAR} "${value}" does not look like a Cloudflare version ID ` +
+        '(expected UUID shape).'
+    );
+  }
+  return value;
+}
+
+function buildVersionOverrideHeaderValue(candidateVersionId: string): string {
+  return `${WORKER_SCRIPT_NAME}="${candidateVersionId}"`;
+}
 
 const EXPECTED_NETWORK = 'eip155:8453';
 const EXPECTED_ASSET = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
@@ -117,12 +160,28 @@ const RUN_LOCAL_COMPANY_EVIDENCE_FIRST_PAID_E2E_ENV_VAR =
 
 // ---------------------------------------------------------------------------
 export type FirstPaidE2EStage =
+  // SUN-1222C-R6: added ahead of 'PRE_CHALLENGE'. SUN-1222C-R5 proved a
+  // fully-deployed, price-coherent, reachable candidate can still have
+  // every paid route return 404 because its activation/cutover vars were
+  // silently dropped on upload -- this stage is a non-economic gate the
+  // harness must clear before it will attempt any part of the payment
+  // flow, including the "just a 402" unpaid probe.
+  | 'ACTIVATION_CHECK'
   | 'PRE_CHALLENGE'
   | 'CHALLENGE_RECEIVED'
   | 'CHALLENGE_VALIDATED'
   | 'PAYMENT_MATERIAL_CREATED'
   | 'PAID_REQUEST_SUBMITTED'
   | 'RESULT_OBSERVED';
+
+const STAGES_AFTER_ACTIVATION_CHECK: ReadonlySet<FirstPaidE2EStage> = new Set([
+  'PRE_CHALLENGE',
+  'CHALLENGE_RECEIVED',
+  'CHALLENGE_VALIDATED',
+  'PAYMENT_MATERIAL_CREATED',
+  'PAID_REQUEST_SUBMITTED',
+  'RESULT_OBSERVED',
+]);
 
 // SUN-1222C-R4: 'application_error' is a NEW, distinct value from
 // 'ambiguous' -- see `classifySubmissionOutcome`'s own doc comment. It is
@@ -156,6 +215,7 @@ export interface FirstPaidE2ESanitizedResult {
 }
 
 export interface CallBudgetCounters {
+  activationProbeRequests: number;
   unpaid402Requests: number;
   cdpGetAccountCalls: number;
   paymentSignTypedDataCalls: number;
@@ -166,6 +226,7 @@ export interface CallBudgetCounters {
 
 function freshCounters(): CallBudgetCounters {
   return {
+    activationProbeRequests: 0,
     unpaid402Requests: 0,
     cdpGetAccountCalls: 0,
     paymentSignTypedDataCalls: 0,
@@ -221,7 +282,7 @@ function fail(
       ok: false,
       stage,
       failure_reason: reason,
-      challenge_received: stage !== 'PRE_CHALLENGE',
+      challenge_received: STAGES_AFTER_ACTIVATION_CHECK.has(stage) && stage !== 'PRE_CHALLENGE',
       challenge_validated:
         stage === 'CHALLENGE_VALIDATED' ||
         stage === 'PAYMENT_MATERIAL_CREATED' ||
@@ -289,11 +350,105 @@ export function checkExposureWithinCap(): { ok: true } | { ok: false; reason: st
   return { ok: true };
 }
 
+export interface ActivationCheckResult {
+  ok: boolean;
+  reason?: string;
+}
+
+const QUALIFICATION_SERVICE_ID = 'company_evidence_graph.v2';
+
+/**
+ * SUN-1222C-R6: non-economic pre-payment activation gate. SUN-1222C-R5
+ * proved a fully-deployed, price-coherent, publicly-reachable candidate can
+ * still have every paid route return 404 because a bare `wrangler versions
+ * upload` silently drops the 10 activation/cutover vars (`PAID_ROUTES_ENABLED`
+ * and 9 siblings) that `wrangler.toml`'s own [vars] comment says are
+ * deliberately absent from the frozen candidate and must be supplied by a
+ * separate, explicit deployment step. One GET to the candidate's own
+ * `/catalog` (no body, no payment header, no economic effect whatsoever)
+ * must show the target service both `production_enabled` and
+ * `production_ready` before this harness will attempt a single dollar of
+ * real payment flow.
+ */
+export async function verifyCandidateActivation(
+  fetchImpl: typeof fetch,
+  candidateVersionId: string,
+  serviceId: string = QUALIFICATION_SERVICE_ID
+): Promise<ActivationCheckResult> {
+  let res: Response;
+  try {
+    res = await fetchImpl(`${WORKER_ORIGIN}/catalog`, {
+      method: 'GET',
+      headers: {
+        [VERSION_OVERRIDE_HEADER]: buildVersionOverrideHeaderValue(candidateVersionId),
+      },
+    });
+  } catch (err) {
+    return { ok: false, reason: `network error fetching /catalog: ${String(err)}` };
+  }
+  if (res.status !== 200) {
+    return { ok: false, reason: `expected HTTP 200 from /catalog, got ${res.status}` };
+  }
+  let body: unknown;
+  try {
+    body = await res.json();
+  } catch (err) {
+    return { ok: false, reason: `/catalog response was not valid JSON: ${String(err)}` };
+  }
+  const services = (body as { services?: Array<Record<string, unknown>> })?.services;
+  const entry = Array.isArray(services)
+    ? services.find((s) => s.service_id === serviceId)
+    : undefined;
+  if (!entry) {
+    return { ok: false, reason: `/catalog has no entry for service_id "${serviceId}"` };
+  }
+  if (entry.production_enabled !== true) {
+    return {
+      ok: false,
+      reason:
+        `${serviceId} production_enabled is not true (got ${JSON.stringify(entry.production_enabled)}) ` +
+        '-- candidate is likely missing its activation/cutover vars (see SUN-1222C-R5)',
+    };
+  }
+  if (entry.production_ready !== true) {
+    return {
+      ok: false,
+      reason:
+        `${serviceId} production_ready is not true (got ${JSON.stringify(entry.production_ready)}) ` +
+        '-- candidate is likely missing its activation/cutover vars (see SUN-1222C-R5)',
+    };
+  }
+  return { ok: true };
+}
+
 export async function runFirstPaidE2E(
-  deps: FirstPaidE2EDeps
+  deps: FirstPaidE2EDeps,
+  candidateVersionId: string
 ): Promise<{ result: FirstPaidE2ESanitizedResult; counters: CallBudgetCounters }> {
   const counters = freshCounters();
-  let stage: FirstPaidE2EStage = 'PRE_CHALLENGE';
+  let stage: FirstPaidE2EStage = 'ACTIVATION_CHECK';
+
+  if (candidateVersionId.trim().toLowerCase() === KNOWN_PRODUCTION_VERSION_ID.toLowerCase()) {
+    return fail(
+      counters,
+      'ACTIVATION_CHECK',
+      'refusing to target known production version ID directly -- this harness qualifies ' +
+        '0%-traffic candidates only, never production'
+    );
+  }
+
+  counters.activationProbeRequests += 1;
+  const activation = await verifyCandidateActivation(deps.fetchImpl, candidateVersionId);
+  if (!activation.ok) {
+    return fail(
+      counters,
+      'ACTIVATION_CHECK',
+      activation.reason ?? 'candidate activation check failed'
+    );
+  }
+  stage = 'PRE_CHALLENGE';
+
+  const versionOverrideHeaderValue = buildVersionOverrideHeaderValue(candidateVersionId);
 
   counters.unpaid402Requests += 1;
   let challengeRes: Response;
@@ -302,7 +457,7 @@ export async function runFirstPaidE2E(
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        [VERSION_OVERRIDE_HEADER]: VERSION_OVERRIDE_HEADER_VALUE,
+        [VERSION_OVERRIDE_HEADER]: versionOverrideHeaderValue,
       },
       body: JSON.stringify(CANONICAL_REQUEST_BODY),
     });
@@ -396,7 +551,7 @@ export async function runFirstPaidE2E(
       headers: {
         'content-type': 'application/json',
         'PAYMENT-SIGNATURE': signatureHeader,
-        [VERSION_OVERRIDE_HEADER]: VERSION_OVERRIDE_HEADER_VALUE,
+        [VERSION_OVERRIDE_HEADER]: versionOverrideHeaderValue,
       },
       body: JSON.stringify(CANONICAL_REQUEST_BODY),
     });
@@ -615,14 +770,27 @@ function baseDeps(overrides: Partial<FirstPaidE2EDeps> = {}): FirstPaidE2EDeps {
   };
 }
 
-function twoStepFetch(
+// SUN-1222C-R6: a stable, obviously-fake candidate for unit tests -- never
+// a value this harness would treat as a real operating default (there is
+// none; see `resolveCandidateVersionId`).
+const TEST_CANDIDATE_VERSION_ID = 'aaaaaaaa-1111-2222-3333-444444444444';
+
+function activationOkResponse(serviceId: string = QUALIFICATION_SERVICE_ID): Response {
+  return jsonResponse(200, {
+    services: [{ service_id: serviceId, production_enabled: true, production_ready: true }],
+  });
+}
+
+/** Activation probe (GET /catalog) -> 402 -> paid response. */
+function threeStepFetch(
   challenge: PaymentRequired,
   paidResponse: Response
 ): ReturnType<typeof vi.fn> {
   let call = 0;
   return vi.fn(async () => {
     call += 1;
-    if (call === 1) {
+    if (call === 1) return activationOkResponse();
+    if (call === 2) {
       return jsonResponse(
         402,
         { error: 'payment_required' },
@@ -651,18 +819,130 @@ describe('SUN-1222C2-Q1 company-evidence first-paid-e2e local client (unit, alwa
     ).toBe(true);
   });
 
+  // ---------------------------------------------------------------------
+  // SUN-1222C-R6: candidate targeting must never be silently hardcoded.
+  // ---------------------------------------------------------------------
+
+  it('SUN-1222C-R6: throws when no candidate version is supplied, with no hardcoded fallback', () => {
+    expect(() => resolveCandidateVersionId({})).toThrow(/COMPANY_EVIDENCE_CANDIDATE_VERSION_ID/);
+    expect(() =>
+      resolveCandidateVersionId({ COMPANY_EVIDENCE_CANDIDATE_VERSION_ID: '' })
+    ).toThrow();
+    expect(() =>
+      resolveCandidateVersionId({ COMPANY_EVIDENCE_CANDIDATE_VERSION_ID: 'not-a-uuid' })
+    ).toThrow(/does not look like a Cloudflare version ID/);
+  });
+
+  it('SUN-1222C-R6: resolves exactly the supplied candidate version, proving there is no fixed default', () => {
+    const a = resolveCandidateVersionId({
+      COMPANY_EVIDENCE_CANDIDATE_VERSION_ID: 'aaaaaaaa-1111-2222-3333-444444444444',
+    });
+    const b = resolveCandidateVersionId({
+      COMPANY_EVIDENCE_CANDIDATE_VERSION_ID: 'bbbbbbbb-5555-6666-7777-888888888888',
+    });
+    expect(a).toBe('aaaaaaaa-1111-2222-3333-444444444444');
+    expect(b).toBe('bbbbbbbb-5555-6666-7777-888888888888');
+    expect(a).not.toBe(b);
+  });
+
+  it('SUN-1222C-R6: refuses to target the known production version ID directly', async () => {
+    const fetchImpl = vi.fn();
+    const { result, counters } = await runFirstPaidE2E(
+      baseDeps({ fetchImpl }),
+      KNOWN_PRODUCTION_VERSION_ID
+    );
+    expect(result.ok).toBe(false);
+    expect(result.stage).toBe('ACTIVATION_CHECK');
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(counters.unpaid402Requests).toBe(0);
+  });
+
+  // ---------------------------------------------------------------------
+  // SUN-1222C-R6: pre-payment activation gate. Reproduces the exact
+  // SUN-1222C-R5 regression (candidate exists, economics coherent, but the
+  // 10 activation/cutover vars are absent -> production_enabled/
+  // production_ready both false) and requires the harness to stop before
+  // any part of the payment flow -- not merely before signing.
+  // ---------------------------------------------------------------------
+
+  it('SUN-1222C-R6: reproduces the SUN-1222C-R5 regression -- stops before 402/signing/payment when production_enabled is false', async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse(200, {
+        services: [
+          { service_id: QUALIFICATION_SERVICE_ID, production_enabled: false, production_ready: false },
+        ],
+      })
+    );
+    const { result, counters } = await runFirstPaidE2E(
+      baseDeps({ fetchImpl }),
+      TEST_CANDIDATE_VERSION_ID
+    );
+    expect(result.ok).toBe(false);
+    expect(result.stage).toBe('ACTIVATION_CHECK');
+    expect(result.failure_reason).toMatch(/production_enabled is not true/);
+    expect(result.challenge_received).toBe(false);
+    expect(result.payment_material_created).toBe(false);
+    expect(result.paid_request_submitted).toBe(false);
+    expect(counters.unpaid402Requests).toBe(0);
+    expect(counters.cdpGetAccountCalls).toBe(0);
+    expect(counters.paymentSignTypedDataCalls).toBe(0);
+    expect(counters.paidRequestSubmissions).toBe(0);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it('SUN-1222C-R6: activation gate also fails closed when production_enabled is true but production_ready is false', async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse(200, {
+        services: [
+          { service_id: QUALIFICATION_SERVICE_ID, production_enabled: true, production_ready: false },
+        ],
+      })
+    );
+    const { result } = await runFirstPaidE2E(baseDeps({ fetchImpl }), TEST_CANDIDATE_VERSION_ID);
+    expect(result.stage).toBe('ACTIVATION_CHECK');
+    expect(result.failure_reason).toMatch(/production_ready is not true/);
+  });
+
+  it('SUN-1222C-R6: activation gate fails closed when the service entry is missing from /catalog entirely', async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(200, { services: [] }));
+    const { result } = await runFirstPaidE2E(baseDeps({ fetchImpl }), TEST_CANDIDATE_VERSION_ID);
+    expect(result.stage).toBe('ACTIVATION_CHECK');
+    expect(result.failure_reason).toMatch(/no entry for service_id/);
+  });
+
+  it('SUN-1222C-R6: activation gate clears and the flow proceeds when production_enabled and production_ready are both true', async () => {
+    const fetchImpl = threeStepFetch(
+      validChallenge(),
+      jsonResponse(200, { result_class: 'success' })
+    );
+    const { result, counters } = await runFirstPaidE2E(
+      baseDeps({ fetchImpl }),
+      TEST_CANDIDATE_VERSION_ID
+    );
+    expect(result.ok).toBe(true);
+    expect(counters.activationProbeRequests).toBe(1);
+  });
+
   it('sends exactly one unpaid 402 request before anything else', async () => {
-    const fetchImpl = twoStepFetch(
+    const fetchImpl = threeStepFetch(
       validChallenge(),
       jsonResponse(200, { result_class: 'success', receipt_id: 'r1' })
     );
-    const { counters } = await runFirstPaidE2E(baseDeps({ fetchImpl }));
+    const { counters } = await runFirstPaidE2E(baseDeps({ fetchImpl }), TEST_CANDIDATE_VERSION_ID);
     expect(counters.unpaid402Requests).toBe(1);
   });
 
-  it('a non-402 initial response stops the flow with zero signing', async () => {
-    const fetchImpl = vi.fn(async () => jsonResponse(500, { error: 'boom' }));
-    const { result, counters } = await runFirstPaidE2E(baseDeps({ fetchImpl }));
+  it('a non-402 response to the actual challenge request stops the flow with zero signing', async () => {
+    let call = 0;
+    const fetchImpl = vi.fn(async () => {
+      call += 1;
+      if (call === 1) return activationOkResponse();
+      return jsonResponse(500, { error: 'boom' });
+    });
+    const { result, counters } = await runFirstPaidE2E(
+      baseDeps({ fetchImpl }),
+      TEST_CANDIDATE_VERSION_ID
+    );
     expect(result.ok).toBe(false);
     expect(result.stage).toBe('PRE_CHALLENGE');
     expect(counters.paymentSignTypedDataCalls).toBe(0);
@@ -679,15 +959,18 @@ describe('SUN-1222C2-Q1 company-evidence first-paid-e2e local client (unit, alwa
     ];
     for (const override of overrides) {
       const challenge = validChallenge(validRequirement(override));
-      const fetchImpl = twoStepFetch(challenge, jsonResponse(200, {}));
-      const { result, counters } = await runFirstPaidE2E(baseDeps({ fetchImpl }));
+      const fetchImpl = threeStepFetch(challenge, jsonResponse(200, {}));
+      const { result, counters } = await runFirstPaidE2E(
+        baseDeps({ fetchImpl }),
+        TEST_CANDIDATE_VERSION_ID
+      );
       expect(result.ok).toBe(false);
       expect(counters.paymentSignTypedDataCalls).toBe(0);
     }
   });
 
   it('a resolved account address that does not match the controlled buyer never signs', async () => {
-    const fetchImpl = twoStepFetch(validChallenge(), jsonResponse(200, {}));
+    const fetchImpl = threeStepFetch(validChallenge(), jsonResponse(200, {}));
     const deps = baseDeps({
       fetchImpl,
       cdpClient: {
@@ -696,7 +979,7 @@ describe('SUN-1222C2-Q1 company-evidence first-paid-e2e local client (unit, alwa
         },
       },
     });
-    const { result, counters } = await runFirstPaidE2E(deps);
+    const { result, counters } = await runFirstPaidE2E(deps, TEST_CANDIDATE_VERSION_ID);
     expect(result.ok).toBe(false);
     expect(result.failure_reason).toMatch(/does not match the controlled buyer/);
     expect(counters.paymentSignTypedDataCalls).toBe(0);
@@ -708,11 +991,14 @@ describe('SUN-1222C2-Q1 company-evidence first-paid-e2e local client (unit, alwa
   });
 
   it('PAYMENT-SIGNATURE is submitted exactly once on a fully valid run', async () => {
-    const fetchImpl = twoStepFetch(
+    const fetchImpl = threeStepFetch(
       validChallenge(),
       jsonResponse(200, { result_class: 'success' })
     );
-    const { counters, result } = await runFirstPaidE2E(baseDeps({ fetchImpl }));
+    const { counters, result } = await runFirstPaidE2E(
+      baseDeps({ fetchImpl }),
+      TEST_CANDIDATE_VERSION_ID
+    );
     expect(counters.paidRequestSubmissions).toBe(1);
     expect(result.ok).toBe(true);
   });
@@ -721,25 +1007,29 @@ describe('SUN-1222C2-Q1 company-evidence first-paid-e2e local client (unit, alwa
     let call = 0;
     const fetchImpl = vi.fn(async () => {
       call += 1;
-      if (call === 1) {
+      if (call === 1) return activationOkResponse();
+      if (call === 2) {
         return jsonResponse(402, {}, { 'PAYMENT-REQUIRED': encodeChallenge(validChallenge()) });
       }
       throw new Error('simulated timeout');
     });
-    const { result, counters } = await runFirstPaidE2E(baseDeps({ fetchImpl }));
+    const { result, counters } = await runFirstPaidE2E(
+      baseDeps({ fetchImpl }),
+      TEST_CANDIDATE_VERSION_ID
+    );
     expect(result.submission_result).toBe('ambiguous');
     expect(counters.paidRequestSubmissions).toBe(1);
-    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
   });
 
   it('a 402 after signed submission classifies REJECTED and never retries', async () => {
-    const fetchImpl = twoStepFetch(
+    const fetchImpl = threeStepFetch(
       validChallenge(),
       jsonResponse(402, { error: 'settlement_rejected' })
     );
-    const { result } = await runFirstPaidE2E(baseDeps({ fetchImpl }));
+    const { result } = await runFirstPaidE2E(baseDeps({ fetchImpl }), TEST_CANDIDATE_VERSION_ID);
     expect(result.submission_result).toBe('rejected');
-    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
   });
 
   // SUN-1222C-R4-D1 proved: an application-generated 502 with a valid,
@@ -748,7 +1038,7 @@ describe('SUN-1222C2-Q1 company-evidence first-paid-e2e local client (unit, alwa
   // silently discarded -- indistinguishable from a genuine transport
   // failure. It is an authoritative application response, not ambiguity.
   it('SUN-1222C-R4: a 502 with a parseable SITEBORNE error body classifies as application_error and preserves the specific detail, not ambiguous', async () => {
-    const fetchImpl = twoStepFetch(
+    const fetchImpl = threeStepFetch(
       validChallenge(),
       jsonResponse(502, {
         error: 'service_execution_failed',
@@ -756,7 +1046,7 @@ describe('SUN-1222C2-Q1 company-evidence first-paid-e2e local client (unit, alwa
         details: 'sec-edgar company_submissions returned permanent_failure for CIK 0000320193',
       })
     );
-    const { result } = await runFirstPaidE2E(baseDeps({ fetchImpl }));
+    const { result } = await runFirstPaidE2E(baseDeps({ fetchImpl }), TEST_CANDIDATE_VERSION_ID);
     expect(result.submission_result).toBe('application_error');
     expect(result.http_status).toBe(502);
     expect(result.application_error_code).toBe('service_execution_failed');
@@ -769,11 +1059,11 @@ describe('SUN-1222C2-Q1 company-evidence first-paid-e2e local client (unit, alwa
   // only the generic `message` present -- still surfaced (better than
   // nothing), still NOT 'ambiguous'.
   it('SUN-1222C-R4: a 502 with only a generic `message` (no `details`) still classifies as application_error and surfaces the generic message', async () => {
-    const fetchImpl = twoStepFetch(
+    const fetchImpl = threeStepFetch(
       validChallenge(),
       jsonResponse(502, { error: 'service_execution_failed', message: 'partial' })
     );
-    const { result } = await runFirstPaidE2E(baseDeps({ fetchImpl }));
+    const { result } = await runFirstPaidE2E(baseDeps({ fetchImpl }), TEST_CANDIDATE_VERSION_ID);
     expect(result.submission_result).toBe('application_error');
     expect(result.application_error_code).toBe('service_execution_failed');
     expect(result.application_error_detail).toBe('partial');
@@ -783,25 +1073,25 @@ describe('SUN-1222C2-Q1 company-evidence first-paid-e2e local client (unit, alwa
   // received-but-unparseable body) must remain conservatively classified,
   // never overcorrected into a false 'application_error'.
   it('SUN-1222C-R4: a 5xx with a non-JSON/unparseable body remains classified ambiguous (protects true ambiguity)', async () => {
-    const fetchImpl = twoStepFetch(
+    const fetchImpl = threeStepFetch(
       validChallenge(),
       new Response('<html>Bad Gateway</html>', {
         status: 502,
         headers: { 'content-type': 'text/html' },
       })
     );
-    const { result } = await runFirstPaidE2E(baseDeps({ fetchImpl }));
+    const { result } = await runFirstPaidE2E(baseDeps({ fetchImpl }), TEST_CANDIDATE_VERSION_ID);
     expect(result.submission_result).toBe('ambiguous');
     expect(result.application_error_code).toBeUndefined();
     expect(result.application_error_detail).toBeUndefined();
   });
 
   it('payment material never appears in the returned result', async () => {
-    const fetchImpl = twoStepFetch(
+    const fetchImpl = threeStepFetch(
       validChallenge(),
       jsonResponse(200, { result_class: 'success' })
     );
-    const { result } = await runFirstPaidE2E(baseDeps({ fetchImpl }));
+    const { result } = await runFirstPaidE2E(baseDeps({ fetchImpl }), TEST_CANDIDATE_VERSION_ID);
     const serialized = JSON.stringify(result);
     expect(serialized).not.toMatch(/signature/i);
     expect(serialized).not.toMatch(/authorization/i);
@@ -820,21 +1110,20 @@ describe('SUN-1222C2-Q1 company-evidence first-paid-e2e local client (unit, alwa
     expect(EXPECTED_BUYER).toBe('0x516F57e1fB800ccEB2E70C42607Fb93E2abEcB99');
   });
 
-  it('the unpaid and paid requests carry the identical, quoted Cloudflare-Workers-Version-Overrides value', async () => {
-    const fetchImpl = twoStepFetch(
+  it('the activation probe, unpaid, and paid requests all carry the identical, quoted Cloudflare-Workers-Version-Overrides value for the supplied candidate', async () => {
+    const fetchImpl = threeStepFetch(
       validChallenge(),
       jsonResponse(200, { result_class: 'success' })
     );
     const deps = baseDeps({ fetchImpl });
-    await runFirstPaidE2E(deps);
+    await runFirstPaidE2E(deps, TEST_CANDIDATE_VERSION_ID);
     const calls = (fetchImpl as ReturnType<typeof vi.fn>).mock.calls;
-    expect(calls).toHaveLength(2);
-    const expectedHeaderValue = VERSION_OVERRIDE_HEADER_VALUE;
+    expect(calls).toHaveLength(3);
+    const expectedHeaderValue = `${WORKER_SCRIPT_NAME}="${TEST_CANDIDATE_VERSION_ID}"`;
     for (const call of calls) {
       const headers = (call[1] as RequestInit).headers as Record<string, string>;
       expect(headers[VERSION_OVERRIDE_HEADER]).toBe(expectedHeaderValue);
     }
-    expect(CANDIDATE_VERSION_ID).not.toBe('db7054c9-76ee-4830-aabe-8a4542261b6a');
   });
 
   it('the production Worker bundle has no reachable import path to this file (grep proof)', async () => {
@@ -872,8 +1161,11 @@ describe.skipIf(!process.env[RUN_LOCAL_COMPANY_EVIDENCE_FIRST_PAID_E2E_ENV_VAR])
       if (!apiKeyId || !apiKeySecret || !walletSecret) {
         throw new Error('CDP_API_KEY_ID / CDP_API_KEY_SECRET / CDP_WALLET_SECRET must all be set');
       }
+      // SUN-1222C-R6: no hardcoded candidate -- must be supplied fresh, every
+      // run, read from live deployment state at the moment of the attempt.
+      const candidateVersionId = resolveCandidateVersionId(process.env);
       const deps = buildRealDeps({ apiKeyId, apiKeySecret, walletSecret });
-      const { result } = await runFirstPaidE2E(deps);
+      const { result } = await runFirstPaidE2E(deps, candidateVersionId);
       // eslint-disable-next-line no-console -- the one authorized, sanitized output surface.
       console.log(JSON.stringify(result));
       expect(result.stage).toBeDefined();
