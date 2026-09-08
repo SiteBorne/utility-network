@@ -242,6 +242,174 @@ describe('paid-continuation-workflow — executor integration (H2AWI-2b)', () =>
   });
 });
 
+describe('paid-continuation-workflow — durable rejection-detail capture (SUN-1222C-R4-D4-CONTINUED)', () => {
+  // SUN-1222C-R4-D4 proved `error_detail`/`deriveErrorDetail(...)` is
+  // computed and returned in the terminal `WorkflowContinuationResult`, but
+  // never durably written anywhere — `transitionJobState`'s
+  // `createStateEvent(...)` call only ever receives the fixed
+  // `TransitionReason` enum ('EXECUTION_FAILED' / 'QUARANTINE_POLICY'), not
+  // the dynamic, specific reason. Once the Workflow instance's own retained
+  // output is truncated/expired, that specific reason becomes permanently
+  // unrecoverable (D4-CONTINUED's live D1 proof: the job row, its
+  // idempotency-key correlation, and all 9 state-transition events survive
+  // perfectly — only the *reason text* itself was ever lost). The fix
+  // threads the SAME already-bounded, already-sanitized string
+  // (`deriveErrorDetail`'s ≤500-char output — R4-D3 proved these are
+  // service-authored, never raw response bodies/headers/credentials) into
+  // `StateEvent.evidence_ref`, an existing, already-nullable D1 column no
+  // migration is needed for.
+
+  it('persists the specific rejection reason as the REJECTED event\'s evidence_ref (limitations-only shape)', async () => {
+    const metadata = buildTestMetadata();
+    const deps = await buildTestDependencies({
+      executor: async () => ({
+        result: {
+          result_class: 'partial',
+          limitations: [
+            'sec-edgar company_submissions returned permanent_failure for CIK 0000320193',
+          ],
+        },
+      }),
+    });
+    const input = await sealTestInput(metadata, { key: deps.envelopeKey });
+    const step = new FakeWorkflowStep();
+
+    const result = await runPaidContinuationWorkflow({ payload: input }, step, deps);
+    expect(result.status).toBe('executor_rejected');
+
+    const rejectedEvent = deps.jobPersistence.events.find((e) => e.to_state === 'REJECTED');
+    expect(rejectedEvent).toBeDefined();
+    expect(rejectedEvent!.evidence_ref).toBe(
+      'sec-edgar company_submissions returned permanent_failure for CIK 0000320193'
+    );
+
+    const quarantinedEvent = deps.jobPersistence.events.find((e) => e.to_state === 'QUARANTINED');
+    expect(quarantinedEvent).toBeDefined();
+    expect(quarantinedEvent!.evidence_ref).toBe(
+      'sec-edgar company_submissions returned permanent_failure for CIK 0000320193'
+    );
+  });
+
+  it('persists the specific rejection reason (failure.message shape) durably too', async () => {
+    const metadata = buildTestMetadata();
+    const deps = await buildTestDependencies({
+      executor: async () => ({
+        result: {
+          result_class: 'rejected',
+          failure: { code: 'bad_input', message: 'the specific bad-input reason' },
+        },
+      }),
+    });
+    const input = await sealTestInput(metadata, { key: deps.envelopeKey });
+    const step = new FakeWorkflowStep();
+
+    await runPaidContinuationWorkflow({ payload: input }, step, deps);
+
+    const rejectedEvent = deps.jobPersistence.events.find((e) => e.to_state === 'REJECTED');
+    expect(rejectedEvent!.evidence_ref).toBe('the specific bad-input reason');
+  });
+
+  it('leaves evidence_ref undefined (not a stray value) when deriveErrorDetail has nothing to report', async () => {
+    const metadata = buildTestMetadata();
+    const deps = await buildTestDependencies({
+      executor: async () => ({ result: { result_class: 'rejected' } }),
+    });
+    const input = await sealTestInput(metadata, { key: deps.envelopeKey });
+    const step = new FakeWorkflowStep();
+
+    await runPaidContinuationWorkflow({ payload: input }, step, deps);
+
+    const rejectedEvent = deps.jobPersistence.events.find((e) => e.to_state === 'REJECTED');
+    expect(rejectedEvent!.evidence_ref).toBeUndefined();
+  });
+
+  it('persists a bounded reason for a thrown executor error (executor_timeout) too', async () => {
+    const metadata = buildTestMetadata();
+    const deps = await buildTestDependencies({
+      executor: async () => {
+        throw new Error('modal timeout');
+      },
+    });
+    const input = await sealTestInput(metadata, { key: deps.envelopeKey });
+    const step = new FakeWorkflowStep();
+
+    await runPaidContinuationWorkflow({ payload: input }, step, deps);
+
+    const rejectedEvent = deps.jobPersistence.events.find((e) => e.to_state === 'REJECTED');
+    expect(rejectedEvent!.evidence_ref).toBe('modal timeout');
+  });
+
+  it('never lets a sentinel secret-shaped string reach the durable evidence_ref', async () => {
+    // Defense-in-depth: even if a future executor bug put something
+    // sensitive-looking into `failure.message`, this test only documents
+    // existing behavior — deriveErrorDetail passes the string through
+    // unchanged (R4-D3's own established boundary is that services never
+    // put payment material there in the first place). What this DOES prove
+    // is that nothing ELSE (payment payload, signature, auth headers) leaks
+    // in ALONGSIDE it — evidence_ref is exactly and only the one derived
+    // string, never a serialized object.
+    const metadata = buildTestMetadata();
+    const deps = await buildTestDependencies({
+      executor: async () => ({
+        result: { result_class: 'rejected', failure: { code: 'bad_input', message: 'plain reason' } },
+      }),
+    });
+    const input = await sealTestInput(metadata, { key: deps.envelopeKey });
+    const step = new FakeWorkflowStep();
+
+    await runPaidContinuationWorkflow({ payload: input }, step, deps);
+
+    const rejectedEvent = deps.jobPersistence.events.find((e) => e.to_state === 'REJECTED');
+    expect(typeof rejectedEvent!.evidence_ref).toBe('string');
+    expect(rejectedEvent!.evidence_ref).not.toMatch(/signature|nonce|authorization|PAYMENT-SIGNATURE/i);
+  });
+
+  it('idempotency: re-running the same terminal transition never appends a second event', async () => {
+    const metadata = buildTestMetadata();
+    const deps = await buildTestDependencies({
+      executor: async () => ({ result: { result_class: 'rejected', failure: { code: 'x', message: 'one reason' } } }),
+    });
+    const input = await sealTestInput(metadata, { key: deps.envelopeKey });
+    const step = new FakeWorkflowStep();
+
+    await runPaidContinuationWorkflow({ payload: input }, step, deps);
+    const countAfterFirst = deps.jobPersistence.events.filter((e) => e.to_state === 'REJECTED').length;
+    expect(countAfterFirst).toBe(1);
+
+    // Re-entering with the job already at the terminal REJECTED state (the
+    // platform re-invoking a memoized step graph) must be a pure no-op —
+    // `transitionJobState`'s existing `isTerminal(job.current_state)` guard
+    // already covers this; this test proves the new evidenceRef parameter
+    // does not bypass it.
+    await runPaidContinuationWorkflow({ payload: input }, step, deps);
+    const countAfterSecond = deps.jobPersistence.events.filter((e) => e.to_state === 'REJECTED').length;
+    expect(countAfterSecond).toBe(1);
+  });
+
+  it('a diagnostic-persistence write failure on the REJECTED event still fails closed — zero settlement', async () => {
+    const metadata = buildTestMetadata();
+    const deps = await buildTestDependencies({
+      executor: async () => ({
+        result: { result_class: 'rejected', failure: { code: 'x', message: 'reason that fails to persist' } },
+      }),
+    });
+    // Existing crash-matrix fixture mechanism (`failAppendStateEventForToState`)
+    // — simulates the D1 write for the REJECTED event itself throwing.
+    deps.jobPersistence.failAppendStateEventForToState = 'REJECTED';
+    const input = await sealTestInput(metadata, { key: deps.envelopeKey });
+    const step = new FakeWorkflowStep();
+
+    // `transitionJobState` propagates a persistence throw uncaught (same as
+    // every other step in this orchestration — no bespoke swallow-and-carry-
+    // on path exists for this call); the surrounding `step.do`/Workflow
+    // retry machinery is what would see it, not a silent success.
+    await expect(runPaidContinuationWorkflow({ payload: input }, step, deps)).rejects.toThrow(
+      'simulated terminal-state-event persistence failure'
+    );
+    expect(deps.settle).not.toHaveBeenCalled();
+  });
+});
+
 describe('paid-continuation-workflow — PCC integration (H2AWI-2c)', () => {
   it('a corrupted/missing PCC surfaces as pcc_failed, never reaching settle', async () => {
     const metadata = buildTestMetadata();

@@ -429,7 +429,13 @@ async function transitionJobState(
   jobId: string,
   toState: JobState,
   reason: TransitionReason,
-  persistence: JobStatePersistence
+  persistence: JobStatePersistence,
+  // SUN-1222C-R4-D4-CONTINUED: the one place a caller may attach the
+  // specific, already-bounded/already-sanitized reason text (from
+  // `deriveErrorDetail`) to the durable state-event trail. Optional and
+  // additive — every existing call site keeps working unchanged; only the
+  // rejection/quarantine call sites below pass one.
+  evidenceRef?: string
 ): Promise<void> {
   const job = await persistence.getJob(jobId);
   if (!job) return; // no job record wired yet (e.g. a unit test not exercising job-state assertions) — never throws for an absent optional record
@@ -450,7 +456,8 @@ async function transitionJobState(
     job.current_state,
     toState,
     reason,
-    'SYSTEM'
+    'SYSTEM',
+    evidenceRef
   );
   await persistence.appendStateEvent(event);
   await persistence.setCurrentState(jobId, toState);
@@ -750,16 +757,51 @@ export async function runPaidContinuationWorkflow(
       });
     });
   } catch (e) {
-    await transitionJobState(jobId, 'QUARANTINED', 'EXECUTION_FAILED', deps.persistence.job);
-    await transitionJobState(jobId, 'REJECTED', 'QUARANTINE_POLICY', deps.persistence.job);
+    // SUN-1222C-R4-D4-CONTINUED: a thrown executor error's message is the
+    // exact same text `terminal(...)` already puts in the (operator-only,
+    // per R4-D3) `error_code` field — bounding it here too before it ever
+    // reaches the durable event trail, same defense-in-depth rationale as
+    // `deriveErrorDetail`/`boundedDetail` below.
+    const timeoutDetail = boundedDetail(e instanceof Error ? e.message : errorCode(e));
+    await transitionJobState(
+      jobId,
+      'QUARANTINED',
+      'EXECUTION_FAILED',
+      deps.persistence.job,
+      timeoutDetail
+    );
+    await transitionJobState(
+      jobId,
+      'REJECTED',
+      'QUARANTINE_POLICY',
+      deps.persistence.job,
+      timeoutDetail
+    );
     return terminal('executor_timeout', jobId, { error_code: errorCode(e) });
   }
   if (executorOutcome.result.result_class !== 'success') {
-    await transitionJobState(jobId, 'QUARANTINED', 'EXECUTION_FAILED', deps.persistence.job);
-    await transitionJobState(jobId, 'REJECTED', 'QUARANTINE_POLICY', deps.persistence.job);
+    // SUN-1222C-R4-D4-CONTINUED: computed once, reused for both the
+    // terminal HTTP-facing result (unchanged) and the durable state-event
+    // trail (new) — the exact same already-bounded, already-sanitized
+    // string in both places, never two independent derivations.
+    const rejectionDetail = deriveErrorDetail(executorOutcome.result);
+    await transitionJobState(
+      jobId,
+      'QUARANTINED',
+      'EXECUTION_FAILED',
+      deps.persistence.job,
+      rejectionDetail
+    );
+    await transitionJobState(
+      jobId,
+      'REJECTED',
+      'QUARANTINE_POLICY',
+      deps.persistence.job,
+      rejectionDetail
+    );
     return terminal('executor_rejected', jobId, {
       error_code: executorOutcome.result.failure?.code ?? executorOutcome.result.result_class,
-      error_detail: deriveErrorDetail(executorOutcome.result),
+      error_detail: rejectionDetail,
     });
   }
   await transitionJobState(jobId, 'VERIFYING', 'EXECUTION_COMPLETED', deps.persistence.job);
