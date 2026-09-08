@@ -74,7 +74,20 @@ function fakeDeps(): PaidContinuationWorkflowDependencies {
     validatePcc: vi.fn() as never,
     settlement: { repository: {} as never, evidenceProvider: {} as never },
     reconciliation: { checker: vi.fn() as never, network: 'eip155:8453' },
-    persistence: { job: {} as never, resultReceipt: {} as never },
+    // SUN-1222C-R4-D7: `envelopeKey` above is deliberately not a real
+    // CryptoKey, so every `open-envelope` step in this file's tests
+    // genuinely throws when `fakeStep` executes it — this file has never
+    // cared about the decrypted payload, only that delegation happened.
+    // D7 closed a durable-observability gap that now makes that failure
+    // path call `persistence.job.getJob(jobId)` before returning; `{} as
+    // never` had no such method. A real `getJob` resolving to `undefined`
+    // is exactly the "no job record wired yet" case
+    // `transitionJobState`'s own doc comment already anticipates — a
+    // documented, intentional no-op, not new test-only behavior.
+    persistence: {
+      job: { getJob: async () => undefined } as never,
+      resultReceipt: {} as never,
+    },
   };
 }
 

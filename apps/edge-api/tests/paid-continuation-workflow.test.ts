@@ -23,6 +23,7 @@ import {
   buildTestMetadata,
   fakeSettleSuccess,
   fakeSettleRejected,
+  generateTestKey,
   sealTestInput,
   TEST_JOB_ID,
 } from './support/paid-continuation-workflow-fixtures';
@@ -463,6 +464,72 @@ describe('paid-continuation-workflow — PCC integration (H2AWI-2c)', () => {
     expect(typeof rejectedEvent!.evidence_ref).toBe('string');
     expect(rejectedEvent!.evidence_ref).toBe('missing_receipt');
     expect(rejectedEvent!.evidence_ref).not.toMatch(/signature|nonce|authorization|PAYMENT-SIGNATURE/i);
+  });
+});
+
+describe('paid-continuation-workflow — terminal observability parity (SUN-1222C-R4-D7)', () => {
+  it('an envelope-open failure durably transitions the job to REJECTED with a bounded evidence_ref, not just a transient result', async () => {
+    const metadata = buildTestMetadata();
+    const deps = await buildTestDependencies();
+    // Sealed with a DIFFERENT key than deps.envelopeKey: openContinuationEnvelope
+    // will genuinely fail to decrypt, exercising the real catch branch
+    // (never a mocked/forced throw).
+    const wrongKey = await generateTestKey();
+    const input = await sealTestInput(metadata, { key: wrongKey });
+    const step = new FakeWorkflowStep();
+
+    const result = await runPaidContinuationWorkflow({ payload: input }, step, deps);
+
+    expect(result.status).toBe('workflow_internal_error');
+
+    const rejectedEvent = deps.jobPersistence.events.find((e) => e.to_state === 'REJECTED');
+    expect(rejectedEvent).toBeDefined();
+    expect(rejectedEvent!.reason).toBe('VALIDATION_FAILED');
+    expect(typeof rejectedEvent!.evidence_ref).toBe('string');
+    expect(rejectedEvent!.evidence_ref).toBe(result.error_code);
+    // Never the raw ciphertext/key material — only the same short,
+    // bounded code already in the transient result.
+    expect(rejectedEvent!.evidence_ref!.length).toBeLessThanOrEqual(500);
+
+    const jobAfter = await deps.jobPersistence.getJob(TEST_JOB_ID);
+    expect(jobAfter?.current_state).toBe('REJECTED'); // previously stuck at LOCKED forever
+  });
+
+  it('an explicit settlement rejection durably persists the same reason already in the transient result', async () => {
+    const metadata = buildTestMetadata();
+    const deps = await buildTestDependencies({
+      settleResponse: fakeSettleRejected(),
+    });
+    const input = await sealTestInput(metadata, { key: deps.envelopeKey });
+    const step = new FakeWorkflowStep();
+
+    const result = await runPaidContinuationWorkflow({ payload: input }, step, deps);
+
+    expect(result.status).toBe('settlement_rejected');
+    const refundEvent = deps.jobPersistence.events.find((e) => e.to_state === 'REFUND_REQUIRED');
+    expect(refundEvent).toBeDefined();
+    expect(refundEvent!.evidence_ref).toBe(result.error_code);
+    expect(typeof refundEvent!.evidence_ref).toBe('string');
+    expect(refundEvent!.evidence_ref).not.toMatch(/signature|nonce|authorization/i);
+  });
+
+  it('a persistence failure after settlement leaves the job in the retryable SETTLING state — no premature REFUND_REQUIRED that would block idempotent retry', async () => {
+    // Regression guard for the reverted D7 attempt: forcing a durable
+    // transition here broke the exact idempotent-retry contract this
+    // step's own doc comment promises. This test pins the CORRECT
+    // (Class E, not-actually-terminal) behavior.
+    const metadata = buildTestMetadata();
+    const deps = await buildTestDependencies();
+    deps.resultReceiptPersistence.failResultOnce = true;
+    const input = await sealTestInput(metadata, { key: deps.envelopeKey });
+    const step = new FakeWorkflowStep();
+
+    const result = await runPaidContinuationWorkflow({ payload: input }, step, deps);
+
+    expect(result.status).toBe('persistence_failed_after_settlement');
+    const jobAfterFailure = await deps.jobPersistence.getJob(TEST_JOB_ID);
+    expect(jobAfterFailure?.current_state).toBe('SETTLING'); // never forced to REFUND_REQUIRED
+    expect(deps.jobPersistence.events.some((e) => e.to_state === 'REFUND_REQUIRED')).toBe(false);
   });
 });
 

@@ -722,6 +722,21 @@ export async function runPaidContinuationWorkflow(
       })) as DecryptedContinuationPayload;
     })) as DecryptedContinuationPayload;
   } catch (e) {
+    // SUN-1222C-R4-D7: sibling fix to D4-CONTINUED/D6's evidence_ref
+    // threading — an envelope-open failure previously returned this
+    // terminal result without ANY durable state transition at all (the
+    // job stayed at whatever pre-Workflow state x402-service.ts left it
+    // in, with zero D1 record that a failure occurred here or why).
+    // `errorCode(e)` is already the same short, bounded code this
+    // terminal result puts in `error_code` — never raw envelope
+    // ciphertext, key material, or exception internals.
+    await transitionJobState(
+      jobId,
+      'REJECTED',
+      'VALIDATION_FAILED',
+      deps.persistence.job,
+      boundedDetail(errorCode(e))
+    );
     return terminal('workflow_internal_error', jobId, { error_code: errorCode(e) });
   }
 
@@ -871,7 +886,20 @@ export async function runPaidContinuationWorkflow(
     return terminal('settlement_ambiguous', jobId);
   }
   if (settleOutcome.kind === 'rejected') {
-    await transitionJobState(jobId, 'REFUND_REQUIRED', 'PAYMENT_FAILED', deps.persistence.job);
+    // SUN-1222C-R4-D7: `settleOutcome.reason` is already the same short,
+    // structured, service-authored code this terminal result puts in
+    // `error_code` (a `canAdvanceToSettled` gate enum, optionally suffixed
+    // with a structural-validation detail, or a fixed reconciliation
+    // code — never raw facilitator/provider content) — previously
+    // computed but dropped before the durable state-event trail, same
+    // gap class D5/D6 already closed for the other rejection branches.
+    await transitionJobState(
+      jobId,
+      'REFUND_REQUIRED',
+      'PAYMENT_FAILED',
+      deps.persistence.job,
+      boundedDetail(settleOutcome.reason)
+    );
     return terminal('settlement_rejected', jobId, { error_code: settleOutcome.reason });
   }
 
@@ -884,6 +912,18 @@ export async function runPaidContinuationWorkflow(
       ? (verificationReceipt as { receipt_id: string }).receipt_id
       : undefined);
   if (!verificationReceiptId) {
+    // SUN-1222C-R4-D7 evaluated and deliberately did NOT add a durable
+    // state transition here (or to the four sibling
+    // `persistence_failed_after_settlement` branches below): the job is
+    // intentionally left at 'SETTLING' — a `RetryableState` — exactly
+    // like `settlement_ambiguous` above, so the Workflow platform's own
+    // idempotent step-retry can still resolve to 'DELIVERED' normally
+    // (proof: `paid-continuation-workflow.test.ts`'s
+    // settled-then-*-persistence-failure retry tests). Forcing
+    // 'REFUND_REQUIRED' here would permanently block that legitimate
+    // retry path, since 'REFUND_REQUIRED' has no transition to
+    // 'DELIVERED'. Classified Class E (not actually terminal), not a
+    // durable-observability gap.
     return terminal('persistence_failed_after_settlement', jobId, {
       error_code: 'missing_verification_receipt_id',
       settlement_transaction_reference: settleOutcome.transactionReference,
@@ -899,6 +939,9 @@ export async function runPaidContinuationWorkflow(
   // that's compile-time only; nothing stops an implementation from
   // resolving it to `undefined` at runtime.
   if (verificationReceipt === undefined) {
+    // SUN-1222C-R4-D7: see the `missing_verification_receipt_id` sibling
+    // above — Class E, no durable transition added, same retry-safety
+    // rationale.
     return terminal('persistence_failed_after_settlement', jobId, {
       error_code: 'missing_verification_receipt',
       settlement_transaction_reference: settleOutcome.transactionReference,
@@ -931,6 +974,9 @@ export async function runPaidContinuationWorkflow(
   );
   const linkVerification = await verifyPaymentServiceLink(paymentServiceLink);
   if (!linkVerification.valid) {
+    // SUN-1222C-R4-D7: see the `missing_verification_receipt_id` sibling
+    // above — Class E, no durable transition added, same retry-safety
+    // rationale.
     return terminal('persistence_failed_after_settlement', jobId, {
       error_code: linkVerification.reason,
       settlement_transaction_reference: settleOutcome.transactionReference,
@@ -976,6 +1022,10 @@ export async function runPaidContinuationWorkflow(
       })
     );
   } catch (e) {
+    // SUN-1222C-R4-D7: see the `missing_verification_receipt_id` sibling
+    // above — Class E, no durable transition added, same retry-safety
+    // rationale (this is exactly the step-retry case the comment above
+    // this try block describes).
     return terminal('persistence_failed_after_settlement', jobId, {
       error_code: errorCode(e),
       settlement_transaction_reference: settleOutcome.transactionReference,
@@ -1001,6 +1051,14 @@ export async function runPaidContinuationWorkflow(
       }
     );
   } catch (e) {
+    // SUN-1222C-R4-D7: see the `missing_verification_receipt_id` sibling
+    // above — Class E, no durable transition added. Critically, adding
+    // one here was tried and reverted: it broke the exact idempotent
+    // retry this step's own doc comment above promises (a job already
+    // marked 'REFUND_REQUIRED' can never legitimately reach 'DELIVERED'
+    // on a later successful retry — proof:
+    // `paid-continuation-workflow.test.ts`'s
+    // settled-then-terminal-state-persistence-failure test).
     return terminal('persistence_failed_after_settlement', jobId, {
       error_code: errorCode(e),
       settlement_transaction_reference: settleOutcome.transactionReference,
