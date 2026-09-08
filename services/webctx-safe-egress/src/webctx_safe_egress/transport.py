@@ -58,6 +58,114 @@ def _read_until(sock: socket.socket | ssl.SSLSocket, terminator: bytes, deadline
     return buf
 
 
+# SUN-1222C-Q1-D1 — RFC 7230 §4.1 bounded chunked-transfer-coding decoder.
+# `fetch_pinned`'s body-reading loop previously recognized ONLY
+# `Content-Length`; a `Transfer-Encoding: chunked` response (Content-Length
+# and Transfer-Encoding are mutually exclusive per §3.3.3 — a chunked
+# response never carries Content-Length) fell through to the
+# connection-close-delimited path, which accumulated the RAW wire bytes —
+# hex chunk-size lines, CRLF framing, chunk extensions, trailers — as
+# though they were the body itself. That raw blob was base64-shipped
+# through the Modal executor unchanged and reached
+# `SecureHttpClient.fetchJson`'s `JSON.parse` on the Cloudflare Worker
+# side, which failed on whatever the leading chunk-size bytes happened to
+# tokenize as (the real Q1 failure: "Unexpected number in JSON at position
+# 1" — V8's signature for a bare "0" immediately followed by another
+# decimal digit, exactly what a hex chunk-size line like "05dc" produces).
+class _ChunkedBodyReader:
+    """Stateful reader over the same recv() stream `fetch_pinned` already
+    owns. Bounded: enforces `max_response_bytes` on the DECODED payload
+    (never buffers an unbounded amount before checking), rejects malformed
+    framing instead of silently returning corrupt/partial data, and
+    discards chunk extensions and trailers safely without letting either
+    smuggle bytes into the returned body.
+    """
+
+    def __init__(self, sock: socket.socket | ssl.SSLSocket, initial: bytes, deadline: float, max_response_bytes: int):
+        self._sock = sock
+        self._buf = initial
+        self._deadline = deadline
+        self._max_response_bytes = max_response_bytes
+
+    def _fill(self) -> None:
+        if time.monotonic() > self._deadline:
+            raise TransportTimeoutError("timed out reading chunked response body")
+        try:
+            chunk = self._sock.recv(4096)
+        except TimeoutError as err:
+            raise TransportTimeoutError("timed out reading chunked response body") from err
+        if not chunk:
+            raise MalformedResponseError("connection closed mid-chunked-stream (no terminal chunk received)")
+        self._buf += chunk
+
+    def _read_line(self) -> bytes:
+        """Reads one CRLF-terminated line (the line itself, without the
+        CRLF), growing the buffer as needed. Used for chunk-size lines and
+        trailer header lines — both are header-shaped, so bounded the same
+        way `_read_until` bounds header reads."""
+        while b"\r\n" not in self._buf:
+            if len(self._buf) > _MAX_CHUNK_LINE_BYTES:
+                raise MalformedResponseError("chunk-size/trailer line exceeded bound before CRLF")
+            self._fill()
+        line, _, rest = self._buf.partition(b"\r\n")
+        self._buf = rest
+        return line
+
+    def _read_exact(self, n: int) -> bytes:
+        while len(self._buf) < n:
+            self._fill()
+        data, self._buf = self._buf[:n], self._buf[n:]
+        return data
+
+    def read_body(self) -> tuple[bytes, bool]:
+        out = bytearray()
+        truncated = False
+        while True:
+            size_line = self._read_line()
+            # Chunk extensions (`;key=value`) are permitted after the size
+            # and before CRLF (RFC 7230 §4.1.1) — discard them; only the
+            # hex size digits before any `;` are meaningful.
+            hex_size = size_line.split(b";", 1)[0].strip()
+            try:
+                size = int(hex_size, 16)
+            except ValueError as err:
+                raise MalformedResponseError(f"malformed chunk-size line: {size_line!r}") from err
+            if size == 0:
+                break
+            if len(out) + size > self._max_response_bytes:
+                # Read and discard only up to the bound, then stop — never
+                # allocate unbounded memory for an over-large chunk.
+                remaining = self._max_response_bytes - len(out)
+                if remaining > 0:
+                    out.extend(self._read_exact(remaining))
+                truncated = True
+                # Still must drain this chunk's own trailing CRLF and the
+                # rest of the stream is no longer needed — the connection
+                # will be closed by the caller's `finally: sock.close()`.
+                break
+            data = self._read_exact(size)
+            out.extend(data)
+            terminator = self._read_exact(2)
+            if terminator != b"\r\n":
+                raise MalformedResponseError("chunk data not terminated by CRLF")
+        if not truncated:
+            # Trailers: zero or more header-shaped lines, terminated by an
+            # empty line. Bounded the same way chunk-size lines are.
+            trailer_bytes = 0
+            while True:
+                line = self._read_line()
+                trailer_bytes += len(line)
+                if trailer_bytes > _MAX_TRAILER_BYTES:
+                    raise MalformedResponseError("trailer section exceeded bound")
+                if line == b"":
+                    break
+        return bytes(out), truncated
+
+
+_MAX_CHUNK_LINE_BYTES = 4096
+_MAX_TRAILER_BYTES = 16384
+
+
 def fetch_pinned(
     *,
     validated_ip: str,
@@ -123,6 +231,22 @@ def fetch_pinned(
                 continue
             k, _, v = line.partition(b":")
             parsed_headers[k.decode("latin-1").strip().lower()] = v.decode("latin-1").strip()
+
+        # SUN-1222C-Q1-D1 — Content-Length and Transfer-Encoding: chunked
+        # are mutually exclusive (RFC 7230 §3.3.3); a chunked response
+        # never carries Content-Length, so this branch must come first and
+        # be checked independently, not folded into the Content-Length
+        # length-bound loop below.
+        transfer_encoding = parsed_headers.get("transfer-encoding", "").lower()
+        if "chunked" in [enc.strip() for enc in transfer_encoding.split(",")]:
+            reader = _ChunkedBodyReader(sock, bytes(rest), deadline, max_response_bytes)
+            decoded_body, truncated = reader.read_body()
+            return RawResponse(
+                status=status,
+                headers=parsed_headers,
+                body=decoded_body,
+                truncated=truncated,
+            )
 
         body = bytearray(rest)
         truncated = False
