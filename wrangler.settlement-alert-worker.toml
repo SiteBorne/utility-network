@@ -1,0 +1,93 @@
+# SUN-1222C-R4-D12 — dedicated unresolved-settlement alert Worker.
+#
+# Hosts EXACTLY ONE thing: `scheduled()` sweep of
+# `listUnresolvedSettlements()` -> one HTTPS POST per unresolved incident to
+# an operator-controlled webhook (`apps/edge-api/src/
+# settlement-alert-worker-entrypoint.ts`). This is a THIRD, SEPARATE
+# Cloudflare Worker script -- alongside the public API Worker
+# (`wrangler.toml`, `name = "siteborne-utility-edge"`) and the dedicated
+# Workflow host (`wrangler.paid-continuation-runtime.toml`,
+# `name = "siteborne-paid-continuation-runtime"`). Deploying THIS config
+# with a normal `wrangler deploy` can only ever affect THIS script's own
+# cron trigger and traffic; it can never touch the public API Worker's
+# 100%/0% split or the Workflow host's `siteborne-paid-continuation`
+# resource registration.
+#
+# NOT YET DEPLOYED (D12_PRODUCTION_ACTIVATION=BLOCKED_PENDING_SECRET). This
+# file is frozen local configuration only, exactly like
+# `wrangler.paid-continuation-runtime.toml` was before its own gated
+# H2BF5 deployment checkpoint -- D12's authorization is
+# GRANTED_IMPLEMENTATION_ONLY: source/config definition of one cron trigger
+# and one new Worker, NOT creation or activation of those production
+# resources (D12_PRODUCTION_DEPLOYMENT_AUTHORIZATION=ABSENT,
+# D12_WEBHOOK_SECRET_PROVISIONING_AUTHORIZATION=ABSENT). `wrangler deploy
+# --config wrangler.settlement-alert-worker.toml` must not run until a
+# separate checkpoint supplies or authorizes provisioning of a real
+# `SETTLEMENT_ALERT_WEBHOOK_URL` value and separately authorizes
+# activation.
+name = "siteborne-settlement-alert"
+main = "apps/edge-api/src/settlement-alert-worker-entrypoint.ts"
+# Matches both other scripts' compatibility_date -- same runtime
+# semantics, same bundling behavior, no independent compatibility-date
+# drift across the three scripts.
+compatibility_date = "2026-08-05"
+compatibility_flags = ["nodejs_compat"]
+
+# D12 §19/§26: this script serves no public HTTP traffic of any kind --
+# its `fetch()` handler is a permanent, unconditional 404 that exists only
+# to satisfy the platform's module-worker build requirement (see the
+# entrypoint's own doc comment). Disabling `workers_dev` and declaring no
+# `routes`/custom domains means that inert 404 is never reachable in
+# production; the ONLY way this script's code ever runs is its own
+# `[triggers]` cron below invoking `scheduled()`.
+workers_dev = false
+# No `routes`, no custom domains (D12_PUBLIC_HTTP_ROUTE=ABSENT).
+
+# D12 §14: 15-minute cadence. `lifecycle_stage = 'settlement_pending'` is
+# set immediately before the sole `settle()` call
+# (`paid-continuation-workflow.ts`) and cleared by `recordSettledExternal`
+# moments later on any clean outcome -- normal in-flight settlement never
+# holds this stage for more than a few seconds. D9's own reconciliation
+# engine (`settlement-reconciliation.ts`) is a *synchronous*, bounded
+# 5-retry read that resolves (or gives up) within the same Workflow step
+# invocation, not across separate sweeps. So a row still at
+# `settlement_pending` by the time THIS Worker's sweep observes it has
+# already exhausted every automatic recovery path available to it --
+# 15 minutes is comfortably above that full resolution window (seconds),
+# giving a wide safety margin against alerting on a row that is still
+# genuinely, normally in flight, while remaining timely for a condition
+# D9/D10 established should be rare. `listUnresolvedSettlements`'s own
+# `olderThanMs` filter provides a second, independent guard against the
+# same false-positive risk (see the entrypoint's own sweep call).
+[triggers]
+crons = ["*/15 * * * *"]
+
+# Same authoritative production D1 database both other scripts bind -- no
+# migration, no new database. D12 §25: the binding itself is technically
+# read-write (Cloudflare does not offer a read-only D1 binding grant at
+# the Worker level) -- `D12_D1_TECHNICAL_CAPABILITY=READ_WRITE`. This
+# script's own CODE PATH never issues a `.run()`/write statement anywhere
+# in its import graph, only `listUnresolvedSettlements()`'s single
+# `.all()` read (D12_D1_CODEPATH_CAPABILITY=READ_ONLY) -- see the D12
+# evidence report's static capability audit for the grep-level proof.
+[[d1_databases]]
+binding = "DB"
+database_name = "siteborne-utility"
+database_id = "efe23c42-cbcc-47c2-9b28-922a541bdcdd"
+
+# D12 §8: `SETTLEMENT_ALERT_WEBHOOK_URL` is a real secret, provisioned
+# (once separately authorized) via
+# `wrangler secret put SETTLEMENT_ALERT_WEBHOOK_URL --config
+# wrangler.settlement-alert-worker.toml` -- deliberately absent from this
+# file (never a `[vars]` entry, never committed, never logged). Its
+# absence is the expected, safe steady state until that separate
+# authorization: the entrypoint's own `scheduled()` handler fails closed
+# (D12 §20 S7) when `env.SETTLEMENT_ALERT_WEBHOOK_URL` is undefined --
+# no crash loop, no placeholder value, no secret-value disclosure.
+
+# Deliberately absent, unlike both other scripts (D12 §5/§22 trust
+# boundary): no `[[workflows]]` binding to `PAID_CONTINUATION_WORKFLOW`,
+# no `[ai]` binding, no `[[r2_buckets]]` `ARTIFACTS` binding, no `[[queues
+# .producers]]` `JOBS`/`EVENTS` binding, no CDP/facilitator/payment-signing
+# credential of any kind. This script's total capability surface is
+# exactly: read `DB`, and `fetch()` one operator-controlled HTTPS URL.
