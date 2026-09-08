@@ -1215,16 +1215,21 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
           );
         case 'executor_rejected':
           // Matches the pre-H2AWI-3 contract's resolved-but-unsuccessful
-          // executor branch (502 service_execution_failed). SUN-1222C-R4:
-          // `result.error_detail`, when present, is now surfaced as the
-          // response's `details` field — the stable `message` (still
-          // `error_code`) is unchanged for every existing caller.
+          // executor branch (502 service_execution_failed). SUN-1222C-R4-D3:
+          // `result.error_detail` (SUN-1222C-R4's new field) is deliberately
+          // NOT passed to `jsonError` here. SUN-1221E2D's public-response
+          // contract forbids adding any diagnostic detail to this response,
+          // for every executor failure shape, with no service-specific
+          // exception — `result.error_detail` stays available only to
+          // operators via the Workflow instance's own retained output
+          // (`WorkflowContinuationResult.error_detail`), never in the HTTP
+          // body a paying client receives. See
+          // docs/reports/SUN-1222C-R4-D3-public-error-contract-reconciliation.md.
           return jsonError(
             c,
             502,
             'service_execution_failed',
-            result.error_code ?? 'executor_rejected',
-            result.error_detail
+            result.error_code ?? 'executor_rejected'
           );
         case 'pcc_failed':
           return jsonError(c, 500, 'service_execution_failed', result.error_code ?? 'pcc_failed');

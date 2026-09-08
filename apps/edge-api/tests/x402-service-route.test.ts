@@ -895,6 +895,69 @@ describe('x402 HTTP vertical slice (SUN-0700A checkpoint 5)', () => {
       expect(rows.results).toHaveLength(0);
     });
 
+    it('SUN-1222C-R4-D3: the same public non-leak rule holds for a `limitations`-only executor result (no `failure` object at all) — the exact CompanyEvidenceGraphService shape SUN-1222C-R4-D1 diagnosed, and the specific regression SUN-1222C-R4-D2 caught before deployment', async () => {
+      const limitationsOnlyApp = new Hono();
+      // Exactly CompanyEvidenceGraphService's real shape for a legitimate
+      // result_class: 'partial' outcome: the verification mesh itself
+      // decided 'pass' (so `failure` stays `undefined` -- see
+      // `paid-continuation-workflow.ts`'s `deriveErrorDetail`), and the
+      // only informative detail lives in `limitations`.
+      const limitationsOnlyExecutor = async (): Promise<ExecutorOutcome> => ({
+        result: {
+          result_class: 'partial',
+          limitations: [
+            'requested_field_groups included groups the provider could not fulfil',
+            'sec-edgar company_submissions returned permanent_failure for CIK 0000320193',
+          ],
+        },
+      });
+      createX402ServiceRoute(limitationsOnlyApp, {
+        serviceId: 'company_evidence_graph.v1',
+        scheme: 'exact',
+        pricingKey: 'company_evidence_graph',
+        network: 'eip155:84532',
+        asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+        paymentRequirementExtra: { name: 'USDC', version: '2' },
+        path: '/v1/company/evidence-graph-diagnostic',
+        inputSchema: { type: 'object' },
+        inputValidator: compileTestInputValidator({ type: 'object' }),
+        contractRelease: '1.0.0',
+        inputSchemaHash: 'sha256:' + '3'.repeat(64),
+        outputSchemaHash: 'sha256:' + '4'.repeat(64),
+        pccDependency: '1.0.0',
+        db,
+        clock: () => clockValue,
+        evidenceMode: 'fixture',
+        executor: limitationsOnlyExecutor,
+        ...(await buildTestContinuationFields(db, () => clockValue, limitationsOnlyExecutor)),
+      });
+
+      const challenge = await get402(limitationsOnlyApp, '/v1/company/evidence-graph-diagnostic', COMPANY_INPUT);
+      const res = await payAndRetry(
+        limitationsOnlyApp,
+        '/v1/company/evidence-graph-diagnostic',
+        COMPANY_INPUT,
+        challenge
+      );
+
+      expect(res.status).toBe(502);
+      const body = (await res.json()) as Record<string, unknown>;
+      // SUN-1222C-R4's public passthrough (`result.error_detail` into
+      // `jsonError`'s `details` param) would put the exact SEC rejection
+      // string below into this body. SUN-1221E2D's rule forbids that for
+      // every executor failure shape, `limitations`-only included.
+      expect(body).not.toHaveProperty('details');
+      expect(body).not.toHaveProperty('error_detail');
+      expect(JSON.stringify(body)).not.toContain('sec-edgar');
+      expect(JSON.stringify(body)).not.toContain('CIK 0000320193');
+      // The stable, coarse contract is unchanged: generic error/message,
+      // nothing else.
+      expect(body).toEqual({
+        error: 'service_execution_failed',
+        message: 'partial',
+      });
+    });
+
     it('does not write a diagnostic audit event on a normal successful execution (no regression)', async () => {
       const before = await db
         .prepare(
