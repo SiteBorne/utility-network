@@ -124,7 +124,15 @@ above (same standard D5 itself used for its own sibling fix).
 
 Predeployment gates all passed (§5), so the conditional deployment
 authorization applies: exactly one deployment of
-`siteborne-paid-continuation-runtime` from this checkpoint's source.
+`siteborne-paid-continuation-runtime` from this checkpoint's source (`b95a8dc`).
+
+**Executed.** New host version `d930b4bd-40f2-45f8-8464-7b19fef512bd` @ 100%
+(supersedes D5's `05e11cbd`). Bindings unchanged (`PAID_CONTINUATION_WORKFLOW`
+Workflow, `DB` D1, `ARTIFACTS` R2, `SELLER_WALLET_ADDRESS`,
+`PAYMENT_ENVIRONMENT`, `PRODUCTION_ENABLED`,
+`HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP`, `PRODUCTION_CDP_CREDENTIALS_APPROVED`
+— same 8 as D5's readback). Public API confirmed unchanged by the same
+`wrangler deployments list` readback: `db7054c9` @ 100%, `d3472f58` @ 0%.
 
 ## 8. Scope discipline
 
@@ -160,7 +168,9 @@ PRODUCTION_PREFLIGHT=PASS
 WRANGLER_DRY_RUN=PASS
 LIVE_SYNTHETIC_QUALIFICATION=NOT_POSSIBLE (inherited D5 finding: payment-gated architecture, no safe non-economic path — same conclusion, same reasoning)
 HOST_DEPLOYMENT_AUTHORIZED=YES (conditional on gates passing — they did)
+HOST_DEPLOYMENT_EXECUTED=YES (d930b4bd-40f2-45f8-8464-7b19fef512bd @ 100%, supersedes 05e11cbd)
 PUBLIC_API_DEPLOYMENTS=0
+PUBLIC_API_UNCHANGED=YES (db7054c9 @ 100% / d3472f58 @ 0%, confirmed via readback)
 TRAFFIC_MUTATIONS=0
 REAL_402_REQUESTS=0
 PAYMENT_AUTHORIZATIONS_CREATED=0
@@ -170,5 +180,7 @@ ECONOMIC_EFFECT_USDC=0
 PAYMENT_BOUNDARY_CHANGED=NO
 PCC_SEMANTICS_CHANGED=NO
 SETTLEMENT_OWNERSHIP=0 public / 1 dedicated Workflow (unchanged)
-WORKING_TREE=clean (pending this evidence commit)
+WORKING_TREE=clean
+FIX_COMMIT_SHA=b95a8dc
+HOST_VERSION_ID=d930b4bd-40f2-45f8-8464-7b19fef512bd
 ```
