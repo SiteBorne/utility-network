@@ -425,6 +425,45 @@ describe('paid-continuation-workflow — PCC integration (H2AWI-2c)', () => {
     expect(step.calls.map((c) => c.name)).not.toContain('settle');
     expect(deps.settle).not.toHaveBeenCalled();
   });
+
+  // SUN-1222C-R4-D6: the sibling rejection path to the executor-rejection
+  // one above — D5 closed `evidence_ref` for `executor_rejected`/
+  // `executor_timeout`; this closes the one other terminal rejection
+  // branch that stops short of settlement, `pcc_failed`, which previously
+  // only ever wrote the bare `VERIFICATION_FAILED` state-transition reason
+  // and dropped `pccResult.reason` (e.g. `signature_mismatch`,
+  // `missing_receipt`) before it could reach D1.
+  it('persists the specific PCC rejection reason as the REJECTED event\'s evidence_ref', async () => {
+    const metadata = buildTestMetadata();
+    const deps = await buildTestDependencies({
+      validatePcc: () => ({ valid: false, reason: 'signature_mismatch' }),
+    });
+    const input = await sealTestInput(metadata, { key: deps.envelopeKey });
+    const step = new FakeWorkflowStep();
+
+    const result = await runPaidContinuationWorkflow({ payload: input }, step, deps);
+
+    expect(result.status).toBe('pcc_failed');
+    const rejectedEvent = deps.jobPersistence.events.find((e) => e.to_state === 'REJECTED');
+    expect(rejectedEvent).toBeDefined();
+    expect(rejectedEvent!.evidence_ref).toBe('signature_mismatch');
+  });
+
+  it('PCC evidence_ref stays a plain bounded string, never a serialized object or payment material', async () => {
+    const metadata = buildTestMetadata();
+    const deps = await buildTestDependencies({
+      validatePcc: () => ({ valid: false, reason: 'missing_receipt' }),
+    });
+    const input = await sealTestInput(metadata, { key: deps.envelopeKey });
+    const step = new FakeWorkflowStep();
+
+    await runPaidContinuationWorkflow({ payload: input }, step, deps);
+
+    const rejectedEvent = deps.jobPersistence.events.find((e) => e.to_state === 'REJECTED');
+    expect(typeof rejectedEvent!.evidence_ref).toBe('string');
+    expect(rejectedEvent!.evidence_ref).toBe('missing_receipt');
+    expect(rejectedEvent!.evidence_ref).not.toMatch(/signature|nonce|authorization|PAYMENT-SIGNATURE/i);
+  });
 });
 
 describe('paid-continuation-workflow — authorization expiry gate (H2AWI-2f)', () => {

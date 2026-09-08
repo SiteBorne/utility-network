@@ -835,7 +835,22 @@ export async function runPaidContinuationWorkflow(
     deps.validatePcc(executorOutcome)
   );
   if (!pccResult.valid) {
-    await transitionJobState(jobId, 'REJECTED', 'VERIFICATION_FAILED', deps.persistence.job);
+    // SUN-1222C-R4-D6: sibling fix to D5's executor_rejected/
+    // executor_timeout evidence_ref threading — `pccResult.reason` (e.g.
+    // `signature_mismatch`, `missing_receipt`) is already a short,
+    // service-authored code (see `PccValidationResult`, never raw PCC
+    // content/payment material), but was previously only returned in the
+    // terminal HTTP-facing result and dropped before the durable
+    // state-event trail. Bounded for the same defense-in-depth reason
+    // `deriveErrorDetail` bounds its own strings, even though this one is
+    // always short in practice.
+    await transitionJobState(
+      jobId,
+      'REJECTED',
+      'VERIFICATION_FAILED',
+      deps.persistence.job,
+      boundedDetail(pccResult.reason)
+    );
     return terminal('pcc_failed', jobId, { error_code: pccResult.reason });
   }
   await transitionJobState(jobId, 'SETTLING', 'VERIFICATION_PASSED', deps.persistence.job);
