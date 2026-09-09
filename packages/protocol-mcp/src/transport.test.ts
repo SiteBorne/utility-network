@@ -209,6 +209,32 @@ describe('SITEBORNE MCP 2026-07-28 Hono transport', () => {
     });
   });
 
+  // SUN-1222C-MCP-PRE-CUTOVER-REMEDIATION: MCP quotes must bind the exact
+  // real production route path each v2 service is actually mounted at
+  // (`apps/edge-api/src/index.ts`), not a synthetic underscore-joined
+  // path that no route ever serves. A client that paid against the wrong
+  // `resource_id`/`payment_requirements.resource` would have its x402
+  // payment bound to a path returning 404, not the real paid service.
+  it.each([
+    ['company_evidence_graph.v2', '/v2/company/evidence-graph'],
+    ['web_context_verified.v2', '/v2/web/context'],
+    ['document_evidence_json.v2', '/v2/document/evidence-json'],
+    ['verify_agent_output.v2', '/v2/verify/agent-output'],
+  ] as const)('binds %s quotes to the real mounted route %s', async (serviceId, realPath) => {
+    const { app } = createFixtureApp();
+    const client = await connectClient(app);
+    clients.push(client);
+
+    const quote = await client.callTool({
+      name: 'siteborne_get_quote',
+      arguments: { service_id: serviceId, scheme: 'exact', input: frozenInputExample(serviceId) },
+    });
+
+    expect(quote.isError).not.toBe(true);
+    const structured = quote.structuredContent as { resource_id: string };
+    expect(structured.resource_id).toBe(`https://utility.siteborne.net${realPath}`);
+  });
+
   it('reports production false and local protocol readiness truthfully', async () => {
     const { app } = createFixtureApp();
     const client = await connectClient(app);

@@ -4,11 +4,18 @@ import {
   type CreateSiteborneMcpOptions,
   type McpServiceHealthStatus,
 } from '@siteborne/protocol-mcp';
-import { PREPRODUCTION_NETWORK } from '@siteborne/protocol-x402';
-import { getDefaultAsset } from '@x402/evm';
+import {
+  assertPreproductionNetwork,
+  isProductionPaymentAuthorized,
+  resolvePaymentNetwork,
+} from '@siteborne/protocol-x402';
 import type { Context } from 'hono';
 import type { Env } from '../control-plane/config/env';
-import { resolveEffectiveServiceRuntimeStatus } from '../control-plane/config/production-payment';
+import {
+  resolveEffectiveServiceRuntimeStatus,
+  resolvePaymentAsset,
+  resolveProductionAuthorizationInput,
+} from '../control-plane/config/production-payment';
 
 const MCP_ALLOWED_HOSTS = [
   'utility.siteborne.net',
@@ -93,17 +100,23 @@ export async function mcpRoute(context: Context<{ Bindings: Env }>): Promise<Res
   };
 
   if (context.env?.SELLER_WALLET_ADDRESS) {
-    // SUN-1000 checkpoint 1O-A: now sourced from the same canonical
-    // network constant and the official @x402/evm asset table as every
-    // other first-party payment declaration (paid-services.ts,
-    // discovery.ts) -- this file previously hand-typed both values
-    // independently, and its asset address had drifted by one hex
-    // character from the real, accepted Base Sepolia USDC contract
-    // address every live-proof test uses
-    // (...dCF7c here vs the correct ...dCF7e).
+    // SUN-1222C-MCP-PRE-CUTOVER-REMEDIATION: previously hardcoded
+    // PREPRODUCTION_NETWORK unconditionally, diverging from the real v2
+    // CDP production routes (production/company-evidence-graph-v2-cdp-
+    // composition.ts and its siblings), which resolve network/asset
+    // through the single canonical, fail-closed
+    // resolveProductionAuthorizationInput -> resolvePaymentNetwork ->
+    // resolvePaymentAsset chain -- production (Base mainnet) only when
+    // all four ADR-0055 gates are simultaneously true, preproduction
+    // (Base Sepolia) otherwise. MCP quotes now resolve through the exact
+    // same chain, so a client's quote always matches what the real paid
+    // route will actually require.
+    const productionAuthorization = resolveProductionAuthorizationInput(context.env);
+    const network = resolvePaymentNetwork(productionAuthorization);
+    assertPreproductionNetwork(network, isProductionPaymentAuthorized(productionAuthorization));
     options.quote = {
-      network: PREPRODUCTION_NETWORK,
-      asset: getDefaultAsset(PREPRODUCTION_NETWORK).address,
+      network,
+      asset: resolvePaymentAsset(network).address,
       payee: context.env.SELLER_WALLET_ADDRESS,
     };
   }

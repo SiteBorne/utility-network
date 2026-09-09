@@ -143,15 +143,24 @@ const UPTO_PRICING_KEYS: Readonly<
   'verify_agent_output.v2': 'verify_agent_output_reproduction',
 };
 
+// SUN-1222C-MCP-PRE-CUTOVER-REMEDIATION: v1 paths are placeholders — no v1
+// route is mounted in `apps/edge-api/src/index.ts` today (only the four v2
+// CDP production routes are real), so there is no live v1 divergence to
+// correct. The four v2 entries previously used a synthetic
+// underscore-joined path (`/v2/company_evidence_graph`) that does not match
+// any route Hono actually serves; a client paying against that resource
+// would bind its x402 payment to a path returning 404. Corrected to the
+// exact real mounted paths (`index.ts`'s own `app.post('/v2/...', ...)`
+// registrations).
 const SERVICE_RESOURCES: Readonly<Record<SiteborneServiceId, string>> = {
   'company_evidence_graph.v1': 'https://utility.siteborne.net/v1/company_evidence_graph',
   'web_context_verified.v1': 'https://utility.siteborne.net/v1/web_context_verified',
   'document_evidence_json.v1': 'https://utility.siteborne.net/v1/document_evidence_json',
   'verify_agent_output.v1': 'https://utility.siteborne.net/v1/verify_agent_output',
-  'company_evidence_graph.v2': 'https://utility.siteborne.net/v2/company_evidence_graph',
-  'web_context_verified.v2': 'https://utility.siteborne.net/v2/web_context_verified',
-  'document_evidence_json.v2': 'https://utility.siteborne.net/v2/document_evidence_json',
-  'verify_agent_output.v2': 'https://utility.siteborne.net/v2/verify_agent_output',
+  'company_evidence_graph.v2': 'https://utility.siteborne.net/v2/company/evidence-graph',
+  'web_context_verified.v2': 'https://utility.siteborne.net/v2/web/context',
+  'document_evidence_json.v2': 'https://utility.siteborne.net/v2/document/evidence-json',
+  'verify_agent_output.v2': 'https://utility.siteborne.net/v2/verify/agent-output',
 };
 
 const HOSTILE_OBJECT_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
