@@ -101,12 +101,18 @@ describe('paid-continuation-workflow — step graph (H2AWI-2a)', () => {
     expect(result.settlement_transaction_reference).toBe('0xsettledhash');
 
     const persisted = deps.resultReceiptPersistence.results.get(TEST_JOB_ID)?.cachedResult;
+    // SUN-1222C-PCC-WIRE-RESULT-IMPLEMENTATION: `body` is now the governed
+    // v2 wire result -- the full PCC document (`durableEvidence.pcc`/
+    // `pccResult.pcc`) itself, byte-identical -- never a bespoke
+    // service_id/result_class/receipt_id envelope. This harness's own
+    // `validatePcc` fixture (see buildTestDependencies) returns
+    // `{ pcc_id: 'pcc_test_0001', signature: '0xpccsignature' }` as its
+    // `pcc`, so that is exactly what `body` must now equal.
     expect(persisted).toMatchObject({
       status: 200,
       body: {
-        service_id: 'web_context_verified.v2',
-        result_class: 'success',
-        receipt_id: 'receipt_test_0001',
+        pcc_id: 'pcc_test_0001',
+        signature: '0xpccsignature',
       },
       settleResponse: {
         success: true,

@@ -223,27 +223,24 @@ describe('createMcpX402ServiceBoundary', () => {
     }
   });
 
-  it('a 200 response returns body.output (not the whole envelope) as the fulfilled result, and decodes PAYMENT-RESPONSE', async () => {
+  it('a 200 response returns the whole body (the governed PCC document) as the fulfilled result, and decodes PAYMENT-RESPONSE', async () => {
     const settleResponse: SettleResponse = {
       success: true,
       transaction: '0xabc123',
       network: 'eip155:8453',
       payer: '0xBuyer',
     };
-    const realOutput = { pcc_version: '1.0.0', job_id: 'job_xyz', subject: {}, claims: [] };
+    // SUN-1222C-PCC-WIRE-RESULT-IMPLEMENTATION: the REST route's 200 body
+    // *is* the governed v2 wire result now -- the full PCC document
+    // (`DurableCachedResult.body`, see its doc comment in
+    // paid-continuation-workflow.ts) -- never a bespoke envelope with a
+    // nested `output` field. `additionalProperties: false` on the accepted
+    // 2.0.0 schema's base PCC ref means no sibling metadata field can
+    // legally sit alongside it.
+    const realPccDocument = { pcc_version: '1.0.0', job_id: 'job_xyz', subject: {}, claims: [] };
     const handler: McpX402RouteHandler = async (c) => {
       c.header('PAYMENT-RESPONSE', encodePaymentResponseHeaderSafe(settleResponse));
-      return c.json(
-        {
-          service_id: 'company_evidence_graph.v2',
-          result_class: 'success',
-          output: realOutput,
-          receipt_id: 'rcpt_1',
-          link_id: 'link_1',
-          link_hash: 'hash_1',
-        },
-        200
-      );
+      return c.json(realPccDocument, 200);
     };
     const boundary = createMcpX402ServiceBoundary(
       {} as never,
@@ -260,10 +257,10 @@ describe('createMcpX402ServiceBoundary', () => {
 
     expect(outcome.outcome).toBe('fulfilled');
     if (outcome.outcome === 'fulfilled') {
-      // Proves the envelope-vs-output distinction: result must be exactly
-      // `realOutput`, never the whole response body (which additionally
-      // carries service_id/result_class/receipt_id/link_id/link_hash).
-      expect(outcome.result).toEqual(realOutput);
+      // Proves the whole-body identity: result must be exactly the PCC
+      // document the REST route returned, byte-identical, never unwrapped
+      // to a sub-field.
+      expect(outcome.result).toEqual(realPccDocument);
       expect(outcome.paymentResponse).toEqual(settleResponse);
     }
   });

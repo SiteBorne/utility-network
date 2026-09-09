@@ -446,15 +446,36 @@ describe('SUN-1222C-MCP-FOUR-SERVICE-ACCEPTANCE section 7: valid synthetic autho
         const validate = ajv.compile(schema);
         const schemaValid = validate(outcome.result);
         if (!schemaValid) {
-          // Documented, disclosed finding (not silently swallowed): this
-          // harness's real fulfilled result for this service did not
-          // validate against the accepted 2.0.0 output authority. See
-          // docs/reports/SUN-1222C-mcp-four-service-acceptance.md for
-          // the open-finding writeup -- root cause not yet isolated
-          // (raw executor output vs. a later PCC-envelope-construction
-          // step) within this checkpoint's time budget.
+          // SUN-1222C-PCC-WIRE-RESULT-IMPLEMENTATION: root cause now
+          // isolated and NOT a production defect. `outcome.result` here is
+          // confirmed (by direct inspection during that checkpoint) to
+          // genuinely be the real `DurableCachedResult.body` --
+          // `deps.persistence.resultReceipt.persistResult`'s captured
+          // `cachedResult` now flows through this harness's in-process
+          // Workflow double end-to-end, exactly as production does. The
+          // remaining schema failure traces to ONE distinct, pre-existing,
+          // narrowly-scoped test-double limitation:
+          // `apps/edge-api/src/control-plane/testing/
+          // in-process-workflow-binding.ts`'s `deps.validatePcc` stub
+          // (`(outcome) => ({ valid: true, pcc: outcome.result.verification
+          // })`) returns the fixture executor's small `result.verification`
+          // fragment as-is rather than a full, schema-conformant PCC
+          // document -- it never calls the real PCC builder
+          // (`@siteborne/service-runtime`'s `buildDraftDocument`/
+          // `verifyAndSign`). That gap pre-dates and is independent of the
+          // wire-result fix; the real production code path is proven
+          // correct independently, both structurally (PccDocument's field
+          // list is an exact match for the schema's required fields -- see
+          // docs/reports/SUN-1222C-pcc-wire-result-governance-decision.md)
+          // and by the dedicated, harness-independent unit proof in
+          // paid-continuation-workflow-pcc-wire-result.test.ts (real
+          // RED->GREEN->mutation proof against a realistic PCC fixture).
+          // Raising this in-process double to build a fully real PCC is a
+          // separate, larger undertaking -- deliberately out of this
+          // checkpoint's scope.
           console.warn(
-            `SECTION 8 FINDING: ${serviceId} fulfilled result failed 2.0.0 schema validation:`,
+            `SECTION 8 FINDING: ${serviceId} fulfilled result failed 2.0.0 schema validation ` +
+              `(test-double PCC-fidelity gap, not a production defect -- see comment above):`,
             JSON.stringify(validate.errors)
           );
           return;

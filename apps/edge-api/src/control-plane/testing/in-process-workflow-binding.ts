@@ -54,6 +54,7 @@ import {
   type PaidContinuationWorkflowStep,
   type JobStatePersistence,
   type JobRecord,
+  type PersistResultInput,
 } from '../workflows/paid-continuation-workflow';
 import type { ExecutorOutcome, ServiceExecutor } from '../routes/x402-service';
 import type { WorkflowBindingLike, WorkflowInstanceLike } from '../continuation/handoff';
@@ -132,6 +133,13 @@ export function createInProcessWorkflowBinding(
       // race on each other's captured output.
       let capturedOutcome: ExecutorOutcome | undefined;
       let capturedSettlement: { transactionReference?: string; payer?: string } | undefined;
+      // SUN-1222C-PCC-WIRE-RESULT-IMPLEMENTATION: the real, already-fixed
+      // `DurableCachedResult` the workflow itself constructs (governed PCC
+      // wire body included) -- captured here so `persistReceipt` below can
+      // use this ONE real object as its source of truth instead of
+      // independently re-deriving a second, drift-prone response shape
+      // from raw executor output.
+      let capturedCachedResult: PersistResultInput['cachedResult'] | undefined;
 
       const recordingExecutor: ServiceExecutor = async (input, ctx) => {
         options.onExecutorCall?.();
@@ -189,7 +197,8 @@ export function createInProcessWorkflowBinding(
         persistence: {
           job: jobStatePersistence,
           resultReceipt: {
-            async persistResult() {
+            async persistResult({ cachedResult }) {
+              capturedCachedResult = cachedResult;
               return { status: 'written' as const };
             },
             async persistReceipt({ jobId, paymentIdentifier }) {
@@ -233,14 +242,26 @@ export function createInProcessWorkflowBinding(
               link = await extendWithSettlement(link, settlementEvidenceHash);
               await verifyPaymentServiceLink(link);
 
-              const responseBody = {
-                service_id: metadata.service,
-                result_class: capturedOutcome.result.result_class,
-                output: capturedOutcome.result.output,
-                receipt_id: receiptId,
-                link_id: link.link_id,
-                link_hash: link.link_hash,
-              };
+              // SUN-1222C-PCC-WIRE-RESULT-IMPLEMENTATION: use the real
+              // workflow's own `cachedResult.body` (the governed PCC wire
+              // result -- see DurableCachedResult's doc comment) as the
+              // single source of truth, rather than re-deriving a second,
+              // now-provably-stale shape from raw executor output. Falls
+              // back to the old reconstruction only if the real STEP 5
+              // (`persist-result`) somehow never ran before this STEP 6
+              // (`persist-receipt`) -- should not happen given the real
+              // workflow's own step ordering, kept only as a defensive
+              // non-crash fallback.
+              const responseBody: Readonly<Record<string, unknown>> = capturedCachedResult
+                ? capturedCachedResult.body
+                : {
+                    service_id: metadata.service,
+                    result_class: capturedOutcome.result.result_class,
+                    output: capturedOutcome.result.output,
+                    receipt_id: receiptId,
+                    link_id: link.link_id,
+                    link_hash: link.link_hash,
+                  };
               const settleResponse: SettleResponse | NeverminedPaymentResponse =
                 rail === 'nevermined'
                   ? {

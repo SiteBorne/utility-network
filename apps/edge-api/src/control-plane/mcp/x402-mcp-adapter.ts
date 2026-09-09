@@ -59,8 +59,12 @@ export const MCP_X402_SERVICE_PATHS: Readonly<Partial<Record<SiteborneServiceId,
   'verify_agent_output.v2': '/v2/verify/agent-output',
 };
 
-interface RestResultBody {
-  output?: unknown;
+/** A 402/error REST response body -- code/message/error only. The 200
+ * (fulfilled) body is NOT this shape: it is the governed PCC document
+ * itself (see `DurableCachedResult.body`'s doc comment in
+ * paid-continuation-workflow.ts), read as `Readonly<Record<string,
+ * unknown>>` below rather than through this narrow interface. */
+interface RestErrorResultBody {
   code?: string;
   message?: string;
   error?: string;
@@ -120,7 +124,9 @@ export function createMcpX402ServiceBoundary(
       const response = await subApp.request(request, undefined, env);
 
       if (response.status === 402) {
-        const body = (await response.json().catch(() => undefined)) as RestResultBody | undefined;
+        const body = (await response.json().catch(() => undefined)) as
+          | Readonly<Record<string, unknown>>
+          | undefined;
         const headerValue = response.headers.get('PAYMENT-REQUIRED');
         const decoded = headerValue ? decodePaymentRequiredHeaderSafe(headerValue) : undefined;
         return {
@@ -137,18 +143,19 @@ export function createMcpX402ServiceBoundary(
       }
 
       if (response.status === 200) {
-        const body = (await response.json()) as RestResultBody;
+        // SUN-1222C-PCC-WIRE-RESULT-IMPLEMENTATION: the entire 200 body
+        // *is* the governed v2 result -- the same full PCC document
+        // `DurableCachedResult.body` now carries (see its doc comment in
+        // paid-continuation-workflow.ts), byte-identical to what the REST
+        // transport returns via `c.json(cached.body, ...)`. Never
+        // unwrapped to a sub-field: MCP_SERVICE_OUTPUT_SCHEMAS validates
+        // this whole object, exactly as REST and A2A do.
+        const body = (await response.json()) as Readonly<Record<string, unknown>>;
         const headerValue = response.headers.get('PAYMENT-RESPONSE');
         const decoded = headerValue ? decodePaymentResponseHeaderSafe(headerValue) : undefined;
         return {
           outcome: 'fulfilled',
-          // `body.output` -- not the whole response envelope
-          // (service_id/result_class/receipt_id/link_id/link_hash sit
-          // alongside it) -- is the field the durable Workflow's own
-          // cachedResult.body construction uses for the PCC-shaped
-          // service output (paid-continuation-workflow.ts), which is
-          // exactly what MCP_SERVICE_OUTPUT_SCHEMAS validates.
-          result: body.output,
+          result: body,
           ...(decoded?.ok ? { paymentResponse: decoded.value } : {}),
         };
       }
@@ -159,7 +166,7 @@ export function createMcpX402ServiceBoundary(
       const body = (await response.json().catch(() => ({
         code: 'unexpected_status',
         message: `service returned HTTP ${response.status}`,
-      }))) as RestResultBody;
+      }))) as RestErrorResultBody;
       return {
         outcome: 'rejected',
         code: body.code ?? 'unexpected_status',

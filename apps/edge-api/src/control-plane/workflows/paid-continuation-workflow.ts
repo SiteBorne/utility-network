@@ -260,14 +260,23 @@ export interface PersistResultInput {
 
 export interface DurableCachedResult {
   readonly status: 200;
-  readonly body: {
-    readonly service_id: string;
-    readonly result_class: string;
-    readonly output?: unknown;
-    readonly receipt_id: string;
-    readonly link_id: string;
-    readonly link_hash: string;
-  };
+  /**
+   * SUN-1222C-PCC-WIRE-RESULT-IMPLEMENTATION: the governed v2 wire result
+   * *is* the full PCC document (`durableEvidence.pcc`, unmodified) --
+   * never a bespoke envelope. `contracts/releases/2.0.0/schemas/services/
+   * *.schema.json` requires the entire validated object to itself be a
+   * valid PCC document (`allOf` ref to `proof-carrying-context.schema.json`
+   * at the schema's own top level, `additionalProperties: false`), so no
+   * sibling metadata field (the previous `service_id` / `result_class` /
+   * `receipt_id` / `link_id` / `link_hash` envelope this replaces) can be
+   * added alongside it without breaking schema conformance. Service
+   * identity already lives at `contract.service_id` /
+   * `contract.service_version`; idempotency/correlation already lives at
+   * `contract.idempotency_key` -- both already required by the base PCC
+   * schema, so nothing is lost, only relocated to its already-governed
+   * home. See docs/reports/SUN-1222C-pcc-wire-result-governance-decision.md.
+   */
+  readonly body: Readonly<Record<string, unknown>>;
   readonly settleResponse: SettleResponse;
   readonly durableEvidence: {
     readonly pcc: unknown;
@@ -1019,14 +1028,14 @@ export async function runPaidContinuationWorkflow(
 
   const cachedResult: DurableCachedResult = {
     status: 200,
-    body: {
-      service_id: decrypted.settlementContext.service_id,
-      result_class: executorOutcome.result.result_class,
-      output: executorOutcome.result.output,
-      receipt_id: verificationReceiptId,
-      link_id: paymentServiceLink.link_id,
-      link_hash: paymentServiceLink.link_hash,
-    },
+    // SUN-1222C-PCC-WIRE-RESULT-IMPLEMENTATION: the wire body *is* the
+    // already-built, already-signed PCC document -- the accepted v2
+    // output-schema authority (see DurableCachedResult.body's own doc
+    // comment). Never a second PCC construction; `verificationReceipt`
+    // (== `pccResult.pcc`) is the exact same object every other use of
+    // this result (durableEvidence.pcc below, receipt persistence)
+    // already treats as authoritative.
+    body: verificationReceipt as Readonly<Record<string, unknown>>,
     settleResponse: {
       success: true,
       transaction: settleOutcome.transactionReference ?? 'reconciled:transaction-unavailable',
