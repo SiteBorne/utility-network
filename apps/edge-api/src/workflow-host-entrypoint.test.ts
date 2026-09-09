@@ -67,7 +67,10 @@ function fakeDeps(): PaidContinuationWorkflowDependencies {
     validatePcc: vi.fn() as never,
     settlement: { repository: {} as never, evidenceProvider: {} as never },
     reconciliation: { checker: vi.fn() as never, network: 'eip155:8453' },
-    persistence: { job: {} as never, resultReceipt: {} as never },
+    persistence: {
+      job: { getJob: async () => undefined } as never,
+      resultReceipt: {} as never,
+    },
   };
 }
 
