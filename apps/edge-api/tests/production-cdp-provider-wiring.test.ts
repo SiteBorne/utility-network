@@ -227,7 +227,18 @@ describe('production CDP provider wiring (SUN-1200 checkpoint B)', () => {
     const res = await payAndRetry(app, '/v2/web/context', WEB_INPUT, challenge);
     expect(res.status).toBe(200);
     const body = (await res.json()) as Record<string, unknown>;
-    expect(body.result_class).toBe('success');
+    // SUN-1222C-PCC-WIRE-RESULT-IMPLEMENTATION (ac642cb): the 200 body is
+    // now the governed v2 wire result -- the full PCC document, or (in
+    // this harness) the `result.verification` fragment
+    // `createInProcessWorkflowBinding`'s documented, pre-existing,
+    // out-of-scope `validatePcc` stub forwards as-is (see
+    // in-process-workflow-binding.ts and mcp-four-service-acceptance
+    // .test.ts's Section 8 comment), regardless of production/fixture
+    // evidence mode -- empirically confirmed identical for this exact
+    // production-CDP-evidenced route. `result_class` no longer exists on
+    // the wire body; `verification.decision === 'pass'` is its governed
+    // nested-location equivalent.
+    expect(body.decision).toBe('pass');
     expect(verifyCount).toBe(1);
     expect(settleCount).toBe(1);
   });

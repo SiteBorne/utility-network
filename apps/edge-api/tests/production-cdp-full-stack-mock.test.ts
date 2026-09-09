@@ -232,9 +232,17 @@ describe('production CDP full-stack mock (SUN-1200 checkpoint D, directive §22/
     const res = await payAndRetry(app, '/v2/web/context', WEB_INPUT, challenge);
     expect(res.status).toBe(200);
     const body = (await res.json()) as Record<string, unknown>;
-    expect(body.result_class).toBe('success');
-    expect(body.receipt_id).toBeDefined();
-    expect(body.link_id).toBeDefined();
+    // SUN-1222C-PCC-WIRE-RESULT-IMPLEMENTATION (ac642cb): the 200 body is
+    // now the governed v2 wire result -- the full PCC document, or (in
+    // this harness) the `result.verification` fragment
+    // `createInProcessWorkflowBinding`'s documented, pre-existing,
+    // out-of-scope `validatePcc` stub forwards as-is (see
+    // in-process-workflow-binding.ts and mcp-four-service-acceptance
+    // .test.ts's Section 8 comment). `result_class`/`receipt_id`/
+    // `link_id` no longer exist anywhere on the wire body by design --
+    // `verification.decision === 'pass'` is the governed nested-location
+    // equivalent for this test's "success, receipt, PSL" signal.
+    expect(body.decision).toBe('pass');
     expect(verifyCount).toBe(1);
     expect(settleCount).toBe(1);
 

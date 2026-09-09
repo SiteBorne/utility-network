@@ -284,9 +284,19 @@ describe('x402 HTTP vertical slice (SUN-0700A checkpoint 5)', () => {
       const res = await payAndRetry(app, '/v1/company/evidence-graph', COMPANY_INPUT, challenge);
       expect(res.status).toBe(200);
       const body = (await res.json()) as Record<string, unknown>;
-      expect(body.result_class).toBe('success');
-      expect(body.receipt_id).toBeTruthy();
-      expect(body.link_id).toBeTruthy();
+      // SUN-1222C-PCC-WIRE-RESULT-IMPLEMENTATION (ac642cb): the 200 body
+      // is now the governed v2 wire result -- the full PCC document, or
+      // (in this harness) the `result.verification` fragment
+      // `createInProcessWorkflowBinding`'s documented, pre-existing,
+      // out-of-scope `validatePcc` stub forwards as-is (see
+      // in-process-workflow-binding.ts and mcp-four-service-acceptance
+      // .test.ts's Section 8 comment). `result_class`/`receipt_id`/
+      // `link_id` no longer exist anywhere on the wire body by design
+      // (`additionalProperties: false` on the PCC document; service
+      // identity/idempotency now live at contract.service_id/
+      // contract.idempotency_key) -- `verification.decision === 'pass'`
+      // is the governed nested location for this test's "success" signal.
+      expect(body.decision).toBe('pass');
       expect(res.headers.get('PAYMENT-RESPONSE')).toBeTruthy();
     });
 
@@ -354,7 +364,12 @@ describe('x402 HTTP vertical slice (SUN-0700A checkpoint 5)', () => {
         const res = await payAndRetry(app, path, input, challenge);
         expect(res.status).toBe(200);
         const body = (await res.json()) as Record<string, unknown>;
-        expect(body.result_class).toBe('success');
+        // SUN-1222C-PCC-WIRE-RESULT-IMPLEMENTATION (ac642cb): see the
+        // matching comment on the "exact synthetic end-to-end lifecycle"
+        // test above -- `result_class` no longer exists on the governed
+        // wire body; `verification.decision === 'pass'` is its governed
+        // nested-location equivalent.
+        expect(body.decision).toBe('pass');
       });
     }
   });
@@ -544,7 +559,10 @@ describe('x402 HTTP vertical slice (SUN-0700A checkpoint 5)', () => {
       const res = await payAndRetry(app, declaredPath, COMPANY_INPUT, challenge);
       expect(res.status).toBe(200);
       const body = (await res.json()) as Record<string, unknown>;
-      expect(body.result_class).toBe('success');
+      // SUN-1222C-PCC-WIRE-RESULT-IMPLEMENTATION (ac642cb): see the
+      // matching comment on the "exact synthetic end-to-end lifecycle"
+      // test above.
+      expect(body.decision).toBe('pass');
     });
   });
 
@@ -794,8 +812,13 @@ describe('x402 HTTP vertical slice (SUN-0700A checkpoint 5)', () => {
           const res = await payAndRetry(app, '/v1/verify/agent-output', AGENT_INPUT, challenge, id);
           expect(res.status).toBe(200);
           const body = (await res.json()) as Record<string, unknown>;
-          expect(body.receipt_id).toBeTruthy();
-          expect(body.link_id).toBeTruthy();
+          // SUN-1222C-PCC-WIRE-RESULT-IMPLEMENTATION (ac642cb): see the
+          // matching comment on the "exact synthetic end-to-end lifecycle"
+          // test above -- `receipt_id`/`link_id` no longer exist on the
+          // wire body (relocated to durable D1 state, never returned to
+          // the buyer); `verification.decision === 'pass'` is this
+          // harness's governed nested-location "verified receipt" signal.
+          expect(body.decision).toBe('pass');
 
           // A second retry of the exact same identifier must reconstruct
           // the identical result — never a second consumption.
@@ -808,7 +831,12 @@ describe('x402 HTTP vertical slice (SUN-0700A checkpoint 5)', () => {
           );
           expect(retry.status).toBe(200);
           const retryBody = (await retry.json()) as Record<string, unknown>;
-          expect(retryBody.link_id).toBe(body.link_id);
+          // Was `expect(retryBody.link_id).toBe(body.link_id)` --
+          // vacuously true post-ac642cb since neither body carries
+          // `link_id` any more (both `undefined`). Byte-identical replay
+          // of the whole governed wire body is the equivalent, still-
+          // meaningful "same result, never a second consumption" proof.
+          expect(retryBody).toEqual(body);
         }),
         { numRuns: 3 }
       );
@@ -1084,7 +1112,12 @@ describe('x402 HTTP vertical slice (SUN-0700A checkpoint 5)', () => {
 
         expect(res.status).toBe(200);
         const body = (await res.json()) as Record<string, unknown>;
-        expect(body.result_class).toBe('success');
+        // SUN-1222C-PCC-WIRE-RESULT-IMPLEMENTATION (ac642cb): see the
+        // matching comment on the "exact synthetic end-to-end lifecycle"
+        // test above -- `disconnectExecutor`'s `result.verification`
+        // block (with `decision: 'pass'`) above is exactly what now
+        // becomes this response's whole wire body.
+        expect(body.decision).toBe('pass');
 
         // The actual H2A protection assertion: exactly one continuation
         // was registered to survive the request context, and it is the
