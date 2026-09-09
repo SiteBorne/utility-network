@@ -1,9 +1,20 @@
 import { BUNDLED_SERVICE_INPUT_SCHEMAS, type SiteborneServiceId } from '@siteborne/protocol-x402';
-import companyOutput from '../../../contracts/releases/1.0.0/schemas/services/company-evidence-output.schema.json' with { type: 'json' };
-import webOutput from '../../../contracts/releases/1.0.0/schemas/services/web-context-output.schema.json' with { type: 'json' };
-import documentOutput from '../../../contracts/releases/1.0.0/schemas/services/document-evidence-output.schema.json' with { type: 'json' };
-import agentOutput from '../../../contracts/releases/1.0.0/schemas/services/agent-verification-output.schema.json' with { type: 'json' };
-import pccSchema from '../../../contracts/releases/1.0.0/schemas/proof-carrying-context.schema.json' with { type: 'json' };
+// SUN-1222C-MCP-PAYMENT-DESIGN-CORRECTION §17: sourced from the accepted
+// 2.0.0 release, not 1.0.0. Real production v2 executors already emit
+// results under contractRelease '2.0.0' (see e.g.
+// company-evidence-graph-v2-production-executor.ts). 2.0.0's only
+// difference from 1.0.0 is that `contract.service_id` /
+// `contract.service_version` are widened from a `const` fixed to the v1
+// value to an `enum` covering both v1 and v2 — every other constraint is
+// byte-identical. Sourcing v2 entries from 1.0.0 made every genuine v2
+// result schema-invalid (a v2 identity value can never satisfy a v1-only
+// `const`), which is exactly the defect this fixes; v1 entries are
+// unaffected (1.0.0 and 2.0.0 validate v1-identified results identically).
+import companyOutput from '../../../contracts/releases/2.0.0/schemas/services/company-evidence-output.schema.json' with { type: 'json' };
+import webOutput from '../../../contracts/releases/2.0.0/schemas/services/web-context-output.schema.json' with { type: 'json' };
+import documentOutput from '../../../contracts/releases/2.0.0/schemas/services/document-evidence-output.schema.json' with { type: 'json' };
+import agentOutput from '../../../contracts/releases/2.0.0/schemas/services/agent-verification-output.schema.json' with { type: 'json' };
+import pccSchema from '../../../contracts/releases/2.0.0/schemas/proof-carrying-context.schema.json' with { type: 'json' };
 import moneySchema from '../../../contracts/releases/1.0.0/schemas/common/money.schema.json' with { type: 'json' };
 
 const PCC_SCHEMA_ID = 'https://utility.siteborne.net/schemas/proof-carrying-context.schema.json';
@@ -55,7 +66,9 @@ function selfContainedOutputSchema(schema: unknown): unknown {
 export const MCP_SERVICE_INPUT_SCHEMAS = BUNDLED_SERVICE_INPUT_SCHEMAS;
 
 // SUN-1000 checkpoint 1M: v2 entries reuse the identical frozen output
-// schema — output semantics are unchanged (checkpoint 1L section 7).
+// schema object — output semantics are unchanged (checkpoint 1L section 7).
+// The schema object itself is the 2.0.0 release (see the import comment
+// above), which is the one that actually accepts a v2-identified result.
 export const MCP_SERVICE_OUTPUT_SCHEMAS: Readonly<Record<SiteborneServiceId, unknown>> = {
   'company_evidence_graph.v1': selfContainedOutputSchema(companyOutput),
   'web_context_verified.v1': selfContainedOutputSchema(webOutput),
