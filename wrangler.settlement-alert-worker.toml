@@ -13,18 +13,12 @@
 # 100%/0% split or the Workflow host's `siteborne-paid-continuation`
 # resource registration.
 #
-# NOT YET DEPLOYED (D12_PRODUCTION_ACTIVATION=BLOCKED_PENDING_SECRET). This
-# file is frozen local configuration only, exactly like
-# `wrangler.paid-continuation-runtime.toml` was before its own gated
-# H2BF5 deployment checkpoint -- D12's authorization is
-# GRANTED_IMPLEMENTATION_ONLY: source/config definition of one cron trigger
-# and one new Worker, NOT creation or activation of those production
-# resources (D12_PRODUCTION_DEPLOYMENT_AUTHORIZATION=ABSENT,
-# D12_WEBHOOK_SECRET_PROVISIONING_AUTHORIZATION=ABSENT). `wrangler deploy
-# --config wrangler.settlement-alert-worker.toml` must not run until a
-# separate checkpoint supplies or authorizes provisioning of a real
-# `SETTLEMENT_ALERT_WEBHOOK_URL` value and separately authorizes
-# activation.
+# DEPLOYED (SUN-1222C-R4-D14, D14_SETTLEMENT_ALERT_PRODUCTION_ACTIVATION=PASS
+# -- see docs/reports/SUN-1222C-R4-D14-settlement-alert-production-activation.md).
+# `SETTLEMENT_ALERT_WEBHOOK_URL` is provisioned as a real Cloudflare Worker
+# secret (via `wrangler secret bulk`, never `wrangler secret put`, never
+# committed to this file or logged). The 15-minute cron below is active in
+# production.
 name = "siteborne-settlement-alert"
 main = "apps/edge-api/src/settlement-alert-worker-entrypoint.ts"
 # Matches both other scripts' compatibility_date -- same runtime
