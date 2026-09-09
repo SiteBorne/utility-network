@@ -15,6 +15,25 @@ export const SITEBORNE_A2A_JWKS_URL = `${SITEBORNE_A2A_ORIGIN}/.well-known/jwks.
  */
 export const SITEBORNE_X402_EXTENSION_URI = 'https://siteborne.net/extensions/a2a/x402/v1';
 
+/**
+ * SUN-1222C-AGENT-TRUST-100 (slice A): the `securitySchemes` map key under
+ * which SITEBORNE declares native A2A `mutualTLS` caller-identity support.
+ * This declares capability only -- it does not by itself gate any operation.
+ * Root `securityRequirements` stays `[]` (see card.ts) so the anonymous A2A
+ * probe SITEBORNE's own external conformance monitor performs is unaffected;
+ * a future, separately authorized checkpoint may add mTLS to
+ * `AgentSkill.securityRequirements` for specific skills without touching
+ * this declaration.
+ */
+export const SITEBORNE_MTLS_SECURITY_SCHEME_KEY = 'mtls';
+export const SITEBORNE_MTLS_SECURITY_SCHEME_DESCRIPTION =
+  'Optional mutual TLS: callers presenting a client certificate that ' +
+  "Cloudflare validates against SITEBORNE's trusted CA are recognized as " +
+  'a strongly attributed caller identity. mTLS is never required to reach ' +
+  'the public A2A endpoint or its skills, and never itself authorizes ' +
+  'paid execution -- x402 payment remains the sole economic authorization ' +
+  'mechanism for every service.';
+
 // SUN-1000 checkpoint 1M: v2 identities added alongside v1 (checkpoint 1L
 // PREPRODUCTION_V2_REPLACEMENT decision — v1 remains frozen historical
 // evidence, v2 is additive here; nothing is removed).

@@ -3,6 +3,7 @@ import { AgentCard } from '@a2a-js/sdk';
 import {
   A2A_PROTOCOL_VERSION,
   SITEBORNE_A2A_INTERFACE_URL,
+  SITEBORNE_MTLS_SECURITY_SCHEME_KEY,
   SITEBORNE_SERVICE_IDS,
   SITEBORNE_X402_EXTENSION_URI,
   buildUnsignedSiteborneAgentCard,
@@ -25,7 +26,7 @@ describe('SITEBORNE A2A v1 Agent Card contract', () => {
     expect(card.skills.map((skill) => skill.id)).toEqual(SITEBORNE_SERVICE_IDS);
     expect(card.skills.every((skill) => skill.inputModes.includes('application/json'))).toBe(true);
     expect(card.skills.every((skill) => skill.outputModes.includes('application/json'))).toBe(true);
-    expect(card.securitySchemes).toEqual({});
+    expect(Object.keys(card.securitySchemes)).toEqual([SITEBORNE_MTLS_SECURITY_SCHEME_KEY]);
     expect(card.securityRequirements).toEqual([]);
     expect(card.capabilities?.streaming).toBe(false);
     expect(card.capabilities?.pushNotifications).toBe(false);
@@ -127,5 +128,74 @@ describe('SITEBORNE A2A v1 Agent Card contract', () => {
       expect(v1?.name.toLowerCase()).toContain('v1');
       expect(v2?.name.toLowerCase()).toContain('v2');
     }
+  });
+});
+
+// SUN-1222C-AGENT-TRUST-100-IMPLEMENTATION-A §8/§9/§18/§19: truthfully
+// declares native A2A mutualTLS caller-identity support without gating the
+// public anonymous probe (root securityRequirements stays []) and without
+// costing the "Valid AgentCard" / "Protocol version" conformance criteria.
+describe('SITEBORNE A2A Agent Card mTLS security-scheme declaration', () => {
+  it('declares mutualTLS under the wire key defined by the pinned SDK', () => {
+    const card = buildUnsignedSiteborneAgentCard();
+    const wire = AgentCard.toJSON(card) as {
+      securitySchemes?: Record<string, { mtlsSecurityScheme?: { description?: string } }>;
+    };
+
+    const scheme = card.securitySchemes[SITEBORNE_MTLS_SECURITY_SCHEME_KEY];
+    expect(scheme?.scheme?.$case).toBe('mtlsSecurityScheme');
+    expect(
+      scheme?.scheme?.$case === 'mtlsSecurityScheme' ? scheme.scheme.value.description : undefined
+    ).toEqual(expect.stringContaining('mutual TLS'));
+
+    // The exact wire shape SITEBORNE's own pinned @a2a-js/sdk@1.0.1
+    // SecurityScheme.toJSON() produces for a mtls oneof member -- proven by
+    // reading node_modules/.pnpm/@a2a-js+sdk@1.0.1_*/…/dist/index.js, not
+    // assumed. Agenstry (and any other conformant A2A client) reads exactly
+    // this shape from GET /.well-known/agent-card.json.
+    const wireScheme = wire.securitySchemes?.[SITEBORNE_MTLS_SECURITY_SCHEME_KEY];
+    expect(wireScheme?.mtlsSecurityScheme).toBeDefined();
+    expect(wireScheme?.mtlsSecurityScheme?.description).toEqual(
+      expect.stringContaining('mutual TLS')
+    );
+  });
+
+  it('never requires mTLS to reach the agent root -- the public probe stays anonymous', () => {
+    const card = buildUnsignedSiteborneAgentCard();
+    // An empty securityRequirements array is A2A's own "no requirement"
+    // representation (see @a2a-js/sdk AgentCard doc comment: "Security
+    // requirements for contacting the agent"). Anything non-empty here
+    // would gate Agenstry's own anonymous SendMessage heartbeat probe,
+    // which SUN-1222C-agent-trust-100-design.md §9 explicitly forbids.
+    expect(card.securityRequirements).toEqual([]);
+  });
+
+  it('every skill also carries no per-skill security requirement in this slice', () => {
+    // SUN-1222C-AGENT-TRUST-100-IMPLEMENTATION-A §10: no existing production
+    // skill is being (mis)marked as mTLS-required just to chase conformance
+    // points. Skill-level enforcement is a distinct, later, separately
+    // authorized decision (design doc §10/§13, "Option D").
+    const card = buildUnsignedSiteborneAgentCard();
+    for (const skill of card.skills) {
+      expect(skill.securityRequirements, `skill ${skill.id}`).toEqual([]);
+    }
+  });
+
+  it('declaring mTLS does not disturb the x402 extension payload', () => {
+    const card = buildUnsignedSiteborneAgentCard({
+      'web_context_verified.v2': true,
+      'verify_agent_output.v2': true,
+    });
+    const x402Extension = card.capabilities?.extensions.find(
+      (extension) => extension.uri === SITEBORNE_X402_EXTENSION_URI
+    );
+    expect(x402Extension?.params).toMatchObject({
+      x402Version: 2,
+      paymentRequiredForUsefulExecution: true,
+      productionEnabled: true,
+    });
+    // mTLS declaration and the x402 extension are structurally independent
+    // planes of the same card -- adding one must not perturb the other.
+    expect(Object.keys(card.securitySchemes)).toEqual([SITEBORNE_MTLS_SECURITY_SCHEME_KEY]);
   });
 });

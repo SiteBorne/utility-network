@@ -9,6 +9,8 @@ import {
   A2A_PROTOCOL_VERSION,
   SITEBORNE_A2A_INTERFACE_URL,
   SITEBORNE_A2A_ORIGIN,
+  SITEBORNE_MTLS_SECURITY_SCHEME_DESCRIPTION,
+  SITEBORNE_MTLS_SECURITY_SCHEME_KEY,
   SITEBORNE_SERVICE_IDS,
   SITEBORNE_X402_EXTENSION_URI,
 } from './constants';
@@ -141,7 +143,22 @@ export function buildUnsignedSiteborneAgentCard(
         },
       ],
     },
-    securitySchemes: {},
+    // SUN-1222C-AGENT-TRUST-100-IMPLEMENTATION-A: declares native A2A
+    // mutualTLS caller-identity *capability* only. Root securityRequirements
+    // stays `[]` (below) so this never gates the public agent root or any
+    // skill -- see docs/reports/SUN-1222C-agent-trust-100-design.md §9 and
+    // §11 (Option B: x402 remains the sole economic-authorization gate;
+    // mTLS may only ever *enrich* an already-x402-authorized request, and
+    // only where a future, separately authorized checkpoint wires a
+    // specific skill's own securityRequirements to it).
+    securitySchemes: {
+      [SITEBORNE_MTLS_SECURITY_SCHEME_KEY]: {
+        scheme: {
+          $case: 'mtlsSecurityScheme',
+          value: { description: SITEBORNE_MTLS_SECURITY_SCHEME_DESCRIPTION },
+        },
+      },
+    },
     securityRequirements: [],
     defaultInputModes: [JSON_MEDIA_TYPE],
     defaultOutputModes: [JSON_MEDIA_TYPE],
