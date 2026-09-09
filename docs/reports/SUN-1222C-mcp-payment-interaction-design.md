@@ -185,3 +185,293 @@ MCP_REPOSITORY_RELEASE_GATE=STILL_BLOCKED
 LIVE_PAID_ACCEPTANCE=NOT_EXECUTED
 CUTOVER_AUTHORIZED=NO
 ```
+
+## 22. CORRECTION — SUN-1222C-MCP-PAYMENT-DESIGN-CORRECTION
+
+Superseding checkpoint. §§1–21 above are retained as the audit trail, not deleted. This section
+overrides the conclusion in §4/§16 above, which incorrectly reported the whole payment
+interaction as `PROTOCOL_STATUS=UNSPECIFIED`.
+
+**Previous conclusion:** MCP-native payment execution has no official carrier; recommended a
+SITEBORNE-specific REST-handoff + retrieval-tool design.
+
+**New upstream evidence:** `@x402/mcp` is a real, maintained package (Coinbase/x402 authors,
+`npm view @x402/mcp` → v2.25.0, published 5 days before this checkpoint; not merely pinned-repo
+prose — downloaded and inspected the actual tarball at
+`/tmp/x402-mcp-inspect/package/{README.md,dist/esm/index.mjs}`). It defines a real, documented
+wire format for x402-over-MCP:
+
+- `PaymentRequired` carrier (server → client, unpaid call): a `CallToolResult` with
+  `isError: true`, `structuredContent` set to the `PaymentRequired` object, and
+  `content[0].text` holding the same object JSON-encoded (the server-generated/recommended
+  shape) — or, as a fallback shape a client may also accept, a JSON-RPC error with code
+  `-32042` (or `402`) carrying `error.data.x402` or `error.data`.
+- `PaymentPayload` carrier (client → server, retried call): `_meta["x402/payment"]`.
+- `SettleResponse` carrier (server → client, paid result): `_meta["x402/payment-response"]`.
+- Client-side signing is the documented architecture (`createx402MCPClient`,
+  `wrapMCPClientWithPayment`, both driven by a caller-supplied wallet/scheme) — not a
+  bridge holding buyer custody.
+
+**Impact:** design changes. §4/§16's `UNSPECIFIED` classification is corrected below. This is a
+real, maintained protocol convention, not a SITEBORNE invention — but it cannot be adopted by
+importing the library wholesale. Two concrete, code-verified blockers, not caution:
+
+1. **SDK incompatibility.** `@x402/mcp@2.25.0`'s compiled dist
+   (`dist/esm/index.mjs`) imports `@modelcontextprotocol/sdk/client/index.js` — the deprecated
+   monolithic v1 SDK. `grep` of this repo's `node_modules/.pnpm` confirms that package is not
+   installed anywhere; SITEBORNE already migrated fully to the split v2 SDK
+   (`@modelcontextprotocol/server@2.0.0` / `@modelcontextprotocol/client@2.0.0`), whose own
+   README states it "replaces the monolithic `@modelcontextprotocol/sdk` package from v1." The
+   v1 and v2 `McpServer`/`Client` types are different, non-interoperable packages — `@x402/mcp`
+   cannot be imported as-is without adding a second, deprecated MCP SDK to the dependency graph.
+2. **Settlement-authority violation.** Direct inspection of `dist/esm/index.mjs` shows
+   `resourceServer.settlePayment(...)` called from inside the library's own
+   `settlePaymentResult`/request-handling flow (both `settleBeforeHandler` and
+   `settleAfterHandler` phases) — settlement happens *inside* the MCP call boundary, driven by a
+   caller-supplied `HTTPFacilitatorClient`, with no hook into SITEBORNE's durable
+   `PaidContinuationWorkflow`. Adopting `createPaymentWrapper`/`x402ResourceServer` as documented
+   would create a second live settlement call site inside the MCP layer, directly violating the
+   `TOTAL_PRODUCTION_SETTLE_CALLSITES=1` invariant proven across the entire D4–D17 R4 sequence.
+
+### 22.1 Three distinguished claims
+
+```
+MCP_CORE_PAYMENT_STANDARD=NO
+```
+The MCP specification itself (2026-07-28) defines no payment concept anywhere. Confirmed
+by the complete absence of "payment"/"x402"/"elicit" in `@modelcontextprotocol/server`'s own
+README (checked in §3 of the original audit).
+
+```
+X402_OFFICIAL_MCP_TRANSPORT=YES
+```
+A real, maintained, versioned wire format exists (above), authored by the same organization
+that maintains x402 core/evm/extensions, and pinned to `@x402/core: ~2.25.0` — closely tracking
+(though newer than) this repo's pinned `@x402/core@2.21.0`.
+
+```
+SITEBORNE_X402_MCP_TRANSPORT_IMPLEMENTED=NO
+```
+SITEBORNE's current `/mcp` route (`apps/edge-api/src/routes/mcp.ts`,
+`packages/protocol-mcp/src/server.ts`) implements none of this wire format today — it returns
+its own ad-hoc shape for quotes/payment-required, not `_meta["x402/payment"]`,
+`_meta["x402/payment-response"]`, or the `structuredContent`+`isError` `PaymentRequired` shape.
+
+### 22.2 Protocol classification (corrected)
+
+```
+MCP_CORE_PAYMENT_SEMANTICS=UNSPECIFIED
+X402_MCP_TRANSPORT_SEMANTICS=OFFICIAL_DRAFT_OR_EXTENSION
+X402_MCP_LIBRARY_SUPPORT=IMPLEMENTATION_CONVENTION
+SITEBORNE_CURRENT_PAYMENT_CARRIER=LOCAL_PROPOSAL
+```
+
+`X402_MCP_TRANSPORT_SEMANTICS` is `OFFICIAL_DRAFT_OR_EXTENSION`, not `OFFICIAL_STABLE_PROTOCOL`
+— it is real and maintained, but is an x402-ecosystem convention layered on top of MCP via
+`_meta`/JSON-RPC-error-code, not a cross-vendor standard ratified into MCP core itself, and its
+own README documents 4 different accepted `PaymentRequired` shapes across 2 response types —
+evidence the wire format itself is still settling. `X402_MCP_LIBRARY_SUPPORT` is downgraded to
+`IMPLEMENTATION_CONVENTION` (not `OFFICIAL_STABLE_PROTOCOL`) specifically for the *library*,
+because its reference implementation is one concrete opinionated wrapper (v1-SDK-bound,
+in-process settlement) — separable from the wire format it documents, which SITEBORNE can adopt
+independently.
+
+### 22.3 Exact wire semantics (§5 answer)
+
+```
+X402_MCP_PAYMENT_REQUIRED_CARRIER=CallToolResult{isError:true, structuredContent:<PaymentRequired>, content:[{type:"text", text:<PaymentRequired JSON>}]}  (primary/recommended); JSON-RPC error code -32042 or 402 with error.data.x402 or error.data (accepted fallback shapes)
+X402_MCP_PAYMENT_PAYLOAD_CARRIER=_meta["x402/payment"]
+X402_MCP_SETTLEMENT_RESPONSE_CARRIER=_meta["x402/payment-response"]
+```
+
+Not invented — read directly from the real package's README wire-flow table and confirmed
+structurally consistent with the `attachPaymentResponseToMeta`/`MCP_PAYMENT_RESPONSE_META_KEY`
+symbols found in the actual compiled `dist/esm/index.mjs`.
+
+### 22.4 Client-side signing vs buyer custody (§6 answer)
+
+```
+X402_MCP_CLIENT_SIDE_SIGNING_SUPPORTED=YES
+SERVER_SIDE_BUYER_CUSTODY_REQUIRED=NO
+```
+
+`createx402MCPClient`/`wrapMCPClientWithPayment` are client-side wrapper factories driven by a
+caller-supplied wallet/scheme (`ExactEvmScheme(walletAccount)`) — the documented architecture is
+exactly SITEBORNE's required shape (seller-side paid tool, caller signs with their own wallet).
+No upstream example shows an MCP bridge holding buyer funds; that architecture was not adopted
+and remains correctly out of scope.
+
+### 22.5 Revised option comparison (§7 answer)
+
+Pure Option A (import `@x402/mcp`'s `createPaymentWrapper` end-to-end) is **not viable**: blocked
+by both the SDK incompatibility and the settlement-authority violation proven in §22 above —
+these are code-verified facts, not caution. Pure Option B (the original REST-handoff design)
+remains safe but now needlessly ignores a real, maintained standard SITEBORNE could interoperate
+with at near-zero cost. The corrected recommendation is Option C, a hybrid that was anticipated
+by the original checkpoint's own §9 hedge ("determine whether SITEBORNE should reuse official
+transport types/constants/wire semantics while connecting them to SITEBORNE's existing settlement
+architecture"):
+
+- Adopt the **wire semantics only** (the three carrier keys/shapes in §22.3), implemented as a
+  small SITEBORNE-owned adapter inside the existing `/mcp` route — not by importing
+  `@x402/mcp`'s `createPaymentWrapper`/`x402ResourceServer`.
+- The adapter parses `_meta["x402/payment"]` into the same `PaymentPayload` shape SITEBORNE's
+  existing `decodePaymentSignatureHeaderSafe`/quote-matching logic already validates in
+  `x402-service.ts`, and feeds it into the **same, unmodified** durable
+  `PaidContinuationWorkflow` handoff the REST paid routes already use — zero new settlement call
+  sites.
+- On settlement, the adapter serializes the Workflow's existing `SettleResponse` into
+  `_meta["x402/payment-response"]` instead of any SITEBORNE-ad-hoc shape.
+- Unpaid calls return `PaymentRequired` in the exact `structuredContent`+`isError:true` shape
+  from §22.3, built from the same canonical quote-resolution chain already fixed in B.
+
+This keeps `TOTAL_PRODUCTION_SETTLE_CALLSITES=1`, requires zero new MCP SDK dependency, and
+gives any `@x402/mcp`-compatible client (or any client implementing the documented wire format
+directly) a genuinely interoperable, standards-aligned experience — without adopting the
+upstream library's incompatible settlement path.
+
+### 22.6 `siteborne_get_result` reassessed (§8 answer)
+
+```
+SITEBORNE_GET_RESULT_DECISION=OPTIONAL
+```
+
+With the in-band adapter above, payment and result now round-trip inside one bounded tool-call
+retry (client retries the same tool with `_meta["x402/payment"]` attached; the adapter awaits
+the same durable Workflow handoff already observed to complete in single-digit seconds
+throughout the R4 evidence chain, then returns the settled result directly). A separate
+retrieval tool is not required for the primary flow. It remains worth keeping as an optional
+resilience aid for the narrow case where a client's own tool-call timeout is shorter than the
+Workflow's wait — an already-paid, still-settling call — but is no longer load-bearing for basic
+functionality, so is downgraded from the original design's implied `REQUIRED`.
+
+### 22.7 Settlement-owner preservation (§9 answer — restated for clarity)
+
+```
+PUBLIC_API_SETTLE_CALLSITES=0
+MCP_ADAPTER_SETTLE_CALLSITES=0
+DEDICATED_WORKFLOW_SETTLE_CALLSITES=1
+TOTAL_PRODUCTION_SETTLE_CALLSITES=1
+```
+
+The MCP adapter parses, validates shape, extracts the payment payload, binds request identity,
+invokes SITEBORNE's existing payment validation, invokes the existing durable handoff, and
+serializes payment-required/result metadata in the upstream wire format — it never gains
+independent settlement authority.
+
+### 22.8 Payment-identifier / idempotency compatibility (§10 answer)
+
+```
+PAYMENT_IDENTIFIER_COMPATIBILITY=COMPATIBLE
+DURABLE_HANDOFF_COMPATIBILITY=COMPATIBLE
+RETRY_IDEMPOTENCY_COMPATIBILITY=COMPATIBLE
+RESULT_AUTHORIZATION_COMPATIBILITY=COMPATIBLE
+```
+
+Nothing in the upstream wire format prescribes an identity/idempotency mechanism of its own —
+`PaymentPayload` is opaque scheme-specific data to the MCP transport layer. SITEBORNE's existing
+`payment_identifier` (already durable, already bound to job/request identity, already the sole
+mechanism the dedicated Workflow keys off of) sits entirely underneath the adapter and requires
+no second identity mechanism.
+
+### 22.9 Client compatibility (§11 answer)
+
+```
+SUPPORTED_CLIENT_REQUIREMENTS=an MCP client implementing the x402-MCP wire format in §22.3 (either @x402/mcp's own client wrapper, or any client implementing the same _meta/structuredContent shapes directly)
+ACTUAL_APPLICATIONS_TESTED=NOT_TESTED
+```
+
+No named application (Claude Desktop/Code/Cursor) was tested against the payment flow this
+checkpoint — only the local packed stdio binary's handshake/tool-listing behavior was verified
+live (§22.10). Whether any specific named client ships built-in x402-MCP payment-awareness is a
+distinct, unverified question from protocol-level compatibility and should not be assumed.
+
+### 22.10 Stdio (§12 answer — unchanged)
+
+```
+STDIO_ACTUAL_BEHAVIOR=fully local, offline, discovery-only shim; never proxies to production (re-confirmed unchanged this checkpoint — no source touched)
+STDIO_RECOMMENDED_SCOPE=unchanged: keep as local discovery/schema-exploration only; evolving it into a genuine remote proxy capable of executing the new in-band payment flow is a separate, distinctly-scoped future decision, not required to unblock this design
+```
+
+### 22.11 V2 output schema (§13 — unchanged, restated)
+
+```
+V2_OUTPUT_ROOT_CAUSE=frozen-contracts.ts sources all eight output schemas from contracts/releases/1.0.0/; the real production v2 routes already declare and validate against the already-accepted contracts/releases/2.0.0/ release, which differs only in widening service_id/service_version from const to enum
+V2_OUTPUT_SCHEMA_AUTHORITY=contracts/releases/2.0.0/schemas/services/*.schema.json
+SCHEMA_GOVERNANCE_ACTION_REQUIRED=point frozen-contracts.ts's v2 output-schema imports at the existing 2.0.0 release; no new schema content, no mutation to 1.0.0 or 2.0.0
+```
+
+### 22.12 B/C (§14 — reconfirmed)
+
+```
+B_CANONICAL_QUOTE_RESOLUTION=PRESERVED
+C_V2_RESOURCE_PATHS=PRESERVED
+```
+
+Re-ran `apps/edge-api/tests/mcp-route.test.ts` + `packages/protocol-mcp/src/transport.test.ts`
+this checkpoint: 49/49 pass, zero regression.
+
+### 22.13 Final architecture decision (§16 answer)
+
+```
+FINAL_RECOMMENDED_PAYMENT_ARCHITECTURE=C (hybrid: official x402-MCP wire semantics, SITEBORNE-owned adapter, existing settlement backend)
+WHY=Pure A (import @x402/mcp's createPaymentWrapper end-to-end) is blocked by two code-verified facts: it depends on the deprecated v1 MCP SDK (not installed, incompatible with this repo's v2 SDK), and it settles payment inside its own wrapper via a caller-supplied facilitator client, which would create a second production settlement call site. Pure B (the original REST-handoff design) is safe but ignores a real, maintained, documented wire standard that costs nothing to interoperate with. C adopts the officially documented carrier keys/shapes (_meta["x402/payment"], _meta["x402/payment-response"], structuredContent+isError PaymentRequired) as a thin translation layer in front of SITEBORNE's existing, unmodified x402-service.ts validation and PaidContinuationWorkflow settlement path — zero new settlement authority, zero new MCP SDK dependency, genuine standards alignment.
+```
+
+### 22.14 Revised implementation plan (§17 answer — design only, no implementation this checkpoint)
+
+Dependency-ordered, each with its own RED→GREEN→mutation-proof cycle and its own commit boundary
+when eventually authorized:
+
+1. **Wire-format adapter module** (`packages/protocol-mcp`): pure functions
+   `encodePaymentRequiredResult(paymentRequired)` → `CallToolResult` in the §22.3 shape, and
+   `decodePaymentPayloadFromMeta(request)` → existing `PaymentPayload` type or `undefined`.
+   Security invariant: never touches settlement; pure serialization/parsing.
+2. **v2 output-schema source correction**: point `frozen-contracts.ts`'s output-schema imports
+   at `contracts/releases/2.0.0/` instead of `1.0.0` for all four v2 entries. Security invariant:
+   1.0.0/2.0.0 release files themselves stay immutable; only the import source changes.
+3. **MCP route integration**: wire the adapter into the existing `/mcp` tool-call handler so an
+   unpaid call returns the §22.3 `PaymentRequired` shape (using the same canonical
+   quote-resolution chain B already fixed), and a retried call with `_meta["x402/payment"]`
+   present is decoded and handed to the **existing, unmodified**
+   `x402-service.ts`/`PaidContinuationWorkflow` validation-and-settlement path. Security
+   invariant: `TOTAL_PRODUCTION_SETTLE_CALLSITES` stays 1; this task must not add a call site.
+4. **Settlement-response serialization**: on Workflow completion, encode the existing
+   `SettleResponse` into `_meta["x402/payment-response"]` on the successful `CallToolResult`.
+5. **`payment_identifier` binding through MCP**: ensure the adapter binds request identity using
+   SITEBORNE's existing `payment_identifier`/idempotency mechanism (§22.8), not a new one.
+6. **Four-service acceptance**: credential-free client acceptance tests exercising all four v2
+   tools through the new wire format end-to-end against local/workerd, no live network calls.
+7. **HTTP MCP + stdio scope confirmation**: confirm the HTTP `/mcp` route carries the new flow;
+   stdio scope stays unchanged (§22.10) unless separately authorized.
+8. **Full release-gate sweep**: full monorepo suite, typecheck, build, lint, secrets-scan,
+   preflight, wrangler dry-runs — not run this checkpoint (design-only).
+
+```
+IMPLEMENTATION_TASK_COUNT=8
+```
+
+### 22.15 Zero-effect accounting (this correction checkpoint)
+
+```
+PRODUCTION_SOURCE_CHANGES=0
+UPLOADS=0
+DEPLOYMENTS=0
+PRODUCTION_MUTATIONS=0
+LIVE_QUOTES_OR_INTENTIONAL_402_REQUESTS=0
+REAL_SIGNING=0
+PAID_REQUESTS=0
+REAL_PROVIDER_CALLS=0
+REAL_SETTLEMENTS=0
+ECONOMIC_EFFECT_USDC=0
+```
+
+The only filesystem changes made this checkpoint are inspection of the `@x402/mcp` package into
+`/tmp/x402-mcp-inspect` (outside the repository, not committed) and this correction section
+appended to the design report.
+
+```
+MCP_REPOSITORY_RELEASE_GATE=STILL_BLOCKED
+LIVE_PAID_ACCEPTANCE=NOT_EXECUTED
+CUTOVER_AUTHORIZED=NO
+```
