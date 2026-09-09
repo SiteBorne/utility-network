@@ -33,6 +33,12 @@ import type {
   McpQuoteConfiguration,
   McpServiceExecutionBoundary,
 } from './types';
+import {
+  attachPaymentResponseMeta,
+  buildPaymentRequiredResult,
+  extractPaymentPayload,
+  type McpRequestMeta,
+} from './x402-wire';
 
 const defaultBoundary: McpServiceExecutionBoundary = {
   async execute(serviceId) {
@@ -298,14 +304,43 @@ export function createSiteborneMcpServer(options: CreateSiteborneMcpOptions = {}
         if (containsHostileObjectKey(input)) {
           return errorResult('invalid_input', 'input contains a forbidden object key');
         }
-        const outcome = await boundary.execute(serviceId, input, invocationContext(context));
+        // SUN-1222C-MCP-PAYMENT-DESIGN-CORRECTION: the official carrier
+        // for the buyer's payment authorization on a retried tools/call.
+        // `context.mcpReq._meta` is the SDK's own per-call metadata
+        // accessor (reserved io.modelcontextprotocol/* envelope keys
+        // already lifted out) -- extraction and schema validation happen
+        // exactly once, here, so no boundary implementation re-parses
+        // `_meta` itself. containsHostileObjectKey already guarded
+        // `input`; the payload's own JSON.parse-reachable pollution
+        // surface is covered by @x402/core's own parsePaymentPayload
+        // (see x402-wire.ts's doc comment).
+        const paymentPayload = extractPaymentPayload(
+          context.mcpReq._meta as McpRequestMeta | undefined
+        );
+        const outcome = await boundary.execute(
+          serviceId,
+          input,
+          invocationContext(context),
+          paymentPayload
+        );
+        if (outcome.outcome === 'payment_required' && outcome.paymentRequired) {
+          // Official wire shape (verified against the real, published
+          // @x402/mcp package -- see the design-correction report) takes
+          // precedence over the ad-hoc SITEBORNE-only errorResult shape
+          // whenever the boundary supplies a genuine PaymentRequired
+          // object.
+          return buildPaymentRequiredResult(outcome.paymentRequired);
+        }
         if (outcome.outcome !== 'fulfilled') {
           return errorResult(outcome.code, outcome.message, outcome.details);
         }
-        return {
-          content: [{ type: 'text', text: JSON.stringify(outcome.result) }],
+        const fulfilled = {
+          content: [{ type: 'text' as const, text: JSON.stringify(outcome.result) }],
           structuredContent: outcome.result,
         };
+        return outcome.paymentResponse
+          ? attachPaymentResponseMeta(fulfilled, outcome.paymentResponse)
+          : fulfilled;
       }
     );
   }

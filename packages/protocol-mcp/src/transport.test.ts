@@ -4,6 +4,7 @@ import {
   frozenOutputExample,
   type SiteborneServiceId,
 } from '@siteborne/protocol-x402';
+import type { PaymentPayload, PaymentRequired, SettleResponse } from '@x402/core/types';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   MCP_PROTOCOL_VERSION,
@@ -138,13 +139,163 @@ describe('SITEBORNE MCP 2026-07-28 Hono transport', () => {
       expect(result.isError).not.toBe(true);
       expect(result.structuredContent).toEqual(frozenOutputExample(serviceId));
       expect(boundary.execute).toHaveBeenCalledTimes(1);
+      // SUN-1222C-MCP-PAYMENT-DESIGN-CORRECTION: this call carries no
+      // `_meta["x402/payment"]`, so the 4th arg is genuinely `undefined`
+      // -- a real assertion (not a placeholder) that an unpaid call
+      // reaches the boundary with no payment payload at all, never a
+      // synthesized or defaulted one.
       expect(boundary.execute).toHaveBeenCalledWith(
         serviceId,
         input,
-        expect.objectContaining({ protocol_version: MCP_PROTOCOL_VERSION })
+        expect.objectContaining({ protocol_version: MCP_PROTOCOL_VERSION }),
+        undefined
       );
     }
   );
+
+  // SUN-1222C-MCP-PAYMENT-DESIGN-CORRECTION (Architecture C): end-to-end
+  // proof that the official x402-over-MCP wire carriers (verified against
+  // the real @x402/mcp@2.25.0 package, not invented) are correctly wired
+  // through the real SDK client/server round trip, not merely unit-tested
+  // in isolation on x402-wire.ts.
+  describe('x402 payment wire carriers', () => {
+    it('extracts a real _meta["x402/payment"] payload and passes it to the boundary', async () => {
+      const paymentPayload: PaymentPayload = {
+        x402Version: 2,
+        accepted: {
+          scheme: 'exact',
+          network: 'eip155:8453',
+          amount: '31200',
+          asset: '0xUSDC',
+          payTo: '0xPayee',
+          maxTimeoutSeconds: 60,
+          extra: {},
+        },
+        payload: { signature: '0xdeadbeef' },
+      };
+      const boundary: McpServiceExecutionBoundary = {
+        execute: vi.fn(async (serviceId) => ({
+          outcome: 'fulfilled' as const,
+          result: frozenOutputExample(serviceId),
+        })),
+      };
+      const { app } = createFixtureApp(boundary);
+      const client = await connectClient(app);
+      clients.push(client);
+      const input = frozenInputExample('company_evidence_graph.v2');
+
+      await client.callTool({
+        name: 'siteborne_company_evidence_graph',
+        arguments: input as Record<string, unknown>,
+        _meta: { 'x402/payment': paymentPayload },
+      });
+
+      expect(boundary.execute).toHaveBeenCalledWith(
+        'company_evidence_graph.v2',
+        input,
+        expect.objectContaining({ protocol_version: MCP_PROTOCOL_VERSION }),
+        paymentPayload
+      );
+    });
+
+    it('a boundary payment_required outcome with a real PaymentRequired object emits the official wire shape', async () => {
+      const paymentRequired: PaymentRequired = {
+        x402Version: 2,
+        resource: { url: 'https://utility.siteborne.net/v2/company/evidence-graph' },
+        accepts: [
+          {
+            scheme: 'exact',
+            network: 'eip155:8453',
+            amount: '31200',
+            asset: '0xUSDC',
+            payTo: '0xPayee',
+            maxTimeoutSeconds: 60,
+            extra: {},
+          },
+        ],
+      };
+      const boundary: McpServiceExecutionBoundary = {
+        execute: vi.fn(async () => ({
+          outcome: 'payment_required' as const,
+          code: 'payment_required',
+          message: 'payment required',
+          paymentRequired,
+        })),
+      };
+      const { app } = createFixtureApp(boundary);
+      const client = await connectClient(app);
+      clients.push(client);
+      const input = frozenInputExample('company_evidence_graph.v2');
+
+      const result = await client.callTool({
+        name: 'siteborne_company_evidence_graph',
+        arguments: input as Record<string, unknown>,
+      });
+
+      expect(result.isError).toBe(true);
+      expect(result.structuredContent).toEqual(paymentRequired);
+      // §12: the text fallback must never disagree with structuredContent.
+      const content = result.content as Array<{ type: string; text: string }>;
+      expect(JSON.parse(content[0]!.text)).toEqual(paymentRequired);
+    });
+
+    it('a boundary fulfilled outcome with a SettleResponse attaches the official _meta["x402/payment-response"] carrier', async () => {
+      const settleResponse: SettleResponse = {
+        success: true,
+        transaction: '0xabc123',
+        network: 'eip155:8453',
+        payer: '0xBuyer',
+      };
+      const boundary: McpServiceExecutionBoundary = {
+        execute: vi.fn(async (serviceId) => ({
+          outcome: 'fulfilled' as const,
+          result: frozenOutputExample(serviceId),
+          paymentResponse: settleResponse,
+        })),
+      };
+      const { app } = createFixtureApp(boundary);
+      const client = await connectClient(app);
+      clients.push(client);
+      const input = frozenInputExample('company_evidence_graph.v2');
+
+      const result = await client.callTool({
+        name: 'siteborne_company_evidence_graph',
+        arguments: input as Record<string, unknown>,
+        _meta: { 'x402/payment': { placeholder: true } },
+      });
+
+      expect(result.isError).not.toBe(true);
+      const meta = result._meta as Record<string, unknown> | undefined;
+      expect(meta?.['x402/payment-response']).toEqual(settleResponse);
+    });
+
+    it('a malformed _meta["x402/payment"] fails closed to undefined rather than crashing or reaching the boundary as-is', async () => {
+      const boundary: McpServiceExecutionBoundary = {
+        execute: vi.fn(async (serviceId) => ({
+          outcome: 'fulfilled' as const,
+          result: frozenOutputExample(serviceId),
+        })),
+      };
+      const { app } = createFixtureApp(boundary);
+      const client = await connectClient(app);
+      clients.push(client);
+      const input = frozenInputExample('company_evidence_graph.v2');
+
+      const result = await client.callTool({
+        name: 'siteborne_company_evidence_graph',
+        arguments: input as Record<string, unknown>,
+        _meta: { 'x402/payment': { hello: 'not a valid payment payload' } },
+      });
+
+      expect(result.isError).not.toBe(true); // did not crash
+      expect(boundary.execute).toHaveBeenCalledWith(
+        'company_evidence_graph.v2',
+        input,
+        expect.objectContaining({ protocol_version: MCP_PROTOCOL_VERSION }),
+        undefined // fail-closed: malformed payload never reaches the boundary as a truthy value
+      );
+    });
+  });
 
   it('builds canonical exact and upto quotes, preserving maximum-not-actual semantics', async () => {
     const { app } = createFixtureApp();

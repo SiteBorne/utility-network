@@ -29,6 +29,7 @@
     "@modelcontextprotocol/server": "2.0.0",
     "@siteborne/pricing": "workspace:*",
     "@siteborne/protocol-x402": "workspace:*",
+    "@x402/core": "^2.21.0",
     "hono": "^4.11.4",
     "zod": "^4.2.0"
   },

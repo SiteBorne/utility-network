@@ -317,6 +317,9 @@ importers:
       '@siteborne/protocol-x402':
         specifier: workspace:*
         version: link:../protocol-x402
+      '@x402/core':
+        specifier: ^2.21.0
+        version: 2.21.0
       hono:
         specifier: ^4.11.4
         version: 4.13.0
