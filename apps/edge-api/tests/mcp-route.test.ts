@@ -59,21 +59,31 @@ describe('edge-api /mcp route', () => {
   });
 
   it('does not expose useful service execution without the paid boundary', async () => {
+    // SUN-1222C-MCP-PAYMENT-DESIGN-CORRECTION: the MCP layer now delegates
+    // to the real production route function for this service
+    // (companyEvidenceGraphV2CdpProductionRoute) rather than an always-
+    // "payment_required" stub. This test's fixture env sets no
+    // PAID_ROUTES_ENABLED / *_CDP_ROUTE_ENABLED / D1 binding, so the real
+    // route honestly 404s before reaching payment logic at all -- a
+    // stronger proof of "no useful execution without configuration AND
+    // payment" than the old stub's fixed wording ever was. The core
+    // safety property this test exists to protect (isError, no
+    // structuredContent, no service output) is unchanged and still
+    // asserted below.
     const client = await connect();
     const result = await client.callTool({
       name: 'siteborne_company_evidence_graph',
-      arguments: frozenInputExample('company_evidence_graph.v1') as Record<string, unknown>,
+      arguments: frozenInputExample('company_evidence_graph.v2') as Record<string, unknown>,
     });
     expect(result.isError).toBe(true);
     expect(result.structuredContent).toBeUndefined();
-    expect(result.content).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          type: 'text',
-          text: expect.stringContaining('payment_required'),
-        }),
-      ])
-    );
+    const content = result.content as Array<{ type: string; text: string }>;
+    expect(content).toHaveLength(1);
+    expect(content[0]!.type).toBe('text');
+    // Never a fulfilled-shaped payload leaking through as an "error".
+    expect(() => JSON.parse(content[0]!.text)).not.toThrow();
+    const parsed = JSON.parse(content[0]!.text) as { code?: string };
+    expect(parsed.code).toBeDefined();
   });
 
   it('quotes on Base Sepolia when production payment authorization is not satisfied', async () => {

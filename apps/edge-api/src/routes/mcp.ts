@@ -8,6 +8,7 @@ import {
   assertPreproductionNetwork,
   isProductionPaymentAuthorized,
   resolvePaymentNetwork,
+  type SiteborneServiceId,
 } from '@siteborne/protocol-x402';
 import type { Context } from 'hono';
 import type { Env } from '../control-plane/config/env';
@@ -16,6 +17,28 @@ import {
   resolvePaymentAsset,
   resolveProductionAuthorizationInput,
 } from '../control-plane/config/production-payment';
+import {
+  createMcpX402ServiceBoundary,
+  type McpX402RouteHandler,
+} from '../control-plane/mcp/x402-mcp-adapter';
+import { companyEvidenceGraphV2CdpProductionRoute } from '../control-plane/routes/production-company-evidence-v2-cdp-route';
+import { webContextVerifiedV2CdpProductionRoute } from '../control-plane/routes/production-web-context-v2-cdp-route';
+import { documentEvidenceJsonV2CdpProductionRoute } from '../control-plane/routes/production-document-evidence-v2-cdp-route';
+import { verifyAgentOutputV2CdpProductionRoute } from '../control-plane/routes/production-verify-v2-cdp-route';
+
+// SUN-1222C-MCP-PAYMENT-DESIGN-CORRECTION (Architecture C): the ONLY place
+// the MCP payment adapter is wired to real production route functions.
+// Each of these is the EXACT function real REST callers hit at the
+// matching path (POST /v2/...) -- the adapter never re-implements
+// payment verification, executor selection, or settlement; it only
+// translates the MCP wire shape into a request these functions already
+// accept, and translates their real Response back.
+const MCP_X402_PRODUCTION_HANDLERS: Readonly<Partial<Record<SiteborneServiceId, McpX402RouteHandler>>> = {
+  'company_evidence_graph.v2': companyEvidenceGraphV2CdpProductionRoute,
+  'web_context_verified.v2': webContextVerifiedV2CdpProductionRoute,
+  'document_evidence_json.v2': documentEvidenceJsonV2CdpProductionRoute,
+  'verify_agent_output.v2': verifyAgentOutputV2CdpProductionRoute,
+};
 
 const MCP_ALLOWED_HOSTS = [
   'utility.siteborne.net',
@@ -97,6 +120,18 @@ export async function mcpRoute(context: Context<{ Bindings: Env }>): Promise<Res
     health: { production_ready: false, production_enabled: productionEnabled, services },
     allowedHosts: [...MCP_ALLOWED_HOSTS],
     allowedOrigins: [...MCP_ALLOWED_HOSTS],
+    // SUN-1222C-MCP-PAYMENT-DESIGN-CORRECTION: the real REST route
+    // functions decide for themselves (via their own PAID_ROUTES_ENABLED
+    // / *_CDP_ROUTE_ENABLED / production-authorization gates) whether to
+    // execute or return 404/503 -- the adapter is wired unconditionally
+    // here rather than duplicating that gating; an unpaid call to a
+    // gated-off service correctly surfaces as a rejected/unavailable
+    // outcome from the underlying route itself, not a second gate.
+    serviceBoundary: createMcpX402ServiceBoundary(
+      context.env,
+      MCP_X402_PRODUCTION_HANDLERS,
+      new URL(context.req.raw.url).origin
+    ),
   };
 
   if (context.env?.SELLER_WALLET_ADDRESS) {
