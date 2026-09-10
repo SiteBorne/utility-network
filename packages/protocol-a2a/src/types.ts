@@ -64,4 +64,15 @@ export interface CreateSiteborneA2aOptions {
    * true), not set independently -- see `buildX402ExtensionParams` in
    * `card.ts`. */
   effectiveProductionStatusByServiceId?: Partial<Record<SiteborneServiceId, boolean>>;
+  /** SUN-1222C-DEPLOYMENT-DEPENDENCY-AND-MTLS-TRUTHFULNESS-REMEDIATION --
+   * whether the card may truthfully declare `securitySchemes.mtls`.
+   * Omitted entirely (every caller before this checkpoint) keeps the
+   * declaration absent, the production-compatible default until a real
+   * mTLS production interface is operator-qualified. A real caller
+   * (edge-api) computes this from `MTLS_PRODUCTION_ACTIVE` via
+   * `resolveMtlsProductionActive` and injects it here -- this
+   * credential-independent package never reads `env` itself, the same
+   * dependency direction as `signingIdentity` and
+   * `effectiveProductionStatusByServiceId` above. */
+  mtlsProductionActive?: boolean;
 }

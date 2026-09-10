@@ -109,7 +109,23 @@ function buildX402ExtensionParams(
  * no private key material can enter this credential-independent package API.
  */
 export function buildUnsignedSiteborneAgentCard(
-  effectiveProductionStatusByServiceId?: Partial<Record<SiteborneServiceId, boolean>>
+  effectiveProductionStatusByServiceId?: Partial<Record<SiteborneServiceId, boolean>>,
+  /** SUN-1222C-DEPLOYMENT-DEPENDENCY-AND-MTLS-TRUTHFULNESS-REMEDIATION:
+   * defaults `false`, matching every other production-activation flag's
+   * fail-closed convention in this codebase (`PRODUCTION_ENABLED`,
+   * `PAID_ROUTES_ENABLED`, etc.) -- the same "absent means the
+   * production-compatible, not-yet-active state" discipline as
+   * `effectiveProductionStatusByServiceId` above. `false` is also the
+   * only value every caller before this checkpoint implicitly used
+   * (nobody passed a second argument), so this default preserves every
+   * existing caller's actual intended behavior even though it changes
+   * the unconditional-`true` bug this checkpoint fixes. This
+   * credential-independent package never reads `env`/config itself --
+   * `edge-api`'s `resolveMtlsProductionActive` computes this from real
+   * deployment configuration and injects it via
+   * `CreateSiteborneA2aOptions.mtlsProductionActive`, the same
+   * dependency direction as `signingIdentity`. */
+  mtlsProductionActive = false
 ): AgentCard {
   return {
     name: 'SITEBORNE Utility Network',
@@ -151,14 +167,24 @@ export function buildUnsignedSiteborneAgentCard(
     // mTLS may only ever *enrich* an already-x402-authorized request, and
     // only where a future, separately authorized checkpoint wires a
     // specific skill's own securityRequirements to it).
-    securitySchemes: {
-      [SITEBORNE_MTLS_SECURITY_SCHEME_KEY]: {
-        scheme: {
-          $case: 'mtlsSecurityScheme',
-          value: { description: SITEBORNE_MTLS_SECURITY_SCHEME_DESCRIPTION },
-        },
-      },
-    },
+    //
+    // SUN-1222C-DEPLOYMENT-DEPENDENCY-AND-MTLS-TRUTHFULNESS-REMEDIATION:
+    // that declaration was unconditional from the checkpoint above --
+    // truthful only once a real, operator-qualified production mTLS
+    // interface exists. `mtlsProductionActive` (`false` by default) gates
+    // it: an empty `securitySchemes` object is A2A's own "no scheme
+    // declared" representation, exactly parallel to `securityRequirements:
+    // []` below meaning "no requirement".
+    securitySchemes: mtlsProductionActive
+      ? {
+          [SITEBORNE_MTLS_SECURITY_SCHEME_KEY]: {
+            scheme: {
+              $case: 'mtlsSecurityScheme',
+              value: { description: SITEBORNE_MTLS_SECURITY_SCHEME_DESCRIPTION },
+            },
+          },
+        }
+      : {},
     securityRequirements: [],
     defaultInputModes: [JSON_MEDIA_TYPE],
     defaultOutputModes: [JSON_MEDIA_TYPE],

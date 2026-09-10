@@ -26,7 +26,13 @@ describe('SITEBORNE A2A v1 Agent Card contract', () => {
     expect(card.skills.map((skill) => skill.id)).toEqual(SITEBORNE_SERVICE_IDS);
     expect(card.skills.every((skill) => skill.inputModes.includes('application/json'))).toBe(true);
     expect(card.skills.every((skill) => skill.outputModes.includes('application/json'))).toBe(true);
-    expect(Object.keys(card.securitySchemes)).toEqual([SITEBORNE_MTLS_SECURITY_SCHEME_KEY]);
+    // SUN-1222C-DEPLOYMENT-DEPENDENCY-AND-MTLS-TRUTHFULNESS-REMEDIATION:
+    // no second argument means `mtlsProductionActive` defaults `false` --
+    // the production-compatible state before real mTLS is operator-
+    // qualified -- so the default card declares no security scheme at
+    // all. See the dedicated 'mTLS declaration truthfulness gate' describe
+    // block below for the CAPABILITY_TRUE/CAPABILITY_FALSE proof.
+    expect(Object.keys(card.securitySchemes)).toEqual([]);
     expect(card.securityRequirements).toEqual([]);
     expect(card.capabilities?.streaming).toBe(false);
     expect(card.capabilities?.pushNotifications).toBe(false);
@@ -137,7 +143,12 @@ describe('SITEBORNE A2A v1 Agent Card contract', () => {
 // costing the "Valid AgentCard" / "Protocol version" conformance criteria.
 describe('SITEBORNE A2A Agent Card mTLS security-scheme declaration', () => {
   it('declares mutualTLS under the wire key defined by the pinned SDK', () => {
-    const card = buildUnsignedSiteborneAgentCard();
+    // SUN-1222C-DEPLOYMENT-DEPENDENCY-AND-MTLS-TRUTHFULNESS-REMEDIATION:
+    // explicitly activates the gate -- these tests prove the *shape* of
+    // the declaration when it IS truthfully active, not the default
+    // (now-gated-off) state. See the truthfulness gate describe block
+    // below for CAPABILITY_FALSE/default coverage.
+    const card = buildUnsignedSiteborneAgentCard(undefined, true);
     const wire = AgentCard.toJSON(card) as {
       securitySchemes?: Record<string, { mtlsSecurityScheme?: { description?: string } }>;
     };
@@ -182,10 +193,13 @@ describe('SITEBORNE A2A Agent Card mTLS security-scheme declaration', () => {
   });
 
   it('declaring mTLS does not disturb the x402 extension payload', () => {
-    const card = buildUnsignedSiteborneAgentCard({
-      'web_context_verified.v2': true,
-      'verify_agent_output.v2': true,
-    });
+    const card = buildUnsignedSiteborneAgentCard(
+      {
+        'web_context_verified.v2': true,
+        'verify_agent_output.v2': true,
+      },
+      true
+    );
     const x402Extension = card.capabilities?.extensions.find(
       (extension) => extension.uri === SITEBORNE_X402_EXTENSION_URI
     );
@@ -197,5 +211,65 @@ describe('SITEBORNE A2A Agent Card mTLS security-scheme declaration', () => {
     // mTLS declaration and the x402 extension are structurally independent
     // planes of the same card -- adding one must not perturb the other.
     expect(Object.keys(card.securitySchemes)).toEqual([SITEBORNE_MTLS_SECURITY_SCHEME_KEY]);
+  });
+});
+
+// SUN-1222C-DEPLOYMENT-DEPENDENCY-AND-MTLS-TRUTHFULNESS-REMEDIATION §9/§10/
+// §11: the mTLS security-scheme declaration above was unconditional --
+// deploying the code as it stood before this checkpoint would advertise a
+// native mTLS capability that does not yet exist in production (no real
+// Cloudflare mTLS interface has been provisioned or operator-qualified).
+// This describe block is the genuine RED->GREEN->mutation proof for the
+// truthfulness gate: `mtlsProductionActive` (default `false`, matching
+// every other production-activation flag's fail-closed convention in this
+// codebase) must be the ONLY thing that turns the declaration on.
+describe('SITEBORNE A2A Agent Card mTLS declaration truthfulness gate (SUN-1222C-DEPLOYMENT-DEPENDENCY-AND-MTLS-TRUTHFULNESS-REMEDIATION)', () => {
+  it('CAPABILITY_FALSE (default, no second argument): omits securitySchemes.mtls entirely -- the production-compatible state before real mTLS is qualified', () => {
+    const card = buildUnsignedSiteborneAgentCard();
+    const wire = AgentCard.toJSON(card) as { securitySchemes?: Record<string, unknown> };
+
+    expect(card.securitySchemes).toEqual({});
+    expect(Object.keys(card.securitySchemes)).toHaveLength(0);
+    expect(wire.securitySchemes ?? {}).toEqual({});
+  });
+
+  it('CAPABILITY_FALSE explicit (mtlsProductionActive: false): identical to the default -- no hidden second way to enable it', () => {
+    const card = buildUnsignedSiteborneAgentCard(undefined, false);
+    expect(card.securitySchemes).toEqual({});
+  });
+
+  it('CAPABILITY_TRUE (mtlsProductionActive: true): declares mutualTLS with the exact native A2A representation, unchanged from the pre-gate shape', () => {
+    const card = buildUnsignedSiteborneAgentCard(undefined, true);
+    const wire = AgentCard.toJSON(card) as {
+      securitySchemes?: Record<string, { mtlsSecurityScheme?: { description?: string } }>;
+    };
+
+    expect(Object.keys(card.securitySchemes)).toEqual([SITEBORNE_MTLS_SECURITY_SCHEME_KEY]);
+    const scheme = card.securitySchemes[SITEBORNE_MTLS_SECURITY_SCHEME_KEY];
+    expect(scheme?.scheme?.$case).toBe('mtlsSecurityScheme');
+    const wireScheme = wire.securitySchemes?.[SITEBORNE_MTLS_SECURITY_SCHEME_KEY];
+    expect(wireScheme?.mtlsSecurityScheme?.description).toEqual(
+      expect.stringContaining('mutual TLS')
+    );
+  });
+
+  it('CAPABILITY_FALSE and CAPABILITY_TRUE both remain strict A2A-valid, keep root securityRequirements empty, and leave every skill/x402-extension field untouched', () => {
+    const falseCard = buildUnsignedSiteborneAgentCard(undefined, false);
+    const trueCard = buildUnsignedSiteborneAgentCard(undefined, true);
+
+    for (const card of [falseCard, trueCard]) {
+      expect(card.securityRequirements).toEqual([]);
+      expect(card.skills.every((skill) => skill.securityRequirements.length === 0)).toBe(true);
+      expect(card.skills.map((skill) => skill.id)).toEqual(SITEBORNE_SERVICE_IDS);
+      // A2A SDK's own conformance round-trip -- throws on a structurally
+      // invalid card, exactly like every other card construction test in
+      // this file.
+      expect(() => AgentCard.toJSON(card)).not.toThrow();
+    }
+
+    // Public anonymous probe semantics (root requirements empty) and the
+    // x402 extension are identical regardless of the mTLS gate's state.
+    expect(falseCard.securityRequirements).toEqual(trueCard.securityRequirements);
+    expect(falseCard.capabilities?.extensions).toEqual(trueCard.capabilities?.extensions);
   });
 });

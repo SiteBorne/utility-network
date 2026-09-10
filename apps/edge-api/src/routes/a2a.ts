@@ -6,6 +6,7 @@ import {
   resolveEffectiveProductionStatusByServiceId,
   type EffectiveDiscoveryEnv,
 } from '../control-plane/config/production-payment';
+import { resolveMtlsProductionActive } from '../control-plane/config/mtls-production-capability';
 
 const A2A_ALLOWED_HOSTS = [
   'utility.siteborne.net',
@@ -19,7 +20,10 @@ const A2A_ALLOWED_HOSTS = [
 let cachedA2aAppPromise: ReturnType<typeof createSiteborneA2aHonoApp> | undefined;
 let cachedA2aAppCacheKey: string | undefined;
 
-type A2aAppEnv = Pick<Env, 'AGENT_CARD_SIGNING_PRIVATE_KEY' | 'AGENT_CARD_SIGNING_KEY_ID' | 'DB'> &
+type A2aAppEnv = Pick<
+  Env,
+  'AGENT_CARD_SIGNING_PRIVATE_KEY' | 'AGENT_CARD_SIGNING_KEY_ID' | 'DB' | 'MTLS_PRODUCTION_ACTIVE'
+> &
   EffectiveDiscoveryEnv;
 
 /** `context.env` is optional in Hono's generic `Context` typing (every
@@ -64,6 +68,13 @@ const EMPTY_A2A_APP_ENV: A2aAppEnv = {
  * deployments never change `env` mid-isolate, but tests exercising
  * multiple env states against the same imported `app` singleton would
  * otherwise observe the first-built card forever.
+ *
+ * SUN-1222C-DEPLOYMENT-DEPENDENCY-AND-MTLS-TRUTHFULNESS-REMEDIATION: also
+ * resolves `MTLS_PRODUCTION_ACTIVE` (default `false`) via
+ * `resolveMtlsProductionActive` and injects it into
+ * `mtlsProductionActive`, the sole gate for whether the served card may
+ * truthfully declare `securitySchemes.mtls` -- included in the cache key
+ * below for the same reason every other computed boolean already is.
  */
 function resolveA2aApp(env: A2aAppEnv): ReturnType<typeof createSiteborneA2aHonoApp> {
   const hasDb = Boolean(env.DB);
@@ -71,10 +82,12 @@ function resolveA2aApp(env: A2aAppEnv): ReturnType<typeof createSiteborneA2aHono
     env,
     hasDb
   );
+  const mtlsProductionActive = resolveMtlsProductionActive(env);
   const cacheKey = JSON.stringify([
     env.AGENT_CARD_SIGNING_PRIVATE_KEY ?? '',
     env.AGENT_CARD_SIGNING_KEY_ID ?? '',
     effectiveProductionStatusByServiceId,
+    mtlsProductionActive,
   ]);
   if (!cachedA2aAppPromise || cachedA2aAppCacheKey !== cacheKey) {
     cachedA2aAppCacheKey = cacheKey;
@@ -93,6 +106,7 @@ function resolveA2aApp(env: A2aAppEnv): ReturnType<typeof createSiteborneA2aHono
         allowedOrigins: A2A_ALLOWED_HOSTS,
         ...(signingIdentity ? { signingIdentity } : {}),
         effectiveProductionStatusByServiceId,
+        mtlsProductionActive,
       };
       return createSiteborneA2aHonoApp(options);
     })();

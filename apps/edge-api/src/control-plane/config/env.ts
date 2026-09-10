@@ -151,6 +151,29 @@ export interface Env {
    * real deployment can rotate keys without colliding with the dev/test
    * identity. */
   AGENT_CARD_SIGNING_KEY_ID?: string;
+  /** SUN-1222C-DEPLOYMENT-DEPENDENCY-AND-MTLS-TRUTHFULNESS-REMEDIATION:
+   * the sole gate for whether the live Agent Card is truthfully allowed
+   * to advertise native A2A `mutualTLS` caller-identity *capability*
+   * (`securitySchemes.mtls` in `packages/protocol-a2a/src/card.ts`).
+   * `mtls-caller-context.ts` (SUN-1222C-AGENT-TRUST-100-IMPLEMENTATION-A)
+   * added the source-level mTLS support but wired it into zero routes;
+   * the card's `securitySchemes.mtls` declaration was left unconditional
+   * from that same checkpoint, meaning a deploy of that code today would
+   * advertise a capability before any real, operator-qualified
+   * production mTLS interface exists (the exact "metadata says X, wire
+   * behavior says not-X" case `productionEnabled` on the x402 extension
+   * already guards against on the payment side, see
+   * `production-payment.ts`'s resolvers). Must be the exact literal
+   * `'true'`; absent/unset (the default everywhere today, and the only
+   * production-compatible value until real mTLS provisioning is
+   * qualified) means the card omits `securitySchemes.mtls` entirely.
+   * This flag alone enables no request-time behavior whatsoever — it
+   * governs ONLY this one static metadata field; Cloudflare edge mTLS
+   * enforcement, x402 payment gating, and every other route's
+   * authorization are all completely independent of it. See
+   * `resolveMtlsProductionActive` in
+   * `./mtls-production-capability.ts`. */
+  MTLS_PRODUCTION_ACTIVE?: string;
   /** SUN-1200 checkpoint A (ADR 0055): explicit payment-environment
    * selector. Must be the exact literal `'production'` to have any
    * effect; every other value (including unset, empty, or any other
