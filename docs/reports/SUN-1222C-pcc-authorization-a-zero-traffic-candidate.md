@@ -834,3 +834,371 @@ A1 made no Cloudflare mutation. The required final Preview URL policy is already
 restored because it never changed. Exact-candidate qualification now requires
 the separately governed A2 deployment-membership path unless a different
 protected, non-public Preview mechanism is authorized first.
+
+## A2 — zero-percent deployment membership and zero-write qualification
+
+Date: 2026-09-10 UTC
+
+Authorization A2 rejected the unsafe public Preview URL path documented above
+and authorized one narrowly scoped production deployment-composition change:
+replace only the active 0% member with immutable candidate version 60. It did
+not authorize another upload, non-zero candidate traffic, paid-runtime changes,
+Preview URL enablement, variable/secret/binding changes, payment, provider
+execution, settlement, or checkpoint-generated persistent state.
+
+### Integrity and immutable source
+
+The A2 session began from the exact authorized evidence commit on clean `main`:
+
+```text
+PWD=/Users/meta4ickal/SITEBORNE Utility Network
+BRANCH=main
+HEAD=c47f0d847b79a456a8be71b48038921322dcbc06
+WORKING_TREE=CLEAN
+EVIDENCE_COMMIT_EXISTS=YES
+EVIDENCE_COMMIT_REACHABLE=YES
+```
+
+The only changes after candidate source commit
+`2f947bfe0fa1722158323aaf44496ee6ebf046fd` were this chronological report.
+Candidate version 60 still identified that source commit in its immutable
+version-upload annotation. No second version was uploaded.
+
+### Current Cloudflare mechanism and command equivalence
+
+Pinned Wrangler readback was `4.119.0`. Its live help defined the positional
+syntax as `<version-id>@<percentage>` and `--yes` as the non-interactive
+confirmation flag. Current Cloudflare documentation establishes that a
+deployment contains at most two Worker versions, that a version override can
+select only a version in the current deployment, and that a version at 0% gets
+no percentage-routed traffic but remains selectable by a valid override.
+
+- Version overrides: <https://developers.cloudflare.com/workers/versions-and-deployments/version-overrides/>
+- Versions and deployments: <https://developers.cloudflare.com/workers/versions-and-deployments/>
+- Wrangler `versions deploy`: <https://developers.cloudflare.com/workers/wrangler/commands/workers/#versions-deploy>
+
+```text
+CURRENT_DEPLOYMENT_MAX_VERSIONS=2
+VERSION_OVERRIDE_REQUIRES_VERSION_IN_CURRENT_DEPLOYMENT=YES
+ZERO_PERCENT_DEPLOYMENT_MEMBER_RECEIVES_NORMAL_PERCENTAGE_TRAFFIC=NO
+ZERO_PERCENT_DEPLOYMENT_MEMBER_CAN_BE_SELECTED_BY_VERSION_OVERRIDE=YES
+A2_MECHANISM_VALID=YES
+```
+
+The exact proposed command was:
+
+```bash
+npx wrangler versions deploy 'db7054c9-76ee-4830-aabe-8a4542261b6a@100%' 'd155c9a1-ca3a-49f9-92a3-b35760dc58e6@0%' --name siteborne-utility-edge --message 'SUN-1222C-PCC-AUTHORIZATION-A2: db7054c9 baseline 100%; d155c9a1 exact candidate 0%; d3472f58 retained immutable' --yes
+```
+
+A `--dry-run` with otherwise byte-identical arguments selected exactly those
+two versions and displayed 100% and 0% respectively. The command only creates
+a deployment referencing existing immutable versions; it does not upload a
+version or rewrite either version's source/configuration. Triggers and routes
+are a separate Wrangler operation.
+
+```text
+WOULD_CHANGE_WORKER_SOURCE=NO
+WOULD_UPLOAD_NEW_VERSION=NO
+WOULD_CHANGE_VARS=NO
+WOULD_CHANGE_SECRETS=NO
+WOULD_CHANGE_BINDINGS=NO
+WOULD_CHANGE_TRIGGERS=NO
+WOULD_CHANGE_ROUTES=NO
+WOULD_CHANGE_CUSTOM_DOMAIN=NO
+WOULD_CHANGE_PAID_RUNTIME=NO
+NORMAL_TRAFFIC_TO_D155C9A1=0%
+```
+
+Before mutation, the exact inverse was also successfully dry-run:
+
+```bash
+npx wrangler versions deploy 'db7054c9-76ee-4830-aabe-8a4542261b6a@100%' 'd3472f58-f578-4a8f-992b-0d0956c9b561@0%' --name siteborne-utility-edge --message 'SUN-1222C-PCC-AUTHORIZATION-A2-RESTORE: db7054c9 baseline 100%; restore d3472f58 governed candidate 0%' --yes
+```
+
+```text
+ORIGINAL_TOPOLOGY_RESTORABLE=YES
+D3472F58_VERSION_RETENTION_AFTER_MEMBERSHIP_REPLACEMENT=YES
+```
+
+### Pre-mutation topology
+
+The last-moment scripted assertions required an exact match before allowing the
+mutation:
+
+```text
+PRE_DEPLOYMENT_ID=9043050a-3e51-4078-a30a-e4fe819e3efb
+PUBLIC_BASELINE_VERSION=db7054c9-76ee-4830-aabe-8a4542261b6a
+PUBLIC_BASELINE_NORMAL_TRAFFIC_PRE=100%
+EXISTING_R6_VERSION=d3472f58-f578-4a8f-992b-0d0956c9b561
+EXISTING_R6_NORMAL_TRAFFIC_PRE=0%
+NEW_CANDIDATE_VERSION=d155c9a1-ca3a-49f9-92a3-b35760dc58e6
+NEW_CANDIDATE_VERSION_NUMBER=60
+NEW_CANDIDATE_NORMAL_TRAFFIC_PRE=0%/UNASSIGNED
+PAID_RUNTIME_VERSION_PRE=d62011b9-6219-47e1-8cf9-5006776cfb50
+PAID_RUNTIME_TRAFFIC_PRE=100%
+PRE_MUTATION_TOPOLOGY_ASSERTIONS=PASS
+```
+
+### Persistent-state safety classification
+
+The following table is based on the exact candidate source. “Provider” includes
+the production CDP authenticated-seller lookup that can occur while a paid
+route's per-isolate composition is first constructed; it is conservatively
+classified as an external provider call even though it is not useful service
+execution. A2 did not rely on an already-warm isolate.
+
+| Probe | Endpoint | Request class | Expected status | D1 write possible | R2 write possible | Queue write possible | Workflow creation possible | Provider call possible | Payment verify possible | Settlement possible | Safe under A2 |
+|---|---|---|---:|---|---|---|---|---|---|---|---|
+| Health | `/health` | GET/read-only | 200 | No | No | No | No | No | No | No | Yes |
+| Readiness | `/ready` | GET/read-only | 200 | No | No | No | No | No | No | No | Yes |
+| Agent Card | `/.well-known/agent-card.json` | GET/read-only | 200 | No | No | No | No | No | No | No | Yes |
+| JWKS | `/.well-known/jwks.json` | GET/read-only | 200 | No | No | No | No | No | No | No | Yes |
+| A2A discovery | Agent Card then `/a2a` resolution | GET/read-only | 200 | No | No | No | No | No | No | No | Yes |
+| A2A `SendMessage` | `/a2a` | schema-valid, no payment; closed default boundary and per-request in-memory task store | 200 task/input-required | No | No | No | No | No | No | No | Yes |
+| MCP initialize | `/mcp` | discovery | 200 | No | No | No | No | No | No | No | Yes |
+| MCP tools/list | `/mcp` | discovery | 200 | No | No | No | No | No | No | No | Yes |
+| MCP malformed tools/call | `/mcp` | non-object params, rejected before tool boundary | 400 | No | No | No | No | No | No | No | Yes |
+| MCP schema-valid unpaid paid-tool call | `/mcp` to real REST adapter | valid tool input without payment | 402 if completed | Yes, quote + audit | No | No | No | Yes on cold composition | No | No | No |
+| REST malformed paid request | four active `/v2/...` routes | malformed JSON, but route composition precedes body parsing on a cold isolate | 400 if composition completes | No from malformed-body branch | No | No | No | Yes on cold composition | No | No | No |
+| REST schema-valid unpaid request | four active `/v2/...` routes | valid input without payment | 402 | Yes, quote + audit | No | No | No | Yes on cold composition | No | No | No |
+| Document upload malformed | `/v2/artifacts/documents` | generic malformed request | 4xx | Yes for variants reaching distributed ingress admission; declared-oversize alone rejects earlier | No before storage | No | No | No | No | No | Only the declared-oversize subtype is statically safe |
+| Document upload valid | `/v2/artifacts/documents` | valid upload | 201 | Yes | Yes | No | No | No | No | No | No |
+
+```text
+A2_SAFE_PROBES=/health; /ready; Agent Card; JWKS; A2A discovery; A2A SendMessage through the closed in-memory boundary; MCP initialize; MCP tools/list; MCP malformed tools/call; GET /catalog; declared-oversize document rejection (structurally safe but not executed)
+A2_STATE_WRITING_PROBES=MCP schema-valid unpaid paid-tool call; REST schema-valid unpaid paid request; generic document-upload malformed variants that reach distributed admission; valid document upload
+REST_MALFORMED_PAID_REQUEST=BLOCKED_REQUIRES_BOUNDED_STATE_WRITE_AUTHORIZATION_OR_EXTERNAL_PROVIDER_CALL_AUTHORIZATION
+```
+
+No write-capable probe was run. Before the deployment, 73 targeted tests passed
+across the settlement-ownership, A2A, MCP transport, and document-upload safety
+suites.
+
+```text
+ZERO_WRITE_EXACT_RUNTIME_QUALIFICATION_SUFFICIENT=YES
+CHECKPOINT_D1_WRITES_MAX=0
+CHECKPOINT_R2_WRITES_MAX=0
+CHECKPOINT_QUEUE_WRITES_MAX=0
+CHECKPOINT_WORKFLOW_CREATIONS_MAX=0
+CHECKPOINT_PROVIDER_CALLS_MAX=0
+CHECKPOINT_PAYMENT_VERIFY_CALLS_MAX=0
+CHECKPOINT_SETTLEMENTS_MAX=0
+```
+
+This means the candidate's exact version, read-only public runtime, signed
+identity, service discovery, and closed no-free-use protocol behavior could be
+meaningfully qualified. It does not mean the state-creating 402 or paid
+execution lifecycle was qualified.
+
+### Authorized membership mutation and post-state
+
+The exact command above exited 0. Wrangler reported:
+
+```text
+SUCCESS Deployed siteborne-utility-edge version db7054c9-76ee-4830-aabe-8a4542261b6a at 100% and version d155c9a1-ca3a-49f9-92a3-b35760dc58e6 at 0%
+A2_DEPLOYMENT_COMMAND_EXIT_CODE=0
+A2_NEW_DEPLOYMENT_ID=f5c536de-53d6-4ea9-acd1-3f8d006b8ca7
+```
+
+Wrangler's deployment output also listed a sync of already-identical
+non-versioned observability state: `logpush=false`, observability enabled, and
+head sampling rate 1. It reported no source, route, trigger, variable, secret,
+binding, or percentage change outside the authorized membership composition.
+
+Immediate readback was exact:
+
+```text
+POST_DEPLOYMENT_ID=f5c536de-53d6-4ea9-acd1-3f8d006b8ca7
+PUBLIC_BASELINE_TRAFFIC_POST=100%
+NEW_CANDIDATE_NORMAL_TRAFFIC_POST=0%
+D3472F58_CURRENT_DEPLOYMENT_MEMBER=NO
+D3472F58_IMMUTABLE_VERSION_RETAINED=YES
+PAID_RUNTIME_VERSION=d62011b9-6219-47e1-8cf9-5006776cfb50
+PAID_RUNTIME_TRAFFIC=100%
+PAID_RUNTIME_DEPLOYMENTS=0
+```
+
+`wrangler versions list` still returned d3472f58 as immutable version 59 and
+d155c9a1 as immutable version 60. No restoration deployment was required.
+
+### Exact-version override and normal-traffic control
+
+A bounded Wrangler tail session was running before the probes. The candidate
+health request carried the exact documented structured header:
+
+```text
+Cloudflare-Workers-Version-Overrides: siteborne-utility-edge="d155c9a1-ca3a-49f9-92a3-b35760dc58e6"
+```
+
+It returned HTTP 200 with `status: ok`; tail correlated Cloudflare Ray
+`a38e3bc71c0be3da-ATL` to script `siteborne-utility-edge` and
+`scriptVersion.id=d155c9a1-ca3a-49f9-92a3-b35760dc58e6`.
+
+A separate no-header `/health` control returned HTTP 200; tail correlated Ray
+`a38e3c148af9b229-ATL` to
+`scriptVersion.id=db7054c9-76ee-4830-aabe-8a4542261b6a`.
+
+```text
+EXACT_VERSION_OVERRIDE_REACHABILITY=PASS
+NORMAL_TRAFFIC_REMAINS_BASELINE=YES
+```
+
+### Candidate read-only runtime results
+
+Every candidate request below carried the version override. Tail correlation
+used the response Ray ID and attributed every listed request to d155c9a1.
+
+- `/ready`: HTTP 200; `production_services_enabled=true`.
+- Agent Card: HTTP 200; one signed card with all eight service identities, the
+  four v2 services marked `productionEnabled=true`, the four v1 services false,
+  and the canonical `/a2a` interface.
+- JWKS: HTTP 200; exactly one public P-256/ES256 key, no private `d` member.
+- Local verification passed using `verifyAgentCardAgainstTrustedJwks` with the
+  explicitly fetched candidate card and candidate JWKS. The verifier followed
+  no network URL.
+- Agent Card `securitySchemes` resolved to `{}` and root
+  `securityRequirements` to `[]`; no mutual TLS capability was advertised.
+- A guarded A2A SDK fetch injector rejected any origin other than
+  `https://utility.siteborne.net` and added the override to both requests.
+  Discovery and `POST /a2a` were each HTTP 200 and candidate-attributed. The
+  schema-valid `SendMessage` returned an in-memory `payment_required` Task,
+  `productionEnabled=false`, and zero artifacts.
+- MCP initialize returned HTTP 200 and negotiated protocol `2025-11-25` with
+  server `net.siteborne/utility` 0.1.0.
+- MCP tools/list returned HTTP 200 and six tools: the four v2 service tools,
+  each explicitly payment-required, plus read-only quote and health helpers.
+- MCP malformed `tools/call` with non-object params returned HTTP 400 before
+  service-boundary dispatch.
+- `/catalog`: HTTP 200; exactly eight services, with the four v2 services true
+  for `production_enabled` and all four v1 services false.
+
+```text
+CANDIDATE_AGENT_CARD_RUNTIME=PASS
+CANDIDATE_JWKS_RUNTIME=PASS
+CANDIDATE_JWS_CRYPTOGRAPHICALLY_VERIFIED=YES
+CANDIDATE_MTLS_ADVERTISED=NO
+MTLS_PRODUCTION_ACTIVE_EFFECTIVE=FALSE
+A2A_ALL_REQUESTS_ATTRIBUTED_TO_D155C9A1=YES
+CANDIDATE_A2A_ZERO_WRITE_RUNTIME_PROOF=PASS
+MCP_ALL_REQUESTS_ATTRIBUTED_TO_D155C9A1=YES
+CANDIDATE_MCP_INITIALIZE=PASS
+CANDIDATE_MCP_DISCOVERY=PASS
+```
+
+REST family accounting is deliberately scoped:
+
+| Service ID | Activation visible | Malformed rejection runtime proof | Schema-valid unpaid 402 proof |
+|---|---|---|---|
+| `verify_agent_output.v2` | YES — Agent Card, MCP, catalog | NOT_EXECUTED — cold-composition provider-call risk | NOT_EXECUTED — state-writing |
+| `web_context_verified.v2` | YES — Agent Card, MCP, catalog | NOT_EXECUTED — cold-composition provider-call risk | NOT_EXECUTED — state-writing |
+| `company_evidence_graph.v2` | YES — Agent Card, MCP, catalog | NOT_EXECUTED — cold-composition provider-call risk | NOT_EXECUTED — state-writing |
+| `document_evidence_json.v2` | YES — Agent Card, MCP, catalog | NOT_EXECUTED — cold-composition provider-call risk | NOT_EXECUTED — state-writing |
+| `document-artifact-upload` | YES — immutable var/binding readback and local structural route proof | NOT_EXECUTED — generic malformed variants may write admission state | NOT_EXECUTED — valid upload writes D1/R2 |
+
+```text
+VALID_DOCUMENT_ARTIFACT_UPLOAD_EXECUTED=NO
+CHECKPOINT_R2_WRITES=0
+PCC_REST_RUNTIME_EVIDENCE_CLASS=CANDIDATE_RUNTIME_READ_ONLY + LOCAL_STRUCTURAL; paid-route rejection/402 blocked
+PCC_MCP_RUNTIME_EVIDENCE_CLASS=CANDIDATE_RUNTIME_READ_ONLY + CANDIDATE_RUNTIME_PRE_WRITE_REJECTION + LOCAL_STRUCTURAL
+PCC_A2A_RUNTIME_EVIDENCE_CLASS=CANDIDATE_RUNTIME_READ_ONLY + closed in-memory no-free-use SendMessage + LOCAL_STRUCTURAL
+LIVE_FULFILLED_PCC_RESULT_VERIFIED=NO
+```
+
+### Fresh settlement ownership proof
+
+The canonical source guard was re-run during A2 and all four tests passed:
+
+```text
+PUBLIC_API_SETTLE_CALLSITES=0
+MCP_ADAPTER_SETTLE_CALLSITES=0
+DEDICATED_WORKFLOW_SETTLE_CALLSITES=1
+TOTAL_PRODUCTION_SETTLE_CALLSITES=1
+```
+
+This is fresh source/semantic evidence, not a live settlement and not a paid
+request.
+
+### Qualification, exposure, and retention policy
+
+All executed candidate runtime probes passed and no candidate defect was found.
+Qualification remains partial only because A2's deliberate no-write/no-provider
+boundary excludes the four REST 400/402 paths, schema-valid paid MCP tool calls,
+and the document upload lifecycle.
+
+```text
+CANDIDATE_ZERO_WRITE_RUNTIME_QUALIFICATION=PARTIAL
+STATE_WRITING_QUALIFICATION_GAPS=four REST malformed/402 runtime proofs; MCP schema-valid paid-tool 402; document-artifact malformed admission path and valid D1/R2 upload; all live fulfilled paid/PCC execution
+CANDIDATE_RUNTIME_DEFECT_FOUND=NO
+ZERO_WRITE_EVIDENCE_GAP_DEPLOYMENT_POLICY=A
+D155C9A1_CURRENT_ZERO_PERCENT_CANDIDATE=YES
+D3472F58_STATUS=SUPERSEDED_BUT_IMMUTABLE_RETAINED
+```
+
+Policy A is safer and matches the purpose of A2: exact-version read-only
+qualification succeeded; the baseline remains 100%; restoring the former 0%
+member would remove exact override reachability without curing any candidate
+defect. The remaining proof requires its own bounded state/provider authority.
+
+Before A2, d3472f58 was already public-override-addressable and carried the
+same production secrets, bindings, and activated REST routes. d155c9a1 adds a
+payment-aware MCP adapter to the same REST-owned payment lifecycle and full PCC
+wire results. That is a broader protocol entry path, but not a new exposure
+class: both states expose a 0%-traffic, explicit-override-only candidate with
+production bindings and payment-gated useful execution.
+
+```text
+D155C9A1_OVERRIDE_ADDRESSABLE_PUBLICLY=YES
+D3472F58_WAS_OVERRIDE_ADDRESSABLE_PUBLICLY=YES
+A2_CREATES_NEW_EXPOSURE_CLASS=NO
+A2_CHANGES_WHICH_CANDIDATE_IS_OVERRIDE_ADDRESSABLE=YES
+MATERIALLY_BROADER_CANDIDATE_CAPABILITY=payment-aware MCP calls can enter the existing REST payment boundary; still payment-gated and not exercised in A2
+```
+
+### A2 accounting and decision
+
+```text
+NORMAL_TRAFFIC_BASELINE_PRE=100%
+NORMAL_TRAFFIC_BASELINE_POST=100%
+NORMAL_TRAFFIC_D155_PRE=0%/UNASSIGNED
+NORMAL_TRAFFIC_D155_POST=0%
+NORMAL_TRAFFIC_PERCENTAGE_MUTATIONS=0
+PRODUCTION_DEPLOYMENT_MUTATIONS=1
+DEPLOYMENT_MEMBERSHIP_MUTATIONS=1
+VERSION_OVERRIDE_ROUTABILITY_CHANGED=YES
+
+ADDITIONAL_VERSION_UPLOADS=0
+VAR_MUTATIONS=0
+SECRET_MUTATIONS=0
+PAID_RUNTIME_DEPLOYMENTS=0
+
+CHECKPOINT_D1_WRITES=0
+CHECKPOINT_R2_WRITES=0
+CHECKPOINT_QUEUE_WRITES=0
+CHECKPOINT_WORKFLOW_CREATIONS=0
+CHECKPOINT_PROVIDER_CALLS=0
+PAYMENT_AUTHORIZATIONS_SUBMITTED=0
+FACILITATOR_VERIFY_CALLS=0
+FACILITATOR_SETTLE_CALLS=0
+REAL_TEST_PAYMENTS=0
+REAL_TEST_PROVIDER_CALLS=0
+REAL_TEST_SETTLEMENTS=0
+ECONOMIC_EFFECT_USDC=0
+
+TRAFFIC_CUTOVER_AUTHORIZED=NO
+FEATURE_CUTOVER_AUTHORIZED=NO
+PAID_RUNTIME_DEPLOY_AUTHORIZED=NO
+MTLS_PROVISIONING_AUTHORIZED=NO
+```
+
+```text
+SUN1222C_PCC_AUTHORIZATION_A2_ZERO_PERCENT_DEPLOYMENT_MEMBERSHIP=PASS_WITH_STATE_WRITE_QUALIFICATION_GAPS
+NEXT_REQUIRED_CHECKPOINT=SUN-1222C-PCC-BOUNDED-QUALIFICATION-STATE-WRITE-AUTHORIZATION
+```
+
+Chronology is preserved: the candidate upload succeeded; the first
+production-host override attempt failed safely because the candidate was not a
+current deployment member; remediation identified the documented override
+requirement; A1 rejected unprotected Preview URLs; A2 then made the minimum
+authorized 0%-membership change, recovered exact-version read-only runtime
+qualification, and stopped before any persistent-state or economic probe.
