@@ -1571,3 +1571,167 @@ authorized write paths, and stopped before each path's independently proven
 boundary violation. It did not rewrite prior gaps as passes and did not issue a
 payment, provider, artifact, deployment, traffic, version, variable, secret,
 queue, Workflow, settlement, or chain mutation.
+
+## 2026-09-10 — qualification-boundary exception stopped before one-shot probes
+
+The human-approved qualification-boundary exception authorized at most one
+authenticated Coinbase CDP seller-identity lookup and expressly required both
+the outer MCP client and the executing client library to perform no automatic
+retry. It also conditionally authorized the already-understood two-row
+admission-window housekeeping case and one deterministic synthetic artifact.
+This entry records the pre-execution result without rewriting the earlier safe
+stops.
+
+### Integrity, topology, and exact-version health
+
+The checkpoint began on clean `main` at
+`7e2dbd0fb7e243ed43b44b4bf61254a9946364fb`; that prior evidence commit exists
+and is reachable. Candidate source commit
+`2f947bfe0fa1722158323aaf44496ee6ebf046fd` remains immutable. Read-only
+Wrangler 4.119.0 inspection reconfirmed public deployment
+`f5c536de-53d6-4ea9-acd1-3f8d006b8ca7`: baseline
+`db7054c9-76ee-4830-aabe-8a4542261b6a` at 100% and candidate
+`d155c9a1-ca3a-49f9-92a3-b35760dc58e6` at 0%. Version
+`d3472f58-f578-4a8f-992b-0d0956c9b561` remains retained. Paid runtime
+`d62011b9-6219-47e1-8cf9-5006776cfb50` remains at 100%.
+
+Fresh qualification run ID:
+`sun1222c-pcc-boundary-3b929d3e7d145e90fa03c5febef5a4e69e46dce721989789`.
+A read-only `/health` request carrying the exact candidate version override
+returned HTTP 200 (Cloudflare Ray `a38f11ee49d8a38b-ATL`), and authoritative
+tail attribution reported
+`scriptVersion.id=d155c9a1-ca3a-49f9-92a3-b35760dc58e6`.
+
+```text
+PUBLIC_DEPLOYMENT_DRIFT=NO
+PAID_RUNTIME_DRIFT=NO
+EXACT_VERSION_OVERRIDE_REACHABILITY_RECONFIRMED=YES
+```
+
+### Fresh state and housekeeping prechecks
+
+The pre-event D1 snapshot was: 72 `x402_quotes`, 170 `audit_events`, 18
+`payment_attempts`, two `document_ingress_admission_windows`, one
+`job_artifacts` row, and zero `queue_dispatches`. No candidate-correlated
+quote or audit record existed after checkpoint start. The planned artifact
+hash had no D1 artifact row, and exact R2 key
+`artifacts/fdacd0a37cc16d810fd42c59455af644cfa860ebb0c287277cc6a1663cc488ef`
+did not exist.
+
+The only admission rows before the route-derived cleanup cutoff
+`1788825600000` were freshly read as:
+
+| Primary key | Scope | Window start | Count | Expired by route logic |
+|---|---|---:|---:|---|
+| `global:global:1788393600000` | `global` | 1788393600000 | 4 | YES |
+| `source:207.68.238.67:1788393600000` | `source` | 1788393600000 | 4 | YES |
+
+Schema and source inspection reconfirmed that this table has no foreign keys
+or dependent payment, job, artifact, audit, or settlement lifecycle. The
+route's normal housekeeping predicate is exactly
+`WHERE window_start_ms < ?`, with the bound value calculated as the current
+window start minus two 86,400,000-millisecond days. The two rows were therefore
+eligible for the conditionally authorized route-owned cleanup. This did not,
+however, authorize bypassing the later CDP-call cap gate.
+
+### CDP API semantics versus installed SDK execution envelope
+
+Coinbase documents seller account retrieval as authenticated `GET
+/v2/evm/accounts/{address}`. The installed `@coinbase/cdp-sdk` 1.55.0 source
+confirms that `client.evm.getAccount({address})` delegates to that GET; the
+method itself cannot transfer assets, sign or broadcast transactions, mutate
+the wallet, or trigger settlement. This matches Coinbase's separation of
+account retrieval from signing, sending, updating, and other write operations:
+
+- https://docs.cdp.coinbase.com/api-reference/v2/rest-api/evm-accounts/get-evm-account-by-address
+- https://docs.cdp.coinbase.com/api-reference/v2/rest-api/evm-accounts/evm-accounts
+
+The immutable candidate's installed execution envelope nevertheless violates
+the stricter one-call qualification cap before a request can safely be made:
+
+1. `EvmClient.getAccount` calls `Analytics.trackAction` before the account
+   GET. With no `DISABLE_CDP_USAGE_TRACKING=true` binding in candidate version
+   60, that code starts a separate unauthenticated POST to
+   `https://cca-lite.coinbase.com/amp`.
+2. `CdpOpenApiClient.configure` installs `axios-retry` without overriding its
+   retry count. Installed `axios-retry` 4.5.0 therefore applies its default
+   three retries to retryable network/idempotent-request failures. The account
+   GET can consequently make up to four authenticated attempts rather than the
+   authorized maximum of one.
+3. Repository production construction supplies only the CDP API key ID and
+   secret to `new CdpClient(...)`; it provides neither a retry-zero option nor
+   a usage-tracking disable override. Candidate version 60 contains no ordinary
+   or secret binding named `DISABLE_CDP_USAGE_TRACKING`.
+
+The vendor endpoint is read-only, but the checkpoint required a maximum of one
+authenticated call and explicitly prohibited automatic retry in the client
+library. A successful first attempt might happen to yield one authenticated
+GET, but that outcome cannot be guaranteed before spending the one-shot probe,
+and the analytics POST is an additional network call in either case. Section
+11 therefore predicts values above the authorized caps and requires STOP.
+
+```text
+CDP_LOOKUP_OPERATION=READ_ONLY_ACCOUNT_LOOKUP
+CDP_LOOKUP_CAN_TRANSFER_ASSETS=NO
+CDP_LOOKUP_CAN_SIGN_TRANSACTION=NO
+CDP_LOOKUP_CAN_BROADCAST_TRANSACTION=NO
+CDP_LOOKUP_CAN_MUTATE_WALLET=NO
+CDP_LOOKUP_CAN_TRIGGER_SETTLEMENT=NO
+CDP_SDK_AUTOMATIC_RETRIES_MAX=3
+CDP_AUTHENTICATED_GET_ATTEMPTS_POSSIBLE_MAX=4
+CDP_SDK_USAGE_ANALYTICS_POST_PREDICTED=YES
+CHECKPOINT_CAPS_PROVEN_SAFE=NO
+```
+
+### Safe stop, state accounting, and disposition
+
+The live tail was stopped. No MCP `tools/call`, direct REST paid-route request,
+or document-artifact request was issued. Because the governing text says to
+STOP when source predicts a value above any Section 11 cap, the independently
+safe artifact exception was not spent after this blocker was found. The two
+expired admission rows remain untouched, and the deterministic artifact remains
+absent. No quote or audit ID exists for this run.
+
+The canonical settlement-ownership and MCP-adapter semantic tests were rerun
+after the safe stop: 13 tests passed across two test files. They reconfirmed
+zero public-API settlement callsites, zero MCP-adapter settlement callsites,
+one dedicated-Workflow settlement callsite, and one total production
+settlement callsite.
+
+```text
+SUN1222C_PCC_QUALIFICATION_BOUNDARY_EXCEPTION_AUTHORIZATION=BLOCKED
+AUTHORIZED_READ_ONLY_CDP_IDENTITY_LOOKUPS=0
+MCP_REQUEST_COUNT=0
+DIRECT_REST_RUNTIME_REQUEST_EXECUTED=NO
+DOCUMENT_ARTIFACT_REQUESTS=0
+CHECKPOINT_X402_QUOTES_CREATED=0
+CHECKPOINT_AUDIT_EVENTS_CREATED=0
+CHECKPOINT_PAYMENT_ATTEMPTS_CREATED=0
+CHECKPOINT_ADMISSION_ROWS_CREATED=0
+CHECKPOINT_ADMISSION_ROWS_DELETED=0
+CHECKPOINT_JOB_ARTIFACT_ROWS_CREATED=0
+CHECKPOINT_R2_OBJECTS_CREATED=0
+CHECKPOINT_QUEUE_WRITES=0
+CHECKPOINT_WORKFLOW_CREATIONS=0
+ALL_CHECKPOINT_STATE_ACCOUNTED_FOR=YES
+UNATTRIBUTED_D1_WRITES=0
+UNATTRIBUTED_D1_DELETIONS=0
+UNATTRIBUTED_R2_WRITES=0
+REAL_TEST_PAYMENTS=0
+PAYMENT_AUTHORIZATIONS_SUBMITTED=0
+PAYMENT_VERIFY_CALLS=0
+FACILITATOR_VERIFY_CALLS=0
+FACILITATOR_SETTLE_CALLS=0
+USEFUL_PROVIDER_EXECUTIONS=0
+REAL_TEST_SETTLEMENTS=0
+CHAIN_TRANSACTIONS=0
+ECONOMIC_EFFECT_USDC=0
+```
+
+This is a qualification-envelope blocker, not evidence that the read-only CDP
+account endpoint mutates state and not evidence of a candidate runtime failure.
+A successor governance decision must either authorize the precisely disclosed
+analytics/retry envelope or authorize candidate remediation that disables SDK
+usage tracking and guarantees one attempt. No cutover, deployment, upload,
+traffic, variable, secret, paid-runtime, payment, provider-execution, Workflow,
+settlement, chain, or mTLS action is authorized by this report.
