@@ -558,3 +558,279 @@ subject to governance review of the repository's deliberate
 `preview_urls=false` containment policy. If governance instead requires
 production-host proof, the alternative is the separately authorized A2
 deployment-membership checkpoint. Neither mutation is authorized here.
+
+## Authorization A1 — temporary Preview URL enablement safety gate
+
+Date: 2026-09-10
+
+Final A1 result: `PREVIEW_EXPOSURE_UNSAFE`
+
+This section preserves both preceding failures and records the next chronological
+checkpoint. Authorization A1 permitted temporary Preview URL enablement only if
+the already-production-configured candidate could be exposed safely. The
+pre-mutation security gate failed, so Preview URLs were never enabled.
+
+### Repository and live-state integrity
+
+```text
+PWD=/Users/meta4ickal/SITEBORNE Utility Network
+BRANCH=main
+HEAD_PRE=184ea06f4b59a46cff8dd9a8c550704c17162ac6
+WORKING_TREE_PRE=CLEAN
+EVIDENCE_COMMIT_EXISTS=YES
+EVIDENCE_COMMIT_REACHABLE=YES
+WRANGLER_VERSION=4.119.0
+RUNTIME_SOURCE_UNCHANGED_SINCE_CANDIDATE=YES
+```
+
+Read-only Wrangler calls reconfirmed the candidate and deployments:
+
+```text
+CANDIDATE_EXISTS=YES
+CANDIDATE_VERSION=d155c9a1-ca3a-49f9-92a3-b35760dc58e6
+CANDIDATE_VERSION_NUMBER=60
+CANDIDATE_SOURCE_COMMIT=2f947bfe0fa1722158323aaf44496ee6ebf046fd
+CANDIDATE_ASSIGNED_TO_CURRENT_DEPLOYMENT=NO
+
+PUBLIC_BASELINE_VERSION=db7054c9-76ee-4830-aabe-8a4542261b6a
+PUBLIC_BASELINE_TRAFFIC=100%
+EXISTING_R6_CANDIDATE_VERSION=d3472f58-f578-4a8f-992b-0d0956c9b561
+EXISTING_R6_CANDIDATE_TRAFFIC=0%
+NEW_CANDIDATE_TRAFFIC=0% / UNASSIGNED
+
+PAID_RUNTIME_VERSION=d62011b9-6219-47e1-8cf9-5006776cfb50
+PAID_RUNTIME_TRAFFIC=100%
+```
+
+### Exact live Preview URL state
+
+The committed configuration remains:
+
+```text
+LOCAL_WORKERS_DEV=true
+LOCAL_PREVIEW_URLS=false
+```
+
+A sanitized, read-only Cloudflare API request using Wrangler's existing
+authentication returned HTTP 200 and the exact current subdomain state:
+
+```json
+{
+  "enabled": true,
+  "previews_enabled": false
+}
+```
+
+```text
+PREVIEW_STATE_PRE={"enabled":true,"previews_enabled":false}
+LIVE_PREVIEW_URLS_ENABLED_PRE=NO
+```
+
+No authentication material or secret value was printed.
+
+### Minimum technical mutation
+
+Current first-party Cloudflare API documentation exposes a script-subdomain
+settings resource:
+
+```text
+GET  /accounts/{account_id}/workers/scripts/{script_name}/subdomain
+POST /accounts/{account_id}/workers/scripts/{script_name}/subdomain
+```
+
+The setting-only POST accepts the existing `enabled` value and a
+`previews_enabled` boolean. Therefore the minimum reversible operation would
+have been a POST preserving `enabled=true` and changing only
+`previews_enabled=false -> true`, followed by the exact inverse POST. This is
+method B, not `wrangler deploy`; it does not upload code, create a Worker
+version, create a deployment, or alter traffic percentages.
+
+- Cloudflare API: <https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/subdomain/>
+- Cloudflare API POST: <https://developers.cloudflare.com/api/resources/workers/subresources/scripts/subresources/subdomain/methods/create/>
+
+```text
+MINIMUM_PREVIEW_ENABLEMENT_METHOD=B
+CREATES_NEW_WORKER_VERSION=NO
+CHANGES_ACTIVE_DEPLOYMENT=NO
+CHANGES_TRAFFIC=NO
+```
+
+No POST was sent because the mandatory exposure gate below failed.
+
+### Existing Access protection
+
+Cloudflare documents three applicable protection scopes: account-level
+`all_preview_workers`/`all_workers`, Worker-level `preview_worker`/`worker`, and
+hostname-specific Access applications.
+
+- Cloudflare Access for Workers: <https://developers.cloudflare.com/workers/configuration/cloudflare-access/>
+- Cloudflare Access applications API: <https://developers.cloudflare.com/api/resources/zero_trust/subresources/access/subresources/applications/methods/list>
+
+A sanitized, read-only account Access-application request returned HTTP 403:
+
+```text
+access.api.error.not_enabled: Access is not enabled.
+```
+
+This is an account-level negative result, not merely an empty application
+filter. There can be no inherited account, Worker, or preview-specific Access
+application while Access itself is not enabled.
+
+```text
+ACCOUNT_OR_WORKER_ACCESS_PROTECTION_ALREADY_PRESENT=NO
+PREVIEW_URL_ACCESS_POLICY_ALREADY_PRESENT=NO
+TEMPORARY_PREVIEW_PUBLIC_EXPOSURE=YES
+```
+
+Cloudflare states that enabled Preview URLs are public unless protected by
+Access. No Access policy was created or authorized in A1.
+
+### Production capability exposure
+
+The immutable candidate readback proves all five route activation flags are
+true, all four production authorization gates are satisfied, and the candidate
+contains real production bindings and secret bindings. Secret values were not
+read or exposed.
+
+Relevant candidate state:
+
+```text
+PAID_ROUTES_ENABLED=true
+VERIFY_V2_CDP_ROUTE_ENABLED=true
+WEB_CONTEXT_V2_CDP_ROUTE_ENABLED=true
+COMPANY_EVIDENCE_GRAPH_V2_CDP_ROUTE_ENABLED=true
+DOCUMENT_EVIDENCE_JSON_V2_CDP_ROUTE_ENABLED=true
+DOCUMENT_ARTIFACT_UPLOAD_ROUTE_ENABLED=true
+PAYMENT_ENVIRONMENT=production
+PRODUCTION_ENABLED=true
+HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP=true
+PRODUCTION_CDP_CREDENTIALS_APPROVED=true
+
+CDP_API_KEY_ID=PRESENT
+CDP_API_KEY_SECRET=PRESENT
+MODAL_WEBCTX_ENDPOINT_URL=PRESENT
+MODAL_WEBCTX_PROXY_KEY=PRESENT
+MODAL_WEBCTX_PROXY_SECRET=PRESENT
+MODAL_DOCWORKER_ENDPOINT_URL=PRESENT
+MODAL_DOCWORKER_PROXY_KEY=PRESENT
+MODAL_DOCWORKER_PROXY_SECRET=PRESENT
+NVM_API_KEY=PRESENT
+PAID_RECEIPT_SIGNING_PRIVATE_KEY=PRESENT
+PAYMENT_CONTINUATION_ENCRYPTION_KEY=PRESENT
+
+D1_DB=PRESENT
+R2_ARTIFACTS=PRESENT
+KV_CATALOG=PRESENT
+QUEUE_EVENTS=PRESENT
+QUEUE_JOBS=PRESENT
+AI=PRESENT
+BROWSER=PRESENT
+PAID_CONTINUATION_WORKFLOW=PRESENT
+```
+
+The candidate source matches the current runtime source; only documentation
+commits follow source commit `2f947bfe0fa1722158323aaf44496ee6ebf046fd`.
+Static source review establishes these public-preview consequences:
+
+1. Anonymous clients could invoke health, discovery, Agent Card, JWKS, A2A, MCP,
+   catalog, service metadata, schemas, and OpenAPI surfaces.
+2. An anonymous schema-valid unpaid request to an activated paid route would
+   create and persist a payment requirement/quote and audit state before
+   returning HTTP 402.
+3. A request carrying a structurally valid payment payload reaches the real CDP
+   payment evidence provider's verification boundary.
+4. After successful verification, the route creates D1 job/payment state and
+   hands execution and settlement context to `PAID_CONTINUATION_WORKFLOW`.
+5. The web-context and company-evidence compositions contain real external
+   executor dependencies; the document-evidence composition contains its real
+   document-provider and R2 dependencies.
+6. `/v2/artifacts/documents` is deliberately outside the payment machinery and
+   performs validate/hash/store against real D1/R2 when its two activation flags
+   are true.
+
+The code explicitly labels the post-verification span as real economic
+execution. Preview hostname obscurity is not an authorization control.
+
+```text
+PREVIEW_URL_USES_PRODUCTION_BINDINGS=YES
+PUBLIC_PREVIEW_COULD_INVOKE_UNPAID_DISCOVERY=YES
+PUBLIC_PREVIEW_COULD_TRIGGER_PAYMENT_REQUIRED=YES
+PUBLIC_PREVIEW_COULD_CREATE_UNPAID_D1_STATE=YES
+PUBLIC_PREVIEW_COULD_ACCEPT_REAL_PAID_REQUEST=YES
+PUBLIC_PREVIEW_COULD_INVOKE_REAL_PROVIDER_EXECUTION=YES
+PUBLIC_PREVIEW_COULD_CREATE_WORKFLOW_STATE=YES
+PUBLIC_PREVIEW_COULD_PRODUCE_ECONOMIC_SIDE_EFFECTS=YES
+TEMPORARY_PUBLIC_PREVIEW_ACCEPTABLE_FOR_BOUNDED_QUALIFICATION=NO
+PREVIEW_ENABLEMENT_AUTHORIZATION_SAFE=NO
+```
+
+### Mandatory pre-enable stop
+
+Authorization A1 section 7 requires a stop before enablement when a public
+Preview URL could accept a real paid request and no existing Access protection
+applies. Both conditions are proven. Consequently:
+
+```text
+PREVIEW_ENABLE_MUTATIONS=0
+PREVIEW_DISABLE_MUTATIONS=0
+PREVIEW_STATE_POST={"enabled":true,"previews_enabled":false}
+LIVE_PREVIEW_URLS_ENABLED_FINAL=NO
+```
+
+No versioned Preview hostname was made routable, constructed for use, or
+requested. Candidate runtime qualification therefore did not resume:
+
+```text
+VERSIONED_PREVIEW_URL=NOT_RESOLVED_SAFETY_GATE_STOP
+PREVIEW_URL_CANDIDATE_ASSOCIATION_PROVEN=NOT_EXECUTED
+CANDIDATE_RUNTIME_REACHABLE=NOT_EXECUTED
+CANDIDATE_MTLS_ADVERTISED=NOT_EVALUATED
+CANDIDATE_A2A_RUNTIME=NOT_EXECUTED
+CANDIDATE_MCP_DISCOVERY=NOT_EXECUTED
+CANDIDATE_MCP_PROTOCOL=NOT_EXECUTED
+CANDIDATE_REST_RUNTIME_REACHABILITY=NOT_EXECUTED
+PCC_REST_PREVIEW_RUNTIME_UNPAID_PROOF=NOT_EXECUTED
+PCC_MCP_PREVIEW_RUNTIME_UNPAID_PROOF=NOT_EXECUTED
+PCC_A2A_PREVIEW_RUNTIME_UNPAID_PROOF=NOT_EXECUTED
+AUTHORIZATION_A_REQUIRED_QUALIFICATION_LEVEL=NOT_DETERMINED_AFTER_SECTION_7_STOP
+CANDIDATE_QUALIFICATION_RECOVERED=NO
+```
+
+The canonical settlement proof was not re-run after the section 7 stop. The
+unchanged source and prior accepted evidence continue to record the historical
+invariant, without presenting it as a new A1 execution result:
+
+```text
+PUBLIC_API_SETTLE_CALLSITES=0 (not re-run after section 7 stop)
+MCP_ADAPTER_SETTLE_CALLSITES=0 (not re-run after section 7 stop)
+DEDICATED_WORKFLOW_SETTLE_CALLSITES=1 (not re-run after section 7 stop)
+TOTAL_PRODUCTION_SETTLE_CALLSITES=1 (not re-run after section 7 stop)
+```
+
+### A1 accounting and decision
+
+```text
+ADDITIONAL_VERSION_UPLOADS=0
+PRODUCTION_DEPLOYMENT_MUTATIONS=0
+TRAFFIC_MUTATIONS=0
+VAR_MUTATIONS=0
+SECRET_MUTATIONS=0
+PAID_RUNTIME_DEPLOYMENTS=0
+REAL_TEST_PAYMENTS=0
+PAYMENT_AUTHORIZATIONS_SUBMITTED=0
+REAL_TEST_PROVIDER_CALLS=0
+FACILITATOR_VERIFY_CALLS=0
+FACILITATOR_SETTLE_CALLS=0
+REAL_TEST_SETTLEMENTS=0
+ECONOMIC_EFFECT_USDC=0
+```
+
+```text
+SUN1222C_PCC_AUTHORIZATION_A1_TEMPORARY_PREVIEW_URL_ENABLEMENT=PREVIEW_EXPOSURE_UNSAFE
+NEXT_REQUIRED_CHECKPOINT=SUN-1222C-PCC-AUTHORIZATION-A2-ZERO-PERCENT-DEPLOYMENT-MEMBERSHIP
+```
+
+A1 made no Cloudflare mutation. The required final Preview URL policy is already
+restored because it never changed. Exact-candidate qualification now requires
+the separately governed A2 deployment-membership path unless a different
+protected, non-public Preview mechanism is authorized first.
