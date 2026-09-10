@@ -98,4 +98,15 @@ regexes = [
   # UUID-shaped pattern, so a real secret that happened to be UUID-shaped
   # would still be caught.
   '''db7054c9-76ee-4830-aabe-8a4542261b6a''',
+  # SUN-1222C source-remediation gate: a previously documented, stale
+  # Cloudflare Worker Version ID. It is a public release identifier, not a
+  # credential, and appears in two historical reports in `KEY=value` form.
+  # Allow only the exact UUID; retain detection for every other UUID-shaped
+  # value and for all actual provider credential formats.
+  '''3a74686d-bad8-4fb0-b6b8-604292145d69''',
+  # SUN-1222C bounded artifact qualification: the deterministic R2 object key
+  # for a public 68-byte fixture, derived directly from the SHA-256 printed
+  # beside it in the evidence report. It is an object locator, not secret or
+  # authorization material. Allow only this exact content-addressed key.
+  '''artifacts/fdacd0a37cc16d810fd42c59455af644cfa860ebb0c287277cc6a1663cc488ef''',
 ]

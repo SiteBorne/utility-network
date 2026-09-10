@@ -172,11 +172,9 @@ export interface LocalCdpSignerCapabilityClient {
   };
 }
 
-/** Structurally requires all three credentials — there is no overload
- * that accepts only two, unlike the production
- * `buildProductionCdpAccountLookupClientFactory`, which structurally
- * cannot accept a `walletSecret` at all. This is a deliberately separate
- * factory living in a deliberately separate, non-bundled file. */
+/** Structurally requires all three credentials. This is a deliberately
+ * separate, non-bundled live-capability factory; the production pre-402
+ * seller path constructs no account client at all. */
 export function buildLocalCdpSignerCapabilityClientFactory(
   credentials: LocalCdpCredentials
 ): () => LocalCdpSignerCapabilityClient {

@@ -16,7 +16,7 @@
 import { getDefaultAsset } from '@x402/evm';
 import type { Network } from '@x402/core/types';
 import type { HTTPFacilitatorClient } from '@x402/core/server';
-import { CdpClient } from '@coinbase/cdp-sdk';
+import { isAddress } from 'viem';
 import {
   isProductionPaymentAuthorized,
   type PaymentEvidenceMode,
@@ -103,8 +103,8 @@ export interface ProductionBindingsCheck {
 }
 
 /**
- * Presence-only check (never reads, logs, or returns secret VALUES) for
- * the production-payment-specific secrets. Distinct from this same
+ * Presence-only check (never logs or returns secret VALUES) for the governed
+ * public receiver plus production-payment-specific credentials. Distinct from this same
  * file's neighbor `env.ts`'s existing `validateProductionBindings`
  * (defined but never wired into the live request path anywhere) — this
  * is the canonical equivalent this checkpoint wires for real.
@@ -117,14 +117,10 @@ export interface ProductionBindingsCheck {
  * parameter on the facilitator client at all, so `.verify()`/`.settle()`
  * never need it. `CdpClient`'s own constructor doc comment states the
  * Wallet Secret "is used specifically to authenticate requests to POST,
- * and DELETE endpoints in the EVM and Solana Account APIs" — the
- * seller-identity operation this repository performs,
- * `evm.getAccount(...)`, is a read (GET), never a POST/DELETE write.
- * Neither of this repository's two real CDP SDK call sites needs it.
- * `CdpAccountLookupClient`/`buildProductionCdpAccountLookupClientFactory`
- * still accept an optional wallet secret (the SDK itself still allows
- * one to be supplied) — this checkpoint stops *requiring* it, it does
- * not forbid a caller from ever providing one. */
+ * and DELETE endpoints in the EVM and Solana Account APIs". Neither real
+ * production CDP SDK call site in this repository needs it.
+ * The pre-402 request path no longer constructs a general CDP account
+ * client merely to rediscover the governed public receiver address. */
 export function checkProductionBindingsPresent(
   env: Pick<Env, 'SELLER_WALLET_ADDRESS' | 'CDP_API_KEY_ID' | 'CDP_API_KEY_SECRET'>
 ): ProductionBindingsCheck {
@@ -142,14 +138,29 @@ export interface SellerIdentityCheckInput {
   authenticatedAddress: string;
 }
 
-/** Separates "configured seller public address" (`SELLER_WALLET_ADDRESS`,
- * a Cloudflare secret) from "authenticated CDP wallet/account identity"
- * (what a real CDP client resolves once given real credentials).
- * Production authorization must require these to match before any
- * economic execution. No real CDP wallet client is constructed by this
- * checkpoint; `authenticatedAddress` is supplied by the caller — a real
- * CDP client in a future credential-provisioning checkpoint, a mock in
- * this checkpoint's own deterministic tests. */
+/**
+ * Resolves the governed x402 receiver without I/O.
+ *
+ * `SELLER_WALLET_ADDRESS` is the committed, deployment-frozen canonical
+ * `payTo`; CDP account membership is not data needed to construct a payment
+ * requirement. `viem`'s strict address check accepts conventional all-lower
+ * or all-upper addresses and validates EIP-55 when the address uses mixed
+ * case. The original bytes are retained so the frozen public contract does
+ * not change. Missing, malformed, or bad-checksum configuration fails closed
+ * before the facilitator is constructed.
+ */
+export function resolveGovernedSellerAddress(configuredAddress: string): `0x${string}` {
+  if (!isAddress(configuredAddress, { strict: true })) {
+    throw new Error('seller_wallet_address_malformed_or_bad_checksum');
+  }
+  return configuredAddress as `0x${string}`;
+}
+
+/** Separates the configured canonical public receiver
+ * (`SELLER_WALLET_ADDRESS`, a committed Cloudflare ordinary var) from an
+ * authenticated CDP wallet/account identity. This pure equality assertion is
+ * retained for an explicitly authorized release qualification; it is not a
+ * request-time prerequisite for constructing a 402. */
 export function assertSellerIdentityConsistent(input: SellerIdentityCheckInput): void {
   if (input.configuredAddress.toLowerCase() !== input.authenticatedAddress.toLowerCase()) {
     throw new Error(
@@ -329,8 +340,7 @@ export function isDocumentEvidenceJsonV2CdpRouteFlagEnabled(
   env: Pick<Env, 'PAID_ROUTES_ENABLED' | 'DOCUMENT_EVIDENCE_JSON_V2_CDP_ROUTE_ENABLED'>
 ): boolean {
   return (
-    env.PAID_ROUTES_ENABLED === 'true' &&
-    env.DOCUMENT_EVIDENCE_JSON_V2_CDP_ROUTE_ENABLED === 'true'
+    env.PAID_ROUTES_ENABLED === 'true' && env.DOCUMENT_EVIDENCE_JSON_V2_CDP_ROUTE_ENABLED === 'true'
   );
 }
 
@@ -448,37 +458,10 @@ export function resolveEffectiveProductionStatusByServiceId(
 }
 
 /**
- * SUN-1200 checkpoint C — seller-identity architecture decision.
- *
- * Three options were on the table: (A) require the seller to be a
- * CDP-managed wallet, authenticated via the CDP SDK itself, checked
- * against `SELLER_WALLET_ADDRESS`; (B) allow an arbitrary external EVM
- * seller address with no CDP-side authentication at all; (C) leave the
- * question ambiguous/deferred.
- *
- * This repository already, unambiguously chose (A) in checkpoint A/B:
- * `ProductionCdpProviderDependencies.getAuthenticatedSellerAddress`
- * exists specifically to be resolved from an authenticated CDP identity
- * (its own doc comment: "what a real CDP client resolves once given
- * real credentials"), and `resolveProductionCdpEvidenceProvider` already
- * fails closed to fixture mode unless that hook is both supplied AND its
- * result matches `SELLER_WALLET_ADDRESS`
- * (`assertSellerIdentityConsistent`). There is no code path anywhere in
- * this repository that accepts an external, CDP-unauthenticated EVM
- * seller — (B) was never built and is not being introduced now. This
- * checkpoint completes (A) by providing the real implementation of that
- * already-decided hook, rather than re-opening the architecture
- * question.
- *
- * `CdpAccountLookupClient` is the minimal read-only surface this
- * repository needs from `@coinbase/cdp-sdk`'s `CdpClient.evm.getAccount`
- * — narrowed to exactly the one call this boundary makes, so a test can
- * supply a mock without depending on the real SDK's full client shape.
- * Real construction (`new CdpClient({...})` with real credentials) is
- * the caller's job (a future credential-provisioning checkpoint's
- * `index.ts` wiring) — this file never imports `@coinbase/cdp-sdk`
- * itself, preserving the credential-independent package boundary this
- * file already documents at its own top.
+ * Narrow, transport-agnostic account lookup shape retained exclusively for an
+ * explicitly authorized release qualification/preflight. It is not wired into
+ * normal request handling. Callers control the transport policy; this module
+ * adds no retries, analytics, signing, or transaction behavior.
  */
 export interface CdpAccountLookupClient {
   evm: {
@@ -487,75 +470,25 @@ export interface CdpAccountLookupClient {
 }
 
 /**
- * The real (not fixture, not a stub) implementation of
- * `getAuthenticatedSellerAddress`: asks a CDP client to resolve the
- * account at the configured `SELLER_WALLET_ADDRESS` and returns the
- * address the CDP API itself confirms for that account. Read-only — a
- * wallet lookup, never a transaction, never a signature. `createClient`
- * is injected (never constructed here) so this function makes no
- * decision about credentials or network access itself; a caller that
- * never invokes it (every caller in this repository today) never
- * triggers a CDP API call at all — this checkpoint proves the function
- * against `CdpAccountLookupClientMock`-shaped test doubles only, and it
- * is not wired into `index.ts`'s live request path, matching the
- * seller-identity hook's existing disclosed-unwired pattern (`index.ts`
- * still passes no `getAuthenticatedSellerAddress` at all, so production
- * evidence-provider construction continues to fail closed to fixture
- * mode regardless of every other flag, exactly as before this
- * checkpoint).
+ * Builds the separately-invoked authenticated seller membership assertion.
+ * Keeping this pure boundary preserves the historical governance check while
+ * removing it from anonymous pre-402 route construction. The high-level CDP
+ * SDK factory is intentionally absent: any future live use must provide a
+ * separately reviewed deterministic transport.
  */
-const EVM_ADDRESS_PATTERN = /^0x[0-9a-fA-F]{40}$/;
-
 export function buildCdpSellerAddressLookup(
   createClient: () => CdpAccountLookupClient,
   sellerWalletAddress: string
 ): () => Promise<string> {
   return async () => {
-    if (!EVM_ADDRESS_PATTERN.test(sellerWalletAddress)) {
-      // Malformed configuration -- refuse to even attempt the lookup
-      // rather than passing an unvalidated string into the CDP SDK.
-      // Propagates to `resolveProductionCdpEvidenceProvider`'s existing
-      // try/catch, which fails closed to fixture mode exactly like every
-      // other lookup failure.
-      throw new Error('seller_wallet_address_malformed');
-    }
-    const client = createClient();
-    const account = await client.evm.getAccount({
-      address: sellerWalletAddress as `0x${string}`,
+    const address = resolveGovernedSellerAddress(sellerWalletAddress);
+    const account = await createClient().evm.getAccount({ address });
+    assertSellerIdentityConsistent({
+      configuredAddress: address,
+      authenticatedAddress: account.address,
     });
     return account.address;
   };
-}
-
-/**
- * SUN-1200 checkpoint D — the real (not stubbed) production client
- * factory for `buildCdpSellerAddressLookup`'s `createClient` parameter.
- * Constructs a real `@coinbase/cdp-sdk` `CdpClient` from real credential
- * bindings — but only inside the closure this function returns, never
- * eagerly: calling `buildProductionCdpAccountLookupClientFactory(...)`
- * itself makes no network call and constructs nothing; only invoking the
- * returned factory (which only happens inside
- * `buildCdpSellerAddressLookup`'s own closure, which itself only runs
- * once `resolveProductionCdpEvidenceProvider` has already confirmed every
- * ADR 0055 gate and required binding) constructs the client, and even
- * that construction makes no network call on its own — `CdpClient`'s own
- * constructor does no I/O (matches the same "construction ≠ network
- * call" property already confirmed and relied on for
- * `createCdpFacilitatorClient` in checkpoint A/B).
- */
-export function buildProductionCdpAccountLookupClientFactory(
-  bindings: Pick<Env, 'CDP_API_KEY_ID' | 'CDP_API_KEY_SECRET'>
-): () => CdpAccountLookupClient {
-  return () =>
-    new CdpClient({
-      apiKeyId: bindings.CDP_API_KEY_ID,
-      apiKeySecret: bindings.CDP_API_KEY_SECRET,
-      // Deliberately no `walletSecret` -- see this file's own
-      // `checkProductionBindingsPresent` doc comment for the full
-      // reconciliation. `evm.getAccount(...)` is a read-only GET; the SDK
-      // only requires the Wallet Secret for POST/DELETE Account-API
-      // writes, which this repository never performs.
-    });
 }
 
 export interface ProductionCdpProviderDependencies {
@@ -567,13 +500,6 @@ export interface ProductionCdpProviderDependencies {
    * `beforeAll`, before any credential validation step) — only
    * `.verify()`/`.settle()` do. */
   createFacilitatorClient: () => HTTPFacilitatorClient;
-  /** Resolves the authenticated CDP wallet's public address. SUN-1200
-   * checkpoint B deliberately wires NO real implementation of this hook
-   * into the live request path — omitting it (the default everywhere
-   * today) fails closed to fixture mode exactly like every other missing
-   * gate, regardless of every other flag. A real implementation is a
-   * separate, future credential-provisioning checkpoint's job. */
-  getAuthenticatedSellerAddress?: () => Promise<string>;
 }
 
 export interface ResolvedCdpEvidence {
@@ -589,10 +515,8 @@ export interface ResolvedCdpEvidence {
  *      ADR 0055 gates);
  *   2. every required production secret is present
  *      (`checkProductionBindingsPresent`);
- *   3. `deps.getAuthenticatedSellerAddress` is supplied and resolves
- *      without throwing;
- *   4. the resolved authenticated address matches the configured
- *      `SELLER_WALLET_ADDRESS` (`assertSellerIdentityConsistent`).
+ *   3. the governed `SELLER_WALLET_ADDRESS` passes deterministic local
+ *      EVM syntax/checksum validation (`resolveGovernedSellerAddress`).
  * Only then does it construct a real `CdpPaymentEvidenceProvider` —
  * never eagerly, never at Worker startup, only inside this function, only
  * on this exact success path. Any failure anywhere falls back to fixture
@@ -613,20 +537,8 @@ export async function resolveProductionCdpEvidenceProvider(
   if (!bindingsCheck.ok) {
     return { evidenceMode: 'fixture' };
   }
-  if (!deps.getAuthenticatedSellerAddress) {
-    return { evidenceMode: 'fixture' };
-  }
-  let authenticatedAddress: string;
   try {
-    authenticatedAddress = await deps.getAuthenticatedSellerAddress();
-  } catch {
-    return { evidenceMode: 'fixture' };
-  }
-  try {
-    assertSellerIdentityConsistent({
-      configuredAddress: bindings.SELLER_WALLET_ADDRESS,
-      authenticatedAddress,
-    });
+    resolveGovernedSellerAddress(bindings.SELLER_WALLET_ADDRESS);
   } catch {
     return { evidenceMode: 'fixture' };
   }

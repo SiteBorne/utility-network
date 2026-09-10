@@ -535,12 +535,10 @@ export function classifySubmissionOutcome(httpStatus: number): SubmissionResult 
   return 'ambiguous'; // any other unexpected status is treated conservatively, never as success.
 }
 
-/** Builds the real (non-mocked) dependency bundle for a live run — the
- * ONLY place in this file that ever constructs a real `CdpClient` with a
- * `walletSecret`, mirroring SUN-1220G's local-only pattern exactly. Never
- * imports `buildProductionCdpAccountLookupClientFactory` (that factory's
- * type deliberately excludes walletSecret and lives inside the production
- * bundle) — this tool constructs its own client entirely independently. */
+/** Builds the real (non-mocked) dependency bundle for a separately authorized
+ * live run — the ONLY place in this file that constructs a real `CdpClient`
+ * with a `walletSecret`, mirroring SUN-1220G's local-only pattern exactly.
+ * The production pre-402 seller path constructs no account client. */
 function buildRealDeps(credentials: LocalFirstPaidE2ECredentials): FirstPaidE2EDeps {
   const cdpClient = new CdpClient({
     apiKeyId: credentials.apiKeyId,

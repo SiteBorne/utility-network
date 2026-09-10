@@ -1735,3 +1735,13 @@ analytics/retry envelope or authorize candidate remediation that disables SDK
 usage tracking and guarantees one attempt. No cutover, deployment, upload,
 traffic, variable, secret, paid-runtime, payment, provider-execution, Workflow,
 settlement, chain, or mTLS action is authorized by this report.
+
+### Seller-identity determinism remediation continuation
+
+The source-only continuation is recorded in
+[`SUN-1222C-cdp-seller-identity-determinism-remediation.md`](./SUN-1222C-cdp-seller-identity-determinism-remediation.md).
+It preserves this safe failure chronology, removes the SDK account lookup and
+its telemetry/retry fan-out from normal pre-402 handling, retains authenticated
+membership comparison only as a separately authorized qualification primitive,
+and requires a new immutable candidate under a future checkpoint. It does not
+rewrite or retroactively pass the immutable `d155c9a1` qualification attempt.

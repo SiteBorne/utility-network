@@ -2,8 +2,8 @@
  * SUN-1200 checkpoint D — the full outer HTTP production/recovery mock
  * proof (directive §22/§23). Exercises the complete real stack --
  * `buildPaidServicesApp`, real Miniflare D1, the real
- * `resolveProductionCdpEvidenceProvider` gate, the real
- * `buildCdpSellerAddressLookup` and `buildCdpChainReceiptChecker`
+ * `resolveProductionCdpEvidenceProvider` gate and the real
+ * `buildCdpChainReceiptChecker`
  * boundary functions -- but with EVERY external network-facing dependency
  * (the CDP facilitator, the CDP account-lookup client, the chain-RPC
  * client) supplied as an injected, deterministic test double. No real
@@ -31,11 +31,7 @@ import {
   type PaymentRequired,
   type ProductionAuthorizationInput,
 } from '@siteborne/protocol-x402';
-import {
-  buildCdpSellerAddressLookup,
-  resolveProductionCdpEvidenceProvider,
-  type CdpAccountLookupClient,
-} from '../src/control-plane/config/production-payment';
+import { resolveProductionCdpEvidenceProvider } from '../src/control-plane/config/production-payment';
 import { buildCdpChainReceiptChecker } from '../src/control-plane/evidence/chain-receipt-checker';
 import { buildPaidServicesApp } from '../src/control-plane/routes/paid-services';
 
@@ -148,16 +144,6 @@ function mockFacilitator(
   } as unknown as HTTPFacilitatorClient;
 }
 
-function mockSellerClient(resolvedAddress: string): CdpAccountLookupClient {
-  return {
-    evm: {
-      async getAccount() {
-        return { address: resolvedAddress };
-      },
-    },
-  };
-}
-
 describe('production CDP full-stack mock (SUN-1200 checkpoint D, directive §22/§23)', () => {
   let mf: Miniflare;
   let db: D1Database;
@@ -187,10 +173,6 @@ describe('production CDP full-stack mock (SUN-1200 checkpoint D, directive §22/
   ) {
     const cdpEvidence = await resolveProductionCdpEvidenceProvider(FULLY_AUTHORIZED, BINDINGS, {
       createFacilitatorClient: () => facilitator,
-      getAuthenticatedSellerAddress: buildCdpSellerAddressLookup(
-        () => mockSellerClient(SELLER),
-        SELLER
-      ),
     });
     const cdpChainReceiptChecker = chainReceiptResult
       ? buildCdpChainReceiptChecker(() => ({
@@ -210,7 +192,7 @@ describe('production CDP full-stack mock (SUN-1200 checkpoint D, directive §22/
     });
   }
 
-  it('§22 full outer HTTP positive production mock: mainnet challenge, production USDC, seller identity match, verify=1 execute=1 settle=1, receipt, PSL', async () => {
+  it('§22 full outer HTTP positive production mock: mainnet challenge, governed seller payTo, verify=1 execute=1 settle=1, receipt, PSL', async () => {
     let verifyCount = 0;
     let settleCount = 0;
     const facilitator = mockFacilitator({
@@ -329,19 +311,19 @@ describe('production CDP full-stack mock (SUN-1200 checkpoint D, directive §22/
     expect(settleCount).toBe(1);
   });
 
-  it('seller mismatch through the full mocked stack: the mock CDP account lookup resolving a different address fails closed to fixture mode -- testnet, no economic path reachable', async () => {
+  it('malformed governed seller through the full mocked stack fails closed to fixture mode -- testnet, no economic path reachable', async () => {
     const facilitator = mockFacilitator();
     let facilitatorConstructed = false;
-    const cdpEvidence = await resolveProductionCdpEvidenceProvider(FULLY_AUTHORIZED, BINDINGS, {
-      createFacilitatorClient: () => {
-        facilitatorConstructed = true;
-        return facilitator;
-      },
-      getAuthenticatedSellerAddress: buildCdpSellerAddressLookup(
-        () => mockSellerClient('0x0000000000000000000000000000000000dEaD'),
-        SELLER
-      ),
-    });
+    const cdpEvidence = await resolveProductionCdpEvidenceProvider(
+      FULLY_AUTHORIZED,
+      { ...BINDINGS, SELLER_WALLET_ADDRESS: 'not-an-address' },
+      {
+        createFacilitatorClient: () => {
+          facilitatorConstructed = true;
+          return facilitator;
+        },
+      }
+    );
     expect(cdpEvidence.evidenceMode).toBe('fixture');
     expect(facilitatorConstructed).toBe(false);
 

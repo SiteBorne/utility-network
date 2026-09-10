@@ -39,8 +39,6 @@ import {
 import { ModalSafeEgressClient, type InjectedHttpClient } from '@siteborne/provider-adapters';
 import { createCdpFacilitatorClient } from '@coinbase/cdp-sdk/x402';
 import {
-  buildCdpSellerAddressLookup,
-  buildProductionCdpAccountLookupClientFactory,
   resolvePaymentAsset,
   resolveProductionAuthorizationInput,
   resolveProductionCdpEvidenceProvider,
@@ -157,13 +155,6 @@ export async function buildCompanyEvidenceGraphV2CdpProductionRouteConfig(
             apiKeyId: env.CDP_API_KEY_ID,
             apiKeySecret: env.CDP_API_KEY_SECRET,
           }),
-        getAuthenticatedSellerAddress: buildCdpSellerAddressLookup(
-          buildProductionCdpAccountLookupClientFactory({
-            CDP_API_KEY_ID: env.CDP_API_KEY_ID ?? '',
-            CDP_API_KEY_SECRET: env.CDP_API_KEY_SECRET ?? '',
-          }),
-          env.SELLER_WALLET_ADDRESS ?? ''
-        ),
       }
     );
     if (resolved.evidenceMode !== 'production') {

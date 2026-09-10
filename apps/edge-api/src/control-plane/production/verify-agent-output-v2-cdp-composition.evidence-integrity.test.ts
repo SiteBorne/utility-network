@@ -5,17 +5,15 @@
  *
  * SUN-1216: proved the fixture trust class was structurally confined to
  * `'fixture'` evidence mode, which `policy.ts` never accepts as
- * satisfying `'production'` mode -- but the composition itself had no
- * real `getAuthenticatedSellerAddress` wired at all, so it could only
- * ever resolve `evidenceMode: 'fixture'`, silently, with no third
- * argument required. That silent fallback (not the trust-class gate,
+ * satisfying `'production'` mode -- but the composition could only ever
+ * resolve `evidenceMode: 'fixture'`, silently, with no third argument
+ * required. That silent fallback (not the trust-class gate,
  * which was always sound) was the actual R0.
  *
- * SUN-1218: wires the real, already-tested `getAuthenticatedSellerAddress`
- * (`buildCdpSellerAddressLookup`/`buildProductionCdpAccountLookupClientFactory`,
- * SUN-1200 checkpoints C/D) and makes the production call site (no third
- * argument) fail closed to `{unavailable: true}` whenever real evidence
- * cannot be established -- never a silent fixture fallback. Fixture
+ * SUN-1218 made the production call site (no third argument) fail closed to
+ * `{unavailable: true}` whenever real evidence cannot be established --
+ * never a silent fixture fallback. SUN-1222C subsequently made seller
+ * resolution deterministic and local without changing that boundary. Fixture
  * evidence remains selectable ONLY via the composition's new, explicit,
  * narrowly-typed `explicitTestEvidenceOverride` third parameter, which
  * the real production route module (`production-verify-v2-cdp-route.ts`)

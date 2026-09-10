@@ -48,8 +48,6 @@ import {
   type InjectedHttpClient,
 } from '@siteborne/provider-adapters';
 import {
-  buildCdpSellerAddressLookup,
-  buildProductionCdpAccountLookupClientFactory,
   resolvePaymentAsset,
   resolveProductionAuthorizationInput,
   resolveProductionCdpEvidenceProvider,
@@ -221,13 +219,6 @@ export async function buildWebContextV2CdpProductionRouteConfig(
             apiKeyId: env.CDP_API_KEY_ID,
             apiKeySecret: env.CDP_API_KEY_SECRET,
           }),
-        getAuthenticatedSellerAddress: buildCdpSellerAddressLookup(
-          buildProductionCdpAccountLookupClientFactory({
-            CDP_API_KEY_ID: env.CDP_API_KEY_ID ?? '',
-            CDP_API_KEY_SECRET: env.CDP_API_KEY_SECRET ?? '',
-          }),
-          env.SELLER_WALLET_ADDRESS ?? ''
-        ),
       }
     );
     // Same structural invariant as verify's composition: real provider OR

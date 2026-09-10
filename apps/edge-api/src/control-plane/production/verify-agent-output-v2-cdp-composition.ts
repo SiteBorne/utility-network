@@ -12,9 +12,7 @@
  * `index.ts`).
  *
  * SUN-1218 checkpoint X closes the payment-evidence trust gap this
- * exposed: `getAuthenticatedSellerAddress` is now wired for real (SUN-1200
- * checkpoints C/D's already-tested `buildCdpSellerAddressLookup`/
- * `buildProductionCdpAccountLookupClientFactory`), and this function now
+ * exposed: production evidence selection is fail-closed and this function
  * enforces, structurally, the permanent invariant
  *
  *   PRODUCTION_PAYMENT_EVIDENCE_FALLBACK_TO_SYNTHETIC = IMPOSSIBLE
@@ -50,8 +48,6 @@ import {
   ProductionSignerConfigurationError,
 } from '@siteborne/service-runtime';
 import {
-  buildCdpSellerAddressLookup,
-  buildProductionCdpAccountLookupClientFactory,
   resolvePaymentAsset,
   resolveProductionAuthorizationInput,
   resolveProductionCdpEvidenceProvider,
@@ -146,14 +142,10 @@ export async function buildVerifyAgentOutputV2CdpProductionRouteConfig(
   const network = resolvePaymentNetwork(productionAuthorization);
   assertPreproductionNetwork(network, isProductionPaymentAuthorized(productionAuthorization));
 
-  // SUN-1218 checkpoint X: `getAuthenticatedSellerAddress` is now wired
-  // to the real, already-implemented, already-tested
-  // `buildCdpSellerAddressLookup`/`buildProductionCdpAccountLookupClientFactory`
-  // (SUN-1200 checkpoints C/D) -- construction alone makes no network
-  // call; only actually invoking the returned closure does, and that
-  // only happens inside `resolveProductionCdpEvidenceProvider`'s own
-  // gate #3, itself only reached once gates #1/#2 (ADR-0055 human
-  // authorization + real binding presence) already hold.
+  // SUN-1222C determinism remediation: the governed seller address is
+  // validated locally inside `resolveProductionCdpEvidenceProvider`.
+  // Provider selection performs no authenticated account lookup, retry,
+  // telemetry, or other external I/O before a 402 can be constructed.
   let cdpEvidence: {
     evidenceMode: 'fixture' | 'production';
     evidenceProvider?: PaymentEvidenceProvider;
@@ -174,13 +166,6 @@ export async function buildVerifyAgentOutputV2CdpProductionRouteConfig(
             apiKeyId: env.CDP_API_KEY_ID,
             apiKeySecret: env.CDP_API_KEY_SECRET,
           }),
-        getAuthenticatedSellerAddress: buildCdpSellerAddressLookup(
-          buildProductionCdpAccountLookupClientFactory({
-            CDP_API_KEY_ID: env.CDP_API_KEY_ID ?? '',
-            CDP_API_KEY_SECRET: env.CDP_API_KEY_SECRET ?? '',
-          }),
-          env.SELLER_WALLET_ADDRESS ?? ''
-        ),
       }
     );
     // SUN-1218's central invariant, enforced structurally, not by an

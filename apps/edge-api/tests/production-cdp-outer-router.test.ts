@@ -5,18 +5,12 @@
  * throughout. No real CDP/Nevermined provider call anywhere in this
  * file.
  *
- * SUN-1200 checkpoint D: `index.ts` now wires the REAL (not stubbed)
- * `getAuthenticatedSellerAddress`/`buildCdpSellerAddressLookup`, which
- * constructs a real `@coinbase/cdp-sdk` `CdpClient` and would make a
- * genuine network call to Coinbase's API once every other gate holds and
- * the configured seller address is well-formed. This file's shared
- * `FULL_PRODUCTION_ENV_SHAPE.SELLER_WALLET_ADDRESS` is therefore
- * DELIBERATELY malformed (fails `EVM_ADDRESS_PATTERN` inside
- * `buildCdpSellerAddressLookup` before `createClient()` is ever called) —
- * every scenario in this file resolves to `evidenceMode: 'fixture'` via
- * that local, network-free format check, never via network failure. A
- * genuine full-stack POSITIVE production path (real gates true, a
- * well-formed seller address, a real facilitator/CDP-client response) is
+ * SUN-1222C determinism remediation: the request path validates the governed
+ * seller locally and never constructs a CDP account client. This file's
+ * shared `FULL_PRODUCTION_ENV_SHAPE.SELLER_WALLET_ADDRESS` is deliberately
+ * malformed, so every relevant scenario fails closed via that local check.
+ * A genuine full-stack POSITIVE production path (real gates true and a
+ * well-formed governed seller address) is
  * proven separately in `production-cdp-full-stack-mock.test.ts`, which
  * uses `buildPaidServicesApp` directly with fully injected mock doubles
  * (matching the checkpoint D directive's own §22 instruction), never the
@@ -69,11 +63,8 @@ const FULL_PRODUCTION_ENV_SHAPE = {
   HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP: 'true',
   PRODUCTION_CDP_CREDENTIALS_APPROVED: 'true',
   // Deliberately NOT a well-formed EVM address (see this file's own
-  // header comment) -- guarantees `buildCdpSellerAddressLookup`'s local
-  // format check throws before `createClient()`/any real CDP SDK call is
-  // ever reached, so this shared constant can never accidentally cause a
-  // real outbound network call regardless of which other gate a given
-  // test flips.
+  // header comment) -- guarantees deterministic local validation fails, so
+  // this shared constant can never cause a seller-identity network call.
   SELLER_WALLET_ADDRESS: 'not-a-well-formed-evm-address',
   // Synthetic test values only -- never real credentials. CDP_WALLET_SECRET
   // deliberately omitted (SUN-1200 checkpoint E): no longer part of the

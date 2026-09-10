@@ -10,6 +10,7 @@ build
 *.tsbuildinfo
 coverage
 .nyc_output
+.claude
 
 # Python
 __pycache__
