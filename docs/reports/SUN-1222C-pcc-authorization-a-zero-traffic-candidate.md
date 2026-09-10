@@ -1,6 +1,6 @@
 # SUN-1222C PCC Authorization A — Zero-Traffic Candidate Evidence
 
-Date: 2026-09-10  
+Date: 2026-09-10
 Final checkpoint result: `CANDIDATE_QUALIFICATION_FAILED`  
 Required next checkpoint: `SUN-1222C-PCC-CANDIDATE-FAILURE-REMEDIATION`
 
@@ -318,3 +318,243 @@ NEXT_REQUIRED_CHECKPOINT=SUN-1222C-PCC-CANDIDATE-FAILURE-REMEDIATION
 
 No replacement candidate, deployment, promotion, paid-runtime mutation,
 payment, settlement, or mTLS provisioning is authorized by this report.
+
+## Exact-version reachability remediation — Preview URL discovery
+
+Date: 2026-09-10
+Remediation result: `PREVIEW_URL_DISABLED`
+
+This section preserves the original failure above. It records the subsequent
+read-only remediation checkpoint; it does not reinterpret the production-host
+response as candidate evidence.
+
+### Integrity and topology reconfirmation
+
+The remediation began on clean `main` at this report's original evidence
+commit:
+
+```text
+PWD=/Users/meta4ickal/SITEBORNE Utility Network
+BRANCH=main
+HEAD=ffa458a8c5b088e27da71ef944371c5937b3bb43
+WORKING_TREE=CLEAN
+EVIDENCE_COMMIT_EXISTS=YES
+EVIDENCE_COMMIT_REACHABLE=YES
+WRANGLER_VERSION=4.119.0
+```
+
+Read-only Wrangler list/view calls reconfirmed version 60:
+
+```text
+CANDIDATE_EXISTS=YES
+CANDIDATE_VERSION=d155c9a1-ca3a-49f9-92a3-b35760dc58e6
+CANDIDATE_VERSION_NUMBER=60
+CANDIDATE_SOURCE_COMMIT=2f947bfe0fa1722158323aaf44496ee6ebf046fd
+CANDIDATE_TAG=sun1222c-pcc-cutover-candidate
+CANDIDATE_METADATA_HAS_PREVIEW=true
+CANDIDATE_ASSIGNED_TO_CURRENT_DEPLOYMENT=NO
+```
+
+The active public deployment remained:
+
+```text
+PUBLIC_DEPLOYMENT_ID=9043050a-3e51-4078-a30a-e4fe819e3efb
+PUBLIC_BASELINE_VERSION=db7054c9-76ee-4830-aabe-8a4542261b6a
+PUBLIC_BASELINE_TRAFFIC=100%
+EXISTING_R6_CANDIDATE_VERSION=d3472f58-f578-4a8f-992b-0d0956c9b561
+EXISTING_R6_CANDIDATE_TRAFFIC=0%
+NEW_PUBLIC_CANDIDATE_TRAFFIC=0% (unassigned)
+```
+
+The paid runtime remained:
+
+```text
+PAID_RUNTIME_DEPLOYMENT_ID=0afb9720-73fd-4063-be1d-f09afafc4886
+PAID_RUNTIME_VERSION=d62011b9-6219-47e1-8cf9-5006776cfb50
+PAID_RUNTIME_TRAFFIC=100%
+```
+
+### Version-override limitation
+
+Current first-party Cloudflare documentation says that a version override can
+select only a version contained in the current deployment. If the override is
+not applied, routing follows the deployment percentages. Workers supports at
+most two versions in one deployment.
+
+- Cloudflare: <https://developers.cloudflare.com/workers/versions-and-deployments/version-overrides/>
+- Cloudflare: <https://developers.cloudflare.com/workers/versions-and-deployments/>
+
+Because `d155c9a1-ca3a-49f9-92a3-b35760dc58e6` is not a member of deployment
+`9043050a-3e51-4078-a30a-e4fe819e3efb`, the prior override was legitimately not
+applied. Its request consequently followed the current 100%/0% deployment
+percentages and reached `db7054c9-76ee-4830-aabe-8a4542261b6a`.
+
+```text
+VERSION_OVERRIDE_FAILURE_ROOT_CAUSE=TARGET_VERSION_NOT_IN_CURRENT_DEPLOYMENT
+VERSION_OVERRIDE_REQUIRES_VERSION_IN_CURRENT_DEPLOYMENT=YES
+VERSION_OVERRIDE_CAN_ADDRESS_UNASSIGNED_UPLOADED_VERSION=NO
+EXPECTED_BASELINE_FALLBACK_BEHAVIOR=YES
+```
+
+No repeat production-host override request was made.
+
+### Original upload output and Preview URL state
+
+The sanitized Wrangler log for the successful upload is:
+
+```text
+/Users/meta4ickal/Library/Preferences/.wrangler/logs/wrangler-2026-09-10_05-20-44_181.log
+```
+
+It records the successful upload and candidate ID, then a successful read-only
+`GET` of the Worker's `/subdomain` API resource. The literal operator output
+ends with the candidate ID and deployment guidance; it contains no
+`Version Preview URL` line:
+
+```text
+Uploaded siteborne-utility-edge (3.77 sec)
+Worker Version ID: d155c9a1-ca3a-49f9-92a3-b35760dc58e6
+UPLOAD_RETURNED_PREVIEW_URL=NONE
+```
+
+Pinned Wrangler 4.119.0's inspected upload implementation prints a versioned
+Preview URL only when all of the following are true: a version ID exists, the
+upload API reports `metadata.has_preview`, and the Worker's live subdomain
+resource reports `previews_enabled=true`. Here, the first two predicates are
+proven true, but no URL was printed after the live subdomain readback.
+Therefore the live readback at upload time established
+`previews_enabled=false`.
+
+That matches the committed local source of truth:
+
+```text
+LOCAL_WORKERS_DEV=true
+LOCAL_PREVIEW_URLS=false
+LIVE_PREVIEW_URLS_ENABLED=NO
+```
+
+Cloudflare documents that disabling Preview URLs disables routing to both
+versioned and aliased Preview URLs. It also documents that dashboard state can
+be toggled, but any toggle is a settings mutation and is outside this
+checkpoint.
+
+- Cloudflare: <https://developers.cloudflare.com/workers/versions-and-deployments/preview-urls/>
+- Cloudflare Wrangler configuration: <https://developers.cloudflare.com/workers/wrangler/configuration/>
+
+The dashboard was available only at its sign-in screen, so no authenticated UI
+state was used. No credentials were entered or exposed. The upload-time live
+subdomain readback, pinned Wrangler control flow, exact operator output, and
+committed configuration are the evidence for the disabled state.
+
+```text
+PREVIEW_URL_ENABLEMENT_MUTATION_REQUIRED=YES
+```
+
+### Eligibility distinguished from enablement
+
+The already-collected immutable version metadata reports
+`metadata.has_preview=true`, and the candidate's binding readback contains no
+Durable Object namespace binding. The public API is a normal named Worker,
+rather than a Workers for Platforms user Worker. Its cross-script
+`PAID_CONTINUATION_WORKFLOW` binding is a Workflow binding and does not make the
+public API Worker a Durable Object implementation.
+
+```text
+WORKER_IMPLEMENTS_DURABLE_OBJECT=NO
+WORKER_IS_WORKERS_FOR_PLATFORMS_USER_WORKER=NO
+PREVIEW_URL_ELIGIBLE=YES
+PREVIEW_URLS_ENABLED=NO
+```
+
+Eligibility does not override disabled routing.
+
+### Mandatory stop and unexecuted qualification
+
+Section 6 of the remediation authorization required an immediate stop if
+Preview URLs were disabled and enabling them required a mutation. Consequently,
+no versioned hostname was guessed or requested, no Preview URL association was
+claimed, and no candidate runtime qualification was resumed.
+
+```text
+VERSIONED_PREVIEW_URL=NONE
+PREVIEW_URL_SOURCE=NONE
+PREVIEW_URL_CANDIDATE_ASSOCIATION_PROVEN=NO
+PREVIEW_URL_TAIL_SUPPORTED=NO (documented limitation; not exercised)
+PREVIEW_HEALTH=NOT_EXECUTED_PREVIEW_URL_DISABLED
+
+HOSTNAME_SENSITIVE_SURFACES=NOT_INSPECTED_AFTER_SECTION_6_STOP
+CANDIDATE_AGENT_CARD_GENERATION=BLOCKED_PREVIEW_URL_DISABLED
+CANDIDATE_JWKS_RUNTIME_ON_PREVIEW=BLOCKED_PREVIEW_URL_DISABLED
+CANDIDATE_JWS_CRYPTOGRAPHIC_VERIFICATION=BLOCKED_PREVIEW_URL_DISABLED
+CANONICAL_PRODUCTION_JWKS_UNCHANGED=YES
+CANDIDATE_MTLS_ADVERTISED=NOT_EVALUATED_PREVIEW_URL_DISABLED
+
+A2A_PREVIEW_REQUEST_STAYS_ON_CANDIDATE=NOT_EVALUATED_PREVIEW_URL_DISABLED
+CANDIDATE_A2A_RUNTIME=BLOCKED_PREVIEW_URL_DISABLED
+MCP_PREVIEW_REQUESTS_STAY_ON_CANDIDATE=NOT_EVALUATED_PREVIEW_URL_DISABLED
+CANDIDATE_MCP_DISCOVERY=BLOCKED_PREVIEW_URL_DISABLED
+CANDIDATE_MCP_PROTOCOL=BLOCKED_PREVIEW_URL_DISABLED
+CANDIDATE_REST_RUNTIME_REACHABILITY=BLOCKED_PREVIEW_URL_DISABLED
+DOCUMENT_ARTIFACT_PREVIEW_PROOF=BLOCKED
+
+PCC_REST_LOCAL_STRUCTURAL_PROOF=NOT_RE_RUN_AFTER_SECTION_6_STOP
+PCC_MCP_LOCAL_STRUCTURAL_PROOF=NOT_RE_RUN_AFTER_SECTION_6_STOP
+PCC_A2A_LOCAL_STRUCTURAL_PROOF=NOT_RE_RUN_AFTER_SECTION_6_STOP
+PCC_REST_PREVIEW_RUNTIME_UNPAID_PROOF=BLOCKED_PREVIEW_URL_DISABLED
+PCC_MCP_PREVIEW_RUNTIME_UNPAID_PROOF=BLOCKED_PREVIEW_URL_DISABLED
+PCC_A2A_PREVIEW_RUNTIME_UNPAID_PROOF=BLOCKED_PREVIEW_URL_DISABLED
+LIVE_FULFILLED_PCC_RESULT_VERIFIED=NO
+```
+
+Because candidate qualification did not resume, the source-level settlement
+proof was not re-run. The existing authorized invariant remains historical
+evidence only:
+
+```text
+PUBLIC_API_SETTLE_CALLSITES=0 (not re-run after section 6 stop)
+MCP_ADAPTER_SETTLE_CALLSITES=0 (not re-run after section 6 stop)
+DEDICATED_WORKFLOW_SETTLE_CALLSITES=1 (not re-run after section 6 stop)
+TOTAL_PRODUCTION_SETTLE_CALLSITES=1 (not re-run after section 6 stop)
+```
+
+Authorization A's required qualification level and Preview URL sufficiency
+cannot be decided from candidate runtime evidence because the already-disabled
+Preview URL route prevented Level-1 testing. A production-host exact-version
+test would require deployment membership, but that path was not reached or
+authorized in this checkpoint.
+
+```text
+AUTHORIZATION_A_REQUIRED_QUALIFICATION_LEVEL=NOT_DETERMINED_AFTER_SECTION_6_STOP
+CANDIDATE_QUALIFICATION_RECOVERED=NO
+PRODUCTION_DEPLOYMENT_COMPOSITION_CHANGE_REQUIRED=NOT_DETERMINED_AFTER_SECTION_6_STOP
+D3472F58_IMMUTABLE_VERSION_CAN_REMAIN_RETAINED=YES
+D3472F58_ACTIVE_DEPLOYMENT_MEMBERSHIP_CHANGE_AUTHORIZED=NO
+```
+
+### Remediation accounting and decision
+
+```text
+ADDITIONAL_VERSION_UPLOADS=0
+PRODUCTION_DEPLOYMENT_MUTATIONS=0
+TRAFFIC_MUTATIONS=0
+PAID_RUNTIME_DEPLOYMENTS=0
+REAL_TEST_PAYMENTS=0
+PAYMENT_AUTHORIZATIONS_SUBMITTED=0
+REAL_TEST_PROVIDER_CALLS=0
+FACILITATOR_VERIFY_CALLS=0
+FACILITATOR_SETTLE_CALLS=0
+REAL_TEST_SETTLEMENTS=0
+ECONOMIC_EFFECT_USDC=0
+```
+
+```text
+SUN1222C_PCC_CANDIDATE_FAILURE_REMEDIATION_EXACT_VERSION_REACHABILITY=PREVIEW_URL_DISABLED
+NEXT_REQUIRED_CHECKPOINT=BLOCKER_CHECKPOINT
+```
+
+The blocker checkpoint must choose and separately authorize an exact-version
+mechanism. The least invasive candidate is explicit Preview URL enablement,
+subject to governance review of the repository's deliberate
+`preview_urls=false` containment policy. If governance instead requires
+production-host proof, the alternative is the separately authorized A2
+deployment-membership checkpoint. Neither mutation is authorized here.
