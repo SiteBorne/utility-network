@@ -1202,3 +1202,372 @@ current deployment member; remediation identified the documented override
 requirement; A1 rejected unprotected Preview URLs; A2 then made the minimum
 authorized 0%-membership change, recovered exact-version read-only runtime
 qualification, and stopped before any persistent-state or economic probe.
+
+## SUN-1222C-PCC-BOUNDED-QUALIFICATION-STATE-WRITE-AUTHORIZATION
+
+**Executed 2026-09-10. Decision: `EXTERNAL_PROVIDER_BOUNDARY_BLOCKED`.** This
+checkpoint authorized narrowly attributable, non-economic qualification writes
+only if the complete write set was known in advance, external-provider network
+calls remained zero, and no unrelated production record was changed or
+deleted. The static and live preflight gates found two independent blockers, so
+no state-writing request was issued. This is not evidence of a candidate
+runtime defect.
+
+### Integrity, topology, and exact-version selection
+
+The inherited evidence commit
+`be7a09ac8c407c6b215988d32325b560e5afcda8` existed and was reachable from
+clean `main`. Candidate source remained
+`2f947bfe0fa1722158323aaf44496ee6ebf046fd`; the only source-to-HEAD delta was
+this chronological evidence report.
+
+Read-only Wrangler 4.119.0 readback before and after the checkpoint returned
+the same deployment topology:
+
+```text
+PUBLIC_DEPLOYMENT_ID=f5c536de-53d6-4ea9-acd1-3f8d006b8ca7
+PUBLIC_BASELINE_VERSION=db7054c9-76ee-4830-aabe-8a4542261b6a
+PUBLIC_BASELINE_TRAFFIC=100%
+CURRENT_ZERO_PERCENT_CANDIDATE=d155c9a1-ca3a-49f9-92a3-b35760dc58e6
+CURRENT_ZERO_PERCENT_CANDIDATE_TRAFFIC=0%
+D3472F58_IMMUTABLE_VERSION_RETAINED=YES
+PAID_RUNTIME_VERSION=d62011b9-6219-47e1-8cf9-5006776cfb50
+PAID_RUNTIME_TRAFFIC=100%
+PUBLIC_DEPLOYMENT_DRIFT=NO
+PAID_RUNTIME_DRIFT=NO
+```
+
+Exactly one read-only health request carried:
+
+```text
+Cloudflare-Workers-Version-Overrides: siteborne-utility-edge="d155c9a1-ca3a-49f9-92a3-b35760dc58e6"
+```
+
+`GET /health?qualification=sun1222c-state-write-reconfirm` returned HTTP 200.
+Tail correlated response Ray `a38e6356fc373110-ATL` with
+`scriptVersion.id=d155c9a1-ca3a-49f9-92a3-b35760dc58e6`.
+
+```text
+EXACT_VERSION_OVERRIDE_REACHABILITY_RECONFIRMED=YES
+```
+
+### Qualification identity and planned attribution
+
+```text
+QUALIFICATION_RUN_ID=sun1222c-pcc-q-9e626a8f73daa2b2cdce0a5c2eabc89a27ecedc82a5671ad
+```
+
+The artifact route accepts no caller-controlled filename, request ID, or
+metadata field. Its planned deterministic synthetic body was therefore the
+68-byte `application/pdf` magic-prefix fixture containing the qualification ID.
+The locally computed identity was:
+
+```text
+FIXTURE_SIZE_BYTES=68
+FIXTURE_SHA256=sha256:fdacd0a37cc16d810fd42c59455af644cfa860ebb0c287277cc6a1663cc488ef
+PLANNED_R2_KEY=artifacts/fdacd0a37cc16d810fd42c59455af644cfa860ebb0c287277cc6a1663cc488ef
+```
+
+Had the probe passed every gate, attribution would have combined the unique
+body/hash and content-addressed key, returned `upload_id`, exact D1 metadata
+row, current source/global admission window, response Ray, candidate tail
+attribution, and exact pre/post diff. The REST and MCP routes likewise expose
+no safe caller correlation field before payment; their generated quote and
+requirement IDs plus Ray and time window would have been used. No contract
+shape was altered to insert the qualification ID.
+
+```text
+QUALIFICATION_ATTRIBUTION_STRATEGY=unique synthetic bytes and SHA-256/R2 key; returned upload_id; exact D1 row; source/global window deltas; Ray/tail; for blocked payment routes, generated quote/requirement IDs plus Ray/time window
+```
+
+### Pre-write D1 and R2 snapshot
+
+The only potentially written D1 tables for the three proposed probes were
+`x402_quotes`, `audit_events`, `document_ingress_admission_windows`, and
+`job_artifacts`. `payment_attempts` would not be written by a payment-absent
+request but was included in the control snapshot; `queue_dispatches` was also
+included as a zero-write control. The only potentially written R2 bucket was
+`siteborne-artifacts`.
+
+| Table | `ROW_COUNT_PRE` | `MAX_TIMESTAMP_PRE` / maximum window | Relevant pre-state |
+|---|---:|---|---|
+| `x402_quotes` | 72 | `2026-09-08T13:05:48.509Z` | v2 counts: company 22, document 8, verify 15, web 27 |
+| `audit_events` | 170 | `2026-09-08T13:05:49.839Z` | no checkpoint correlation; historical v2 events only |
+| `payment_attempts` | 18 | `2026-09-08T13:05:49.043Z` | control table; no payment-absent write expected |
+| `job_artifacts` | 1 | `2026-09-02T13:52:11.064Z` | fixture-hash rows: 0 |
+| `document_ingress_admission_windows` | 2 | window start `1788393600000` (`2026-09-03T00:00:00Z`) | one source row and one global row, each count 4; no current-window row |
+| `queue_dispatches` | 0 | `NULL` | zero-write control |
+
+The exact planned R2 key did not exist: Wrangler's read-only object fetch
+returned `The specified key does not exist.` No unrelated row payload and no
+credential was read or recorded.
+
+```text
+POTENTIALLY_WRITTEN_D1_TABLES=x402_quotes,audit_events,document_ingress_admission_windows,job_artifacts
+POTENTIALLY_WRITTEN_R2_BUCKETS=siteborne-artifacts
+```
+
+### Static side-effect trace — REST unpaid 402
+
+All four activated service families use the same production composition and
+the same x402 route lifecycle. Each production route first checks the global
+and service flag, then builds its production route configuration. That builder
+calls `resolveProductionCdpEvidenceProvider`; with the candidate's authorized
+production gates and credentials, it invokes
+`getAuthenticatedSellerAddress`, implemented by
+`buildCdpSellerAddressLookup`. That closure constructs a real CDP client and
+awaits `client.evm.getAccount({address: SELLER_WALLET_ADDRESS})`. This is a real
+authenticated external network request (classification B), not client-only
+construction. It happens before `createX402ServiceRoute` mounts the handler and
+therefore before request JSON validation or the unpaid 402 branch.
+
+Only after that call succeeds would the shared handler parse and validate the
+body, compute its canonical input hash, build a quote/requirement, insert one
+`x402_quotes` row, insert one `payment_required_created` `audit_events` row,
+and return HTTP 402. With no payment signature it would create no
+`payment_attempts`, job, queue entry, Workflow, provider execution,
+facilitator-verify call, settlement, or chain transaction.
+
+| Service ID | Route | Seller lookup classification | Quote | Audit | Payment attempt | Queue | Workflow | Useful provider | Verify | Settle | Safe under zero-external-call cap |
+|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| `verify_agent_output.v2` | `/v2/verify/agent-output` | B: authenticated CDP `evm.getAccount` | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | NO |
+| `web_context_verified.v2` | `/v2/web/context` | B: authenticated CDP `evm.getAccount` | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | NO |
+| `company_evidence_graph.v2` | `/v2/company/evidence-graph` | B: authenticated CDP `evm.getAccount` | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | NO |
+| `document_evidence_json.v2` | `/v2/document/evidence-json` | B: authenticated CDP `evm.getAccount` | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | NO |
+
+`REST_402_SAFE_WITHOUT_EXTERNAL_PROVIDER_CALL=NO` for every service. The
+representative REST probe was not executed; repeating it across four services
+would not change the shared pre-handler boundary.
+
+### Static side-effect trace — MCP paid tool
+
+The exact chain is: MCP `tools/call` -> protocol-MCP service tool ->
+`createMcpX402ServiceBoundary.execute` -> map service to its `/v2/*` path ->
+construct a payment-absent internal request -> invoke the same production REST
+route in a one-route Hono sub-app -> build the same production composition ->
+authenticated CDP `evm.getAccount` -> shared x402 route -> translate REST 402
+into MCP `payment_required`.
+
+The adapter itself imports no repository, facilitator, Workflow, or settlement
+implementation and performs no write. If the external lookup were separately
+authorized and succeeded, the REST boundary would insert the same one quote
+and one audit event. No Workflow, facilitator verification, or settlement is
+possible on the payment-absent branch.
+
+```text
+MCP_ITSELF_WRITES_STATE=NO
+REST_BOUNDARY_WRITES_STATE=YES (one quote plus one audit event, only after route construction)
+EXTERNAL_PROVIDER_CALL_BEFORE_402=YES
+WORKFLOW_CREATED_BEFORE_PAYMENT=NO
+FACILITATOR_VERIFY_BEFORE_PAYMENT=NO
+SETTLEMENT_POSSIBLE=NO
+```
+
+The MCP paid-tool probe was not executed because it would cross the same
+forbidden external-provider boundary and would duplicate the REST quote state.
+
+### Static side-effect trace — document artifact admission/storage
+
+For `POST /v2/artifacts/documents`, an oversized declared Content-Length above
+10,485,760 bytes returns 413 before admission and writes nothing. Other
+structural failures under the byte cap consume admission state before body
+validation, but create no artifact metadata or R2 object. A valid upload runs
+in this order: two-axis D1 admission, bounded body read, exact content-type and
+magic-signature validation, SHA-256, D1 content-hash lookup, R2 head/put, then
+one `job_artifacts` insert. The route imports no payment, facilitator,
+provider-executor, Workflow, or settlement path and emits no queue event.
+
+```text
+MINIMAL_VALID_ARTIFACT_REQUEST_EXISTS=YES
+MINIMAL_ARTIFACT_CAN_USE_SYNTHETIC_NON_SENSITIVE_FIXTURE=YES
+MINIMAL_ARTIFACT_MAX_BYTES=10485760
+EXTERNAL_PROVIDER_CALLS_FOR_ARTIFACT_UPLOAD=0
+PAYMENT_CALLS_FOR_ARTIFACT_UPLOAD=0
+WORKFLOW_CREATIONS_FOR_ARTIFACT_UPLOAD=0
+SETTLEMENT_CALLS_FOR_ARTIFACT_UPLOAD=0
+```
+
+The admission code also invokes `deleteWindowsOlderThan` after each admitted
+axis. For the current window `1788998400000` (`2026-09-10T00:00:00Z`), the
+cleanup cutoff is `1788825600000` (`2026-09-08T00:00:00Z`). Both existing
+September 3 rows are older than that cutoff. Therefore a single valid upload
+would deterministically insert two current-window rows, delete those two
+unrelated expired production admission rows, create one R2 object, and insert
+one artifact metadata row. The checkpoint expressly prohibited modification
+or deletion of unrelated production records. The artifact request was thus
+not authorized, even though its economic/external-call boundary itself is
+safe.
+
+### Probe matrix and hard caps
+
+| Probe | Surface/service | Expected status | D1 inserts max | D1 updates max | D1 deletes | R2 objects max | Queue | Workflow | External provider calls | Payment verify | Settlement | Authorized |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| REST-1 | REST representative v2 service | 402 | 2 | 0 | 0 | 0 | 0 | 0 | 1 CDP lookup | 0 | 0 | NO |
+| MCP-1 | MCP representative paid tool -> REST | MCP `payment_required` | 2 | 0 | 0 | 0 | 0 | 0 | 1 CDP lookup | 0 | 0 | NO |
+| ART-1 | document artifact upload | 201 | 3 | 0 | 2 unrelated expired windows | 1 | 0 | 0 | 0 | 0 | 0 | NO |
+
+One artifact request would have been the minimum to prove its runtime storage
+path; one representative payment request would have sufficed for the four
+statically equivalent REST services, and MCP would have been an additional
+transport proof. No finite set of those requests can satisfy the authorization
+as written because each proposed request violates at least one hard boundary.
+The executable cap was narrowed from the default three requests to zero:
+
+```text
+MINIMUM_SUFFICIENT_STATE_WRITING_REQUEST_COUNT=0
+CHECKPOINT_STATE_WRITING_HTTP_REQUESTS_MAX=0
+CHECKPOINT_D1_NEW_ROWS_MAX=0
+CHECKPOINT_D1_UPDATED_ROWS_MAX=0
+CHECKPOINT_D1_DELETED_ROWS_MAX=0
+CHECKPOINT_R2_NEW_OBJECTS_MAX=0
+CHECKPOINT_QUEUE_WRITES_MAX=0
+CHECKPOINT_WORKFLOW_CREATIONS_MAX=0
+CHECKPOINT_EXTERNAL_PROVIDER_NETWORK_CALLS_MAX=0
+CHECKPOINT_PAYMENT_VERIFY_CALLS_MAX=0
+CHECKPOINT_SETTLEMENT_CALLS_MAX=0
+CHECKPOINT_CHAIN_TRANSACTIONS_MAX=0
+```
+
+### Cleanup and retention policy
+
+No checkpoint row or object was created, so no cleanup mutation was needed.
+The source-supported policies that would apply are:
+
+| State | Policy | Reason |
+|---|---|---|
+| `x402_quotes` | `RETAIN_AS_QUALIFICATION_EVIDENCE` | durable server-issued requirement needed for a later payment retry; no narrow immediate public cleanup path |
+| `audit_events` | `RETAIN_AS_QUALIFICATION_EVIDENCE` | append-only governance evidence |
+| `payment_attempts` | `DO_NOT_TOUCH` | no payment-absent write; payment idempotency authority |
+| `document_ingress_admission_windows` | `DO_NOT_TOUCH` | shared source/global quota counters; literal deletion could weaken production admission policy |
+| `job_artifacts` | `RETAIN_AS_QUALIFICATION_EVIDENCE` | buyer upload record is ephemeral and repository reclamation is age-gated to 24 hours, not immediate |
+| `siteborne-artifacts` object | `RETAIN_AS_QUALIFICATION_EVIDENCE` | repository-supported reclamation deletes R2 before D1 only after the same 24-hour age gate |
+| queue/workflow state | `DO_NOT_TOUCH` | no write is permitted or expected |
+
+```text
+RETAINED_QUALIFICATION_ROWS=NONE
+DELETED_QUALIFICATION_ROWS=NONE
+RETAINED_R2_OBJECTS=NONE
+DELETED_R2_OBJECTS=NONE
+```
+
+### Post-state reconciliation and economic boundary
+
+The read-only post snapshot was byte-for-byte equivalent at the reported
+aggregate level: x402 quotes 72, audit events 170, payment attempts 18, job
+artifacts 1, admission windows 2, queue dispatches 0, and fixture-hash artifact
+rows 0. The planned R2 key was absent before and no request capable of creating
+it was sent.
+
+```text
+CHECKPOINT_HTTP_STATE_WRITING_REQUESTS=0
+CHECKPOINT_D1_ROWS_CREATED=0
+CHECKPOINT_D1_ROWS_UPDATED=0
+CHECKPOINT_D1_ROWS_DELETED=0
+CHECKPOINT_R2_OBJECTS_CREATED=0
+CHECKPOINT_R2_OBJECTS_DELETED=0
+CHECKPOINT_QUEUE_WRITES=0
+CHECKPOINT_WORKFLOW_CREATIONS=0
+ALL_CHECKPOINT_STATE_ACCOUNTED_FOR=YES
+UNATTRIBUTED_D1_WRITES=0
+UNATTRIBUTED_R2_WRITES=0
+REAL_TEST_PAYMENTS=0
+PAYMENT_AUTHORIZATIONS_SUBMITTED=0
+FACILITATOR_VERIFY_CALLS=0
+FACILITATOR_SETTLE_CALLS=0
+REAL_TEST_PROVIDER_CALLS=0
+REAL_TEST_SETTLEMENTS=0
+CHAIN_TRANSACTIONS=0
+ECONOMIC_EFFECT_USDC=0
+```
+
+### Fresh settlement ownership and evidence classification
+
+The canonical ownership scan and MCP adapter guard were re-run together: 13
+tests passed across two test files.
+
+```text
+PUBLIC_API_SETTLE_CALLSITES=0
+MCP_ADAPTER_SETTLE_CALLSITES=0
+DEDICATED_WORKFLOW_SETTLE_CALLSITES=1
+TOTAL_PRODUCTION_SETTLE_CALLSITES=1
+PCC_REST_RUNTIME_EVIDENCE=BLOCKED
+PCC_MCP_RUNTIME_EVIDENCE=BLOCKED
+PCC_A2A_RUNTIME_EVIDENCE=PASS (inherited exact-candidate runtime proof; no additional write required)
+DOCUMENT_ARTIFACT_RUNTIME_EVIDENCE=BLOCKED
+LIVE_FULFILLED_PCC_RESULT_VERIFIED=NO
+```
+
+No candidate runtime defect was found. The pre-feature-cutover gaps are the
+exact-candidate REST unpaid-402 and MCP paid-tool-to-402 proofs, which require
+separate authority for one authenticated, read-only CDP seller lookup, plus the
+artifact admission/storage proof, whose current route necessarily deletes two
+unrelated expired admission rows. A fulfilled paid PCC remains a different
+class of evidence. It is structurally impossible while the old paid runtime is
+the producer, and the verified compatibility matrix allows the new public
+consumer to run with that old producer. It therefore need not precede public
+cutover, but must be performed as bounded live-paid acceptance only after a
+compatible NEW-public/NEW-paid pair exists and is separately authorized.
+
+```text
+FULFILLED_PCC_PROOF_PRE_CUTOVER_POSSIBLE=NO
+FULFILLED_PCC_PROOF_REQUIRED_BEFORE_PUBLIC_CUTOVER=NO
+CANDIDATE_RUNTIME_DEFECT_FOUND=NO
+REMAINING_QUALIFICATION_GAPS=REST schema-valid unpaid 402 and MCP paid-tool-to-402 exact-candidate runtime proof blocked by authenticated CDP lookup; document artifact runtime proof blocked by unrelated admission-window deletion; fulfilled paid PCC deferred to separately authorized NEW/NEW live-paid acceptance
+```
+
+### Feature and future quiescence boundary
+
+Promoting d155c9a1 to 100% would make these candidate-only families normally
+production-accessible and remains a separate explicit decision:
+
+```text
+FEATURES_REQUIRING_100_PERCENT_CUTOVER_AUTHORIZATION=verify_agent_output.v2,web_context_verified.v2,company_evidence_graph.v2,document_evidence_json.v2,document-artifact-upload
+TRAFFIC_CUTOVER_AUTHORIZED=NO
+FEATURE_CUTOVER_AUTHORIZED=NO
+```
+
+The existing quiescence design remains technically valid but is not a
+configuration toggle on an immutable version. It requires uploading a new
+immutable public Worker version from source identical to the then-live public
+version, with the complete authorized configuration preserved except
+`PAID_ROUTES_ENABLED=false`, and deploying that new quiesced version at 100%.
+This necessarily introduces another version/config artifact and a production
+traffic deployment. Restoring admission can redeploy the already-qualified
+non-quiesced version ID; no second restoration upload is needed.
+
+```text
+QUIESCENCE_IMPLEMENTATION_MECHANISM=future versions upload of identical public source/config with only PAID_ROUTES_ENABLED=false, then versions deploy that quiesced version at 100%; later redeploy the existing non-quiesced version to restore admission
+QUIESCENCE_REQUIRES_NEW_PUBLIC_VERSION=YES
+QUIESCENCE_REQUIRES_TRAFFIC_DEPLOYMENT=YES
+```
+
+### Checkpoint decision and mutation accounting
+
+```text
+SUN1222C_PCC_BOUNDED_QUALIFICATION_STATE_WRITE_AUTHORIZATION=EXTERNAL_PROVIDER_BOUNDARY_BLOCKED
+REST_UNPAID_402_RUNTIME_PROOF=BLOCKED
+REST_STATE_ATTRIBUTION_PROVEN=NO (no authorized runtime write)
+MCP_PAID_TOOL_RESULT=BLOCKED
+MCP_TO_REST_PAYMENT_BOUNDARY_PROVEN=NO (runtime blocked; static path proven)
+DOCUMENT_ARTIFACT_RUNTIME_PROOF=BLOCKED
+DOCUMENT_ARTIFACT_HASH_MATCH=NOT_EXECUTED
+
+ADDITIONAL_VERSION_UPLOADS=0
+PRODUCTION_DEPLOYMENT_MUTATIONS=0
+TRAFFIC_PERCENTAGE_MUTATIONS=0
+VAR_MUTATIONS=0
+SECRET_MUTATIONS=0
+PAID_RUNTIME_DEPLOYMENTS=0
+
+PUBLIC_BASELINE_TRAFFIC=100%
+CURRENT_ZERO_PERCENT_CANDIDATE_TRAFFIC=0%
+PAID_RUNTIME_TRAFFIC=100%
+NEXT_REQUIRED_CHECKPOINT=BLOCKER_CHECKPOINT
+```
+
+Chronology is preserved: A2 recovered exact-version read-only qualification;
+this successor checkpoint reconfirmed exact selection, evaluated the newly
+authorized write paths, and stopped before each path's independently proven
+boundary violation. It did not rewrite prior gaps as passes and did not issue a
+payment, provider, artifact, deployment, traffic, version, variable, secret,
+queue, Workflow, settlement, or chain mutation.
