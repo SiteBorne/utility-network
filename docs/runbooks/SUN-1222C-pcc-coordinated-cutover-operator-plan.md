@@ -228,16 +228,33 @@ Only after Stage F passes, use a separately authorized deployment to replace the
 deployment membership but not normal traffic and requires its own command proof.
 
 The prebuilt command shape, dry-run successfully under Wrangler 4.119.0 but not
-executed, is:
+executed during prebuild, is:
 
 ```bash
 npx wrangler versions deploy \
   b6b7477f-94e5-4ee5-9ff3-cc0abb69ecca@100% \
   d28f30c5-b83c-42a8-b0e4-3f3a7c2bc7d1@0% \
   --name siteborne-utility-edge \
-  --message "SUN-1222C post-atomic quiescence qualification membership: b6b7477f 100%; d28f30c5 0%; no normal quiescence traffic" \
+  --message "SUN-1222C quiescence qualification membership: b6b7477f 100%; d28f30c5 0%; replace only old baseline rollback member; no quiescence traffic" \
   --yes
 ```
+
+**Stage G completed on 2026-09-11.** The command was freshly dry-run and then
+executed exactly once, creating deployment
+`72a81c44-8957-4f54-a010-3d0837b9c587`. Final readback is
+`b6b7477f@100% + d28f30c5@0%`; `db7054c9` remains immutable but is no longer a
+current deployment member. Exact override health, readiness, Agent Card,
+JWKS/JWS, catalog, MCP, A2A, mTLS truthfulness, verify/web admission rejection,
+and company/document/artifact rejection all passed with authoritative Tail
+attribution to d28. No qualification state or economic write occurred.
+
+The mandatory pre-promotion ownership audit then classified all 17 frozen
+nonterminal payment attempts as `STALE_ORPHAN_NO_AUTOMATIC_OWNER`: every row has
+no job, no Workflow ID, no state event, no active Workflow instance, no
+scheduled reconciliation owner, and no retry owner. Ages ranged from 76.94 to
+312.13 hours. Therefore the backlog is not naturally drainable and the Stage H
+promotion is blocked. Evidence:
+`docs/reports/SUN-1222C-pcc-quiescence-qualify-promote-and-drain.md`.
 
 ## Stage H — quiesce paid admission
 
@@ -257,16 +274,27 @@ npx wrangler versions deploy \
   --yes
 ```
 
+**BLOCKED — DO NOT RUN.** The 2026-09-11
+`SUN-1222C-PCC-QUIESCENCE-QUALIFY-PROMOTE-AND-DRAIN` authority expressly
+required a naturally drainable backlog before promotion. That gate failed with
+17 stale orphans and zero automatic owners. A separate
+`SUN-1222C-PCC-LIFECYCLE-BACKLOG-RECONCILIATION` checkpoint must resolve and
+evidence the historical records before promotion can be reconsidered.
+
 ## Stage I — drain
 
 After propagation, repeat the lifecycle query until the separately defined drain
 predicate is satisfied. Do not force-deploy around stuck rows. Investigate and
 stop if the drain exceeds its governed bound.
 
-The 2026-09-11 prebuild snapshot was `verified=16`, `settled_external=1`,
-total 17. This count does not block the public-only atomic cutover. After
-quiescence reaches 100%, wait the deployment-tail safety interval and require
-zero rows in every frozen nonterminal stage (`acquired`, `verified`, `executed`,
+The 2026-09-11 fresh ownership audit remains `verified=16`,
+`settled_external=1`, total 17. Unlike the earlier aggregate-only snapshot, the
+individual audit proved all 17 are stale orphans without automatic owners.
+Closing admission cannot drain them. Do not begin a drain clock, claim a bounded
+natural horizon, or promote d28 until a separately authorized lifecycle-backlog
+reconciliation reaches a truthful disposition. After any future quiescence
+reaches 100%, wait the deployment-tail safety interval and require zero rows in
+every frozen nonterminal stage (`acquired`, `verified`, `executed`,
 `settlement_pending`, `settled_external`, `link_verified`, `settlement_failed`)
 before paid-runtime deployment.
 
@@ -297,16 +325,18 @@ to test the release.
 QUIESCENCE_PREBUILD_EXECUTED=YES
 QUIESCENCE_VERSION_ID=d28f30c5-b83c-42a8-b0e4-3f3a7c2bc7d1
 QUIESCENCE_VERSION_NUMBER=63
-QUIESCENCE_VERSION_DEPLOYED=NO
-QUIESCENCE_EXACT_RUNTIME_QUALIFICATION=DEFERRED_UNTIL_CURRENT_DEPLOYMENT_MEMBERSHIP
+QUIESCENCE_VERSION_DEPLOYED=YES_AT_0_PERCENT_ONLY
+QUIESCENCE_EXACT_RUNTIME_QUALIFICATION=PASS
 QUIESCENCE_STILL_REQUIRED_BEFORE_PAID_RUNTIME_DEPLOY=YES
 ATOMIC_PUBLIC_CUTOVER_EXECUTED=YES
 ATOMIC_PUBLIC_CUTOVER_DEPLOYMENT_ID=037ae834-3b1e-4eae-b5c0-7befa09856c1
 ATOMIC_PUBLIC_STABILIZATION=PASS
 PUBLIC_NORMAL_VERSION=b6b7477f-94e5-4ee5-9ff3-cc0abb69ecca
 PUBLIC_NORMAL_TRAFFIC=100%
-PUBLIC_ROLLBACK_VERSION=db7054c9-76ee-4830-aabe-8a4542261b6a
+PUBLIC_ROLLBACK_VERSION=d28f30c5-b83c-42a8-b0e4-3f3a7c2bc7d1
 PUBLIC_ROLLBACK_TRAFFIC=0%
 NEXT_TRAFFIC_STAGE_AUTHORIZED=NO
-NEXT_REQUIRED_CHECKPOINT=SUN-1222C-PCC-QUIESCENCE-QUALIFY-PROMOTE-AND-DRAIN
+PREEXISTING_BACKLOG_NATURALLY_DRAINABLE=NO
+STALE_ORPHAN_COUNT=17
+NEXT_REQUIRED_CHECKPOINT=SUN-1222C-PCC-LIFECYCLE-BACKLOG-RECONCILIATION
 ```
