@@ -248,13 +248,18 @@ JWKS/JWS, catalog, MCP, A2A, mTLS truthfulness, verify/web admission rejection,
 and company/document/artifact rejection all passed with authoritative Tail
 attribution to d28. No qualification state or economic write occurred.
 
-The mandatory pre-promotion ownership audit then classified all 17 frozen
-nonterminal payment attempts as `STALE_ORPHAN_NO_AUTOMATIC_OWNER`: every row has
-no job, no Workflow ID, no state event, no active Workflow instance, no
-scheduled reconciliation owner, and no retry owner. Ages ranged from 76.94 to
-312.13 hours. Therefore the backlog is not naturally drainable and the Stage H
-promotion is blocked. Evidence:
-`docs/reports/SUN-1222C-pcc-quiescence-qualify-promote-and-drain.md`.
+The mandatory pre-promotion ownership audit classified all 17 frozen nonterminal
+payment attempts as `STALE_ORPHAN_NO_AUTOMATIC_OWNER`. A subsequent forensic
+checkpoint corrected that audit's cross-table join: all 17 do have a real job
+through `jobs.idempotency_key = payment_attempts.payment_identifier` despite
+`payment_attempts.job_id` being null, and all have job-state events. That
+correction does not make them naturally drainable: no active Workflow, scheduled
+reconciler, or retry owner exists. Fourteen jobs are `REJECTED`, one is stranded
+at `EXECUTING`, one at `LOCKED`, and the economically settled row is
+`DELIVERED`. None has a truthful current terminal payment-attempt state.
+Evidence: `docs/reports/SUN-1222C-pcc-quiescence-qualify-promote-and-drain.md`
+followed chronologically by
+`docs/reports/SUN-1222C-pcc-lifecycle-backlog-reconciliation.md`.
 
 ## Stage H — quiesce paid admission
 
@@ -278,8 +283,10 @@ npx wrangler versions deploy \
 `SUN-1222C-PCC-QUIESCENCE-QUALIFY-PROMOTE-AND-DRAIN` authority expressly
 required a naturally drainable backlog before promotion. That gate failed with
 17 stale orphans and zero automatic owners. A separate
-`SUN-1222C-PCC-LIFECYCLE-BACKLOG-RECONCILIATION` checkpoint must resolve and
-evidence the historical records before promotion can be reconsidered.
+`SUN-1222C-PCC-LIFECYCLE-BACKLOG-RECONCILIATION` checkpoint then proved the
+current terminal model cannot represent any of the 17 without falsification; it
+performed no D1 mutation. Stage H remains blocked pending
+`SUN-1222C-PCC-LIFECYCLE-MODEL-GAP-REMEDIATION`.
 
 ## Stage I — drain
 
@@ -287,16 +294,24 @@ After propagation, repeat the lifecycle query until the separately defined drain
 predicate is satisfied. Do not force-deploy around stuck rows. Investigate and
 stop if the drain exceeds its governed bound.
 
-The 2026-09-11 fresh ownership audit remains `verified=16`,
-`settled_external=1`, total 17. Unlike the earlier aggregate-only snapshot, the
-individual audit proved all 17 are stale orphans without automatic owners.
-Closing admission cannot drain them. Do not begin a drain clock, claim a bounded
-natural horizon, or promote d28 until a separately authorized lifecycle-backlog
-reconciliation reaches a truthful disposition. After any future quiescence
-reaches 100%, wait the deployment-tail safety interval and require zero rows in
-every frozen nonterminal stage (`acquired`, `verified`, `executed`,
-`settlement_pending`, `settled_external`, `link_verified`, `settlement_failed`)
-before paid-runtime deployment.
+The 2026-09-11 forensic readback remains `verified=16`, `settled_external=1`,
+total 17. The current model has only `verification_failed` and `settled` as
+terminal stages. Neither can represent these records truthfully: successful
+verification cannot become `verification_failed`, and the settled-external row
+lacks durable governed link-verification evidence. Closing admission cannot
+drain them. Do not begin a drain clock, claim a bounded natural horizon, or
+promote d28 until Model C (the selected append-only reconciliation
+classification plus ownership-aware drain gate) and recurrence fixes are
+separately authorized, implemented, deployed, and used to reconcile the exact
+records. Preserve all original attempt IDs, timestamps, verified history,
+payment-identifier ownership, quotes, requirements, and settlement evidence.
+
+The recurrence fix must also close the current non-atomic
+`verified`-to-Workflow-create window and add durable CDP link-finalization from
+`settled_external` through `link_verified` to `settled`. A historical data-only
+cleanup is insufficient. After any future quiescence reaches 100%, wait the
+deployment-tail safety interval and require the revised, governed active-work
+gate to be zero before paid-runtime deployment.
 
 ## Stage J — paid-runtime cutover
 
@@ -338,5 +353,5 @@ PUBLIC_ROLLBACK_TRAFFIC=0%
 NEXT_TRAFFIC_STAGE_AUTHORIZED=NO
 PREEXISTING_BACKLOG_NATURALLY_DRAINABLE=NO
 STALE_ORPHAN_COUNT=17
-NEXT_REQUIRED_CHECKPOINT=SUN-1222C-PCC-LIFECYCLE-BACKLOG-RECONCILIATION
+NEXT_REQUIRED_CHECKPOINT=SUN-1222C-PCC-LIFECYCLE-MODEL-GAP-REMEDIATION
 ```
