@@ -13,6 +13,11 @@
 > exact restoration on failure. This document is a plan, not traffic
 > authorization.
 >
+> **NOT AUTHORIZED FOR AUTOMATIC EXECUTION.** Only steps explicitly recorded as
+> completed may be treated as completed; every remaining upload, deployment,
+> traffic, qualification, drain, and paid-runtime action requires its named
+> human authorization checkpoint.
+>
 > Evidence: `docs/reports/SUN-1222C-pcc-canary-version-skew-remediation.md`.
 
 ## Frozen identities and boundaries
@@ -71,9 +76,14 @@ PAID_ROUTES_ENABLED=true -> false
 ```
 
 All other variables, secret names, bindings, source, routes, and domains must
-match. Upload only; do not deploy it. Record `<QUIESCENCE_VERSION_ID>` and prove
-it is unassigned. No literal upload command belongs here until that checkpoint
-has reconstructed and dry-run the exact full variable map.
+match. This stage completed on 2026-09-11: immutable version
+`d28f30c5-b83c-42a8-b0e4-3f3a7c2bc7d1` (version 63, tag
+`sun1222c-pcc-feature-scoped-quiescence-candidate`) was uploaded exactly once
+and remains unassigned. Its script etag, bindings, secret names, and
+compatibility settings match b6; its only ordinary-variable delta is the one
+shown above. Local/config qualification passed, but exact runtime qualification
+is deliberately deferred until deployment membership. Evidence:
+`docs/reports/SUN-1222C-pcc-quiescence-candidate-prebuild.md`.
 
 ## Stage B — final exact-version candidate qualification
 
@@ -197,9 +207,21 @@ there is no minimum wait before rollback.
 ## Stage G — introduce and qualify quiescence derivative
 
 Only after Stage F passes, use a separately authorized deployment to replace the
-0% baseline member with `<QUIESCENCE_VERSION_ID>@0%` while keeping
+0% baseline member with `d28f30c5-b83c-42a8-b0e4-3f3a7c2bc7d1@0%` while keeping
 `b6b7477f@100%`. Exact-version qualify the quiescence derivative. This changes
 deployment membership but not normal traffic and requires its own command proof.
+
+The prebuilt command shape, dry-run successfully under Wrangler 4.119.0 but not
+executed, is:
+
+```bash
+npx wrangler versions deploy \
+  b6b7477f-94e5-4ee5-9ff3-cc0abb69ecca@100% \
+  d28f30c5-b83c-42a8-b0e4-3f3a7c2bc7d1@0% \
+  --name siteborne-utility-edge \
+  --message "SUN-1222C post-atomic quiescence qualification membership: b6b7477f 100%; d28f30c5 0%; no normal quiescence traffic" \
+  --yes
+```
 
 ## Stage H — quiesce paid admission
 
@@ -208,11 +230,29 @@ Under separate authority, atomically deploy the qualified quiescence version at
 route is closed while discovery and zero-economic health surfaces remain
 correct. Restore `b6b7477f@100%` immediately on unexpected behavior.
 
+Design only; do not run without that separate authority:
+
+```bash
+npx wrangler versions deploy \
+  d28f30c5-b83c-42a8-b0e4-3f3a7c2bc7d1@100% \
+  b6b7477f-94e5-4ee5-9ff3-cc0abb69ecca@0% \
+  --name siteborne-utility-edge \
+  --message "SUN-1222C quiesce public paid admission: d28f30c5 100%; retain b6b7477f 0% for immediate restore" \
+  --yes
+```
+
 ## Stage I — drain
 
 After propagation, repeat the lifecycle query until the separately defined drain
 predicate is satisfied. Do not force-deploy around stuck rows. Investigate and
 stop if the drain exceeds its governed bound.
+
+The 2026-09-11 prebuild snapshot was `verified=16`, `settled_external=1`,
+total 17. This count does not block the public-only atomic cutover. After
+quiescence reaches 100%, wait the deployment-tail safety interval and require
+zero rows in every frozen nonterminal stage (`acquired`, `verified`, `executed`,
+`settlement_pending`, `settled_external`, `link_verified`, `settlement_failed`)
+before paid-runtime deployment.
 
 ## Stage J — paid-runtime cutover
 
@@ -238,8 +278,12 @@ Stop after final readback. Do not provision mTLS or create a real payment merely
 to test the release.
 
 ```text
-QUIESCENCE_PREBUILD_EXECUTED=NO
+QUIESCENCE_PREBUILD_EXECUTED=YES
+QUIESCENCE_VERSION_ID=d28f30c5-b83c-42a8-b0e4-3f3a7c2bc7d1
+QUIESCENCE_VERSION_NUMBER=63
+QUIESCENCE_VERSION_DEPLOYED=NO
+QUIESCENCE_EXACT_RUNTIME_QUALIFICATION=DEFERRED_UNTIL_CURRENT_DEPLOYMENT_MEMBERSHIP
 QUIESCENCE_STILL_REQUIRED_BEFORE_PAID_RUNTIME_DEPLOY=YES
 NEXT_TRAFFIC_STAGE_AUTHORIZED=NO
-NEXT_REQUIRED_CHECKPOINT=SUN-1222C-PCC-QUIESCENCE-CANDIDATE-PREBUILD
+NEXT_REQUIRED_CHECKPOINT=SUN-1222C-PCC-ATOMIC-PUBLIC-CUTOVER-AUTHORIZATION
 ```
