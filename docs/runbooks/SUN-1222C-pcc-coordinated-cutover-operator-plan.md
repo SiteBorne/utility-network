@@ -8,10 +8,11 @@
 > pre-routing client identity, so IP/cookie/header affinity cannot eliminate the
 > proven cross-version skew for ordinary machine agents.
 >
-> The selected strategy is a separately authorized **atomic public cutover**:
-> `db7054c9@100% + b6b7477f@0%` → `b6b7477f@100% + db7054c9@0%`, with immediate
-> exact restoration on failure. This document is a plan, not traffic
-> authorization.
+> The selected atomic public cutover completed and passed stabilization on
+> 2026-09-11: `db7054c9@100% + b6b7477f@0%` became
+> `b6b7477f@100% + db7054c9@0%`. The baseline remains the exact pre-paid-runtime
+> restoration target. This document remains a plan for every subsequent stage,
+> not authorization to quiesce, drain, or deploy the paid runtime.
 >
 > **NOT AUTHORIZED FOR AUTOMATIC EXECUTION.** Only steps explicitly recorded as
 > completed may be treated as completed; every remaining upload, deployment,
@@ -31,11 +32,12 @@ CANDIDATE_DISABLED=company_evidence_graph.v2,document_evidence_json.v2,document-
 PERCENTAGE_CANARY_RETIRED=YES
 ```
 
-Three independent authorities remain mandatory:
+The quiescence prebuild and atomic public cutover authorities are complete.
+Independent authority remains mandatory for:
 
-1. quiescence candidate prebuild/upload;
-2. atomic public traffic cutover; and
-3. paid-runtime cutover after public stabilization, quiescence, and drain.
+1. quiescence 0% membership and exact-version qualification;
+2. quiescence promotion and drain; and
+3. paid-runtime cutover after the authoritative drain reaches zero.
 
 Approval of one does not authorize another. Do not create a Transform Rule,
 change routes/DNS, upload a public version, move traffic, deploy the paid
@@ -60,9 +62,9 @@ npx wrangler deployments status \
   --config wrangler.paid-continuation-runtime.toml
 ```
 
-Expected: clean `main`; Wrangler `4.119.0`; public composition exactly
-`db7054c9...@100% + b6b7477f...@0%`; paid runtime exactly `d62011b9...@100%`.
-Stop on any drift.
+Expected after the completed atomic cutover: clean `main`; Wrangler `4.119.0`;
+public composition exactly `b6b7477f...@100% + db7054c9...@0%`; paid runtime
+exactly `d62011b9...@100%`. Stop on any drift.
 
 ## Stage A — prebuild quiescence derivative unassigned
 
@@ -123,15 +125,15 @@ paid runtime remains, but they continue to block paid-runtime deployment.
 
 **Required checkpoint:** `SUN-1222C-PCC-ATOMIC-PUBLIC-CUTOVER-AUTHORIZATION`
 
-Precompute and dry-run semantics before executing either command. The future
-authorized cutover command is:
+**Completed and stabilized on 2026-09-11.** Both commands were dry-run proven.
+The following cutover command was executed exactly once:
 
 ```bash
 npx wrangler versions deploy \
   b6b7477f-94e5-4ee5-9ff3-cc0abb69ecca@100% \
   db7054c9-76ee-4830-aabe-8a4542261b6a@0% \
   --name siteborne-utility-edge \
-  --message "SUN-1222C atomic public cutover: b6b7477f 100%; retain db7054c9 at 0% for immediate restore" \
+  --message "SUN-1222C atomic public cutover: qualified feature-scoped b6b7477f 100%; retain baseline db7054c9 0% for immediate pre-paid-runtime restore; percentage canary retired" \
   --yes
 ```
 
@@ -146,9 +148,10 @@ npx wrangler versions deploy \
   --yes
 ```
 
-Do not use generic rollback if it would collapse the explicit two-version
-composition. Immediately read back the deployment. Stop and restore if normal
-traffic is not exactly 100% candidate / 0% baseline.
+Deployment `037ae834-3b1e-4eae-b5c0-7befa09856c1` was created at
+`2026-09-11T11:58:11.996898Z`. Immediate and final readback were exactly
+`b6b7477f@100% + db7054c9@0%`. The restoration command was not executed. Do not
+use generic rollback if it would collapse the explicit two-version composition.
 
 ## Stage E — immediate normal-routing smoke
 
@@ -174,6 +177,11 @@ ARTIFACT_DISABLED=YES
 Only bounded, zero-economic probes are allowed unless another checkpoint says
 otherwise. Any wrong version, protocol, price, feature, or safety result invokes
 the Stage D emergency restoration immediately.
+
+**Completed on 2026-09-11.** Normal-routing health, truthful readiness, Agent
+Card, JWKS/JWS, MCP initialize/list, A2A, price, mTLS, and disabled-feature
+checks all passed and were attributed to `b6b7477f`. Evidence:
+`docs/reports/SUN-1222C-pcc-atomic-public-cutover.md`.
 
 ## Stage F — governed public stabilization
 
@@ -203,6 +211,14 @@ Require throughout:
 
 Any hard failure restores Stage D's exact baseline composition immediately;
 there is no minimum wait before rollback.
+
+**Completed on 2026-09-11.** The observed interval was 60 minutes 18.075
+seconds. It included 1,317 successful normal public client requests and 1,075
+conservatively Tail-delivered b6-attributed requests, with zero baseline
+attribution, 5xx, or runtime exceptions in the governed interval. D1 aggregates
+and lifecycle state were unchanged; no organic or checkpoint-generated payment,
+provider, Workflow, or settlement activity occurred. Evidence:
+`docs/reports/SUN-1222C-pcc-atomic-public-cutover.md`.
 
 ## Stage G — introduce and qualify quiescence derivative
 
@@ -284,6 +300,13 @@ QUIESCENCE_VERSION_NUMBER=63
 QUIESCENCE_VERSION_DEPLOYED=NO
 QUIESCENCE_EXACT_RUNTIME_QUALIFICATION=DEFERRED_UNTIL_CURRENT_DEPLOYMENT_MEMBERSHIP
 QUIESCENCE_STILL_REQUIRED_BEFORE_PAID_RUNTIME_DEPLOY=YES
+ATOMIC_PUBLIC_CUTOVER_EXECUTED=YES
+ATOMIC_PUBLIC_CUTOVER_DEPLOYMENT_ID=037ae834-3b1e-4eae-b5c0-7befa09856c1
+ATOMIC_PUBLIC_STABILIZATION=PASS
+PUBLIC_NORMAL_VERSION=b6b7477f-94e5-4ee5-9ff3-cc0abb69ecca
+PUBLIC_NORMAL_TRAFFIC=100%
+PUBLIC_ROLLBACK_VERSION=db7054c9-76ee-4830-aabe-8a4542261b6a
+PUBLIC_ROLLBACK_TRAFFIC=0%
 NEXT_TRAFFIC_STAGE_AUTHORIZED=NO
-NEXT_REQUIRED_CHECKPOINT=SUN-1222C-PCC-ATOMIC-PUBLIC-CUTOVER-AUTHORIZATION
+NEXT_REQUIRED_CHECKPOINT=SUN-1222C-PCC-QUIESCENCE-QUALIFY-PROMOTE-AND-DRAIN
 ```
