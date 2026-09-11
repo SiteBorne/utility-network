@@ -231,6 +231,13 @@ binding = "BROWSER"
 [observability]
 enabled = true
 
+# Model-C owner-intent recovery scanner. This is source/config only until a
+# separately authorized `wrangler triggers deploy`; it performs no payment,
+# provider, or settlement operation and only ensures a deterministic Workflow
+# instance exists for each already-verified durable owner intent.
+[triggers]
+crons = ["* * * * *"]
+
 # SUN-0800B checkpoint 2: the previous custom `[build]` command (`pnpm
 # run build --filter=edge-api`, itself also wrong -- no package is named
 # `edge-api`, only `@siteborne/edge-api`) is removed entirely. It was

@@ -311,6 +311,32 @@ export interface ResultReceiptPersistence {
   ): Promise<{ status: 'written' | 'already_written'; receiptId: string }>;
 }
 
+export interface WorkflowFinalizationPersistence {
+  recordProviderFailure(input: {
+    readonly paymentIdentifier: string;
+    readonly jobId: string;
+    readonly reasonCode: string;
+    readonly createdAt: string;
+  }): Promise<void>;
+  recordSettlementFinalizationUnresolved(input: {
+    readonly paymentIdentifier: string;
+    readonly jobId: string;
+    readonly reasonCode: string;
+    readonly createdAt: string;
+  }): Promise<void>;
+  persistLinkEvidence(input: {
+    readonly paymentIdentifier: string;
+    readonly jobId: string;
+    readonly paymentServiceLink: PaymentServiceLink;
+    readonly settlementTransactionReference: string;
+    readonly settlementEvidenceHash: string;
+    readonly pcc: unknown;
+    readonly buyerReceiptId: string;
+    readonly createdAt: string;
+  }): Promise<void>;
+  finalizeSettled(paymentIdentifier: string, now: string): Promise<void>;
+}
+
 export interface PaidContinuationWorkflowDependencies {
   /** Imported once by the caller (never read from `env` inside
    * `openContinuationEnvelope` itself — H2AWI-1's own boundary). */
@@ -337,6 +363,7 @@ export interface PaidContinuationWorkflowDependencies {
   readonly persistence: {
     readonly job: JobStatePersistence;
     readonly resultReceipt: ResultReceiptPersistence;
+    readonly finalization: WorkflowFinalizationPersistence;
   };
 }
 
@@ -637,7 +664,12 @@ async function runSettlementStep(
     // call settle() again — resolve exclusively via reconciliation.
     return resolveViaReconciliation(paymentIdentifier, deps);
   }
-  if (existing && existing.lifecycleStage === 'settled_external') {
+  if (
+    existing &&
+    (existing.lifecycleStage === 'settled_external' ||
+      existing.lifecycleStage === 'link_verified' ||
+      existing.lifecycleStage === 'settled')
+  ) {
     // Already resolved by a prior attempt. Defensive re-entry only — the
     // platform's own step memoization should make this unreachable in
     // practice (step 4 itself would already be memoized once it returns
@@ -830,6 +862,12 @@ export async function runPaidContinuationWorkflow(
       deps.persistence.job,
       timeoutDetail
     );
+    await deps.persistence.finalization.recordProviderFailure({
+      paymentIdentifier,
+      jobId,
+      reasonCode: `executor_timeout:${errorCode(e)}`,
+      createdAt: new Date().toISOString(),
+    });
     return terminal('executor_timeout', jobId, { error_code: errorCode(e) });
   }
   if (executorOutcome.result.result_class !== 'success') {
@@ -845,6 +883,12 @@ export async function runPaidContinuationWorkflow(
       deps.persistence.job,
       rejectionDetail
     );
+    await deps.persistence.finalization.recordProviderFailure({
+      paymentIdentifier,
+      jobId,
+      reasonCode: `executor_rejected:${executorOutcome.result.failure?.code ?? executorOutcome.result.result_class}`,
+      createdAt: new Date().toISOString(),
+    });
     await transitionJobState(
       jobId,
       'REJECTED',
@@ -946,6 +990,19 @@ export async function runPaidContinuationWorkflow(
     return terminal('settlement_rejected', jobId, { error_code: settleOutcome.reason });
   }
 
+  if (!settleOutcome.transactionReference) {
+    await deps.persistence.finalization.recordSettlementFinalizationUnresolved({
+      paymentIdentifier,
+      jobId,
+      reasonCode: 'missing_settlement_transaction_reference',
+      createdAt: new Date().toISOString(),
+    });
+    return terminal('persistence_failed_after_settlement', jobId, {
+      error_code: 'missing_settlement_transaction_reference',
+    });
+  }
+  const settlementTransactionReference = settleOutcome.transactionReference;
+
   const verificationReceipt = pccResult.pcc;
   const verificationReceiptId =
     executorOutcome.result.receipt_id ??
@@ -1020,6 +1077,12 @@ export async function runPaidContinuationWorkflow(
     // SUN-1222C-R4-D7: see the `missing_verification_receipt_id` sibling
     // above — Class E, no durable transition added, same retry-safety
     // rationale.
+    await deps.persistence.finalization.recordSettlementFinalizationUnresolved({
+      paymentIdentifier,
+      jobId,
+      reasonCode: linkVerification.reason,
+      createdAt: new Date().toISOString(),
+    });
     return terminal('persistence_failed_after_settlement', jobId, {
       error_code: linkVerification.reason,
       settlement_transaction_reference: settleOutcome.transactionReference,
@@ -1089,6 +1152,20 @@ export async function runPaidContinuationWorkflow(
           paymentIdentifier,
           pcc: pccResult.valid ? pccResult.pcc : undefined,
         });
+        await deps.persistence.finalization.persistLinkEvidence({
+          paymentIdentifier,
+          jobId,
+          paymentServiceLink,
+          settlementTransactionReference,
+          settlementEvidenceHash: settleOutcome.settlementEvidenceHash,
+          pcc: pccResult.pcc,
+          buyerReceiptId: receipt.receiptId,
+          createdAt: new Date().toISOString(),
+        });
+        await deps.persistence.finalization.finalizeSettled(
+          paymentIdentifier,
+          new Date().toISOString()
+        );
         await finalizeTerminalState(jobId, deps.persistence.job);
         return receipt;
       }

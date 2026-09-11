@@ -462,6 +462,30 @@ export class FakeResultReceiptPersistence {
   }
 }
 
+export class FakeWorkflowFinalizationPersistence {
+  providerFailures: string[] = [];
+  unresolvedFinalizations: string[] = [];
+  linkEvidenceWrites = 0;
+  settledFinalizations = 0;
+
+  async recordProviderFailure(input: { reasonCode: string }): Promise<void> {
+    this.providerFailures.push(input.reasonCode);
+  }
+  async recordSettlementFinalizationUnresolved(input: { reasonCode: string }): Promise<void> {
+    this.unresolvedFinalizations.push(input.reasonCode);
+  }
+  async persistLinkEvidence(): Promise<void> {
+    this.linkEvidenceWrites += 1;
+  }
+  async finalizeSettled(paymentIdentifier: string): Promise<void> {
+    this.settledFinalizations += 1;
+    const row = this.settlementRepository.rows.get(paymentIdentifier);
+    if (row?.lifecycleStage === 'settled_external') row.lifecycleStage = 'link_verified';
+    if (row?.lifecycleStage === 'link_verified') row.lifecycleStage = 'settled';
+  }
+  constructor(private readonly settlementRepository: FakeSettlementRepository) {}
+}
+
 // -----------------------------------------------------------------------
 // Full dependency bundle
 // -----------------------------------------------------------------------
@@ -470,6 +494,7 @@ export interface TestDependencyBundle extends PaidContinuationWorkflowDependenci
   readonly settlementRepository: FakeSettlementRepository;
   readonly resultReceiptPersistence: FakeResultReceiptPersistence;
   readonly jobPersistence: FakeJobStatePersistence;
+  readonly finalizationPersistence: FakeWorkflowFinalizationPersistence;
   readonly settle: ReturnType<typeof vi.fn>;
   readonly reconciliationChecker: ReturnType<typeof vi.fn>;
 }
@@ -492,6 +517,7 @@ export async function buildTestDependencies(
   });
 
   const resultReceiptPersistence = new FakeResultReceiptPersistence();
+  const finalizationPersistence = new FakeWorkflowFinalizationPersistence(settlementRepository);
   const jobPersistence = new FakeJobStatePersistence();
   jobPersistence.seed({
     id: TEST_JOB_ID,
@@ -539,10 +565,12 @@ export async function buildTestDependencies(
     persistence: {
       job: jobPersistence,
       resultReceipt: resultReceiptPersistence,
+      finalization: finalizationPersistence,
     },
     settlementRepository,
     resultReceiptPersistence,
     jobPersistence,
+    finalizationPersistence,
     settle,
     reconciliationChecker,
   };

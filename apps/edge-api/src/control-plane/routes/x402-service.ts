@@ -100,10 +100,12 @@ import type { Job } from '../types';
 // `PaidContinuationWorkflow` (H2AWI-2), reached only through these two
 // H2AWI-1/H2AWI-2-reusing modules.
 import {
-  createOrJoinPaidContinuation,
   joinExistingPaidContinuation,
+  preparePaidContinuation,
   type WorkflowBindingLike,
 } from '../continuation/handoff';
+import { dispatchWorkflowOwnerIntent } from '../continuation/owner-recovery';
+import { D1WorkflowOwnerIntentRepository } from '../repositories/d1/workflow-owner-intents';
 import { waitForWorkflowResult, type WorkflowWaitOutcome } from '../continuation/waiter';
 import type {
   ContinuationEnvelopeMetadata,
@@ -1037,7 +1039,7 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
       // instance exists yet (the original request has not reached the
       // handoff point) or this route was never configured with a
       // Workflow binding at all.
-      const durableJoin = await driveDurableContinuation('join_only');
+      const durableJoin = await driveDurableContinuation('repair_or_join');
       if (durableJoin) return durableJoin;
       const recovered = await attemptNeverminedRecovery();
       if (recovered) return recovered;
@@ -1158,7 +1160,68 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
       return jsonError(c, 402, 'payment_verification_rejected', verifyGate.reason);
     }
     await transition(jobId, 'PAYMENT_CHALLENGED', 'PAYMENT_VERIFIED', 'PAYMENT_VERIFIED');
-    await paymentAttempts.transitionLifecycleStage(paymentIdentifier, 'acquired', 'verified');
+
+    if (!config.workflow || !config.continuationEnvelopeKey) {
+      return jsonError(
+        c,
+        500,
+        'repository_failure',
+        'durable payment continuation is not configured for this route'
+      );
+    }
+
+    const metadata: ContinuationEnvelopeMetadata = {
+      job_id: jobId,
+      payment_identifier: paymentIdentifier,
+      service: config.serviceId,
+      network: config.network,
+      asset: config.asset,
+      pay_to: evidenceContext.payee,
+      amount_atomic: evidenceContext.amount,
+      valid_before_unix: Math.floor(new Date(stored.quote.expires_at).getTime() / 1000),
+    };
+    const settlementContext: PaymentSettlementContext =
+      rail === 'nevermined'
+        ? {
+            ...evidenceContext,
+            authorizationContext: {
+              rail: 'nevermined',
+              accessToken: sigHeader!,
+              paymentRequired: neverminedRequired!,
+              agentId: config.nevermined!.agentId,
+              planId: config.nevermined!.planId,
+              delegationId: neverminedDelegationId!,
+            },
+          }
+        : {
+            ...evidenceContext,
+            authorizationContext: { rail: 'cdp' },
+            paymentPayload: payload!,
+            paymentRequirements: payload!.accepted,
+          };
+    const continuationPayload: DecryptedContinuationPayload = {
+      executorInput: body,
+      requestInputHash: inputHash,
+      settlementContext,
+      verificationEvidence,
+      actualAmount: stored.quote.amount,
+    };
+    const prepared = await preparePaidContinuation(
+      {
+        envelopeKey: config.continuationEnvelopeKey,
+        envelopeKeyId: config.continuationEnvelopeKeyId ?? 'v1',
+      },
+      { paymentIdentifier, payload: continuationPayload, metadata, requestId }
+    );
+    const ownerIntents = new D1WorkflowOwnerIntentRepository(config.db);
+    const verifiedCommit = await ownerIntents.commitVerifiedWithIntent({
+      paymentIdentifier,
+      intentId: `owner-intent:${prepared.instanceId}`,
+      workflowInstanceId: prepared.instanceId,
+      workflowInput: prepared.workflowInput,
+      createdAt: nowIso,
+    });
+    void verifiedCommit;
     await audit('payment_verified', { payment_identifier: paymentIdentifier });
 
     // SUN-1221E6R-H2A — everything from here on is real economic
@@ -1330,12 +1393,27 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
      * missing-required-config convention.
      */
     async function driveDurableContinuation(mode: 'create_or_join'): Promise<Response>;
-    async function driveDurableContinuation(mode: 'join_only'): Promise<Response | null>;
+    async function driveDurableContinuation(mode: 'repair_or_join'): Promise<Response | null>;
     async function driveDurableContinuation(
-      mode: 'create_or_join' | 'join_only'
+      mode: 'create_or_join' | 'repair_or_join'
     ): Promise<Response | null> {
-      if (mode === 'join_only') {
+      if (mode === 'repair_or_join') {
         if (!config.workflow) return null;
+        const ownerIntent = await new D1WorkflowOwnerIntentRepository(
+          config.db
+        ).getByPaymentIdentifier(paymentIdentifier);
+        if (ownerIntent) {
+          const dispatched = await dispatchWorkflowOwnerIntent(
+            new D1WorkflowOwnerIntentRepository(config.db),
+            config.workflow,
+            paymentIdentifier
+          );
+          if (dispatched.outcome === 'retry_scheduled') return null;
+          const waitOutcome = await waitForWorkflowResult(dispatched.instance, {
+            signal: c.req.raw.signal,
+          });
+          return await translateWaitOutcome(waitOutcome);
+        }
         const joined = await joinExistingPaidContinuation(config.workflow, paymentIdentifier);
         if (!joined) return null;
         const waitOutcome = await waitForWorkflowResult(joined.instance, {
@@ -1353,77 +1431,17 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
         );
       }
 
-      const jobRowResult = await jobsRepo.getByIdempotencyKey(paymentIdentifier);
-      const continuationJobId =
-        jobRowResult.ok && jobRowResult.value ? jobRowResult.value.id : jobId;
-
-      const metadata: ContinuationEnvelopeMetadata = {
-        job_id: continuationJobId,
-        payment_identifier: paymentIdentifier,
-        service: config.serviceId,
-        network: config.network,
-        asset: config.asset,
-        pay_to: evidenceContext.payee,
-        amount_atomic: evidenceContext.amount,
-        // `exact`-scheme only reaches this point (see the `upto` gate in
-        // `runProtectedExecutionPipeline`) -- the quote's own expiry is
-        // this route's existing authoritative "how long is this payment
-        // window valid" value (already checked earlier in this handler),
-        // reused here rather than inventing a second expiry concept.
-        valid_before_unix: Math.floor(new Date(stored.quote.expires_at).getTime() / 1000),
-      };
-
-      // Same object-identity discipline the removed in-request settle
-      // call used to have: the exact `payload`/`payload.accepted` this
-      // request already structurally validated, never a re-decoded copy.
-      const settlementContext: PaymentSettlementContext =
-        rail === 'nevermined'
-          ? {
-              ...evidenceContext,
-              authorizationContext: {
-                rail: 'nevermined',
-                accessToken: sigHeader!,
-                paymentRequired: neverminedRequired!,
-                agentId: config.nevermined!.agentId,
-                planId: config.nevermined!.planId,
-                delegationId: neverminedDelegationId!,
-              },
-            }
-          : {
-              ...evidenceContext,
-              authorizationContext: { rail: 'cdp' },
-              paymentPayload: payload!,
-              paymentRequirements: payload!.accepted,
-            };
-
-      const continuationPayload: DecryptedContinuationPayload = {
-        executorInput: body,
-        requestInputHash: inputHash,
-        settlementContext,
-        verificationEvidence,
-        actualAmount: stored.quote.amount,
-      };
-
-      const handoffResult = await createOrJoinPaidContinuation(
-        {
-          workflow: config.workflow,
-          envelopeKey: config.continuationEnvelopeKey,
-          envelopeKeyId: config.continuationEnvelopeKeyId ?? 'v1',
-        },
-        {
-          paymentIdentifier,
-          payload: continuationPayload,
-          metadata,
-          requestId,
-        }
+      const dispatched = await dispatchWorkflowOwnerIntent(
+        new D1WorkflowOwnerIntentRepository(config.db),
+        config.workflow,
+        paymentIdentifier
       );
 
-      if (handoffResult.outcome === 'create_failed') {
+      if (dispatched.outcome === 'retry_scheduled') {
         // Design §21: verify() already succeeded, but no executor
         // invocation and no settlement occur under any circumstance —
         // there is no synchronous fallback left in this file to regress
         // to.
-        await transition(continuationJobId, 'LOCKED', 'REJECTED', 'QUARANTINE_POLICY');
         return jsonError(
           c,
           500,
@@ -1432,7 +1450,7 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
         );
       }
 
-      const waitOutcome = await waitForWorkflowResult(handoffResult.instance, {
+      const waitOutcome = await waitForWorkflowResult(dispatched.instance, {
         signal: c.req.raw.signal,
       });
       return await translateWaitOutcome(waitOutcome);

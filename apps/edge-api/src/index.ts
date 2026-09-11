@@ -31,6 +31,8 @@ import { companyEvidenceGraphV2CdpProductionRoute } from './control-plane/routes
 import { documentEvidenceJsonV2CdpProductionRoute } from './control-plane/routes/production-document-evidence-v2-cdp-route';
 import { documentArtifactUploadRoute } from './control-plane/routes/document-artifact-upload-route';
 import type { Env } from './control-plane/config/env';
+import { D1WorkflowOwnerIntentRepository } from './control-plane/repositories/d1/workflow-owner-intents';
+import { recoverPendingWorkflowOwnerIntents } from './control-plane/continuation/owner-recovery';
 
 export type { ControlPlaneConfig };
 
@@ -255,4 +257,31 @@ app.get('/', (c) => {
 });
 
 export type AppType = typeof app;
-export default app;
+/**
+ * Model-C durable owner recovery. The HTTP request's waitUntil remains the
+ * low-latency first attempt; this scheduled scan is the independent durable
+ * owner that repairs a committed pending intent after client/process loss.
+ * It can only call the deterministic Workflow binding. It has no facilitator,
+ * provider, settlement, or buyer-signing capability.
+ */
+export async function recoverWorkflowOwnerIntentsScheduled(
+  env: Pick<Env, 'DB' | 'PAID_CONTINUATION_WORKFLOW'>
+): Promise<void> {
+  if (!env.DB || !env.PAID_CONTINUATION_WORKFLOW) return;
+  await recoverPendingWorkflowOwnerIntents(
+    new D1WorkflowOwnerIntentRepository(env.DB),
+    env.PAID_CONTINUATION_WORKFLOW
+  );
+}
+
+const worker = Object.assign(app, {
+  scheduled(
+    _controller: { readonly scheduledTime: number; readonly cron: string },
+    env: Env,
+    ctx: { waitUntil(promise: Promise<unknown>): void }
+  ): void {
+    ctx.waitUntil(recoverWorkflowOwnerIntentsScheduled(env));
+  },
+});
+
+export default worker;

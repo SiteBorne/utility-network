@@ -297,6 +297,26 @@ vi.mock('../src/control-plane/repositories/d1/payment-attempts', () => ({
   })),
 }));
 
+// Model C adds a fifth leaf repository to the real production dependency
+// graph. Keep this orchestration-seam test honest by providing the same
+// idempotent lifecycle effect as D1PaymentFinalizationRepository while still
+// avoiding a real D1Database at this deliberately mocked leaf boundary.
+vi.mock('../src/control-plane/repositories/d1/payment-finalization', () => ({
+  D1PaymentFinalizationRepository: vi.fn().mockImplementation(() => ({
+    async recordProviderFailure() {},
+    async recordSettlementFinalizationUnresolved() {},
+    async persistLinkEvidence() {},
+    async finalizeSettled(paymentIdentifier: string) {
+      const row = getOrCreateSettlementRow(paymentIdentifier);
+      if (row.lifecycleStage === 'settled_external') row.lifecycleStage = 'link_verified';
+      if (row.lifecycleStage === 'link_verified') row.lifecycleStage = 'settled';
+      if (row.lifecycleStage !== 'settled') {
+        throw new Error('payment lifecycle did not reach settled');
+      }
+    },
+  })),
+}));
+
 const FOUR_SERVICES = [
   'company_evidence_graph.v2',
   'web_context_verified.v2',

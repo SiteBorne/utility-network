@@ -481,6 +481,21 @@ describe('x402 HTTP vertical slice (SUN-0700A checkpoint 5)', () => {
      * from an amount-comparison gate to a blanket scheme gate. */
     it('an executor reporting an actual amount above the quote authorized maximum can never reach a paid success (upto is rejected wholesale, not silently clipped)', async () => {
       const overLimitApp = new Hono();
+      const overLimitExecutor = async () => ({
+        result: {
+          result_class: 'success' as const,
+          output: { fake: true },
+          output_hash: 'sha256:' + '3'.repeat(64),
+          receipt_id: 'rcpt_' + '1'.repeat(24),
+          receipt: { fake_receipt: true },
+        },
+        // Deliberately fabricated: far above any real authorized
+        // maximum, to prove the route's own enforcement boundary
+        // (buildUsageResult / UsageExceedsAuthorizationError) rejects
+        // it — independent of whether the real document-usage
+        // calculator could itself ever produce such a value.
+        actualAmountAtomic: '999999999999',
+      });
       createX402ServiceRoute(overLimitApp, {
         serviceId: 'document_evidence_json.v1',
         scheme: 'upto',
@@ -497,21 +512,8 @@ describe('x402 HTTP vertical slice (SUN-0700A checkpoint 5)', () => {
         db,
         clock: () => clockValue,
         evidenceMode: 'fixture',
-        executor: async () => ({
-          result: {
-            result_class: 'success',
-            output: { fake: true },
-            output_hash: 'sha256:' + '3'.repeat(64),
-            receipt_id: 'rcpt_' + '1'.repeat(24),
-            receipt: { fake_receipt: true },
-          },
-          // Deliberately fabricated: far above any real authorized
-          // maximum, to prove the route's own enforcement boundary
-          // (buildUsageResult / UsageExceedsAuthorizationError) rejects
-          // it — independent of whether the real document-usage
-          // calculator could itself ever produce such a value.
-          actualAmountAtomic: '999999999999',
-        }),
+        executor: overLimitExecutor,
+        ...(await buildTestContinuationFields(db, () => clockValue, overLimitExecutor)),
       });
 
       const input = { probe: true };
@@ -960,7 +962,11 @@ describe('x402 HTTP vertical slice (SUN-0700A checkpoint 5)', () => {
         ...(await buildTestContinuationFields(db, () => clockValue, limitationsOnlyExecutor)),
       });
 
-      const challenge = await get402(limitationsOnlyApp, '/v1/company/evidence-graph-diagnostic', COMPANY_INPUT);
+      const challenge = await get402(
+        limitationsOnlyApp,
+        '/v1/company/evidence-graph-diagnostic',
+        COMPANY_INPUT
+      );
       const res = await payAndRetry(
         limitationsOnlyApp,
         '/v1/company/evidence-graph-diagnostic',

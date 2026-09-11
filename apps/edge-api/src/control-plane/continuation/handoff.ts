@@ -122,6 +122,34 @@ export type CreateOrJoinPaidContinuationResult =
       readonly error: unknown;
     };
 
+export interface PreparedPaidContinuation {
+  readonly instanceId: string;
+  readonly workflowInput: WorkflowContinuationInput;
+}
+
+/**
+ * Pure preparation boundary used by the Model-C D1 handoff. Sealing happens
+ * before the transaction, then the exact ciphertext and deterministic instance
+ * identity are committed with `acquired -> verified`. No buyer signing key is
+ * retained: only the already-existing AEAD continuation envelope is stored.
+ */
+export async function preparePaidContinuation(
+  deps: Pick<CreateOrJoinPaidContinuationDeps, 'envelopeKey' | 'envelopeKeyId'>,
+  input: CreateOrJoinPaidContinuationInput
+): Promise<PreparedPaidContinuation> {
+  const instanceId = await deriveWorkflowInstanceId(input.paymentIdentifier);
+  const envelope = await sealContinuationEnvelope({
+    payload: input.payload,
+    metadata: input.metadata,
+    keyMaterial: deps.envelopeKey,
+    keyId: deps.envelopeKeyId,
+  });
+  return {
+    instanceId,
+    workflowInput: { envelope, metadata: input.metadata, request_id: input.requestId },
+  };
+}
+
 /**
  * Idempotent: calling this twice with the same `paymentIdentifier` always
  * resolves to the SAME Workflow instance (`created` the first time,
@@ -134,20 +162,7 @@ export async function createOrJoinPaidContinuation(
   deps: CreateOrJoinPaidContinuationDeps,
   input: CreateOrJoinPaidContinuationInput
 ): Promise<CreateOrJoinPaidContinuationResult> {
-  const instanceId = await deriveWorkflowInstanceId(input.paymentIdentifier);
-
-  const envelope = await sealContinuationEnvelope({
-    payload: input.payload,
-    metadata: input.metadata,
-    keyMaterial: deps.envelopeKey,
-    keyId: deps.envelopeKeyId,
-  });
-
-  const workflowInput: WorkflowContinuationInput = {
-    envelope,
-    metadata: input.metadata,
-    request_id: input.requestId,
-  };
+  const { instanceId, workflowInput } = await preparePaidContinuation(deps, input);
 
   try {
     const instance = await deps.workflow.create({ id: instanceId, params: workflowInput });

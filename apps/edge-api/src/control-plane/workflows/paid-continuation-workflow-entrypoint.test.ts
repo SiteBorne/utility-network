@@ -87,6 +87,7 @@ function fakeDeps(): PaidContinuationWorkflowDependencies {
     persistence: {
       job: { getJob: async () => undefined } as never,
       resultReceipt: {} as never,
+      finalization: {} as never,
     },
   };
 }

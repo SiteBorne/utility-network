@@ -41,6 +41,7 @@ import { importContinuationEnvelopeKey } from '../continuation/envelope';
 import { buildProductionCdpChainReceiptChecker } from '../evidence/chain-receipt-checker';
 import { D1JobsRepository, D1StateEventsRepository } from '../repositories/d1/jobs';
 import { D1PaymentAttemptRepository } from '../repositories/d1/payment-attempts';
+import { D1PaymentFinalizationRepository } from '../repositories/d1/payment-finalization';
 import { X402ServiceResultRepository } from '../repositories/d1/x402-quotes';
 import { receiptPersistenceIdempotencyKey } from '../continuation/idempotency-keys';
 import type {
@@ -379,6 +380,7 @@ export async function buildProductionPaidContinuationWorkflowDependencies(
   const resultReceiptPersistence = new D1ResultReceiptPersistence(
     new X402ServiceResultRepository(env.DB)
   );
+  const finalizationPersistence = new D1PaymentFinalizationRepository(env.DB);
   const chainReceiptChecker = buildProductionCdpChainReceiptChecker({
     productionRpcUrl: env.BASE_RPC_URL,
     preproductionRpcUrl: env.BASE_SEPOLIA_RPC_URL,
@@ -401,6 +403,7 @@ export async function buildProductionPaidContinuationWorkflowDependencies(
     persistence: {
       job: jobPersistence,
       resultReceipt: resultReceiptPersistence,
+      finalization: finalizationPersistence,
     },
   };
 }

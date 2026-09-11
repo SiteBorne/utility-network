@@ -63,6 +63,9 @@ async function verifySchema(db: any) {
     'audit_events',
     'security_events',
     'payment_attempts',
+    'payment_attempt_reconciliations',
+    'payment_workflow_owner_intents',
+    'payment_service_link_evidence',
   ];
 
   for (const table of tables) {

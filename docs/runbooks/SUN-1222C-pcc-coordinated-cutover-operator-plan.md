@@ -355,3 +355,44 @@ PREEXISTING_BACKLOG_NATURALLY_DRAINABLE=NO
 STALE_ORPHAN_COUNT=17
 NEXT_REQUIRED_CHECKPOINT=SUN-1222C-PCC-LIFECYCLE-MODEL-GAP-REMEDIATION
 ```
+
+## Model-C lifecycle remediation — implemented locally, not deployed
+
+The source/schema/recovery checkpoint implemented additive migration `0010`,
+append-only `payment_attempt_reconciliations`, durable
+`payment_workflow_owner_intents`, durable `payment_service_link_evidence`, the
+scheduled deterministic owner-intent scanner, provider-failure reconciliation,
+and idempotent `settled_external → link_verified → settled` finalization.
+Evidence: `docs/reports/SUN-1222C-pcc-lifecycle-model-gap-remediation.md`.
+
+This runbook remains **NOT AUTHORIZED FOR AUTOMATIC EXECUTION**. Migration 0010
+has not been applied to production; no legacy classification has been inserted;
+and the new public/paid source and recovery cron have not been deployed.
+
+The old runtimes are compatible with migration 0010. The new runtimes fail
+closed without it. Under a future explicit production checkpoint, the order is:
+
+1. `npx wrangler d1 migrations apply siteborne-utility --remote`;
+2. prove old public/paid runtime health and topology unchanged;
+3. run the 17-row tool with `--dry-run --remote`, review all preimages, then
+   separately authorize the same command with `--apply --remote`;
+4. require `RAW_NONTERMINAL_LIFECYCLE_COUNT=17` and
+   `ACTIVE_CUTOVER_BLOCKING_WORK_COUNT=0` for the explicit governed legacy set;
+5. upload/qualify and deploy the remediated public normal/quiescence lineage,
+   including the public owner-recovery cron;
+6. close paid admission; and
+7. require the ownership-aware gate below before paid-runtime deployment.
+
+```text
+PUBLIC_PAID_ADMISSION_CLOSED=YES
+OWNER_INTENT_PENDING_COUNT=0
+ACTIVE_WORKFLOW_OWNED_ATTEMPTS=0
+UNRECONCILED_ACTIONABLE_ATTEMPTS=0
+UNRESOLVED_SETTLEMENT_FINALIZATION_COUNT=0
+ACTIVE_CUTOVER_BLOCKING_WORK_COUNT=0
+```
+
+Never substitute `RAW_NONTERMINAL_LIFECYCLE_COUNT=0`: the reviewed 17 retain
+their truthful historical stages. Unknown, unclassified, ownerless-new, pending,
+retry-exhausted, active-owned, and current settlement-finalization records all
+block. Age is never an exception.

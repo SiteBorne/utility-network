@@ -290,6 +290,30 @@ export function createInProcessWorkflowBinding(
               return { status: 'written' as const, receiptId };
             },
           },
+          finalization: {
+            async recordProviderFailure() {},
+            async recordSettlementFinalizationUnresolved() {},
+            async persistLinkEvidence() {},
+            async finalizeSettled(paymentIdentifier) {
+              const stage = await paymentAttempts.getLifecycleStage(paymentIdentifier);
+              if (stage === 'settled_external') {
+                await paymentAttempts.transitionLifecycleStage(
+                  paymentIdentifier,
+                  'settled_external',
+                  'link_verified'
+                );
+              }
+              if (
+                (await paymentAttempts.getLifecycleStage(paymentIdentifier)) === 'link_verified'
+              ) {
+                await paymentAttempts.transitionLifecycleStage(
+                  paymentIdentifier,
+                  'link_verified',
+                  'settled'
+                );
+              }
+            },
+          },
         },
       };
 
