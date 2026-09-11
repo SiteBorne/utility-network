@@ -1,6 +1,16 @@
 # SUN-1222C PCC Coordinated Cutover — Operator Plan
 
 > ## ⛔ NOT AUTHORIZED FOR EXECUTION
+> **2026-09-10 R6 GOVERNANCE HOLD:** Do not execute this plan with candidate
+> `f7bf204d-5041-45c0-bb8c-4c3f776d7c9e`. The feature-authorization review
+> in `docs/reports/SUN-1222C-r6-feature-cutover-authorization.md` authorized
+> only `verify_agent_output.v2` and `web_context_verified.v2`; it blocked
+> `company_evidence_graph.v2`, `document_evidence_json.v2`, and
+> `document-artifact-upload`. Because all five flags are true in the immutable
+> candidate, a new feature-scoped candidate is required before any canary or
+> cutover operation. The command examples below are historical design material,
+> not current operator commands.
+>
 > No stage below may run until the specific authorization it requires
 > (see `docs/reports/SUN-1222C-pcc-coordinated-cutover-authorization-design.md`
 > §15-16) has been explicitly given. This plan spans three independent
