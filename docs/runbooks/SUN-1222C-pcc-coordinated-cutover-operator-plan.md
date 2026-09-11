@@ -1,191 +1,245 @@
 # SUN-1222C PCC Coordinated Cutover — Operator Plan
 
-> ## ⛔ CANARY EXECUTION STILL REQUIRES SEPARATE AUTHORIZATION
+> ## ⛔ PERCENTAGE CANARY IS RETIRED
 >
-> **2026-09-10/11 FEATURE-SCOPE HOLD:** Candidate
-> `f7bf204d-5041-45c0-bb8c-4c3f776d7c9e` **MUST NOT BE CANARIED OR PROMOTED**.
-> Its immutable config enables all five capabilities even though the R6 decision
-> authorized only `verify_agent_output.v2` and `web_context_verified.v2`. It
-> remains retained as immutable evidence but is no longer a current deployment
-> member.
+> The former executable 5% → 25% → 50% → 100% sequence is superseded and must
+> not be run. Baseline `db7054c9` and feature-scoped candidate `b6b7477f` expose
+> different MCP and price contracts. SITEBORNE has no universal stable
+> pre-routing client identity, so IP/cookie/header affinity cannot eliminate the
+> proven cross-version skew for ordinary machine agents.
 >
-> Feature-scoped candidate `b6b7477f-94e5-4ee5-9ff3-cc0abb69ecca` (version 62)
-> is the only candidate eligible for a future 5%/25%/50%/100% rollout. It was
-> exact-version qualified at 0% with company, document, and artifact ingress
-> disabled. The current deployment remains `db7054c9...@100%` plus
-> `b6b7477f...@0%`. This qualification does **not** itself authorize the 5%
-> stage. The older command examples below are historical design material and
-> must not be executed with an old candidate ID or the old all-five variable
-> set.
+> The selected strategy is a separately authorized **atomic public cutover**:
+> `db7054c9@100% + b6b7477f@0%` → `b6b7477f@100% + db7054c9@0%`, with immediate
+> exact restoration on failure. This document is a plan, not traffic
+> authorization.
 >
-> No stage below may run until the specific authorization it requires (see
-> `docs/reports/SUN-1222C-pcc-coordinated-cutover-authorization-design.md`
-> §15-16) has been explicitly given. This plan spans three independent
-> authorization boundaries — A (candidate upload), B (traffic cutover), C
-> (paid-runtime deploy) — do not treat approval of one as approval of another.
->
-> **`POST_PAID_DEPLOY_PUBLIC_ONLY_ROLLBACK_SAFE=NO`** — once Stage 3 (paid-
-> runtime deploy) executes, rolling public traffic back to `db7054c9` alone
-> recreates the proven `result: undefined` regression. If Stage 3 must be
-> undone, roll back the **paid runtime first** (to `d62011b9`), confirm
-> NEW_PUBLIC + OLD_PAID is healthy, only then consider any public-side change.
+> Evidence: `docs/reports/SUN-1222C-pcc-canary-version-skew-remediation.md`.
 
-## Pre-flight (read-only, any time)
+## Frozen identities and boundaries
+
+```text
+PUBLIC_BASELINE=db7054c9-76ee-4830-aabe-8a4542261b6a
+FEATURE_SCOPED_CANDIDATE=b6b7477f-94e5-4ee5-9ff3-cc0abb69ecca
+OLD_PAID_RUNTIME=d62011b9-6219-47e1-8cf9-5006776cfb50
+CANDIDATE_ENABLED=verify_agent_output.v2,web_context_verified.v2
+CANDIDATE_DISABLED=company_evidence_graph.v2,document_evidence_json.v2,document-artifact-upload
+PERCENTAGE_CANARY_RETIRED=YES
+```
+
+Three independent authorities remain mandatory:
+
+1. quiescence candidate prebuild/upload;
+2. atomic public traffic cutover; and
+3. paid-runtime cutover after public stabilization, quiescence, and drain.
+
+Approval of one does not authorize another. Do not create a Transform Rule,
+change routes/DNS, upload a public version, move traffic, deploy the paid
+runtime, submit payment, call a provider, create a Workflow, settle, or activate
+mTLS without the checkpoint that names that mutation.
+
+After the paid runtime becomes new, public-only rollback is forbidden. Restore
+the paid runtime to `d62011b9` first, prove new public + old paid healthy, and
+only then restore public baseline traffic if still required.
+
+## Preflight — read only
 
 ```bash
 set -euo pipefail
 cd "/Users/meta4ickal/SITEBORNE Utility Network"
 git rev-parse HEAD
 git status --short
+npx wrangler --version
 npx wrangler deployments status --name siteborne-utility-edge
-npx wrangler deployments status --name siteborne-paid-continuation-runtime --config wrangler.paid-continuation-runtime.toml
+npx wrangler deployments status \
+  --name siteborne-paid-continuation-runtime \
+  --config wrangler.paid-continuation-runtime.toml
 ```
 
-Expected: HEAD reachable from main, tree clean, public API 100% on `db7054c9`
-with feature-scoped candidate `b6b7477f` at 0%, and paid runtime 100% on
-`d62011b9`. If any differs from the plan document's recorded topology, STOP —
-re-run the reconciliation checkpoint before proceeding.
+Expected: clean `main`; Wrangler `4.119.0`; public composition exactly
+`db7054c9...@100% + b6b7477f...@0%`; paid runtime exactly `d62011b9...@100%`.
+Stop on any drift.
 
----
+## Stage A — prebuild quiescence derivative unassigned
 
-## STAGE A — new candidate upload (0% traffic) — requires Authorization A
+**Required checkpoint:** `SUN-1222C-PCC-QUIESCENCE-CANDIDATE-PREBUILD`
 
-```
-STEP=A.1
-COMMAND=npx wrangler versions upload --name siteborne-utility-edge \
-  --tag sun1222c-pcc-cutover-candidate \
-  --message "SUN-1222C PCC cutover candidate: HEAD 9a8e6f9f... + R6 frozen 10-var set" \
-  --var PAID_ROUTES_ENABLED:true \
-  --var PRODUCTION_ENABLED:true \
-  --var HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP:true \
-  --var PRODUCTION_CDP_CREDENTIALS_APPROVED:true \
-  --var PAYMENT_ENVIRONMENT:production \
-  --var VERIFY_V2_CDP_ROUTE_ENABLED:true \
-  --var WEB_CONTEXT_V2_CDP_ROUTE_ENABLED:true \
-  --var DOCUMENT_EVIDENCE_JSON_V2_CDP_ROUTE_ENABLED:true \
-  --var DOCUMENT_ARTIFACT_UPLOAD_ROUTE_ENABLED:true \
-  --var COMPANY_EVIDENCE_GRAPH_V2_CDP_ROUTE_ENABLED:true \
-  --var SELLER_WALLET_ADDRESS:<exact live value from d3472f58 readback>
-EXPECTED_OUTPUT=New Version ID printed; 0% traffic (no deployment created yet)
-STOP_IF=command errors, or any --var value does not match the live-verified R6 set exactly
-ROLLBACK_COMMAND=none needed — an unused 0%-traffic version has no live effect; simply do not deploy it
+Create exactly one immutable public-Worker version from the same runtime source
+and bindings as `b6b7477f`, with exactly one ordinary-variable delta:
+
+```text
+PAID_ROUTES_ENABLED=true -> false
 ```
 
-```
-STEP=A.2 (read-only)
-COMMAND=npx wrangler versions view <NEW_VERSION_ID> --name siteborne-utility-edge
-EXPECTED_OUTPUT=all 11 vars present, values match A.1 exactly
-HOW_TO_INTERPRET=this is the frozen artifact that stages B/C will reference by ID — record <NEW_VERSION_ID> literally, do not re-derive it later
+All other variables, secret names, bindings, source, routes, and domains must
+match. Upload only; do not deploy it. Record `<QUIESCENCE_VERSION_ID>` and prove
+it is unassigned. No literal upload command belongs here until that checkpoint
+has reconstructed and dry-run the exact full variable map.
+
+## Stage B — final exact-version candidate qualification
+
+**Read-only after separate qualification authority.** Keep normal topology at
+100%/0%. Use a documented version override and authoritative `cf-ray`/tail
+correlation to `b6b7477f` for:
+
+- `/health` and `/ready`;
+- Agent Card, JWKS, and JWS verification;
+- MCP modern and legacy initialize/list plus bounded unpaid payment boundary;
+- A2A discovery and closed SendMessage liveness;
+- verify/web enabled at exactly 17000/8000 atomic; and
+- company/document/artifact surfaces disabled before state.
+
+Do not submit payment, call a useful provider, create a Workflow, or settle.
+
+## Stage C — baseline metrics and lifecycle snapshot
+
+Before traffic authority is exercised, capture:
+
+- current public and paid-runtime deployments;
+- active JSON tail with script-version attribution;
+- baseline health/ready/MCP/A2A/HTTP outcome rates;
+- PaymentRequired, quote, audit, payment-attempt, Workflow, provider, and
+  settlement-alert state; and
+- this read-only lifecycle query:
+
+```bash
+npx wrangler d1 execute siteborne-utility --remote --command \
+  "SELECT lifecycle_stage, COUNT(*) AS n FROM payment_attempts WHERE lifecycle_stage IN ('acquired','verified','executed','settlement_pending','settled_external','link_verified','settlement_failed') GROUP BY lifecycle_stage ORDER BY lifecycle_stage;"
 ```
 
-## STAGE B — qualify at 0%, then staged public cutover — requires Authorization B
+Existing in-flight rows do not block the public-only transition while the old
+paid runtime remains, but they continue to block paid-runtime deployment.
 
-```
-STEP=B.1 (read-only)
-COMMAND=curl -s https://<preview-url-for-NEW_VERSION_ID>/.well-known/agent-card.json | jq .
-EXPECTED_OUTPUT=valid Agent Card JSON, securitySchemes.mtls ABSENT
-HOW_TO_INTERPRET=if mtls scheme present, STOP — truthfulness gate regression, do not proceed to any traffic stage
-```
+## Stage D — atomic public cutover
 
-Repeat equivalent read-only probes for: `/health`, `/ready`,
-`/.well-known/jwks.json`, JWS verify, A2A `SendMessage` (expect
-`TASK_STATE_INPUT_REQUIRED`), MCP discovery, and one unpaid POST per paid route
-(expect `402 PaymentRequired`). All must pass before B.2.
+**Required checkpoint:** `SUN-1222C-PCC-ATOMIC-PUBLIC-CUTOVER-AUTHORIZATION`
 
-```
-STEP=B.2
-COMMAND=npx wrangler versions deploy <NEW_VERSION_ID>@5 db7054c9-76ee-4830-aabe-8a4542261b6a@95 --name siteborne-utility-edge --message "SUN-1222C stage B.2: 5% canary"
-EXPECTED_OUTPUT=traffic split confirmed 5/95
-STOP_IF=command errors, or post-deploy `deployments status` doesn't show 5/95
-ROLLBACK_COMMAND=npx wrangler versions deploy db7054c9-76ee-4830-aabe-8a4542261b6a@100 --name siteborne-utility-edge --message "SUN-1222C stage B rollback: revert to db7054c9"
+Precompute and dry-run semantics before executing either command. The future
+authorized cutover command is:
+
+```bash
+npx wrangler versions deploy \
+  b6b7477f-94e5-4ee5-9ff3-cc0abb69ecca@100% \
+  db7054c9-76ee-4830-aabe-8a4542261b6a@0% \
+  --name siteborne-utility-edge \
+  --message "SUN-1222C atomic public cutover: b6b7477f 100%; retain db7054c9 at 0% for immediate restore" \
+  --yes
 ```
 
-Observe for the gate window in the plan doc §5 (≥30 min, ≥500 requests, 5xx-rate
-check, live A2A/MCP/x402-unpaid probes). On pass, repeat B.2's pattern for 25%,
-then 50%, then:
+The exact emergency restoration command is:
 
-```
-STEP=B.3
-COMMAND=npx wrangler versions deploy <NEW_VERSION_ID>@100 --name siteborne-utility-edge --message "SUN-1222C stage B.3: 100% cutover, db7054c9 -> 0%"
-EXPECTED_OUTPUT=100/0 confirmed; db7054c9 and d3472f58 both at 0%
-STOP_IF=any post-cutover health/Agent Card/A2A/MCP/x402 check fails
-ROLLBACK_COMMAND=npx wrangler versions deploy db7054c9-76ee-4830-aabe-8a4542261b6a@100 --name siteborne-utility-edge --message "SUN-1222C stage B.3 rollback"
-```
-
-This is the point at which the feature-scoped candidate's two authorized
-services, `verify_agent_output.v2` and `web_context_verified.v2`, become normal
-production surfaces. `company_evidence_graph.v2`, `document_evidence_json.v2`,
-and document-artifact upload must remain disabled. If any of those three appears
-execution-available at any stage, roll back and STOP. The 100% promotion still
-requires its own explicit traffic authorization; the present feature-scope
-qualification does not supply it.
-
-## STAGE C — quiesce, drain, deploy paid runtime, restore — requires Authorization C
-
-```
-STEP=C.1
-COMMAND=npx wrangler versions upload --name siteborne-utility-edge \
-  --tag sun1222c-pcc-cutover-quiesced \
-  --message "SUN-1222C stage C.1: temporary paid-admission quiesce" \
-  --var PAID_ROUTES_ENABLED:false \
-  [... all other --var flags identical to STAGE A.1 ...]
-EXPECTED_OUTPUT=New Version ID printed (<QUIESCE_VERSION_ID>), 0% traffic
-STOP_IF=any --var besides PAID_ROUTES_ENABLED differs from the live 100% version
-ROLLBACK_COMMAND=none — unused version, no live effect until deployed
+```bash
+npx wrangler versions deploy \
+  db7054c9-76ee-4830-aabe-8a4542261b6a@100% \
+  b6b7477f-94e5-4ee5-9ff3-cc0abb69ecca@0% \
+  --name siteborne-utility-edge \
+  --message "SUN-1222C atomic public restore: db7054c9 100%; b6b7477f 0%" \
+  --yes
 ```
 
-```
-STEP=C.2
-COMMAND=npx wrangler versions deploy <QUIESCE_VERSION_ID>@100 --name siteborne-utility-edge --message "SUN-1222C stage C.2: close paid-route admission for in-flight drain"
-EXPECTED_OUTPUT=100% traffic on quiesce version; a live unpaid/paid POST to any of the 5 paid routes now returns 404 (c.notFound()); health/Agent Card/A2A/MCP/discovery unaffected
-STOP_IF=anything other than the 5 paid routes changes behavior
-ROLLBACK_COMMAND=npx wrangler versions deploy <NEW_VERSION_ID>@100 --name siteborne-utility-edge --message "SUN-1222C stage C.2 rollback: restore paid admission, abort quiesce"
+Do not use generic rollback if it would collapse the explicit two-version
+composition. Immediately read back the deployment. Stop and restore if normal
+traffic is not exactly 100% candidate / 0% baseline.
+
+## Stage E — immediate normal-routing smoke
+
+Against normal `https://utility.siteborne.net` routing, require 100% tail
+attribution to `b6b7477f` and:
+
+```text
+HEALTH=PASS
+READY=PASS
+AGENT_CARD=PASS
+JWKS=PASS
+JWS=PASS
+MCP_MODERN=PASS
+MCP_LEGACY=PASS
+A2A=PASS
+VERIFY_PRICE_ATOMIC=17000
+WEB_PRICE_ATOMIC=8000
+COMPANY_DISABLED=YES
+DOCUMENT_DISABLED=YES
+ARTIFACT_DISABLED=YES
 ```
 
-```
-STEP=C.3 (read-only, wait 60s after C.2 before running)
-COMMAND=wrangler d1 execute <DB_BINDING_NAME> --remote --command "SELECT lifecycle_stage, COUNT(*) AS n FROM payment_attempts WHERE lifecycle_stage IN ('acquired','verified','executed','settlement_pending','settled_external','link_verified','settlement_failed') GROUP BY lifecycle_stage;"
-EXPECTED_OUTPUT=empty result set (all counts zero)
-HOW_TO_INTERPRET=re-run this query every few minutes until it returns empty; do not proceed to C.4 while any nonterminal row exists. If stuck >30 min, treat as F7 in the plan's failure matrix — investigate the specific row, do not force-deploy.
+Only bounded, zero-economic probes are allowed unless another checkpoint says
+otherwise. Any wrong version, protocol, price, feature, or safety result invokes
+the Stage D emergency restoration immediately.
+
+## Stage F — governed public stabilization
+
+Both floors are mandatory:
+
+```text
+MIN_DURATION=60 minutes
+MIN_CANDIDATE_ATTRIBUTABLE_NORMAL_REQUESTS=1000
 ```
 
-```
-STEP=C.4
-COMMAND=npx wrangler deployments status --name siteborne-paid-continuation-runtime --config wrangler.paid-continuation-runtime.toml
-EXPECTED_OUTPUT=confirms current 100% version = d62011b9-6219-47e1-8cf9-5006776cfb50 (capture this literally as PAID_RUNTIME_PRE_VERSION before C.5)
-HOW_TO_INTERPRET=this is the exact rollback target if C.5/C.6 fails
+Zero failures in 1,000 idealized independent requests corresponds to an
+approximate 95% upper bound of 0.3% for an unseen failure rate. Traffic is not
+perfectly independent, so this is a minimum, not a guarantee. Sixty minutes adds
+a time-based window for asynchronous Workflow/alert behavior. Continue until
+both floors pass; do not waive the request floor because the clock expired.
+
+Require throughout:
+
+- candidate normal attribution 100%, baseline normal attribution 0%;
+- health/ready/Agent Card/JWKS/JWS/MCP/A2A pass;
+- verify and web remain enabled with exact final prices;
+- company, document, and artifact remain disabled;
+- no unexpected 5xx increase or semantic MCP/A2A error;
+- no price inconsistency, payment-ownership anomaly, provider/Workflow anomaly,
+  or settlement-alert anomaly; and
+- paid runtime remains `d62011b9@100%`.
+
+Any hard failure restores Stage D's exact baseline composition immediately;
+there is no minimum wait before rollback.
+
+## Stage G — introduce and qualify quiescence derivative
+
+Only after Stage F passes, use a separately authorized deployment to replace the
+0% baseline member with `<QUIESCENCE_VERSION_ID>@0%` while keeping
+`b6b7477f@100%`. Exact-version qualify the quiescence derivative. This changes
+deployment membership but not normal traffic and requires its own command proof.
+
+## Stage H — quiesce paid admission
+
+Under separate authority, atomically deploy the qualified quiescence version at
+100%, retaining `b6b7477f@0%` as the exact restoration target. Prove every paid
+route is closed while discovery and zero-economic health surfaces remain
+correct. Restore `b6b7477f@100%` immediately on unexpected behavior.
+
+## Stage I — drain
+
+After propagation, repeat the lifecycle query until the separately defined drain
+predicate is satisfied. Do not force-deploy around stuck rows. Investigate and
+stop if the drain exceeds its governed bound.
+
+## Stage J — paid-runtime cutover
+
+Only after quiescence and drain, deploy the new paid runtime under its own
+checkpoint and record the new immutable version. On failure, roll the paid
+runtime back to `d62011b9` first. Keep paid admission closed until worker-to-
+worker health, Workflow/PCC structure, provider boundaries, and settlement
+ownership are proven.
+
+## Stage K — restore admission and final confirmation
+
+Only after the new paid runtime qualifies, restore `b6b7477f@100%`. Re-run the
+candidate smoke set and settlement invariant:
+
+```text
+PUBLIC_API_SETTLE_CALLSITES=0
+MCP_ADAPTER_SETTLE_CALLSITES=0
+DEDICATED_WORKFLOW_SETTLE_CALLSITES=1
+TOTAL_PRODUCTION_SETTLE_CALLSITES=1
 ```
 
-```
-STEP=C.5
-COMMAND=cd apps/paid-runtime && npx wrangler deploy --config wrangler.paid-continuation-runtime.toml
-EXPECTED_OUTPUT=new 100% version deployed (paid runtime has no traffic-split model — plain deploy is all-or-nothing); record the new Version ID
-STOP_IF=command errors, or post-deploy `deployments status` doesn't show the new version at 100%
-ROLLBACK_COMMAND=npx wrangler rollback <PAID_RUNTIME_PRE_VERSION> --name siteborne-paid-continuation-runtime --config wrangler.paid-continuation-runtime.toml --message "SUN-1222C stage C.5 rollback: restore d62011b9"
-```
+Stop after final readback. Do not provision mTLS or create a real payment merely
+to test the release.
 
+```text
+QUIESCENCE_PREBUILD_EXECUTED=NO
+QUIESCENCE_STILL_REQUIRED_BEFORE_PAID_RUNTIME_DEPLOY=YES
+NEXT_TRAFFIC_STAGE_AUTHORIZED=NO
+NEXT_REQUIRED_CHECKPOINT=SUN-1222C-PCC-QUIESCENCE-CANDIDATE-PREBUILD
 ```
-STEP=C.6 (read-only)
-COMMAND=(worker-to-worker binding health check + one structural PCC-shape probe against the new paid runtime, via a diagnostic path that does not create a real payment)
-EXPECTED_OUTPUT=binding reachable, PCC document shape matches contracts/releases/2.0.0
-STOP_IF=binding unreachable, or shape does not validate — roll back per C.5's ROLLBACK_COMMAND immediately, then keep paid admission closed (do not run C.7) until resolved
-```
-
-```
-STEP=C.7
-COMMAND=npx wrangler versions deploy <NEW_VERSION_ID>@100 --name siteborne-utility-edge --message "SUN-1222C stage C.7: restore paid-route admission, PAID_ROUTES_ENABLED=true, Pair D live"
-EXPECTED_OUTPUT=100% traffic restored to the original (non-quiesced) candidate; paid routes respond normally again
-STOP_IF=any post-restore anomaly in PCC shape or settlement topology — this is failure case F10 in the plan document: roll back paid runtime to d62011b9 immediately and escalate, do not attempt a scripted fix
-```
-
-## Post-cutover confirmation (read-only)
-
-```
-STEP=D.1
-COMMAND=re-run the full 0%-qualification probe set (B.1) against the now-100% NEW_PUBLIC, plus the settle-sole-ownership invariant and an mTLS-absence check
-EXPECTED_OUTPUT=all pass; PUBLIC_API_SETTLE_CALLSITES=0, MCP_ADAPTER_SETTLE_CALLSITES=0, DEDICATED_WORKFLOW_SETTLE_CALLSITES=1, TOTAL=1; securitySchemes.mtls absent
-HOW_TO_INTERPRET=this is the final structural qualification of Pair D (NEW_PUBLIC + NEW_PAID) in live production
-```
-
-STOP after D.1. Do not provision mTLS. Do not begin legal-identity work. Do not
-intentionally generate a real payment to "test" any of the above.
