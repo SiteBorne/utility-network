@@ -1745,3 +1745,12 @@ its telemetry/retry fan-out from normal pre-402 handling, retains authenticated
 membership comparison only as a separately authorized qualification primitive,
 and requires a new immutable candidate under a future checkpoint. It does not
 rewrite or retroactively pass the immutable `d155c9a1` qualification attempt.
+
+### Remediated candidate continuation
+
+The authorized successor upload, 0%-membership replacement, and exact-version
+qualification are recorded in
+[`SUN-1222C-pcc-remediated-candidate-upload-and-a2-replacement.md`](./SUN-1222C-pcc-remediated-candidate-upload-and-a2-replacement.md).
+That report preserves every failure above, identifies immutable version
+`f7bf204d-5041-45c0-bb8c-4c3f776d7c9e` as the remediated successor, and
+contains the bounded MCP/REST and document-artifact state accounting.
