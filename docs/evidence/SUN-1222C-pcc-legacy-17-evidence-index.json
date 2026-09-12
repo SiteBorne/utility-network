@@ -1,0 +1,126 @@
+{
+  "schema_version": "sun1222c-legacy-evidence-v1",
+  "source_forensic_commit": "5ee27296557a8b181ca350ea4bdbf077a83d62b7",
+  "source_report": "docs/reports/SUN-1222C-pcc-lifecycle-backlog-reconciliation.md",
+  "entries": [
+    {
+      "evidence_id": "sun1222c-legacy-01",
+      "payment_attempt_id": "57a2bcdb-3d47-4369-b871-2d7befec555c",
+      "correlated_job_id": "33c5387f-4abb-49af-95f6-ef929ba83ad9",
+      "classification": "legacy_execution_failed_unsettled",
+      "reason_code": "provider_execution_failed_no_settlement"
+    },
+    {
+      "evidence_id": "sun1222c-legacy-02",
+      "payment_attempt_id": "a5928987-1c4c-4fd0-8e91-5095b955dda6",
+      "correlated_job_id": "c51a822e-c110-43e1-ac6e-cb1a5444315e",
+      "classification": "legacy_execution_failed_unsettled",
+      "reason_code": "provider_execution_failed_no_settlement"
+    },
+    {
+      "evidence_id": "sun1222c-legacy-03",
+      "payment_attempt_id": "bff2bc21-3b12-417c-ac35-4be05c212936",
+      "correlated_job_id": "11fde704-fce5-4ef0-b627-c0290e20ead8",
+      "classification": "legacy_execution_failed_unsettled",
+      "reason_code": "provider_execution_failed_no_settlement"
+    },
+    {
+      "evidence_id": "sun1222c-legacy-04",
+      "payment_attempt_id": "e8d2607b-c3e3-4690-825a-b919bdaa9a48",
+      "correlated_job_id": "ee04c4bf-1b74-44c6-a1ab-00edc235b4a9",
+      "classification": "legacy_execution_failed_unsettled",
+      "reason_code": "provider_execution_failed_no_settlement"
+    },
+    {
+      "evidence_id": "sun1222c-legacy-05",
+      "payment_attempt_id": "3a728ffc-5f1b-4b12-8145-c84f25fc9330",
+      "correlated_job_id": "de147124-c264-452b-b784-86ee4422ecd1",
+      "classification": "legacy_execution_outcome_unknown",
+      "reason_code": "execution_started_outcome_unproven"
+    },
+    {
+      "evidence_id": "sun1222c-legacy-06",
+      "payment_attempt_id": "123c4f61-2090-40fb-b918-7b2e1f187af0",
+      "correlated_job_id": "8187902a-c3bf-4c3f-89c0-3d84ecd72d05",
+      "classification": "legacy_verified_unrouted_unsettled",
+      "reason_code": "verified_locked_never_routed"
+    },
+    {
+      "evidence_id": "sun1222c-legacy-07",
+      "payment_attempt_id": "abc98f87-9164-4d97-98d3-c24d4367f0a6",
+      "correlated_job_id": "49a43a08-5479-4087-8ada-1afcf8074120",
+      "classification": "legacy_execution_failed_unsettled",
+      "reason_code": "provider_execution_failed_no_settlement"
+    },
+    {
+      "evidence_id": "sun1222c-legacy-08",
+      "payment_attempt_id": "eddedd77-86c0-47c6-8ec3-11f1354dddc5",
+      "correlated_job_id": "3898e160-edd7-4bbf-adcb-80ac4b75f301",
+      "classification": "legacy_execution_failed_unsettled",
+      "reason_code": "provider_execution_failed_no_settlement"
+    },
+    {
+      "evidence_id": "sun1222c-legacy-09",
+      "payment_attempt_id": "56d84294-eff5-4f92-ae91-d61ceca5339a",
+      "correlated_job_id": "64a321cb-f1d2-495d-a405-094b631d4170",
+      "classification": "legacy_settled_external_finalization_incomplete",
+      "reason_code": "settlement_and_result_proven_link_receipt_incomplete"
+    },
+    {
+      "evidence_id": "sun1222c-legacy-10",
+      "payment_attempt_id": "3706d9a9-789e-4e07-bab5-7b3174e11f24",
+      "correlated_job_id": "cdc7b707-cb2c-41c5-a503-360bd95621d8",
+      "classification": "legacy_execution_failed_unsettled",
+      "reason_code": "execution_failed_pre_provider_no_settlement"
+    },
+    {
+      "evidence_id": "sun1222c-legacy-11",
+      "payment_attempt_id": "f964e050-abd4-4f27-b04e-dc06eaf219ed",
+      "correlated_job_id": "8c3add98-6d41-4d12-8838-7acd3a443ef4",
+      "classification": "legacy_execution_failed_unsettled",
+      "reason_code": "execution_failed_pre_provider_no_settlement"
+    },
+    {
+      "evidence_id": "sun1222c-legacy-12",
+      "payment_attempt_id": "7176fb23-7c68-451e-b0a3-1e93f54ef8fe",
+      "correlated_job_id": "63dfe74b-6414-4cfa-9dfa-0fb2b7a83aa0",
+      "classification": "legacy_execution_failed_unsettled",
+      "reason_code": "provider_execution_failed_no_settlement"
+    },
+    {
+      "evidence_id": "sun1222c-legacy-13",
+      "payment_attempt_id": "0ada4abc-a437-428e-803f-3dfb68f915f9",
+      "correlated_job_id": "72efabd1-062b-4fca-9f04-68525b5d1446",
+      "classification": "legacy_execution_failed_unsettled",
+      "reason_code": "provider_execution_failed_no_settlement"
+    },
+    {
+      "evidence_id": "sun1222c-legacy-14",
+      "payment_attempt_id": "d275356c-f6f8-46f7-8a2a-cabe26d32185",
+      "correlated_job_id": "70434d7b-35d0-4658-ba5c-b324b210bd2a",
+      "classification": "legacy_execution_failed_unsettled",
+      "reason_code": "provider_execution_failed_no_settlement"
+    },
+    {
+      "evidence_id": "sun1222c-legacy-15",
+      "payment_attempt_id": "ab07fd69-e50c-4abf-ae5b-1fb8476230b8",
+      "correlated_job_id": "d6563fbb-71ba-4509-8c01-a9e674cba52d",
+      "classification": "legacy_execution_failed_unsettled",
+      "reason_code": "provider_execution_failed_no_settlement"
+    },
+    {
+      "evidence_id": "sun1222c-legacy-16",
+      "payment_attempt_id": "5be6b110-62fb-40a4-8bda-cf4698645d71",
+      "correlated_job_id": "5a87c9c5-995f-4173-8015-596257a41ea2",
+      "classification": "legacy_execution_failed_unsettled",
+      "reason_code": "provider_execution_failed_no_settlement"
+    },
+    {
+      "evidence_id": "sun1222c-legacy-17",
+      "payment_attempt_id": "22d6df47-41db-49a6-8eff-3750bd5539c9",
+      "correlated_job_id": "07b7655b-3731-40e2-b376-30302333497c",
+      "classification": "legacy_execution_failed_unsettled",
+      "reason_code": "provider_execution_failed_no_settlement"
+    }
+  ]
+}
