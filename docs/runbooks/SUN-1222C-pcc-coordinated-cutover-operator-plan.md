@@ -506,6 +506,60 @@ See `docs/reports/SUN-1222C-tdqs-v1.2-credentialed-score.md`. This score clears
 the metadata-quality prerequisite only; it does not itself authorize any Worker
 upload. This runbook remains **NOT AUTHORIZED FOR AUTOMATIC EXECUTION**.
 
+## Model-C public normal and quiescence candidate build — completed
+
+Under `SUN-1222C-PCC-MODEL-C-PUBLIC-NORMAL-AND-QUIESCENCE-CANDIDATE-BUILD`, two
+immutable public-Worker versions were uploaded from the TDQS-qualified
+Model-C source authority `896d75a343d5a4ac2690cf60e1259828482a8a63`, both
+unassigned to any deployment:
+
+```text
+MODEL_C_NORMAL_VERSION_ID=0fd6d9bd-8d29-4b86-a0a6-22634ffeda04
+MODEL_C_NORMAL_TAG=sun1222c-model-c-feature-scoped-normal-candidate
+MODEL_C_QUIESCENCE_VERSION_ID=afe08ea7-4a64-49a2-a16c-e44fc4a50753
+MODEL_C_QUIESCENCE_TAG=sun1222c-model-c-feature-scoped-quiescence-candidate
+NEW_NORMAL_VS_NEW_QUIESCENCE_ONLY_VAR_DELTA=PAID_ROUTES_ENABLED:true→false
+```
+
+Both preserve b6's exact 16 ordinary vars (except that one intentional
+delta), 13 secret names, all bindings (including the same D1 database id
+`efe23c42-cbcc-47c2-9b28-922a541bdcdd`), compatibility date/flags, and
+feature scope (`verify_agent_output.v2`/`web_context_verified.v2` enabled;
+`company_evidence_graph.v2`/`document_evidence_json.v2`/
+`document-artifact-upload` disabled). Both additionally expose a `scheduled`
+handler (the candidate's owner-intent recovery scanner) that is present in
+the version but not wired to any live Cloudflare cron — schedules on
+`siteborne-utility-edge` were confirmed empty both before and after the
+uploads, and `wrangler versions upload`'s own output confirms trigger sync
+requires a separate, unexecuted `wrangler triggers deploy`.
+
+Deployment membership, public traffic, the paid runtime, and the settlement
+alert worker were all reconfirmed unchanged immediately after both uploads:
+
+```text
+PUBLIC: b6b7477f@100% + d28f30c5@0% (unchanged)
+PAID RUNTIME: d62011b9@100% (unchanged)
+SETTLEMENT ALERT: 8fe32c69@100% (unchanged)
+MODEL_C_NORMAL_CURRENT_DEPLOYMENT_MEMBER=NO
+MODEL_C_QUIESCENCE_CURRENT_DEPLOYMENT_MEMBER=NO
+```
+
+Runtime qualification for both new versions remains
+`DEFERRED_UNTIL_DEPLOYMENT_MEMBERSHIP` — uploading and reading back an
+unassigned version is not a claim of exact runtime qualification. No D1
+write, trigger mutation, payment, provider call, Workflow creation, or
+settlement occurred. Full evidence:
+`docs/reports/SUN-1222C-pcc-model-c-public-normal-and-quiescence-candidate-build.md`.
+
+This runbook remains **NOT AUTHORIZED FOR AUTOMATIC EXECUTION**. The next
+required checkpoint, `SUN-1222C-PCC-MODEL-C-PUBLIC-NORMAL-CUTOVER-AND-
+QUIESCENCE-QUALIFICATION`, must separately authorize replacing the current
+d28 0% deployment member with the new Model-C normal version at 0%, its
+exact-version qualification, and — only after that — promotion to 100%. A
+later stage must separately authorize placing the new Model-C quiescence
+version at 0% for its own exact qualification before quiescing. Neither is
+authorized by this section.
+
 ## Model-C production migration and legacy classification — completed
 
 Under fresh, explicit production-data authority, migration 0010 applied once and
