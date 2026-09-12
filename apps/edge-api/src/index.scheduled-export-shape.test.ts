@@ -63,11 +63,7 @@ describe('index.ts default export — canonical ExportedHandler shape', () => {
     // own guard clause makes this a safe no-op; we are proving *wiring*, not
     // re-testing the recovery function's internal behavior.
     const env = baseEnv({ DB: undefined, PAID_CONTINUATION_WORKFLOW: undefined } as Partial<Env>);
-    defaultExport.scheduled(
-      { scheduledTime: Date.now(), cron: '* * * * *' },
-      env,
-      ctx
-    );
+    defaultExport.scheduled({ scheduledTime: Date.now(), cron: '* * * * *' }, env, ctx);
     expect(waitUntil).toHaveBeenCalledTimes(1);
     await expect(waitUntil.mock.calls[0][0]).resolves.toBeUndefined();
   });
