@@ -588,3 +588,26 @@ Full evidence:
 `docs/reports/SUN-1222C-pcc-model-c-production-migration-and-legacy-classification-reauthorization.md`.
 This runbook remains **NOT AUTHORIZED FOR AUTOMATIC EXECUTION** beyond completed
 steps.
+
+## CDP mainnet containment completion (Version Override closure) — completed
+
+The 2026-09-12 emergency containment (`d28f30c5@100%` paid-disabled,
+`b6b7477f@0%` paid-enabled) closed ordinary-percentage paid admission but left
+`b6b7477f` — a fully mainnet-payment-capable version — as an active deployment
+member reachable via Cloudflare Version Override at 0% traffic. A single
+`wrangler versions deploy d28f30c5@100` mutation removed `b6b7477f` from
+deployment membership entirely (dry-run validated first); it remains a
+retained, immutable, queryable version, just not deployed. Active deployment
+membership is now exactly one version. Public discovery endpoints (`/health`,
+`/ready`, agent-card, JWKS, catalog) confirmed healthy; paid routes confirmed
+still closed (404, inert probe). No D1 write, secret/var/route/DNS/trigger
+change, payment, provider execution, settlement, or chain transaction
+occurred.
+
+Platform-level paid-admission containment (ordinary traffic + Version Override
++ Preview URL) is now complete. **SUN-1219/SUN-1219C (CDP mainnet credential
+provenance) remains unresolved** and still blocks any future paid-route
+re-enablement, on any version, by any mechanism.
+
+Full evidence:
+`docs/reports/SUN-1222C-cdp-mainnet-containment-completion-version-override.md`.
