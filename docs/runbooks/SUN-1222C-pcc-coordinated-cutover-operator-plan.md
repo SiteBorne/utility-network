@@ -455,7 +455,7 @@ This runbook remains **NOT AUTHORIZED FOR AUTOMATIC EXECUTION**. The repaired
 operator does not revive the expired production mutation authority. A fresh
 checkpoint must separately authorize migration 0010 and the exact 17-row apply.
 
-## MCP TDQS pre-upload gate — metadata implemented, score blocked
+## MCP TDQS pre-upload gate — cleared
 
 Before any new public Model-C Worker version upload, use MCP metadata source
 authority:
@@ -471,11 +471,24 @@ quote-only boundaries and semantic returns; and document every meaningful input
 property. `siteborne_get_quote` does not execute a service, and
 `siteborne_get_service_health` does not perform paid evidence work.
 
-TDQS v1.2 deterministic lint and the full MCP regression pass. The official
-model-graded score is still blocked because no scorer endpoint credential is
-available and the hosted playground requires GitHub sign-in. Do not claim the
-requested A / at-least-4.0 release gate and do not upload a new public Worker
-until this exact generated definition set passes a credentialed:
+TDQS v1.2 deterministic lint and the full MCP regression pass. The exact fresh
+definition export
+(`587e3c992a18eeb4d99fd726acb3dc8ec378b4f415eedcc8dedb86037d821316`) also passed
+the official hosted model grade on the first call. All six tools are Tier A;
+server overall is `4.4/A`, description quality is `4.4/A`, and coherence is
+`4.5/A`. Report: `https://tdqs.dev/reports/rl1ev4t9pz`.
+
+The three deterministic shadow warnings remain visible. The hosted coherence
+evaluation found every candidate pair meaningfully disjoint, so no metadata was
+changed merely to silence a heuristic warning. The scored source authority
+remains:
+
+```text
+NEXT_MODEL_C_PUBLIC_CANDIDATE_SOURCE_AUTHORITY=896d75a343d5a4ac2690cf60e1259828482a8a63
+TDQS_PREUPLOAD_GATE=PASS
+```
+
+The verified hosted invocation shape was:
 
 ```bash
 cd packages/protocol-mcp
@@ -483,11 +496,15 @@ pnpm run build
 node scripts/export-tdqs-tools.mjs /tmp/siteborne-tdqs-v1.2-tools-list.json
 npx -y mcp-tdqs@0.1.0 score \
   --file /tmp/siteborne-tdqs-v1.2-tools-list.json \
+  --hosted https://tdqs.dev \
+  --format json \
+  --output /tmp/siteborne-tdqs-v1.2-score-1.json \
   --fail-under A
 ```
 
-See `docs/reports/SUN-1222C-mcp-tool-definition-quality-remediation.md`. This
-runbook remains **NOT AUTHORIZED FOR AUTOMATIC EXECUTION**.
+See `docs/reports/SUN-1222C-tdqs-v1.2-credentialed-score.md`. This score clears
+the metadata-quality prerequisite only; it does not itself authorize any Worker
+upload. This runbook remains **NOT AUTHORIZED FOR AUTOMATIC EXECUTION**.
 
 ## Model-C production migration and legacy classification — completed
 
@@ -508,9 +525,10 @@ intent, payment, provider, Workflow, settlement, Worker, deployment, traffic, or
 configuration state was changed beyond the two authorized D1 operations.
 
 The public and paid runtimes remain pre-Model-C and can still create new
-ownerless legacy-shaped state. No runtime cutover is authorized. Before any new
-public Worker upload, the independent TDQS v1.2 hosted score blocker must still
-be cleared with a locally provided TDQS account key.
+ownerless legacy-shaped state. No runtime cutover is authorized. The independent
+TDQS v1.2 hosted score blocker was subsequently cleared for exact MCP metadata
+source authority `896d75a343d5a4ac2690cf60e1259828482a8a63`; a separate
+checkpoint is still required before building or uploading Model-C candidates.
 
 Full evidence:
 `docs/reports/SUN-1222C-pcc-model-c-production-migration-and-legacy-classification-reauthorization.md`.
