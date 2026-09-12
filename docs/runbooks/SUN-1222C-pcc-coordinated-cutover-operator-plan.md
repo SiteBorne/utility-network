@@ -426,3 +426,65 @@ migration 0010 or run the classification apply command until
 `SUN-1222C-PCC-MODEL-C-LEGACY-BACKFILL-REMEDIATION` produces a fail-closed,
 exact-count, evidence-resolvable operator and a new production checkpoint is
 authorized.
+
+## Model-C legacy-backfill operator remediation — completed locally
+
+The required operator remediation completed in two commit-addressed layers:
+
+```text
+EVIDENCE_COMMIT_SHA=21afdd282c5ed2d1e94f35c607c8350f2dbe5dca
+OPERATOR_REMEDIATION_COMMIT_SHA=9b39a826fe4271303b0abc3be08daea0b0a293c8
+```
+
+All 17 plan rows now use unique, commit-pinned machine-readable evidence IDs;
+carry complete attempt/job/settlement preimages; and are processed by an
+exactly-three-state operator (`FRESH_APPLY`, `EXACT_IDEMPOTENT_NOOP`, or
+`CONFLICT`). Apply has no `ON CONFLICT DO NOTHING`, reasserts every precondition
+inside one D1 batch, and accepts success only when both D1 change metadata and
+the immediate exact postimage equal 17. Partial preexisting state and every
+mismatch fail closed. The isolated operator suite passed 38/38, including actual
+D1 rollback at early/middle/late rows and truthful second dry-run/apply no-op
+behavior.
+
+The production dry-run was read-only and matched all 17 source preimages. It
+reported `NO_SCHEMA_MISSING`, as expected because migration 0010 remains
+unapplied. It planned zero mutations and performed zero writes. Full evidence:
+`docs/reports/SUN-1222C-pcc-model-c-legacy-backfill-remediation.md`.
+
+This runbook remains **NOT AUTHORIZED FOR AUTOMATIC EXECUTION**. The repaired
+operator does not revive the expired production mutation authority. A fresh
+checkpoint must separately authorize migration 0010 and the exact 17-row apply.
+
+## MCP TDQS pre-upload gate — metadata implemented, score blocked
+
+Before any new public Model-C Worker version upload, use MCP metadata source
+authority:
+
+```text
+MCP_METADATA_SOURCE_AUTHORITY=896d75a343d5a4ac2690cf60e1259828482a8a63
+```
+
+The six tool names are unchanged. Actual generated definitions now explicitly
+disambiguate company, single-URL web, document, and supplied-output verification
+work; state production-disabled behavior; describe paid, read-only, and
+quote-only boundaries and semantic returns; and document every meaningful input
+property. `siteborne_get_quote` does not execute a service, and
+`siteborne_get_service_health` does not perform paid evidence work.
+
+TDQS v1.2 deterministic lint and the full MCP regression pass. The official
+model-graded score is still blocked because no scorer endpoint credential is
+available and the hosted playground requires GitHub sign-in. Do not claim the
+requested A / at-least-4.0 release gate and do not upload a new public Worker
+until this exact generated definition set passes a credentialed:
+
+```bash
+cd packages/protocol-mcp
+pnpm run build
+node scripts/export-tdqs-tools.mjs /tmp/siteborne-tdqs-v1.2-tools-list.json
+npx -y mcp-tdqs@0.1.0 score \
+  --file /tmp/siteborne-tdqs-v1.2-tools-list.json \
+  --fail-under A
+```
+
+See `docs/reports/SUN-1222C-mcp-tool-definition-quality-remediation.md`. This
+runbook remains **NOT AUTHORIZED FOR AUTOMATIC EXECUTION**.
