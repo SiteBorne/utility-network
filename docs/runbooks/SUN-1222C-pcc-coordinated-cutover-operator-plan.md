@@ -488,3 +488,31 @@ npx -y mcp-tdqs@0.1.0 score \
 
 See `docs/reports/SUN-1222C-mcp-tool-definition-quality-remediation.md`. This
 runbook remains **NOT AUTHORIZED FOR AUTOMATIC EXECUTION**.
+
+## Model-C production migration and legacy classification — completed
+
+Under fresh, explicit production-data authority, migration 0010 applied once and
+the repaired controlled operator inserted exactly 17 append-only, non-actionable
+legacy reconciliation events. The immediate pre-apply state was `FRESH_APPLY`
+with 17 to insert, zero already present, and zero conflicts. D1 change metadata
+and exact postimage both proved 17. The required second dry-run returned
+`EXACT_IDEMPOTENT_NOOP`, zero to insert, 17 already reconciled, zero conflicts,
+and no mutation required.
+
+Raw historical lifecycle state intentionally remains 16 `verified` plus one
+`settled_external` (17 total). The exact global Model-C ownership-aware gate is
+now zero active cutover-blocking work, with zero pending owner intents, zero
+active Workflow-owned attempts, zero unreconciled actionable attempts, and zero
+unresolved settlement-finalization attempts. No payment-attempt, job, owner
+intent, payment, provider, Workflow, settlement, Worker, deployment, traffic, or
+configuration state was changed beyond the two authorized D1 operations.
+
+The public and paid runtimes remain pre-Model-C and can still create new
+ownerless legacy-shaped state. No runtime cutover is authorized. Before any new
+public Worker upload, the independent TDQS v1.2 hosted score blocker must still
+be cleared with a locally provided TDQS account key.
+
+Full evidence:
+`docs/reports/SUN-1222C-pcc-model-c-production-migration-and-legacy-classification-reauthorization.md`.
+This runbook remains **NOT AUTHORIZED FOR AUTOMATIC EXECUTION** beyond completed
+steps.
