@@ -1,7 +1,7 @@
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { frozenInputExample } from '@siteborne/protocol-x402';
 import { afterEach, describe, expect, it } from 'vitest';
-import app from '../src/index';
+import { app } from '../src/index';
 
 const clients: Client[] = [];
 afterEach(async () => {

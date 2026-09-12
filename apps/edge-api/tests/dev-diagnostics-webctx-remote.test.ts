@@ -18,7 +18,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import productionApp from '../src/index';
+import { app as productionApp } from '../src/index';
 import diagnosticApp from '../src/dev-diagnostics/webctx-remote-diagnostic';
 
 const DIAGNOSTIC_FILE = join(

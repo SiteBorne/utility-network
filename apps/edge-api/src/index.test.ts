@@ -8,7 +8,7 @@
  * paid route exactly.
  */
 import { describe, expect, it } from 'vitest';
-import app from './index';
+import { app } from './index';
 import type { Env } from './control-plane/config/env';
 
 function baseEnv(overrides: Partial<Env> = {}): Env {

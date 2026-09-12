@@ -1,7 +1,7 @@
 /**
  * SUN-1222C-1-REMEDIATION §3/§10/§11 — proves `POST /v2/artifacts/documents`
  * through the SAME assembled Hono application the real Worker serves
- * (`import app from './index'`, exactly `index.test.ts`'s own pattern),
+ * (`import { app } from './index'`, exactly `index.test.ts`'s own pattern),
  * never through an isolated Hono instance that mounts the route module in
  * a vacuum. The isolated route-level tests in
  * `document-artifact-upload-route.test.ts` (38 cases) never exercised the
@@ -19,7 +19,7 @@
  * deployment confidence on their own.
  */
 import { describe, expect, it, vi } from 'vitest';
-import app from './index';
+import { app } from './index';
 import type { Env } from './control-plane/config/env';
 
 const MINIMAL_PDF_BYTES = new Uint8Array([

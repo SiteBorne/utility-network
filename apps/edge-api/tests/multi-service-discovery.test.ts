@@ -11,7 +11,7 @@
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import type { D1Database } from '@cloudflare/workers-types';
-import app from '../src/index';
+import { app } from '../src/index';
 
 const VERIFY_V2_ROW = {
   id: 'verify_agent_output.v2',

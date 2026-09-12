@@ -7,7 +7,7 @@ import {
 import { frozenInputExample } from '@siteborne/protocol-x402';
 import { verifyAgentCardAgainstTrustedJwks } from '@siteborne/protocol-a2a';
 import { describe, expect, it } from 'vitest';
-import app from '../src/index';
+import { app } from '../src/index';
 
 const TEST_ORIGIN = 'http://test.local';
 

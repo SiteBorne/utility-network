@@ -53,7 +53,7 @@ export type { ControlPlaneConfig };
 // §"Remove ambiguous same-script ownership" for the full reasoning against
 // re-adding a duplicate export here).
 
-const app = new Hono<{ Bindings: Env }>();
+export const app = new Hono<{ Bindings: Env }>();
 
 app.use('*', createStructuredErrorMiddleware());
 app.use('*', createSecurityHeadersMiddleware());
@@ -274,7 +274,24 @@ export async function recoverWorkflowOwnerIntentsScheduled(
   );
 }
 
-const worker = Object.assign(app, {
+// SUN-1222C cron export remediation: the previous `Object.assign(app, {
+// scheduled })` default export is the Hono application instance itself,
+// merely augmented with an own `scheduled` property. That shape is
+// sufficient for `wrangler versions view`'s static handler-list
+// introspection and for ordinary HTTP dispatch (Hono's own `fetch` is
+// unaffected by the extra property), but the live platform's Cron Trigger
+// dispatcher never invoked it -- zero `scheduled` invocations were
+// observed despite a confirmed, registered `* * * * *` trigger (see
+// docs/reports/SUN-1222C-cron-runtime-invocation-blocker-diagnosis.md).
+// `siteborne-settlement-alert` (`./settlement-alert-worker-entrypoint.ts`)
+// is the proven-working precedent in this same repo: a plain object
+// literal default export with explicit `fetch`/`scheduled` properties,
+// not the augmented application instance. `satisfies ExportedHandler<Env>`
+// is deliberately not applied here either, for the same `Response`-type
+// incompatibility already documented on that file and on
+// `./workflow-host-entrypoint.ts`.
+export default {
+  fetch: app.fetch,
   scheduled(
     _controller: { readonly scheduledTime: number; readonly cron: string },
     env: Env,
@@ -282,6 +299,4 @@ const worker = Object.assign(app, {
   ): void {
     ctx.waitUntil(recoverWorkflowOwnerIntentsScheduled(env));
   },
-});
-
-export default worker;
+};

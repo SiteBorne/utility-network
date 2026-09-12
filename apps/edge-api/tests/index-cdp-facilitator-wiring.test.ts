@@ -88,12 +88,12 @@ describe('index.ts real CDP facilitator wiring (SUN-1200 checkpoint F regression
     rmSync(tempDir, { recursive: true, force: true });
   });
 
-  let app: typeof import('../src/index').default;
+  let app: typeof import('../src/index').app;
 
   beforeEach(async () => {
     capturedFacilitatorArgs = [];
     vi.resetModules();
-    ({ default: app } = await import('../src/index'));
+    ({ app } = await import('../src/index'));
   });
 
   afterEach(() => {

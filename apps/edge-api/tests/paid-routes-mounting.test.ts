@@ -4,7 +4,7 @@
  * may accidentally enable payment execution.
  */
 import { describe, it, expect } from 'vitest';
-import app from '../src/index';
+import { app } from '../src/index';
 
 describe('paid-service route mounting gate (directive §6, §32)', () => {
   it('PAID_ROUTES_ENABLED unset (the default in every environment today) -> /v1/* is a plain 404', async () => {

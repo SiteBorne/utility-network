@@ -5,7 +5,7 @@
  * Public proof only -- no private key material must ever appear here.
  */
 import { describe, it, expect } from 'vitest';
-import app from '../src/index';
+import { app } from '../src/index';
 
 describe('GET /.well-known/mcp-registry-auth', () => {
   it('returns the expected MCP Registry proof line format', async () => {

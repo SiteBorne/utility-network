@@ -23,7 +23,7 @@ import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Miniflare } from 'miniflare';
 import type { D1Database } from '@cloudflare/workers-types';
-import app from '../src/index';
+import { app } from '../src/index';
 
 const MIGRATIONS_DIR = fileURLToPath(new URL('../../../migrations', import.meta.url));
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import app from '../src/index';
+import { app } from '../src/index';
 import { validateHealthResponse, validateReadinessResponse } from '@siteborne/contracts';
 
 describe('apps/edge-api - foundation endpoints', () => {

@@ -13,7 +13,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import type { D1Database } from '@cloudflare/workers-types';
-import app from '../src/index';
+import { app } from '../src/index';
 
 const SERVICE_ROW = {
   id: 'company_evidence_graph.v1',

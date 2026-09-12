@@ -136,7 +136,7 @@ describe('SUN-1221E6R-H2AWI-3F: real production route continuation wiring', () =
 
   describe('fails closed when continuation dependencies are absent (RED reproduces the original bug)', () => {
     it('web_context_verified.v2: 503 service_executor_not_configured, createX402ServiceRoute never called, with no workflow/key bound', async () => {
-      const { default: app } = await import('../src/index');
+      const { app } = await import('../src/index');
       const res = await app.fetch(jsonRequest('/v2/web/context'), { ...BASE_ENV, DB: createFakeD1() } as never);
       expect(res.status).toBe(503);
       const body = (await res.json()) as { error: string };
@@ -145,7 +145,7 @@ describe('SUN-1221E6R-H2AWI-3F: real production route continuation wiring', () =
     });
 
     it('verify_agent_output.v2: 503 service_executor_not_configured, createX402ServiceRoute never called, with no workflow/key bound', async () => {
-      const { default: app } = await import('../src/index');
+      const { app } = await import('../src/index');
       const res = await app.fetch(
         jsonRequest('/v2/verify/agent-output'),
         { ...BASE_ENV, DB: createFakeD1() } as never
@@ -157,7 +157,7 @@ describe('SUN-1221E6R-H2AWI-3F: real production route continuation wiring', () =
     });
 
     it('web_context_verified.v2: still 503, still uncalled, with workflow bound but key absent', async () => {
-      const { default: app } = await import('../src/index');
+      const { app } = await import('../src/index');
       const res = await app.fetch(
         jsonRequest('/v2/web/context'),
         { ...BASE_ENV, DB: createFakeD1(), PAID_CONTINUATION_WORKFLOW: fakeWorkflowBinding() } as never
@@ -167,7 +167,7 @@ describe('SUN-1221E6R-H2AWI-3F: real production route continuation wiring', () =
     });
 
     it('web_context_verified.v2: still 503, still uncalled, with key present but workflow absent', async () => {
-      const { default: app } = await import('../src/index');
+      const { app } = await import('../src/index');
       const res = await app.fetch(
         jsonRequest('/v2/web/context'),
         { ...BASE_ENV, DB: createFakeD1(), PAYMENT_CONTINUATION_ENCRYPTION_KEY: VALID_BASE64_KEY } as never
@@ -179,7 +179,7 @@ describe('SUN-1221E6R-H2AWI-3F: real production route continuation wiring', () =
 
   describe('GREEN: propagates both dependencies into the exact config object createX402ServiceRoute receives', () => {
     it('web_context_verified.v2: config.workflow and config.continuationEnvelopeKey are the exact bound instances', async () => {
-      const { default: app } = await import('../src/index');
+      const { app } = await import('../src/index');
       const workflow = fakeWorkflowBinding();
       await app.fetch(
         jsonRequest('/v2/web/context'),
@@ -198,7 +198,7 @@ describe('SUN-1221E6R-H2AWI-3F: real production route continuation wiring', () =
     });
 
     it('verify_agent_output.v2: config.workflow and config.continuationEnvelopeKey are the exact bound instances', async () => {
-      const { default: app } = await import('../src/index');
+      const { app } = await import('../src/index');
       const workflow = fakeWorkflowBinding();
       await app.fetch(
         jsonRequest('/v2/verify/agent-output'),
