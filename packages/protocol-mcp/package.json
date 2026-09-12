@@ -22,6 +22,8 @@
     "typecheck": "tsc --noEmit",
     "format:check": "prettier --check src/ scripts/ fixtures/",
     "spec:verify": "node --import tsx scripts/verify-spec-fixture.ts",
+    "tdqs:export": "node scripts/export-tdqs-tools.mjs",
+    "tdqs:lint": "node scripts/export-tdqs-tools.mjs /tmp/siteborne-tdqs-v1.2-tools-list.json && npx -y mcp-tdqs@0.1.0 lint --file /tmp/siteborne-tdqs-v1.2-tools-list.json --server-name net.siteborne/utility --fail-on error",
     "check": "pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run build && pnpm run test && pnpm run test:property && pnpm run spec:verify"
   },
   "dependencies": {
