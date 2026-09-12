@@ -396,3 +396,33 @@ Never substitute `RAW_NONTERMINAL_LIFECYCLE_COUNT=0`: the reviewed 17 retain
 their truthful historical stages. Unknown, unclassified, ownerless-new, pending,
 retry-exhausted, active-owned, and current settlement-finalization records all
 block. Age is never an exception.
+
+## Production migration/classification preflight — blocked before mutation
+
+The 2026-09-11 production checkpoint reached an exact read-only preimage match
+for all 17 governed attempts and confirmed Wrangler 4.119.0 would apply only
+migration 0010. It then stopped before applying the migration because the
+controlled legacy-reconciliation operator did not meet its required production
+contract:
+
+- all 17 generated forensic-report fragments referenced missing
+  `#attempt-<UUID>` anchors;
+- the tool did not compare the displayed preimage with expected lifecycle,
+  service, payment-identifier, job, and settlement-presence values;
+- successful `ON CONFLICT DO NOTHING` or zero-row `INSERT ... SELECT` statements
+  could produce fewer than 17 events without failing the command; and
+- its repeated dry-run could not distinguish 0 rows to insert from 17 rows
+  already reconciled.
+
+Cloudflare documents the `/query` multi-statement batch as transactional; the
+blocker is exact-count/preimage/evidence validation, not rollback behavior.
+Migration 0010 remains unapplied, the new tables remain absent, the raw
+nonterminal count remains 17, and production runtimes/topology are unchanged.
+Evidence:
+`docs/reports/SUN-1222C-pcc-lifecycle-model-production-migration-and-legacy-classification.md`.
+
+This runbook remains **NOT AUTHORIZED FOR AUTOMATIC EXECUTION**. Do not apply
+migration 0010 or run the classification apply command until
+`SUN-1222C-PCC-MODEL-C-LEGACY-BACKFILL-REMEDIATION` produces a fail-closed,
+exact-count, evidence-resolvable operator and a new production checkpoint is
+authorized.
