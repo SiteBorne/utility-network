@@ -3,9 +3,14 @@
  *
  * Dedicated, minimal Cloudflare Worker whose only job is to receive the
  * existing `StorageAlertPayload` (see
- * `control-plane/alerting/storage-alert-sweep.ts`) over HTTPS from
- * `siteborne-utility-edge`'s `buildHttpsWebhookTransport`, and forward it
- * as a plain-text operator email.
+ * `control-plane/alerting/storage-alert-sweep.ts`) from
+ * `siteborne-utility-edge`'s `buildServiceBindingStorageAlertTransport`
+ * (see `control-plane/alerting/storage-alert-service-binding-transport.ts`)
+ * over a Cloudflare Service Binding -- not public HTTPS -- and forward it
+ * as a plain-text operator email. This Worker is internal-only: it has no
+ * `workers_dev` subdomain, no preview URLs, no routes, and no Custom
+ * Domain (see `wrangler.storage-alert-receiver.toml`'s own doc comment for
+ * why the earlier public-ingress design was retired).
  *
  * Transport: direct authenticated SMTP to the operator's own IONOS
  * mailbox (`storage@alerts.siteborne.net` -> `hello@siteborne.com`) over

@@ -167,6 +167,26 @@ bucket_name = "siteborne-artifacts"
 binding = "CATALOG"
 id = "59dc955c3ebf4208a882f82d8d8fab30"
 
+# SUN-1222C-STORAGE-ALERT-RECEIVER-SERVICE-BINDING-MIGRATION -- lets this
+# Worker invoke `siteborne-storage-alert-receiver` directly (see
+# `wrangler.storage-alert-receiver.toml`) with no public URL, no DNS
+# record, and no TLS edge certificate: Cloudflare Service Bindings are the
+# documented mechanism for Worker-to-Worker calls within the same account
+# (https://developers.cloudflare.com/workers/runtime-apis/bindings/service-bindings/).
+# Retired design: a public Custom Domain (`storage-alert.siteborne.net`)
+# invoked over ordinary HTTPS via `buildHttpsWebhookTransport` and
+# `STORAGE_RECLAMATION_ALERT_WEBHOOK_URL` -- abandoned after repeated,
+# reproduced Custom Domain/DNS disappearance incidents (see that script's
+# own config doc comment for the full forensic summary). Declaring this
+# binding here mutates only THIS script's own deployment configuration; it
+# does not deploy, route, or otherwise affect `siteborne-storage-alert-
+# receiver` itself, and requires `STORAGE_ALERT_PATH_TOKEN` (a separate,
+# not-yet-provisioned secret) before `reclaimStaleArtifactsScheduled`
+# (`apps/edge-api/src/index.ts`) will actually attempt a delivery.
+[[services]]
+binding = "STORAGE_ALERT_RECEIVER"
+service = "siteborne-storage-alert-receiver"
+
 # SUN-0800B checkpoint 2: corrected from a stale `[[queues]]` array-of-
 # tables shape (invalid under the current wrangler queues schema, which
 # is confirmed live at developers.cloudflare.com/queues/configuration/)

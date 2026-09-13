@@ -35,7 +35,10 @@ import { D1WorkflowOwnerIntentRepository } from './control-plane/repositories/d1
 import { recoverPendingWorkflowOwnerIntents } from './control-plane/continuation/owner-recovery';
 import { reclaimStaleArtifacts } from './control-plane/artifacts/artifact-reclamation';
 import { runStorageAlertSweep } from './control-plane/alerting/storage-alert-sweep';
-import { buildHttpsWebhookTransport } from './control-plane/alerting/settlement-alert-webhook-transport';
+import {
+  buildServiceBindingStorageAlertTransport,
+  type ServiceBindingFetcher,
+} from './control-plane/alerting/storage-alert-service-binding-transport';
 import { R2ArtifactStoreAdapter } from './control-plane/artifacts/store';
 import { D1ArtifactsRepository } from './control-plane/repositories/d1/artifacts';
 
@@ -299,18 +302,22 @@ export async function recoverWorkflowOwnerIntentsScheduled(
  * place for retry — safe, but worth surfacing. The unconditional
  * structured `console.error` (Cloudflare platform logs / Logpush, no new
  * binding) remains and is never suppressed. Additionally, when
- * `env.STORAGE_RECLAMATION_ALERT_WEBHOOK_URL` is provisioned, one bounded
- * webhook delivery is attempted via the same generic, already-proven
- * `buildHttpsWebhookTransport` D12 uses for settlement alerts (see
- * `../alerting/storage-alert-sweep.ts`) — no economic credential, no
- * artifact content, only counts/timestamp/a bounded content-hash sample.
- * A transport failure or a missing secret never blocks or delays
+ * `env.STORAGE_ALERT_RECEIVER` (a Cloudflare Service Binding to the
+ * dedicated, internal-only `siteborne-storage-alert-receiver` Worker) and
+ * `env.STORAGE_ALERT_PATH_TOKEN` are both provisioned, one bounded
+ * delivery is attempted via `buildServiceBindingStorageAlertTransport` —
+ * no public HTTPS webhook, no Custom Domain, no DNS dependency (see that
+ * module's own doc comment for why a Service Binding replaced the earlier
+ * `STORAGE_RECLAMATION_ALERT_WEBHOOK_URL` design). Payload carries no
+ * economic credential, no artifact content, only counts/timestamp/a
+ * bounded content-hash sample — unchanged from before this transport swap.
+ * A transport failure or missing binding/secret never blocks or delays
  * reclamation itself: this call happens strictly after `reclaimStaleArtifacts`
  * has already fully run and been counted, and its own result is not
  * awaited by anything that could roll reclamation back.
  */
 export async function reclaimStaleArtifactsScheduled(
-  env: Pick<Env, 'DB' | 'ARTIFACTS' | 'STORAGE_RECLAMATION_ALERT_WEBHOOK_URL'>
+  env: Pick<Env, 'DB' | 'ARTIFACTS' | 'STORAGE_ALERT_RECEIVER' | 'STORAGE_ALERT_PATH_TOKEN'>
 ): Promise<void> {
   if (!env.DB || !env.ARTIFACTS) return;
   const nowIso = new Date().toISOString();
@@ -329,8 +336,9 @@ export async function reclaimStaleArtifactsScheduled(
       })
     );
   }
-  const webhookUrl = env.STORAGE_RECLAMATION_ALERT_WEBHOOK_URL;
-  if (webhookUrl) {
+  const receiver = env.STORAGE_ALERT_RECEIVER;
+  const pathToken = env.STORAGE_ALERT_PATH_TOKEN;
+  if (receiver && pathToken) {
     try {
       await runStorageAlertSweep(
         {
@@ -339,7 +347,19 @@ export async function reclaimStaleArtifactsScheduled(
           failedContentHashes: result.r2_delete_failure_content_hashes,
           nowIso,
         },
-        { transport: buildHttpsWebhookTransport(webhookUrl) }
+        {
+          transport: buildServiceBindingStorageAlertTransport(
+            // `Fetcher.fetch`'s generated type is a stricter,
+            // Cloudflare-flavored variant of the ambient DOM
+            // `RequestInit`/`Response` that `ServiceBindingFetcher`
+            // deliberately uses instead (see that module's own doc
+            // comment) — every real Service Binding fetcher accepts a
+            // plain `string` URL and ordinary `RequestInit` at runtime
+            // regardless, so this narrows the type only.
+            receiver as unknown as ServiceBindingFetcher,
+            pathToken
+          ),
+        }
       );
     } catch {
       // §3 "alert transport failure that never blocks reclamation

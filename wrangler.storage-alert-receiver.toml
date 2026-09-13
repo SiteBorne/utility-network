@@ -25,8 +25,26 @@
 # Cloudflare email product, so it requires no `[[send_email]]` block, no
 # Email Routing zone state, and no Cloudflare-side destination verification.
 #
+# Second superseded design (never durably stable): a public Custom Domain
+# (`storage-alert.siteborne.net`) plus `workers_dev = true`, invoked over
+# public HTTPS by `siteborne-utility-edge`'s generic `buildHttpsWebhookTransport`.
+# Retired after repeated, reproduced Custom Domain / DNS disappearance
+# incidents in production (multiple `wrangler versions deploy`/`triggers
+# deploy` cycles left the domain object and its managed DNS gone with no
+# corresponding audited deletion event) and after `wrangler deploy --dry-run`
+# was confirmed, via live Cloudflare Audit Logs, to perform a real
+# `POST .../subdomain {enabled:true}` side effect despite this file
+# declaring `workers_dev = false` and despite `--dry-run` being passed --
+# see docs/reports/ for the full forensic timeline. This receiver has no
+# structural need to be publicly reachable at all: its only caller is
+# another Worker in the same account, which Cloudflare Service Bindings
+# (`[[services]]` in `wrangler.toml`, the `siteborne-utility-edge` config)
+# serve directly, with no public URL, no DNS record, and no TLS edge
+# certificate -- see
+# `apps/edge-api/src/control-plane/alerting/storage-alert-service-binding-transport.ts`.
+#
 # NOT YET DEPLOYED. This file is frozen local configuration only. Before
-# `wrangler versions upload --config wrangler.storage-alert-receiver.toml`
+# `wrangler deploy --config wrangler.storage-alert-receiver.toml`
 # may ever run, per SUN-1222C-STORAGE-ALERT-RECEIVER-LOCAL-BUILD's own
 # checkpoint text, the following must each be separately authorized and are
 # NOT satisfied merely by this file existing:
@@ -38,9 +56,10 @@
 #      password) provisioned via `wrangler secret put IONOS_SMTP_PASSWORD
 #      --config wrangler.storage-alert-receiver.toml` -- NOT YET CREATED.
 #      Never a `[vars]` entry, never committed, never logged.
-#   3. The `siteborne-utility-edge` production build actually pointed at
-#      this Worker's URL for `STORAGE_RECLAMATION_ALERT_WEBHOOK_URL`
-#      (itself its own separately-gated secret; see
+#   3. `siteborne-utility-edge`'s own config (`wrangler.toml`) declaring the
+#      `[[services]]` Service Binding to this script, and its
+#      `STORAGE_ALERT_PATH_TOKEN` secret provisioned to match this script's
+#      `ALERT_PATH_TOKEN` (itself its own separately-gated secret; see
 #      `SUN-1222C-STORAGE-RECLAMATION-ALERT-PRODUCTION-DESIGN`).
 #
 # Non-secret SMTP transport constants (`smtp.ionos.com`, port 587, the
@@ -60,14 +79,15 @@ compatibility_flags = ["nodejs_compat"]
 # (`POST /alert/<ALERT_PATH_TOKEN>`) and nothing else; its own `fetch()`
 # handler already returns an identical 404 for every other path/method
 # combination (see the entrypoint's own doc comment on why that 404 is
-# uniform rather than 401/403/405). Disabling `workers_dev` and declaring
-# no `routes`/custom domains means this Worker is reachable ONLY at its
-# `*.workers.dev` subdomain unless a route is separately, explicitly
-# authorized later -- left enabled here (unlike the settlement-alert and
-# workflow-host scripts, which serve no public HTTP at all) because this
-# script's *entire purpose* is to receive one authenticated public HTTPS
-# POST from `siteborne-utility-edge`.
-workers_dev = true
+# uniform rather than 401/403/405). Its only caller is
+# `siteborne-utility-edge`, reached exclusively via a Cloudflare Service
+# Binding (see `wrangler.toml`'s `[[services]]` entry) -- this script is
+# therefore internal-only by design and needs no public ingress of any
+# kind: no `workers_dev` subdomain, no preview URLs, no routes, no Custom
+# Domain. The token-gated path contract is retained anyway as
+# defense-in-depth (SUN-1222C-STORAGE-ALERT-RECEIVER-SERVICE-BINDING-MIGRATION),
+# not because it is reachable from outside this Cloudflare account.
+workers_dev = false
 
 # Wrangler defaults `preview_urls` to the value of `workers_dev` when the
 # key is omitted -- with `workers_dev = true` above, that default would let

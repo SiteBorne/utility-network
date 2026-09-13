@@ -1,4 +1,8 @@
-import type { D1Database as CloudflareD1Database, Workflow } from '@cloudflare/workers-types';
+import type {
+  D1Database as CloudflareD1Database,
+  Fetcher,
+  Workflow,
+} from '@cloudflare/workers-types';
 import type { WorkflowContinuationInput } from '../continuation/types';
 
 export interface Env {
@@ -25,21 +29,30 @@ export interface Env {
    * not removed entirely, so a genuinely future wallet-write use case can
    * still supply it without a further `Env` change. */
   CDP_WALLET_SECRET?: string;
-  /** SUN-1222C-DOCUMENT-ARTIFACT-LOCAL-CLOSURE-R2 §3 — optional operator
-   * webhook for critical artifact-reclamation alerting (persistent R2
-   * delete failures), mirroring `SETTLEMENT_ALERT_WEBHOOK_URL`'s own
-   * pattern in `settlement-alert-worker-entrypoint.ts` exactly: a plain
-   * HTTPS POST destination, provisioned via `wrangler secret put
-   * STORAGE_RECLAMATION_ALERT_WEBHOOK_URL`, never a `[vars]` entry. Absent
-   * this secret, `reclaimStaleArtifactsScheduled` still emits its existing
-   * `console.error` (captured by `wrangler tail`/Logpush) — this is
-   * additive delivery, not a replacement, and its absence never blocks or
-   * degrades reclamation itself (§3 "alert transport failure that never
-   * blocks reclamation itself"). NOT deployed/provisioned by this
-   * checkpoint — implementation-only, exactly as D12's own
-   * `SETTLEMENT_ALERT_WEBHOOK_URL` was before its separate activation
-   * checkpoint. */
-  STORAGE_RECLAMATION_ALERT_WEBHOOK_URL?: string;
+  /** SUN-1222C-DOCUMENT-ARTIFACT-LOCAL-CLOSURE-R2 §3 — critical
+   * artifact-reclamation alerting (persistent R2 delete failures),
+   * delivered to the dedicated `siteborne-storage-alert-receiver` Worker
+   * over a Cloudflare Service Binding (`[[services]]` in `wrangler.toml`),
+   * not a public HTTPS webhook — the receiver is internal-only by design
+   * (no Custom Domain, no workers.dev route). Superseded design: an
+   * earlier `STORAGE_RECLAMATION_ALERT_WEBHOOK_URL` HTTPS-webhook secret,
+   * retired because it required the receiver to be publicly reachable.
+   * Absent this binding, `reclaimStaleArtifactsScheduled` still emits its
+   * existing `console.error` (captured by `wrangler tail`/Logpush) — this
+   * is additive delivery, not a replacement, and its absence never blocks
+   * or degrades reclamation itself (§3 "alert transport failure that never
+   * blocks reclamation itself"). NOT yet deployed/wired live by this
+   * checkpoint — repository/implementation preparation only; see
+   * `wrangler.toml`'s `[[services]]` entry and
+   * `wrangler.storage-alert-receiver.toml` for the full non-deployment
+   * rationale and the separately-gated steps still required. */
+  STORAGE_ALERT_RECEIVER?: Fetcher;
+  /** Path-segment capability token the receiver checks against its own
+   * `ALERT_PATH_TOKEN` secret (constant-time compare) — defense-in-depth
+   * even though the binding itself is not publicly reachable. Provisioned
+   * via `wrangler secret put STORAGE_ALERT_PATH_TOKEN`, never a `[vars]`
+   * entry. NOT yet provisioned by this checkpoint. */
+  STORAGE_ALERT_PATH_TOKEN?: string;
   /** SUN-1000 checkpoint 1O-A: canonical Nevermined credential name,
    * matching `packages/protocol-nevermined/src/config.ts`'s own already-
    * correct `resolveNeverminedConfig` boundary (`canonical`/
