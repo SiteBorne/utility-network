@@ -69,6 +69,15 @@ compatibility_flags = ["nodejs_compat"]
 # POST from `siteborne-utility-edge`.
 workers_dev = true
 
+# Wrangler defaults `preview_urls` to the value of `workers_dev` when the
+# key is omitted -- with `workers_dev = true` above, that default would let
+# every `wrangler versions upload` candidate resolve at a public, unlisted
+# preview URL immediately, before any deliberate deployment/promotion.
+# Setting this explicitly to `false` keeps every undeployed candidate
+# version unreachable; only a later, separately authorized deploy/promotion
+# step is meant to make this Worker's traffic publicly reachable.
+preview_urls = false
+
 # `ALERT_PATH_TOKEN` and `IONOS_SMTP_PASSWORD` are secrets, deliberately
 # absent from this file (never a `[vars]` entry, never committed, never
 # logged) -- each provisioned (once separately authorized) via
