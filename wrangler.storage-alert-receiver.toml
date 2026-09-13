@@ -1,0 +1,88 @@
+# SUN-1222C-STORAGE-ALERT-RECEIVER-LOCAL-BUILD
+#
+# Hosts EXACTLY ONE thing: a `fetch()` handler that authenticates a POST via
+# an unguessable URL-path token, validates the existing `StorageAlertPayload`
+# shape, and forwards it as a plain-text email over direct authenticated SMTP
+# to the operator's own IONOS mailbox
+# (`apps/edge-api/src/storage-alert-receiver-entrypoint.ts` +
+# `apps/edge-api/src/smtp/ionos-smtp-transport.ts`). This is a FOURTH,
+# SEPARATE Cloudflare Worker script -- alongside the public API Worker
+# (`wrangler.toml`, `siteborne-utility-edge`), the Workflow host
+# (`wrangler.paid-continuation-runtime.toml`,
+# `siteborne-paid-continuation-runtime`), and the settlement-alert sweep
+# (`wrangler.settlement-alert-worker.toml`, `siteborne-settlement-alert`).
+# Deploying THIS config can only ever affect THIS script's own traffic and
+# secrets; it cannot touch any other script's deployment membership, D1
+# binding, or trigger -- nor any DNS/Email Routing/IONOS mail configuration,
+# none of which this Worker touches at all.
+#
+# Earlier design (superseded, never deployed): Cloudflare Email Routing via
+# a `send_email` binding. Abandoned once the operator chose to keep IONOS as
+# the sole mail provider for both `siteborne.net` and `siteborne.com` and
+# route storage-alert email through an isolated IONOS mailbox instead --
+# this Worker now makes an outbound SMTP connection
+# (`cloudflare:sockets`, STARTTLS on port 587) rather than using any
+# Cloudflare email product, so it requires no `[[send_email]]` block, no
+# Email Routing zone state, and no Cloudflare-side destination verification.
+#
+# NOT YET DEPLOYED. This file is frozen local configuration only. Before
+# `wrangler versions upload --config wrangler.storage-alert-receiver.toml`
+# may ever run, per SUN-1222C-STORAGE-ALERT-RECEIVER-LOCAL-BUILD's own
+# checkpoint text, the following must each be separately authorized and are
+# NOT satisfied merely by this file existing:
+#   1. `ALERT_PATH_TOKEN` generated (cryptographically random, out-of-band,
+#      never committed to this repository) and provisioned via
+#      `wrangler secret put ALERT_PATH_TOKEN --config
+#      wrangler.storage-alert-receiver.toml`.
+#   2. `IONOS_SMTP_PASSWORD` (the `storage@alerts.siteborne.net` mailbox
+#      password) provisioned via `wrangler secret put IONOS_SMTP_PASSWORD
+#      --config wrangler.storage-alert-receiver.toml` -- NOT YET CREATED.
+#      Never a `[vars]` entry, never committed, never logged.
+#   3. The `siteborne-utility-edge` production build actually pointed at
+#      this Worker's URL for `STORAGE_RECLAMATION_ALERT_WEBHOOK_URL`
+#      (itself its own separately-gated secret; see
+#      `SUN-1222C-STORAGE-RECLAMATION-ALERT-PRODUCTION-DESIGN`).
+#
+# Non-secret SMTP transport constants (`smtp.ionos.com`, port 587, the
+# sender/destination addresses) are deliberately left as plain literals in
+# `storage-alert-receiver-entrypoint.ts` rather than duplicated as `[vars]`
+# here -- none of them are sensitive, and this Worker has exactly one
+# deployment target, so no environment-specific override surface is needed.
+name = "siteborne-storage-alert-receiver"
+main = "apps/edge-api/src/storage-alert-receiver-entrypoint.ts"
+# Matches the other three scripts' compatibility_date -- same runtime
+# semantics, same bundling behavior, no independent compatibility-date
+# drift across the four scripts.
+compatibility_date = "2026-08-05"
+compatibility_flags = ["nodejs_compat"]
+
+# This script serves exactly one authenticated path
+# (`POST /alert/<ALERT_PATH_TOKEN>`) and nothing else; its own `fetch()`
+# handler already returns an identical 404 for every other path/method
+# combination (see the entrypoint's own doc comment on why that 404 is
+# uniform rather than 401/403/405). Disabling `workers_dev` and declaring
+# no `routes`/custom domains means this Worker is reachable ONLY at its
+# `*.workers.dev` subdomain unless a route is separately, explicitly
+# authorized later -- left enabled here (unlike the settlement-alert and
+# workflow-host scripts, which serve no public HTTP at all) because this
+# script's *entire purpose* is to receive one authenticated public HTTPS
+# POST from `siteborne-utility-edge`.
+workers_dev = true
+
+# `ALERT_PATH_TOKEN` and `IONOS_SMTP_PASSWORD` are secrets, deliberately
+# absent from this file (never a `[vars]` entry, never committed, never
+# logged) -- each provisioned (once separately authorized) via
+# `wrangler secret put <NAME> --config wrangler.storage-alert-receiver.toml`.
+# Their absence is the expected, safe steady state until that authorization:
+# the entrypoint's own `fetch()` handler fails closed (uniform 404 for a
+# missing `ALERT_PATH_TOKEN`, 502 with no SMTP connection attempted for a
+# missing `IONOS_SMTP_PASSWORD`) -- no crash, no placeholder credential, no
+# secret-value disclosure, and critically no "open" auth state.
+
+# Deliberately absent, matching the settlement-alert script's own trust
+# boundary: no `[[d1_databases]]`, no `[[r2_buckets]]`, no `[[workflows]]`,
+# no `[[queues.producers]]`, no `[ai]` binding, no `[[send_email]]` binding,
+# no CDP/facilitator/payment-signing credential of any kind, no `[triggers]`
+# cron (this script is purely request-driven). Its total capability surface
+# is exactly: read two path/secret-scoped values, validate one fixed JSON
+# shape, and open one outbound TCP connection to `smtp.ionos.com:587`.
