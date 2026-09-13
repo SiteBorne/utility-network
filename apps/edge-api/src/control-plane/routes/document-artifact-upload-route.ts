@@ -46,12 +46,18 @@ export function isDocumentArtifactUploadRouteFlagEnabled(
   );
 }
 
-const REJECTION_STATUS: Record<DocumentUploadRejectionCode, 400 | 413 | 415 | 502> = {
+const REJECTION_STATUS: Record<DocumentUploadRejectionCode, 400 | 413 | 415 | 502 | 503> = {
   unsupported_media_type: 415,
   media_type_mismatch: 415,
   empty_body: 400,
   byte_limit_exceeded: 413,
   storage_failure: 502,
+  // SUN-1222C-DOCUMENT-ARTIFACT-LOCAL-CLOSURE-R2 §1: a bounded, retryable
+  // server condition (an expired dedup hit whose refresh failed or raced a
+  // concurrent reclamation) -- 503, not 4xx, since nothing about the
+  // buyer's request itself was wrong; a plain retry of the identical
+  // upload is the expected recovery path.
+  expired_dedupe_refresh_failed: 503,
 };
 
 async function sha256Hex(bytes: Uint8Array): Promise<string> {
@@ -155,7 +161,14 @@ export async function documentArtifactUploadRoute(
   });
 
   if (!result.ok) {
-    return c.json({ error: result.code, message: result.message }, REJECTION_STATUS[result.code]);
+    return c.json(
+      {
+        error: result.code,
+        message: result.message,
+        ...(result.retryable !== undefined ? { retryable: result.retryable } : {}),
+      },
+      REJECTION_STATUS[result.code]
+    );
   }
 
   // §34: only the opaque capability and its own declared metadata — no

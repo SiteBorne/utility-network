@@ -47,6 +47,12 @@ export interface ArtifactReclamationDeps {
   nowIso: () => string;
 }
 
+/** Bound on `ArtifactReclamationResult.r2_delete_failure_content_hashes`
+ * -- an alert payload sample, never the full failing set (SUN-1222C-
+ * DOCUMENT-ARTIFACT-LOCAL-CLOSURE-R2 §3 "actionable... bounded
+ * identifiers"). */
+export const MAX_REPORTED_FAILURE_CONTENT_HASHES = 10;
+
 export interface ArtifactReclamationResult {
   /** Both the R2 object and the D1 row were removed (or the R2 object was
    * already gone) for this many artifacts. */
@@ -55,6 +61,11 @@ export interface ArtifactReclamationResult {
    * deliberately left intact so the next reclamation pass retries them;
    * never counted as `reclaimed`. */
   r2_delete_failures: number;
+  /** Content hashes of up to `MAX_REPORTED_FAILURE_CONTENT_HASHES` of the
+   * artifacts counted in `r2_delete_failures` this pass -- bounded
+   * identifiers for `storage-alert-sweep.ts`'s payload, never full row
+   * metadata and never every failure (only a diagnostic sample). */
+  r2_delete_failure_content_hashes: string[];
 }
 
 /**
@@ -76,21 +87,26 @@ export interface ArtifactReclamationResult {
 export async function reclaimStaleArtifacts(
   deps: ArtifactReclamationDeps
 ): Promise<ArtifactReclamationResult> {
-  const nowMs = Date.parse(deps.nowIso());
+  const nowIso = deps.nowIso();
+  const nowMs = Date.parse(nowIso);
   const cutoffIso = new Date(
     nowMs - ARTIFACT_PHYSICAL_RECLAMATION_AFTER_SECONDS * 1000
   ).toISOString();
 
-  const listed = await deps.artifactsRepository.listReclaimable(cutoffIso);
+  // SUN-1222C-DOCUMENT-ARTIFACT-LOCAL-CLOSURE-R2 §2: `nowIso` closes the
+  // dedup-refresh reclamation-safety gap -- see `listReclaimable`'s own
+  // doc comment in `../repositories/interfaces.ts`.
+  const listed = await deps.artifactsRepository.listReclaimable(cutoffIso, nowIso);
   if (!listed.ok) {
     // Fail closed: a listing failure reclaims nothing this pass rather
     // than guessing at a partial/stale list. Never throws past this
     // function's own boundary.
-    return { reclaimed: 0, r2_delete_failures: 0 };
+    return { reclaimed: 0, r2_delete_failures: 0, r2_delete_failure_content_hashes: [] };
   }
 
   let reclaimed = 0;
   let r2DeleteFailures = 0;
+  const r2DeleteFailureContentHashes: string[] = [];
 
   for (const record of listed.value) {
     try {
@@ -103,6 +119,9 @@ export async function reclaimStaleArtifacts(
       // A genuine R2 outage/error. Leave the D1 row alone -- the next
       // pass will retry both the R2 delete and the D1 delete together.
       r2DeleteFailures += 1;
+      if (r2DeleteFailureContentHashes.length < MAX_REPORTED_FAILURE_CONTENT_HASHES) {
+        r2DeleteFailureContentHashes.push(record.content_hash);
+      }
       continue;
     }
 
@@ -120,5 +139,9 @@ export async function reclaimStaleArtifacts(
     }
   }
 
-  return { reclaimed, r2_delete_failures: r2DeleteFailures };
+  return {
+    reclaimed,
+    r2_delete_failures: r2DeleteFailures,
+    r2_delete_failure_content_hashes: r2DeleteFailureContentHashes,
+  };
 }

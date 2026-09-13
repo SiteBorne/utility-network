@@ -104,11 +104,46 @@ export class D1ArtifactsRepository implements ArtifactsRepository {
     }
   }
 
-  async listReclaimable(olderThanIso: string): Promise<RepositoryResponse<ArtifactRecord[]>> {
+  async listReclaimable(
+    olderThanIso: string,
+    nowIso: string
+  ): Promise<RepositoryResponse<ArtifactRecord[]>> {
     try {
-      const stmt = this.db.prepare(`SELECT * FROM job_artifacts WHERE created_at < ?`);
-      const result = await stmt.bind(olderThanIso).all();
+      // See interfaces.ts's doc comment: `expires_at` must independently be
+      // non-live (absent or already passed) — a dedup-refreshed row must
+      // never be reclaimed while its buyer-facing expiry is still in the
+      // future, even if `created_at` alone would otherwise qualify it.
+      const stmt = this.db.prepare(
+        `SELECT * FROM job_artifacts WHERE created_at < ? AND (expires_at IS NULL OR expires_at <= ?)`
+      );
+      const result = await stmt.bind(olderThanIso, nowIso).all();
       return toRepositoryResponse(result, mapArtifactRecord);
+    } catch (e) {
+      return err('DATABASE_ERROR', e instanceof Error ? e.message : 'Unknown error');
+    }
+  }
+
+  async refreshExpiry(
+    id: string,
+    expiresAt: string
+  ): Promise<RepositoryResponse<ArtifactRecord | null>> {
+    try {
+      const stmt = this.db.prepare(`UPDATE job_artifacts SET expires_at = ? WHERE id = ?`);
+      const result = await stmt.bind(expiresAt, id).run();
+
+      const failure = getD1Failure(result);
+      if (failure) {
+        return err('DATABASE_ERROR', failure);
+      }
+      if (result.meta.changes === 0) {
+        // Row is gone (e.g. a concurrent physical reclamation pass) --
+        // not a failure this caller needs to react to.
+        return ok(null);
+      }
+
+      const getStmt = this.db.prepare(`SELECT * FROM job_artifacts WHERE id = ?`);
+      const getResult = await getStmt.bind(id).all();
+      return toSingleRepositoryResponse(getResult, mapArtifactRecord);
     } catch (e) {
       return err('DATABASE_ERROR', e instanceof Error ? e.message : 'Unknown error');
     }

@@ -59,18 +59,39 @@ describe('index.ts default export — canonical ExportedHandler shape', () => {
   it('E. scheduled invokes the exact existing owner-recovery scheduled function via ctx.waitUntil', async () => {
     const waitUntil = vi.fn();
     const ctx = { waitUntil } as { waitUntil(promise: Promise<unknown>): void };
-    // DB/PAID_CONTINUATION_WORKFLOW absent -> recoverWorkflowOwnerIntentsScheduled's
-    // own guard clause makes this a safe no-op; we are proving *wiring*, not
-    // re-testing the recovery function's internal behavior.
-    const env = baseEnv({ DB: undefined, PAID_CONTINUATION_WORKFLOW: undefined } as Partial<Env>);
+    // DB/PAID_CONTINUATION_WORKFLOW/ARTIFACTS absent -> both scheduled
+    // functions' own guard clauses make this a safe no-op; we are proving
+    // *wiring*, not re-testing either function's internal behavior.
+    const env = baseEnv({
+      DB: undefined,
+      PAID_CONTINUATION_WORKFLOW: undefined,
+      ARTIFACTS: undefined,
+    } as Partial<Env>);
     defaultExport.scheduled({ scheduledTime: Date.now(), cron: '* * * * *' }, env, ctx);
-    expect(waitUntil).toHaveBeenCalledTimes(1);
+    // SUN-1222C-document-artifact-production-closure: reclaimStaleArtifactsScheduled
+    // is now wired alongside owner-recovery on the same trigger -> 2 calls.
+    expect(waitUntil).toHaveBeenCalledTimes(2);
     await expect(waitUntil.mock.calls[0][0]).resolves.toBeUndefined();
+    await expect(waitUntil.mock.calls[1][0]).resolves.toBeUndefined();
+  });
+
+  it("E2. scheduled's second waitUntil call runs artifact reclamation, independently of the owner-recovery call", async () => {
+    const waitUntil = vi.fn();
+    const ctx = { waitUntil } as { waitUntil(promise: Promise<unknown>): void };
+    // ARTIFACTS absent -> reclaimStaleArtifactsScheduled's own guard clause
+    // makes this a safe no-op; DB/PAID_CONTINUATION_WORKFLOW present so the
+    // owner-recovery call's own guard does not also short-circuit, proving
+    // the two calls are wired independently rather than one gate covering
+    // both.
+    const env = baseEnv({ ARTIFACTS: undefined } as Partial<Env>);
+    defaultExport.scheduled({ scheduledTime: Date.now(), cron: '* * * * *' }, env, ctx);
+    expect(waitUntil).toHaveBeenCalledTimes(2);
+    await expect(waitUntil.mock.calls[1][0]).resolves.toBeUndefined();
   });
 
   it('F. no provider/payment/facilitator/settlement path is reachable from scheduled', () => {
-    // Static shape guard: scheduled's only observable side effect is the
-    // single waitUntil call proven in (E); it takes no facilitator/provider
+    // Static shape guard: scheduled's only observable side effects are the
+    // waitUntil calls proven in (E)/(E2); it takes no facilitator/provider
     // dependency in its signature.
     expect(defaultExport.scheduled.length).toBeLessThanOrEqual(3);
   });

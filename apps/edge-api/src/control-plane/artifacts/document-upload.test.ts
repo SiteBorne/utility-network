@@ -255,6 +255,196 @@ describe('storeDocumentUpload — adversarial matrix', () => {
     }
   });
 
+  it('a dedup hit whose existing expires_at already lapsed (physical reclamation has not yet run) is refreshed to a fresh TTL rather than handed back dead-on-arrival', async () => {
+    const deps = freshDeps({
+      randomId: () => 'first-id',
+      nowIso: () => '2026-09-01T00:00:00.000Z',
+    });
+    const bytes = pdfBytes('expired-dedupe regression fixture');
+    const first = await storeDocumentUpload(bytes, 'application/pdf', deps);
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    expect(first.expires_at).toBe(
+      new Date(Date.parse('2026-09-01T00:00:00.000Z') + DOCUMENT_UPLOAD_TTL_SECONDS * 1000)
+        .toISOString()
+    );
+
+    // Re-upload the byte-identical content well past the first upload's
+    // expires_at (900s), but before any physical reclamation pass (24h)
+    // would have removed the row -- exactly the window this fix closes.
+    const laterIso = '2026-09-01T01:00:00.000Z'; // 1h later, TTL was 900s
+    const secondDeps = freshDeps({
+      artifactStore: deps.artifactStore,
+      artifactsRepository: deps.artifactsRepository,
+      randomId: () => 'second-id-should-never-be-used',
+      nowIso: () => laterIso,
+    });
+    const second = await storeDocumentUpload(bytes, 'application/pdf', secondDeps);
+    expect(second.ok).toBe(true);
+    if (!second.ok) return;
+
+    // Same content-addressed identity, but the TTL must now be live again
+    // (fresh now + TTL), never the already-past original value.
+    expect(second.upload_id).toBe(first.upload_id);
+    expect(Date.parse(second.expires_at)).toBeGreaterThan(Date.parse(laterIso));
+    expect(second.expires_at).toBe(
+      new Date(Date.parse(laterIso) + DOCUMENT_UPLOAD_TTL_SECONDS * 1000).toISOString()
+    );
+
+    // The refresh is durable, not response-only: reading the row back
+    // independently must show the same extended expiry.
+    const stored = await deps.__repo.getById(first.upload_id);
+    expect(stored.ok && stored.value?.expires_at).toBe(second.expires_at);
+  });
+
+  it('SUN-1222C-LOCAL-CLOSURE-R2 §1: a dedup hit whose existing expires_at already lapsed AND whose refresh fails is rejected -- NEVER returns the stale upload_id as a success', async () => {
+    const bytes = pdfBytes('expired-dedupe-refresh-failure fixture');
+    const hash = await realHash(bytes);
+    const staleExisting = {
+      id: 'stale-existing-id',
+      content_hash: hash,
+      media_type: 'application/pdf' as const,
+      byte_length: bytes.length,
+      created_at: '2026-09-01T00:00:00.000Z',
+      expires_at: '2026-09-01T00:15:00.000Z', // already in the past relative to nowIso below
+      authorization_class: 'buyer_authorized' as const,
+      retention_class: 'ephemeral' as const,
+      artifact_type: 'input' as const,
+    };
+    const deps = freshDeps({
+      nowIso: () => '2026-09-01T01:00:00.000Z', // 45 minutes after expires_at
+      artifactsRepository: {
+        create: async () => ({ ok: false as const, error: { code: 'DUPLICATE_ARTIFACT', message: 'x' } }),
+        getById: async () => ({ ok: true as const, value: staleExisting }),
+        getByContentHash: async () => ({ ok: true as const, value: staleExisting }),
+        getByJobId: async () => ({ ok: true as const, value: [] }),
+        delete: async () => ({ ok: true as const, value: false }),
+        deleteExpired: async () => ({ ok: true as const, value: 0 }),
+        listReclaimable: async () => ({ ok: true as const, value: [] }),
+        // Simulates a genuine repository fault during the refresh attempt.
+        refreshExpiry: async () => ({
+          ok: false as const,
+          error: { code: 'DATABASE_ERROR', message: 'simulated transient D1 fault' },
+        }),
+      },
+    });
+
+    const result = await storeDocumentUpload(bytes, 'application/pdf', deps);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.code).toBe('expired_dedupe_refresh_failed');
+    expect(result.retryable).toBe(true);
+    // Critically: nothing in the rejection carries the dead upload_id as if
+    // it were usable.
+    expect(JSON.stringify(result)).not.toContain('stale-existing-id');
+  });
+
+  it('SUN-1222C-LOCAL-CLOSURE-R2 §1: a dedup hit whose refresh races a concurrent physical reclamation (row already gone) is also rejected, never falls back to the dead reference', async () => {
+    const bytes = pdfBytes('expired-dedupe-race-with-reclamation fixture');
+    const hash = await realHash(bytes);
+    const staleExisting = {
+      id: 'raced-away-id',
+      content_hash: hash,
+      media_type: 'application/pdf' as const,
+      byte_length: bytes.length,
+      created_at: '2026-09-01T00:00:00.000Z',
+      expires_at: '2026-09-01T00:15:00.000Z',
+      authorization_class: 'buyer_authorized' as const,
+      retention_class: 'ephemeral' as const,
+      artifact_type: 'input' as const,
+    };
+    const deps = freshDeps({
+      nowIso: () => '2026-09-01T01:00:00.000Z',
+      artifactsRepository: {
+        create: async () => ({ ok: false as const, error: { code: 'DUPLICATE_ARTIFACT', message: 'x' } }),
+        getById: async () => ({ ok: true as const, value: staleExisting }),
+        getByContentHash: async () => ({ ok: true as const, value: staleExisting }),
+        getByJobId: async () => ({ ok: true as const, value: [] }),
+        delete: async () => ({ ok: true as const, value: false }),
+        deleteExpired: async () => ({ ok: true as const, value: 0 }),
+        listReclaimable: async () => ({ ok: true as const, value: [] }),
+        // `ok: true, value: null` -- the documented "row is gone" outcome.
+        refreshExpiry: async () => ({ ok: true as const, value: null }),
+      },
+    });
+
+    const result = await storeDocumentUpload(bytes, 'application/pdf', deps);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.code).toBe('expired_dedupe_refresh_failed');
+  });
+
+  it('SUN-1222C-LOCAL-CLOSURE-R2 §1: retrying an expired-dedupe-refresh-failure is idempotent -- a subsequent retry that succeeds returns a genuinely live reference, no duplicate rows created', async () => {
+    const deps = freshDeps({ randomId: () => 'first-id', nowIso: () => '2026-09-01T00:00:00.000Z' });
+    const bytes = pdfBytes('idempotent-retry-after-refresh-failure fixture');
+    const first = await storeDocumentUpload(bytes, 'application/pdf', deps);
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+
+    let refreshCalls = 0;
+    const flakyRepo: ArtifactsRepository = {
+      create: (a) => deps.__repo.create(a),
+      getById: (id) => deps.__repo.getById(id),
+      getByContentHash: (h) => deps.__repo.getByContentHash(h),
+      getByJobId: (jobId) => deps.__repo.getByJobId(jobId),
+      delete: (id) => deps.__repo.delete(id),
+      deleteExpired: () => deps.__repo.deleteExpired(),
+      listReclaimable: (a, b) => deps.__repo.listReclaimable(a, b),
+      refreshExpiry: async (id, expiresAt) => {
+        refreshCalls += 1;
+        if (refreshCalls === 1) {
+          return { ok: false, error: { code: 'DATABASE_ERROR', message: 'first attempt fails' } };
+        }
+        return deps.__repo.refreshExpiry(id, expiresAt);
+      },
+    };
+
+    const retryDeps = freshDeps({
+      artifactStore: deps.artifactStore,
+      artifactsRepository: flakyRepo,
+      randomId: () => 'never-used-id',
+      nowIso: () => '2026-09-01T01:00:00.000Z',
+    });
+
+    const failedAttempt = await storeDocumentUpload(bytes, 'application/pdf', retryDeps);
+    expect(failedAttempt.ok).toBe(false);
+
+    const retried = await storeDocumentUpload(bytes, 'application/pdf', retryDeps);
+    expect(retried.ok).toBe(true);
+    if (!retried.ok) return;
+    expect(retried.upload_id).toBe(first.upload_id);
+    expect(Date.parse(retried.expires_at)).toBeGreaterThan(Date.parse('2026-09-01T01:00:00.000Z'));
+
+    // No duplicate row was ever created by either attempt.
+    const stored = await deps.__repo.getByContentHash(await realHash(bytes));
+    expect(stored.ok && stored.value?.id).toBe(first.upload_id);
+  });
+
+  it('a dedup hit whose existing expires_at is still live is left untouched (dedup never shortens anyone\'s window)', async () => {
+    const deps = freshDeps({
+      randomId: () => 'first-id',
+      nowIso: () => '2026-09-01T00:00:00.000Z',
+    });
+    const bytes = pdfBytes('still-live dedupe fixture');
+    const first = await storeDocumentUpload(bytes, 'application/pdf', deps);
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+
+    // Re-upload 10s later -- well within the 900s TTL.
+    const secondDeps = freshDeps({
+      artifactStore: deps.artifactStore,
+      artifactsRepository: deps.artifactsRepository,
+      randomId: () => 'second-id-should-never-be-used',
+      nowIso: () => '2026-09-01T00:00:10.000Z',
+    });
+    const second = await storeDocumentUpload(bytes, 'application/pdf', secondDeps);
+    expect(second.ok).toBe(true);
+    if (!second.ok) return;
+    expect(second.expires_at).toBe(first.expires_at);
+  });
+
   it('handles a concurrent-identical-content race (D1 create returns DUPLICATE_ARTIFACT) by re-reading rather than surfacing a storage_failure for a perfectly successful upload', async () => {
     const bytes = pdfBytes('race condition fixture');
     const hash = await realHash(bytes);
@@ -296,7 +486,9 @@ describe('storeDocumentUpload — adversarial matrix', () => {
       getByJobId: (jobId: string) => realRepo.getByJobId(jobId),
       delete: (id: string) => realRepo.delete(id),
       deleteExpired: () => realRepo.deleteExpired(),
-      listReclaimable: (olderThanIso: string) => realRepo.listReclaimable(olderThanIso),
+      listReclaimable: (olderThanIso: string, nowIso: string) =>
+        realRepo.listReclaimable(olderThanIso, nowIso),
+      refreshExpiry: (id: string, expiresAt: string) => realRepo.refreshExpiry(id, expiresAt),
     };
     const deps = freshDeps({ artifactsRepository: racingRepo, randomId: () => 'never-used-id' });
     const result = await storeDocumentUpload(bytes, 'application/pdf', deps);
@@ -343,6 +535,7 @@ describe('storeDocumentUpload — adversarial matrix', () => {
         delete: async () => ({ ok: true as const, value: false }),
         deleteExpired: async () => ({ ok: true as const, value: 0 }),
         listReclaimable: async () => ({ ok: true as const, value: [] }),
+        refreshExpiry: async () => ({ ok: true as const, value: null }),
       },
     });
     const result = await storeDocumentUpload(pdfBytes(), 'application/pdf', deps);

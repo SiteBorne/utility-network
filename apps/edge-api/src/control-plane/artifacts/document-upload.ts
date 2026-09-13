@@ -71,7 +71,8 @@ export type DocumentUploadRejectionCode =
   | 'media_type_mismatch'
   | 'empty_body'
   | 'byte_limit_exceeded'
-  | 'storage_failure';
+  | 'storage_failure'
+  | 'expired_dedupe_refresh_failed';
 
 export interface DocumentUploadRejection {
   ok: false;
@@ -79,6 +80,12 @@ export interface DocumentUploadRejection {
   message: string;
   /** Present only for byte_limit_exceeded; never echoes bytes back. */
   declaredOrObservedBytes?: number;
+  /** Present only for expired_dedupe_refresh_failed: the caller (a real
+   * buyer retry, or the paid-request submission) is not the same content
+   * needing to be re-hashed/re-uploaded here -- a retry of the identical
+   * upload request is expected to succeed once the transient repository
+   * fault clears or a concurrent reclamation race resolves. */
+  retryable?: boolean;
 }
 
 export interface DocumentUploadAccepted {
@@ -117,6 +124,92 @@ export function sniffMediaType(bytes: Uint8Array): DocumentUploadMediaType | nul
 
 export function isAllowedMediaType(value: string): value is DocumentUploadMediaType {
   return (DOCUMENT_UPLOAD_ALLOWED_MEDIA_TYPES as readonly string[]).includes(value);
+}
+
+/**
+ * SUN-1222C-document-artifact-production-closure — a content-addressed
+ * dedup hit's `expires_at` reflects when the artifact was FIRST uploaded,
+ * not this request. Physical reclamation (`artifact-reclamation.ts`) runs
+ * on a much longer, separate 24h horizon than the 900s buyer-facing TTL,
+ * so there is a real window where a D1 row (and its R2 object) still
+ * exists but its `expires_at` has already lapsed. Returning that stale
+ * value verbatim would hand the buyer a 201 "success" response for an
+ * `upload_id` that is already guaranteed to fail `resolveUploadReference`'s
+ * expiry check on the very next paid request — a dead-on-arrival
+ * reference presented as a live one. If the existing row is missing an
+ * `expires_at` or it has already passed, extend it to a fresh
+ * `now + DOCUMENT_UPLOAD_TTL_SECONDS` before responding; a live row's
+ * `expires_at` is left untouched (dedup never shortens anyone's window).
+ *
+ * SUN-1222C-DOCUMENT-ARTIFACT-LOCAL-CLOSURE-R2 §1 — a stale record MUST
+ * fail closed: a `refreshExpiry` failure or race NEVER falls back to
+ * handing back the original (already-known-dead) `expires_at`. Doing so
+ * would return a `201`-shaped success carrying an `upload_id` already
+ * guaranteed to fail `resolveUploadReference`'s own expiry check on the
+ * very next paid request — indistinguishable, from the buyer's side, from
+ * a server bug, and strictly worse than a clear, retryable rejection.
+ * Three outcomes only:
+ *   1. not stale — return the existing (untouched) reference, unchanged.
+ *   2. stale + refresh succeeds AND returns a live (non-past) row — return
+ *      the renewed reference.
+ *   3. stale + refresh fails, or races a concurrent reclamation pass that
+ *      already deleted the row (`result.ok && result.value === null`), or
+ *      even succeeds but somehow still reports a past `expires_at` — reject
+ *      with `expired_dedupe_refresh_failed` (retryable: true). The caller
+ *      already has the original bytes in hand; a retry re-uploads them
+ *      (mints a fresh row if this one is truly gone, or re-attempts the
+ *      refresh otherwise) rather than the buyer ever seeing a
+ *      dead-on-arrival "success".
+ */
+async function dedupedResponse(
+  existing: ArtifactRecord,
+  deps: DocumentUploadDeps
+): Promise<DocumentUploadResult> {
+  const nowIso = deps.nowIso();
+  const stale = !existing.expires_at || Date.parse(existing.expires_at) <= Date.parse(nowIso);
+
+  if (!stale) {
+    return {
+      ok: true,
+      upload_id: existing.id,
+      media_type: existing.media_type as DocumentUploadMediaType,
+      size_bytes: existing.byte_length,
+      content_hash: existing.content_hash,
+      expires_at: existing.expires_at as string,
+    };
+  }
+
+  const refreshed = new Date(
+    Date.parse(nowIso) + DOCUMENT_UPLOAD_TTL_SECONDS * 1000
+  ).toISOString();
+  const result = await deps.artifactsRepository.refreshExpiry(existing.id, refreshed);
+  const renewedExpiresAt = result.ok ? result.value?.expires_at : undefined;
+  const refreshSucceededAndLive =
+    result.ok &&
+    result.value !== null &&
+    !!renewedExpiresAt &&
+    Date.parse(renewedExpiresAt) > Date.parse(nowIso);
+
+  if (!refreshSucceededAndLive) {
+    return {
+      ok: false,
+      code: 'expired_dedupe_refresh_failed',
+      message:
+        `an existing upload for this content's hash had already expired and could not be ` +
+        `renewed (${!result.ok ? result.error.message : 'row no longer exists or refresh did not take effect'}); ` +
+        `retry this upload`,
+      retryable: true,
+    };
+  }
+
+  return {
+    ok: true,
+    upload_id: existing.id,
+    media_type: existing.media_type as DocumentUploadMediaType,
+    size_bytes: existing.byte_length,
+    content_hash: existing.content_hash,
+    expires_at: renewedExpiresAt as string,
+  };
 }
 
 /**
@@ -176,14 +269,7 @@ export async function storeDocumentUpload(
   // on an existing hash-keyed object; this mirrors that at the D1 layer.
   const existing = await deps.artifactsRepository.getByContentHash(contentHash);
   if (existing.ok && existing.value) {
-    return {
-      ok: true,
-      upload_id: existing.value.id,
-      media_type: existing.value.media_type as DocumentUploadMediaType,
-      size_bytes: existing.value.byte_length,
-      content_hash: existing.value.content_hash,
-      expires_at: existing.value.expires_at ?? deps.nowIso(),
-    };
+    return dedupedResponse(existing.value, deps);
   }
 
   const id = deps.randomId();
@@ -223,14 +309,7 @@ export async function storeDocumentUpload(
     if (created.error.code === 'DUPLICATE_ARTIFACT') {
       const raced = await deps.artifactsRepository.getByContentHash(contentHash);
       if (raced.ok && raced.value) {
-        return {
-          ok: true,
-          upload_id: raced.value.id,
-          media_type: raced.value.media_type as DocumentUploadMediaType,
-          size_bytes: raced.value.byte_length,
-          content_hash: raced.value.content_hash,
-          expires_at: raced.value.expires_at ?? nowIso,
-        };
+        return dedupedResponse(raced.value, deps);
       }
     }
     return {

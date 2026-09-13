@@ -371,14 +371,28 @@ export class InMemoryArtifactsRepository implements ArtifactsRepository {
     return ok(count);
   }
 
-  async listReclaimable(olderThanIso: string): ReturnType<ArtifactsRepository['listReclaimable']> {
+  async listReclaimable(
+    olderThanIso: string,
+    nowIso: string
+  ): ReturnType<ArtifactsRepository['listReclaimable']> {
     const matches: ArtifactRecord[] = [];
     for (const [, artifact] of this.store.entries()) {
-      if (artifact.created_at < olderThanIso) {
+      const notLiveExpiry = !artifact.expires_at || artifact.expires_at <= nowIso;
+      if (artifact.created_at < olderThanIso && notLiveExpiry) {
         matches.push(artifact);
       }
     }
     return ok(matches);
+  }
+
+  async refreshExpiry(
+    id: string,
+    expiresAt: string
+  ): ReturnType<ArtifactsRepository['refreshExpiry']> {
+    const artifact = await this.store.get(id);
+    if (!artifact) return ok(null);
+    const updated = await this.store.update(id, (item) => ({ ...item, expires_at: expiresAt }));
+    return ok(updated);
   }
 
   clear(): void {

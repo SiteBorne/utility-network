@@ -33,6 +33,11 @@ import { documentArtifactUploadRoute } from './control-plane/routes/document-art
 import type { Env } from './control-plane/config/env';
 import { D1WorkflowOwnerIntentRepository } from './control-plane/repositories/d1/workflow-owner-intents';
 import { recoverPendingWorkflowOwnerIntents } from './control-plane/continuation/owner-recovery';
+import { reclaimStaleArtifacts } from './control-plane/artifacts/artifact-reclamation';
+import { runStorageAlertSweep } from './control-plane/alerting/storage-alert-sweep';
+import { buildHttpsWebhookTransport } from './control-plane/alerting/settlement-alert-webhook-transport';
+import { R2ArtifactStoreAdapter } from './control-plane/artifacts/store';
+import { D1ArtifactsRepository } from './control-plane/repositories/d1/artifacts';
 
 export type { ControlPlaneConfig };
 
@@ -274,6 +279,76 @@ export async function recoverWorkflowOwnerIntentsScheduled(
   );
 }
 
+/**
+ * SUN-1222C-document-artifact-production-closure — wires physical artifact
+ * reclamation (`artifact-reclamation.ts`) to the now-proven-working
+ * scheduled dispatcher. Previously unwired entirely (confirmed by trace,
+ * flagged as a deliberate deferral by both `artifact-reclamation.ts`'s own
+ * doc comment and `document-ingress-admission-control.ts`'s), meaning the
+ * bounded-RATE admission control on `POST /v2/artifacts/documents` bounded
+ * how fast storage could accumulate but never how much could accumulate in
+ * total over an unbounded time horizon. This closes that gap using only
+ * already-existing, already-proven-safe machinery: no new binding, no new
+ * secret, no new D1 table, no new Cron Trigger (the same `* * * * *`
+ * trigger `recoverWorkflowOwnerIntentsScheduled` already uses).
+ *
+ * Alerting (SUN-1222C-DOCUMENT-ARTIFACT-LOCAL-CLOSURE-R2 §3 — "critical
+ * storage/reclamation alerting"): a persistent `r2_delete_failures > 0`
+ * after a pass means R2 deletes are failing while the D1 rows are
+ * (correctly, per `reclaimStaleArtifacts`'s own contract) being left in
+ * place for retry — safe, but worth surfacing. The unconditional
+ * structured `console.error` (Cloudflare platform logs / Logpush, no new
+ * binding) remains and is never suppressed. Additionally, when
+ * `env.STORAGE_RECLAMATION_ALERT_WEBHOOK_URL` is provisioned, one bounded
+ * webhook delivery is attempted via the same generic, already-proven
+ * `buildHttpsWebhookTransport` D12 uses for settlement alerts (see
+ * `../alerting/storage-alert-sweep.ts`) — no economic credential, no
+ * artifact content, only counts/timestamp/a bounded content-hash sample.
+ * A transport failure or a missing secret never blocks or delays
+ * reclamation itself: this call happens strictly after `reclaimStaleArtifacts`
+ * has already fully run and been counted, and its own result is not
+ * awaited by anything that could roll reclamation back.
+ */
+export async function reclaimStaleArtifactsScheduled(
+  env: Pick<Env, 'DB' | 'ARTIFACTS' | 'STORAGE_RECLAMATION_ALERT_WEBHOOK_URL'>
+): Promise<void> {
+  if (!env.DB || !env.ARTIFACTS) return;
+  const nowIso = new Date().toISOString();
+  const result = await reclaimStaleArtifacts({
+    artifactStore: new R2ArtifactStoreAdapter(env.ARTIFACTS),
+    artifactsRepository: new D1ArtifactsRepository(env.DB),
+    nowIso: () => nowIso,
+  });
+  if (result.r2_delete_failures > 0) {
+    console.error(
+      JSON.stringify({
+        event: 'siteborne.artifact_reclamation.r2_delete_failures',
+        reclaimed: result.reclaimed,
+        r2_delete_failures: result.r2_delete_failures,
+        observed_at: nowIso,
+      })
+    );
+  }
+  const webhookUrl = env.STORAGE_RECLAMATION_ALERT_WEBHOOK_URL;
+  if (webhookUrl) {
+    try {
+      await runStorageAlertSweep(
+        {
+          r2DeleteFailures: result.r2_delete_failures,
+          reclaimedCount: result.reclaimed,
+          failedContentHashes: result.r2_delete_failure_content_hashes,
+          nowIso,
+        },
+        { transport: buildHttpsWebhookTransport(webhookUrl) }
+      );
+    } catch {
+      // §3 "alert transport failure that never blocks reclamation
+      // itself" — reclamation has already fully completed above;
+      // a construction/delivery error here is swallowed, never rethrown.
+    }
+  }
+}
+
 // SUN-1222C cron export remediation: the previous `Object.assign(app, {
 // scheduled })` default export is the Hono application instance itself,
 // merely augmented with an own `scheduled` property. That shape is
@@ -298,5 +373,6 @@ export default {
     ctx: { waitUntil(promise: Promise<unknown>): void }
   ): void {
     ctx.waitUntil(recoverWorkflowOwnerIntentsScheduled(env));
+    ctx.waitUntil(reclaimStaleArtifactsScheduled(env));
   },
 };

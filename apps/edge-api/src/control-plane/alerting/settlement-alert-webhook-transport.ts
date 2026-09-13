@@ -8,7 +8,7 @@
  * timeout, one attempt per call (D12 §17 — the sweep itself is the retry
  * mechanism across cron invocations, not this function).
  */
-import type { SettlementAlertPayload, SettlementAlertTransport } from './settlement-alert-sweep';
+import type { SettlementAlertPayload } from './settlement-alert-sweep';
 
 const DEFAULT_TIMEOUT_MS = 10_000;
 
@@ -24,11 +24,19 @@ export interface BuildHttpsWebhookTransportOptions {
  * boundary as every other secret this repository provisions via
  * `wrangler secret put`), not user- or request-supplied input, so no
  * additional SSRF allowlist is meaningful here.
+ *
+ * SUN-1222C-DOCUMENT-ARTIFACT-LOCAL-CLOSURE-R2 §3 — generic over the
+ * payload type (`<TPayload>`, defaulting to `SettlementAlertPayload` so
+ * every existing D12 call site is unaffected) rather than hardcoded to
+ * settlement alerts: the implementation was already vendor/schema-agnostic
+ * (a plain `JSON.stringify` POST), only the exported TYPE was needlessly
+ * narrow. `storage-alert-sweep.ts` reuses this exact function, unmodified
+ * at the implementation level, for `StorageAlertPayload` instead.
  */
-export function buildHttpsWebhookTransport(
+export function buildHttpsWebhookTransport<TPayload = SettlementAlertPayload>(
   webhookUrl: string,
   options: BuildHttpsWebhookTransportOptions = {}
-): SettlementAlertTransport {
+): (payload: TPayload) => Promise<{ delivered: boolean }> {
   if (!webhookUrl.startsWith('https://')) {
     throw new Error(
       'settlement alert webhook URL must be HTTPS (D12 §19 destination-safety requirement)'
@@ -37,9 +45,7 @@ export function buildHttpsWebhookTransport(
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const fetchImpl = options.fetchImpl ?? fetch;
 
-  return async function deliver(
-    payload: SettlementAlertPayload
-  ): Promise<{ delivered: boolean }> {
+  return async function deliver(payload: TPayload): Promise<{ delivered: boolean }> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
     try {

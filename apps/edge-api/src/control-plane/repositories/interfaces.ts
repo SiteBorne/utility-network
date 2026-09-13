@@ -88,13 +88,44 @@ export interface ArtifactsRepository {
   delete(id: string): Promise<RepositoryResponse<boolean>>;
   deleteExpired(): Promise<RepositoryResponse<number>>;
   /** SUN-1222C0 — physical reclamation's own read: every artifact record
-   * created strictly before `olderThanIso`, regardless of `expires_at`
-   * (which only gates whether a buyer can still SUBMIT a fresh paid
-   * request against an upload -- a separate, much shorter concern from
-   * "is it now safe to physically delete the bytes"). Returns full
+   * created strictly before `olderThanIso` AND whose `expires_at` is
+   * either absent or already `<= nowIso`.
+   *
+   * SUN-1222C-DOCUMENT-ARTIFACT-LOCAL-CLOSURE-R2 §2 — the `expires_at`
+   * half of this condition is load-bearing, not redundant with
+   * `created_at`: `refreshExpiry()` (the expired-dedupe fix below) can
+   * push a row's `expires_at` into the future WITHOUT touching
+   * `created_at`. Before this fix, a row old enough to be
+   * `created_at`-reclaimable but freshly refreshed by a dedup hit could
+   * be physically deleted out from under a buyer who was just handed a
+   * live (non-expired) `upload_id` for it — a real, provable "reclaimed
+   * while still validly referenced" gap, not a hypothetical one. Requiring
+   * `expires_at <= nowIso` closes it: reclamation now never deletes a row
+   * a buyer currently holds a non-expired promise for, regardless of how
+   * old `created_at` is. (Buyer-side consumption itself is synchronous and
+   * immediate — `resolveUploadReference` reads D1 metadata and the R2
+   * bytes inline, before any Workflow/job is created, and never holds a
+   * reference beyond that single call — so no separate "nonterminal job
+   * still needs this" linkage is needed to prove safety here; the
+   * `expires_at` check alone is the complete invariant.) Returns full
    * records (not just ids) because the caller needs `content_hash` to
    * delete the matching R2 object before removing this row. */
-  listReclaimable(olderThanIso: string): Promise<RepositoryResponse<ArtifactRecord[]>>;
+  listReclaimable(
+    olderThanIso: string,
+    nowIso: string
+  ): Promise<RepositoryResponse<ArtifactRecord[]>>;
+  /** SUN-1222C-document-artifact-production-closure — extends a still-live
+   * or already-past-TTL artifact's `expires_at` in place, without touching
+   * `content_hash`, `id`, or the underlying R2 object. Closes the
+   * expired-dedupe gap in `storeDocumentUpload`: a content-addressed
+   * dedup hit whose existing row's TTL already lapsed (physical
+   * reclamation runs on a much longer, separate horizon — see
+   * `../artifacts/artifact-reclamation.ts`) must never hand a buyer back
+   * an `upload_id` that is dead on arrival at `resolveUploadReference`.
+   * Returns the row unchanged (not an error) if `id` no longer exists —
+   * a concurrent physical reclamation pass winning that race is a normal,
+   * expected outcome, not a failure the caller needs to react to. */
+  refreshExpiry(id: string, expiresAt: string): Promise<RepositoryResponse<ArtifactRecord | null>>;
 }
 
 export interface QueueDispatchRepository {
