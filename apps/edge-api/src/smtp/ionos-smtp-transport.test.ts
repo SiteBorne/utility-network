@@ -1,11 +1,25 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { Socket } from 'cloudflare:sockets';
+import type * as SmtpStageTimeout from './smtp-stage-timeout';
 import {
   SmtpTransportError,
   sendStorageAlertViaIonosSmtp,
   type ConnectFn,
 } from './ionos-smtp-transport';
 import { encodeAuthPlainInitialResponse } from './smtp-message';
+
+// SUN-1222C-SMTP-ROOT-CAUSE: `CLEANUP_TIMEOUT_MS` is mocked small (rather
+// than the real 1_000ms) purely so the bounded-cleanup tests below don't
+// burn a real second each -- the *value itself* is never asserted against,
+// only that the transport's `finally` block races `reader.cancel()`/
+// `currentSocket.close()` against it instead of awaiting them unbounded.
+// `withTimeout`/`StageTimeoutError` are re-exported from the real module
+// unchanged so every other stage timeout in this file keeps its real
+// behavior.
+vi.mock('./smtp-stage-timeout', async (importOriginal) => {
+  const actual = await importOriginal<typeof SmtpStageTimeout>();
+  return { ...actual, CLEANUP_TIMEOUT_MS: 10 };
+});
 
 const HOST = 'smtp.ionos.com';
 const PORT = 587;
@@ -685,5 +699,205 @@ describe('sendStorageAlertViaIonosSmtp — per-stage and overall timeouts', () =
       })
     ).resolves.toBeUndefined();
     expect(post.closeCalls).toBe(1);
+  });
+});
+
+/** Builds a post-TLS scripted socket, exactly like `makeScriptedSocket`,
+ * except its underlying `readable`'s `cancel()` and/or `close()` can be
+ * configured to hang forever -- proves the `finally` block's bounded
+ * cleanup (`CLEANUP_TIMEOUT_MS`, mocked to 10ms above) still lets
+ * `sendStorageAlertViaIonosSmtp` return instead of waiting on either
+ * indefinitely. */
+function makeCleanupHangSocket(
+  responses: Array<string | Uint8Array[]>,
+  opts: { hangCancel?: boolean; hangClose?: boolean }
+) {
+  const writes: string[] = [];
+  let closeCalls = 0;
+  let cancelCalls = 0;
+  const encoder = new TextEncoder();
+
+  const readable = new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const resp of responses) {
+        if (typeof resp === 'string') controller.enqueue(encoder.encode(resp));
+        else for (const piece of resp) controller.enqueue(piece);
+      }
+      // Deliberately never `controller.close()`d -- a real, still-open TCP
+      // connection doesn't close itself just because the peer has no more
+      // buffered bytes right now, and (per the WHATWG streams spec)
+      // `reader.cancel()` on an ALREADY-CLOSED stream is a no-op that never
+      // invokes the underlying source's own `cancel()` algorithm below --
+      // which would defeat the entire point of this hang simulation.
+      // Exactly the responses needed for the scripted sequence are
+      // enqueued above, so nothing here ever calls `read()` again after
+      // the last one is consumed.
+    },
+    cancel() {
+      cancelCalls++;
+      if (opts.hangCancel) return new Promise<void>(() => {}); // never resolves
+    },
+  });
+
+  const writable = new WritableStream<Uint8Array>({
+    write(chunk) {
+      writes.push(new TextDecoder().decode(chunk));
+    },
+  });
+
+  const socket = {
+    readable,
+    writable,
+    opened: Promise.resolve({}),
+    closed: Promise.resolve(),
+    close() {
+      closeCalls++;
+      if (opts.hangClose) return new Promise<void>(() => {}); // never resolves
+      return Promise.resolve();
+    },
+    startTls() {
+      throw new Error('startTls not configured on this fake socket');
+    },
+  } as unknown as Socket;
+
+  return {
+    socket,
+    writes,
+    get closeCalls() {
+      return closeCalls;
+    },
+    get cancelCalls() {
+      return cancelCalls;
+    },
+  };
+}
+
+describe('sendStorageAlertViaIonosSmtp — bounded cleanup (SUN-1222C-SMTP-ROOT-CAUSE)', () => {
+  // Real-runtime wall-clock bound: `CLEANUP_TIMEOUT_MS` is mocked to 10ms
+  // above, so even racing BOTH cleanup steps sequentially should never take
+  // more than a few multiples of that -- this is a generous ceiling
+  // (comfortably below the 5s default vitest test timeout) that only a
+  // still-unbounded `await` could actually exceed.
+  const CLEANUP_BOUND_MS = 500;
+
+  it('reader.cancel() hangs forever -> cleanup timeout expires -> send still resolves normally', async () => {
+    const { pre } = makeTlsSocketPair([GREETING, EHLO1_WITH_STARTTLS, STARTTLS_ACK], []);
+    const post = makeCleanupHangSocket(
+      [EHLO2_WITH_PLAIN, AUTH_OK, MAIL_OK, RCPT_OK, DATA_GO, SUBMIT_OK, QUIT_OK],
+      { hangCancel: true }
+    );
+    (pre.socket as unknown as { startTls: () => Socket }).startTls = () => post.socket;
+
+    const start = Date.now();
+    await expect(
+      sendStorageAlertViaIonosSmtp(config(), ENVELOPE, { ...DEPS, connectFn: () => pre.socket })
+    ).resolves.toBeUndefined();
+    expect(Date.now() - start).toBeLessThan(CLEANUP_BOUND_MS);
+    expect(post.cancelCalls).toBe(1);
+    // The still-hanging cancel() must not have prevented close() from
+    // running too -- both cleanup steps are independent, sequential awaits.
+    expect(post.closeCalls).toBe(1);
+  });
+
+  it('currentSocket.close() hangs forever -> cleanup timeout expires -> send still resolves normally', async () => {
+    const { pre } = makeTlsSocketPair([GREETING, EHLO1_WITH_STARTTLS, STARTTLS_ACK], []);
+    const post = makeCleanupHangSocket(
+      [EHLO2_WITH_PLAIN, AUTH_OK, MAIL_OK, RCPT_OK, DATA_GO, SUBMIT_OK, QUIT_OK],
+      { hangClose: true }
+    );
+    (pre.socket as unknown as { startTls: () => Socket }).startTls = () => post.socket;
+
+    const start = Date.now();
+    await expect(
+      sendStorageAlertViaIonosSmtp(config(), ENVELOPE, { ...DEPS, connectFn: () => pre.socket })
+    ).resolves.toBeUndefined();
+    expect(Date.now() - start).toBeLessThan(CLEANUP_BOUND_MS);
+    expect(post.closeCalls).toBe(1);
+  });
+
+  it('both reader.cancel() and currentSocket.close() hang forever -> total cleanup remains bounded', async () => {
+    const { pre } = makeTlsSocketPair([GREETING, EHLO1_WITH_STARTTLS, STARTTLS_ACK], []);
+    const post = makeCleanupHangSocket(
+      [EHLO2_WITH_PLAIN, AUTH_OK, MAIL_OK, RCPT_OK, DATA_GO, SUBMIT_OK, QUIT_OK],
+      { hangCancel: true, hangClose: true }
+    );
+    (pre.socket as unknown as { startTls: () => Socket }).startTls = () => post.socket;
+
+    const start = Date.now();
+    await expect(
+      sendStorageAlertViaIonosSmtp(config(), ENVELOPE, { ...DEPS, connectFn: () => pre.socket })
+    ).resolves.toBeUndefined();
+    expect(Date.now() - start).toBeLessThan(CLEANUP_BOUND_MS);
+    expect(post.cancelCalls).toBe(1);
+    expect(post.closeCalls).toBe(1);
+  });
+
+  it('a hanging cleanup does not replace a genuine SMTP failure — the original classified stage/message survive', async () => {
+    // The send itself fails at AUTH (535); the post-TLS socket's cleanup
+    // then hangs on both steps. The thrown error must still be the
+    // original SMTP_AUTH_FAILED classification, not a cleanup-related
+    // error or a generic cancellation -- the `.catch(() => {})` after each
+    // bounded cleanup race ensures a cleanup timeout can never itself
+    // become (or replace) the thrown error.
+    const { pre } = makeTlsSocketPair([GREETING, EHLO1_WITH_STARTTLS, STARTTLS_ACK], []);
+    const post = makeCleanupHangSocket([EHLO2_WITH_PLAIN, '535 5.7.8 Authentication failed\r\n'], {
+      hangCancel: true,
+      hangClose: true,
+    });
+    (pre.socket as unknown as { startTls: () => Socket }).startTls = () => post.socket;
+
+    const start = Date.now();
+    const err = await sendStorageAlertViaIonosSmtp(config(), ENVELOPE, {
+      ...DEPS,
+      connectFn: () => pre.socket,
+    }).catch((e) => e);
+    expect(Date.now() - start).toBeLessThan(CLEANUP_BOUND_MS);
+    expect(err).toBeInstanceOf(SmtpTransportError);
+    expect((err as SmtpTransportError).stage).toBe('SMTP_AUTH_FAILED');
+    expect((err as SmtpTransportError).message).toContain('535');
+    expect((err as SmtpTransportError).message).not.toContain(PASSWORD);
+  });
+
+  it('a hanging cleanup after an SMTP_OVERALL timeout does not prevent the timeout error from surfacing', async () => {
+    // The greeting never arrives (a per-stage-budget-driven hang), and
+    // THIS (pre-TLS) socket's own cancel()/close() would also hang forever
+    // -- proves the bounded-cleanup fix covers the pre-TLS
+    // `currentSocket === socket` path too, not just the post-TLS one the
+    // other tests above exercise.
+    let cancelCalls = 0;
+    let closeCalls = 0;
+    const socket = {
+      readable: new ReadableStream<Uint8Array>({
+        pull: () => new Promise<void>(() => {}), // greeting never arrives
+        cancel() {
+          cancelCalls++;
+          return new Promise<void>(() => {}); // never resolves
+        },
+      }),
+      writable: new WritableStream<Uint8Array>({ write() {} }),
+      opened: Promise.resolve({}),
+      closed: Promise.resolve(),
+      close() {
+        closeCalls++;
+        return new Promise<void>(() => {}); // never resolves
+      },
+      startTls() {
+        throw new Error('not configured');
+      },
+    } as unknown as Socket;
+
+    const start = Date.now();
+    const err = await sendStorageAlertViaIonosSmtp(config(), ENVELOPE, {
+      ...DEPS,
+      perStageTimeoutMs: 20,
+      overallTimeoutMs: 100,
+      connectFn: () => socket,
+    }).catch((e) => e);
+    expect(Date.now() - start).toBeLessThan(100 + CLEANUP_BOUND_MS);
+    expect(err).toBeInstanceOf(SmtpTransportError);
+    expect((err as SmtpTransportError).stage).toBe('SMTP_GREETING_REJECTED');
+    expect((err as SmtpTransportError).message).toContain('timed out');
+    expect(cancelCalls).toBe(1);
+    expect(closeCalls).toBe(1);
   });
 });

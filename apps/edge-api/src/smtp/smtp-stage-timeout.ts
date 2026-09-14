@@ -19,6 +19,19 @@
  * itself rather than being force-canceled from outside.
  */
 
+/** SUN-1222C-SMTP-ROOT-CAUSE: the bounded-cleanup budget shared by both
+ * `ionos-smtp-transport.ts` (the real send path) and
+ * `ionos-smtp-diagnostic.ts` (the non-delivery probe) for their identical
+ * `finally` blocks -- `reader.cancel()` and `currentSocket.close()`, each
+ * raced against this budget via `withTimeout`, so a black-holed or
+ * half-upgraded TLS connection can never prevent either function from
+ * actually `return`ing/`throw`ing its own result. Lives here (rather than
+ * in either module) specifically so `ionos-smtp-transport.ts` never has to
+ * import from `ionos-smtp-diagnostic.ts` -- that direction already goes
+ * the other way (the diagnostic module imports `hasStartTls`/`writeLine`
+ * from the transport), and this file has no dependency on either. */
+export const CLEANUP_TIMEOUT_MS = 1_000;
+
 /** Thrown when a `withTimeout`-wrapped operation does not settle within its
  * budget. Deliberately carries only the caller-supplied `stage` label --
  * never anything about the awaited operation's own state -- so it can

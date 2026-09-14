@@ -76,6 +76,15 @@
  * promise is even awaited -- so a hang or rejection in `.opened` still
  * results in the correct (secure, not abandoned pre-TLS) socket being
  * closed.
+ *
+ * Bounded-cleanup fix (same investigation, after `ionos-smtp-diagnostic.ts`
+ * proved the same bug in its own `finally` block via a real Service Binding
+ * integration test): `reader.cancel()`/`currentSocket.close()` below are now
+ * each raced against `CLEANUP_TIMEOUT_MS` (`smtp-stage-timeout.ts`, shared
+ * with the diagnostic module) rather than awaited unbounded -- previously a
+ * black-holed or half-upgraded TLS connection could hang this `finally`
+ * forever, silently preventing the already-classified `SmtpTransportError`
+ * (or success) from ever being thrown/returned past it.
  */
 import type { Socket } from 'cloudflare:sockets';
 import { connect as cloudflareConnect } from '../cloudflare-sockets-ambient';
@@ -86,7 +95,7 @@ import {
   encodeForDataCommand,
   generateMessageId,
 } from './smtp-message';
-import { StageTimeoutError, withTimeout } from './smtp-stage-timeout';
+import { StageTimeoutError, withTimeout, CLEANUP_TIMEOUT_MS } from './smtp-stage-timeout';
 
 export type ConnectFn = (
   address: { hostname: string; port: number },
@@ -499,8 +508,32 @@ export async function sendStorageAlertViaIonosSmtp(
     }
     throw err;
   } finally {
-    await reader.cancel().catch(() => {});
-    await currentSocket.close().catch(() => {});
+    // SUN-1222C-SMTP-ROOT-CAUSE fix: these two cleanup steps used to be
+    // awaited with no bound of their own -- fine when the socket is
+    // healthy, but exactly the kind of operation that can hang
+    // indefinitely on a black-holed or half-upgraded TLS connection. When
+    // that happened, the `SMTP_OVERALL` timeout above still fired and was
+    // still caught, but the classified `SmtpTransportError` could never
+    // actually be thrown past this `finally` -- so the caller (the
+    // Service Binding fetch in `storage-alert-service-binding-transport.ts`)
+    // saw nothing until its OWN, unrelated 10s budget force-canceled the
+    // whole invocation, with no application-level error ever surfacing.
+    // Racing each step against the identical `CLEANUP_TIMEOUT_MS` budget
+    // `ionos-smtp-diagnostic.ts` uses (proven by this module's own tests
+    // and by the real Service Binding integration tests in
+    // `tests/workerd/`) keeps the worst case at
+    // `overallTimeoutMs + 2 * CLEANUP_TIMEOUT_MS`, comfortably under that
+    // 10s caller budget, and guarantees this function's own
+    // `return`/`throw` always reflects the actual send outcome (success,
+    // or the specific `SmtpTransportError` classified above) rather than
+    // a stuck cleanup silently replacing it with an external cancellation.
+    // `.catch(() => {})` on each ensures a cleanup failure can never
+    // itself become the thrown error, overriding the classified one from
+    // the `catch` block above -- exactly as before this fix.
+    await withTimeout('CLEANUP_READER_CANCEL', reader.cancel(), CLEANUP_TIMEOUT_MS).catch(() => {});
+    await withTimeout('CLEANUP_SOCKET_CLOSE', currentSocket.close(), CLEANUP_TIMEOUT_MS).catch(
+      () => {}
+    );
   }
 }
 

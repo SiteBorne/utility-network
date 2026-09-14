@@ -73,7 +73,14 @@ import type { Socket } from 'cloudflare:sockets';
 import { connect as cloudflareConnect } from '../cloudflare-sockets-ambient';
 import { SmtpResponseReader } from './smtp-response-reader';
 import { hasStartTls, writeLine, type ConnectFn } from './ionos-smtp-transport';
-import { StageTimeoutError, withTimeout } from './smtp-stage-timeout';
+import { StageTimeoutError, withTimeout, CLEANUP_TIMEOUT_MS } from './smtp-stage-timeout';
+
+// Re-exported for backward compatibility -- `storage-alert-receiver-entrypoint.ts`
+// (and its tests) import `CLEANUP_TIMEOUT_MS` from this module; the constant
+// itself now lives in `smtp-stage-timeout.ts` (see that file's doc comment)
+// so `ionos-smtp-transport.ts` can use the identical budget without creating
+// an import cycle.
+export { CLEANUP_TIMEOUT_MS };
 
 /** Coarse stage identity used for elapsed-time bookkeeping and as the
  * `failedStage`/`reachedStage` value on failure. Kept deliberately
@@ -178,14 +185,10 @@ const DEFAULT_EHLO_HOSTNAME = 'alerts.siteborne.net';
  * `overallTimeoutMs + 2 * CLEANUP_TIMEOUT_MS`, comfortably under that 12s
  * caller budget, and guarantees this function's own `return`/`throw`
  * always reflects the actual probe outcome, never a stuck cleanup.
- *
- * Exported (SUN-1222C-SMTP-ROOT-CAUSE Service-Binding-isolation addendum)
- * solely so `storage-alert-receiver-entrypoint.ts`'s zero-network
- * `CLEANUP_HANG` control mode can race the exact same budget against
- * never-resolving stand-ins for `reader.cancel()`/`socket.close()`,
- * proving the bounded-cleanup fix itself without duplicating the magic
- * number or touching a real socket. */
-export const CLEANUP_TIMEOUT_MS = 1_000;
+ * `CLEANUP_TIMEOUT_MS` itself now lives in `smtp-stage-timeout.ts` (see
+ * import above) so `ionos-smtp-transport.ts` -- the real send path, which
+ * has the identical `finally` shape and the identical bug -- can share it
+ * without an import cycle. */
 
 /** Maps each stage to the outcome its own timeout resolves to -- used
  * when the OVERALL budget (rather than any individual stage's own
