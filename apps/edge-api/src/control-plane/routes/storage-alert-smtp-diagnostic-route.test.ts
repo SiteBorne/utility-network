@@ -435,3 +435,92 @@ describe('storageAlertSmtpDiagnosticRoute — SUN-1222C-SMTP-ROOT-CAUSE ?mode= z
     expect(receiver.fetch).not.toHaveBeenCalled();
   });
 });
+
+describe('storageAlertSmtpDiagnosticRoute — SUN-1222C-SMTP-ROOT-CAUSE ?mode=IONOS_IMPLICIT_TLS_465 forwarding', () => {
+  it('?mode=IONOS_IMPLICIT_TLS_465 forwards to the receiver /diagnostic path (not /control) with that mode appended, and forwards the body verbatim (no receiver_elapsed_ms/caller_elapsed_ms merge)', async () => {
+    const app = appWithRoute();
+    let capturedUrl = '';
+    const implicitTlsResultJson = JSON.stringify({
+      ok: true,
+      reachedStage: 'COMPLETE',
+      outcome: 'QUIT_OK',
+      timedOut: false,
+      elapsedMsByStage: { IMPLICIT_TLS_CONNECT: 40 },
+    });
+    const { env, receiver } = fullyProvisionedEnv(async (url) => {
+      capturedUrl = url;
+      return new Response(implicitTlsResultJson, {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+
+    const res = await app.request(
+      '/internal/storage-alert-smtp-diagnostic?mode=IONOS_IMPLICIT_TLS_465',
+      { method: 'POST', headers: { Authorization: `Bearer ${DIAGNOSTIC_TOKEN}` } },
+      env
+    );
+
+    expect(res.status).toBe(200);
+    expect(receiver.fetch).toHaveBeenCalledTimes(1);
+    expect(capturedUrl).toBe(
+      `https://storage-alert.internal/diagnostic/${PATH_TOKEN}?mode=IONOS_IMPLICIT_TLS_465`
+    );
+    const body = await res.json();
+    expect(body).toEqual(JSON.parse(implicitTlsResultJson));
+    expect(body.receiver_elapsed_ms).toBeUndefined();
+    expect(body.caller_elapsed_ms).toBeUndefined();
+  });
+
+  it('forwards a non-2xx implicit-TLS receiver result verbatim, with no retry', async () => {
+    const app = appWithRoute();
+    const failureJson = JSON.stringify({
+      ok: false,
+      reachedStage: 'IMPLICIT_TLS_CONNECT',
+      failedStage: 'IMPLICIT_TLS_CONNECT',
+      timedOut: true,
+      elapsedMsByStage: {},
+      detail: 'timed out after 3000ms',
+    });
+    const { env, receiver } = fullyProvisionedEnv(
+      async () =>
+        new Response(failureJson, { status: 502, headers: { 'content-type': 'application/json' } })
+    );
+
+    const res = await app.request(
+      '/internal/storage-alert-smtp-diagnostic?mode=IONOS_IMPLICIT_TLS_465',
+      { method: 'POST', headers: { Authorization: `Bearer ${DIAGNOSTIC_TOKEN}` } },
+      env
+    );
+
+    expect(res.status).toBe(502);
+    const body = await res.json();
+    expect(body.failedStage).toBe('IMPLICIT_TLS_CONNECT');
+    expect(receiver.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('still fails closed with zero receiver calls for an invalid bearer even with ?mode=IONOS_IMPLICIT_TLS_465 present', async () => {
+    const app = appWithRoute();
+    const { env, receiver } = fullyProvisionedEnv(OK_RECEIVER);
+    const res = await app.request(
+      '/internal/storage-alert-smtp-diagnostic?mode=IONOS_IMPLICIT_TLS_465',
+      { method: 'POST' },
+      env
+    );
+    expect(res.status).toBe(404);
+    expect(receiver.fetch).not.toHaveBeenCalled();
+  });
+
+  it('never echoes the diagnostic token or the path token in the implicit-TLS response', async () => {
+    const app = appWithRoute();
+    const { env } = fullyProvisionedEnv(OK_RECEIVER);
+    const res = await app.request(
+      '/internal/storage-alert-smtp-diagnostic?mode=IONOS_IMPLICIT_TLS_465',
+      { method: 'POST', headers: { Authorization: `Bearer ${DIAGNOSTIC_TOKEN}` } },
+      env
+    );
+    const text = await res.text();
+    expect(text).not.toContain(DIAGNOSTIC_TOKEN);
+    expect(text).not.toContain(PATH_TOKEN);
+  });
+});

@@ -73,6 +73,7 @@ import {
   DEFAULT_OVERALL_TIMEOUT_MS,
   CLEANUP_TIMEOUT_MS,
 } from './smtp/ionos-smtp-diagnostic';
+import { probeIonosSmtpImplicitTlsConnectivity } from './smtp/ionos-smtp-implicit-tls-diagnostic';
 import { withTimeout, StageTimeoutError } from './smtp/smtp-stage-timeout';
 
 /** Mirrors `StorageAlertPayload` in
@@ -192,6 +193,20 @@ const SMTP_PORT = 587;
 const FROM_ADDRESS = 'storage@alerts.siteborne.net';
 const TO_ADDRESS = 'hello@siteborne.com';
 const SUBJECT = 'SITEBORNE: storage reclamation critical alert';
+
+/** SUN-1222C-SMTP-ROOT-CAUSE addendum: `POST /diagnostic/<token>?mode=
+ * IONOS_IMPLICIT_TLS_465` (same token, same constant-time check, same
+ * identical-404 discipline) runs `probeIonosSmtpImplicitTlsConnectivity`
+ * (`smtp/ionos-smtp-implicit-tls-diagnostic.ts`) against port 465 instead of
+ * `probeIonosSmtpConnectivity` against port 587 -- isolates whether Cloudflare
+ * Workers can complete ANY TLS handshake against this IONOS service from
+ * whether the failure is specific to the STARTTLS upgrade sequence. Absent or
+ * any other `mode` value leaves the original port-587 STARTTLS probe
+ * unchanged. Identically to the 587 probe, this path never imports or reaches
+ * `env.IONOS_SMTP_PASSWORD`, `AUTH`, `MAIL FROM`, `RCPT TO`, `DATA`, or
+ * `startTls()` -- see that module's own doc comment.*/
+const IMPLICIT_TLS_PORT = 465;
+const DIAGNOSTIC_MODE_IMPLICIT_TLS_465 = 'IONOS_IMPLICIT_TLS_465';
 
 /**
  * SUN-1222C-SMTP-ROOT-CAUSE addendum: `POST /control/<token>?mode=...`
@@ -319,7 +334,14 @@ export default {
     if (diagnosticMatch) {
       const providedDiagnosticToken = diagnosticMatch[1];
       if (!timingSafeEqual(providedDiagnosticToken, token)) return NOT_FOUND();
-      const result = await probeIonosSmtpConnectivity({ host: SMTP_HOST, port: SMTP_PORT });
+      const diagnosticMode = url.searchParams.get('mode');
+      const result =
+        diagnosticMode === DIAGNOSTIC_MODE_IMPLICIT_TLS_465
+          ? await probeIonosSmtpImplicitTlsConnectivity({
+              host: SMTP_HOST,
+              port: IMPLICIT_TLS_PORT,
+            })
+          : await probeIonosSmtpConnectivity({ host: SMTP_HOST, port: SMTP_PORT });
       return new Response(JSON.stringify(result), {
         status: result.ok ? 200 : 502,
         headers: { 'content-type': 'application/json' },

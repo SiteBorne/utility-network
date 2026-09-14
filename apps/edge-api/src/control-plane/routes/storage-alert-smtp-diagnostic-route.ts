@@ -64,6 +64,23 @@ function parseControlMode(value: string | null): ControlMode | undefined {
     : undefined;
 }
 
+/** SUN-1222C-SMTP-ROOT-CAUSE addendum: `?mode=IONOS_IMPLICIT_TLS_465` on this
+ * same route, same bearer, forwards to the receiver's real `/diagnostic/
+ * <token>` path (unchanged Service Binding target) with that same mode
+ * appended as a query param, so the receiver runs
+ * `probeIonosSmtpImplicitTlsConnectivity` (port 465, implicit TLS) instead of
+ * `probeIonosSmtpConnectivity` (port 587, STARTTLS). Mutually exclusive with
+ * `CONTROL_MODES` above -- a value that matches a control mode is handled as
+ * a control mode, never as this. Absent or unrecognized means the original
+ * real-587-diagnostic behavior, unchanged. */
+const DIAGNOSTIC_TRANSPORT_MODES = ['IONOS_IMPLICIT_TLS_465'] as const;
+type DiagnosticTransportMode = (typeof DIAGNOSTIC_TRANSPORT_MODES)[number];
+function parseDiagnosticTransportMode(value: string | null): DiagnosticTransportMode | undefined {
+  return (DIAGNOSTIC_TRANSPORT_MODES as readonly string[]).includes(value ?? '')
+    ? (value as DiagnosticTransportMode)
+    : undefined;
+}
+
 /** Service Binding call budget -- deliberately larger than the receiver's
  * own internal overall diagnostic budget (8s default in
  * `ionos-smtp-diagnostic.ts`) so the receiver always gets to finish and
@@ -107,10 +124,14 @@ export async function storageAlertSmtpDiagnosticRoute(
   const pathToken = env.STORAGE_ALERT_PATH_TOKEN;
   if (!receiver || !pathToken) return NOT_FOUND(); // fail closed if unprovisioned
 
-  const controlMode = parseControlMode(c.req.query('mode') ?? null);
+  const rawMode = c.req.query('mode') ?? null;
+  const controlMode = parseControlMode(rawMode);
+  const diagnosticTransportMode = controlMode ? undefined : parseDiagnosticTransportMode(rawMode);
   const targetUrl = controlMode
     ? `https://storage-alert.internal/control/${encodeURIComponent(pathToken)}?mode=${controlMode}`
-    : `https://storage-alert.internal/diagnostic/${encodeURIComponent(pathToken)}`;
+    : diagnosticTransportMode
+      ? `https://storage-alert.internal/diagnostic/${encodeURIComponent(pathToken)}?mode=${diagnosticTransportMode}`
+      : `https://storage-alert.internal/diagnostic/${encodeURIComponent(pathToken)}`;
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), SERVICE_BINDING_TIMEOUT_MS);

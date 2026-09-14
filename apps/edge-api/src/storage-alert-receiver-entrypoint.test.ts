@@ -50,6 +50,38 @@ vi.mock('./smtp/ionos-smtp-diagnostic', () => ({
   CLEANUP_TIMEOUT_MS: 10,
 }));
 
+// SUN-1222C-SMTP-ROOT-CAUSE addendum: mocked identically in shape to
+// `probeIonosSmtpConnectivity` above -- proves the receiver's
+// `?mode=IONOS_IMPLICIT_TLS_465` branch reaches this function (and only this
+// function) instead of the port-587 probe, without opening a real socket.
+const implicitTlsDiagnosticCalls: Array<{ host: string; port: number }> = [];
+interface StandInImplicitTlsResult {
+  readonly ok: boolean;
+  readonly reachedStage: string;
+  readonly outcome: string;
+  readonly timedOut: boolean;
+  readonly elapsedMsByStage: Record<string, number>;
+  readonly failedStage?: string;
+  readonly detail?: string;
+}
+const DEFAULT_IMPLICIT_TLS_RESULT: StandInImplicitTlsResult = {
+  ok: true,
+  reachedStage: 'COMPLETE',
+  outcome: 'QUIT_OK',
+  timedOut: false,
+  elapsedMsByStage: { IMPLICIT_TLS_CONNECT: 9 },
+};
+const probeIonosSmtpImplicitTlsConnectivity = vi.fn(
+  async (config: { host: string; port: number }): Promise<StandInImplicitTlsResult> => {
+    implicitTlsDiagnosticCalls.push(config);
+    return DEFAULT_IMPLICIT_TLS_RESULT;
+  }
+);
+vi.mock('./smtp/ionos-smtp-implicit-tls-diagnostic', () => ({
+  probeIonosSmtpImplicitTlsConnectivity: (...args: unknown[]) =>
+    (probeIonosSmtpImplicitTlsConnectivity as (...a: unknown[]) => unknown)(...args),
+}));
+
 import worker, { type Env } from './storage-alert-receiver-entrypoint';
 
 const TOKEN = 'a'.repeat(48); // stand-in for a real cryptographically random token
@@ -90,6 +122,12 @@ beforeEach(() => {
   probeIonosSmtpConnectivity.mockImplementation(async (config) => {
     diagnosticCalls.push(config as { host: string; port: number });
     return DEFAULT_DIAGNOSTIC_RESULT;
+  });
+  implicitTlsDiagnosticCalls.length = 0;
+  probeIonosSmtpImplicitTlsConnectivity.mockClear();
+  probeIonosSmtpImplicitTlsConnectivity.mockImplementation(async (config) => {
+    implicitTlsDiagnosticCalls.push(config as { host: string; port: number });
+    return DEFAULT_IMPLICIT_TLS_RESULT;
   });
 });
 
@@ -354,6 +392,84 @@ describe('storage-alert-receiver-entrypoint — SUN-1222C-SMTP-ROOT-CAUSE /diagn
     expect(res.status).toBeLessThan(300);
     expect(sendStorageAlertViaIonosSmtp).toHaveBeenCalledTimes(1);
     expect(probeIonosSmtpConnectivity).not.toHaveBeenCalled();
+  });
+});
+
+describe('storage-alert-receiver-entrypoint — SUN-1222C-SMTP-ROOT-CAUSE /diagnostic path, ?mode=IONOS_IMPLICIT_TLS_465', () => {
+  it('valid token + mode=IONOS_IMPLICIT_TLS_465 -> 200 with the implicit-TLS probe result, reaches only the implicit-TLS module', async () => {
+    const env = makeEnv();
+    const res = await worker.fetch(
+      post(`diagnostic/${TOKEN}?mode=IONOS_IMPLICIT_TLS_465`, undefined),
+      env
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toEqual(DEFAULT_IMPLICIT_TLS_RESULT);
+    expect(probeIonosSmtpImplicitTlsConnectivity).toHaveBeenCalledTimes(1);
+    expect(probeIonosSmtpConnectivity).not.toHaveBeenCalled();
+    expect(sendStorageAlertViaIonosSmtp).not.toHaveBeenCalled();
+  });
+
+  it('targets smtp.ionos.com:465, not 587', async () => {
+    const env = makeEnv();
+    await worker.fetch(post(`diagnostic/${TOKEN}?mode=IONOS_IMPLICIT_TLS_465`, undefined), env);
+    expect(implicitTlsDiagnosticCalls[0]).toEqual({ host: 'smtp.ionos.com', port: 465 });
+  });
+
+  it('no mode param -> unchanged 587 behavior, zero implicit-TLS calls', async () => {
+    const env = makeEnv();
+    await worker.fetch(post(`diagnostic/${TOKEN}`, undefined), env);
+    expect(probeIonosSmtpConnectivity).toHaveBeenCalledTimes(1);
+    expect(probeIonosSmtpImplicitTlsConnectivity).not.toHaveBeenCalled();
+  });
+
+  it('unrecognized mode value -> falls back to unchanged 587 behavior, zero implicit-TLS calls', async () => {
+    const env = makeEnv();
+    await worker.fetch(post(`diagnostic/${TOKEN}?mode=NOT_A_REAL_MODE`, undefined), env);
+    expect(probeIonosSmtpConnectivity).toHaveBeenCalledTimes(1);
+    expect(probeIonosSmtpImplicitTlsConnectivity).not.toHaveBeenCalled();
+  });
+
+  it('failed implicit-TLS probe -> 502 with the failure detail as JSON, zero SMTP send attempted', async () => {
+    probeIonosSmtpImplicitTlsConnectivity.mockResolvedValueOnce({
+      ok: false,
+      reachedStage: 'IMPLICIT_TLS_CONNECT',
+      outcome: 'IMPLICIT_TLS_CONNECT_TIMEOUT',
+      failedStage: 'IMPLICIT_TLS_CONNECT',
+      timedOut: true,
+      elapsedMsByStage: {},
+      detail: 'timed out after 3000ms',
+    });
+    const env = makeEnv();
+    const res = await worker.fetch(
+      post(`diagnostic/${TOKEN}?mode=IONOS_IMPLICIT_TLS_465`, undefined),
+      env
+    );
+    expect(res.status).toBe(502);
+    const body = await res.json();
+    expect(body.failedStage).toBe('IMPLICIT_TLS_CONNECT');
+    expect(sendStorageAlertViaIonosSmtp).not.toHaveBeenCalled();
+  });
+
+  it('wrong path token, implicit-TLS mode requested -> identical 404, zero probe calls of any kind', async () => {
+    const env = makeEnv();
+    const res = await worker.fetch(
+      post(`diagnostic/${'b'.repeat(48)}?mode=IONOS_IMPLICIT_TLS_465`, undefined),
+      env
+    );
+    expect(res.status).toBe(404);
+    expect(probeIonosSmtpImplicitTlsConnectivity).not.toHaveBeenCalled();
+    expect(probeIonosSmtpConnectivity).not.toHaveBeenCalled();
+  });
+
+  it('never reads IONOS_SMTP_PASSWORD on the implicit-TLS branch either', async () => {
+    const env = makeEnv({ IONOS_SMTP_PASSWORD: undefined });
+    const res = await worker.fetch(
+      post(`diagnostic/${TOKEN}?mode=IONOS_IMPLICIT_TLS_465`, undefined),
+      env
+    );
+    expect(res.status).toBe(200);
+    expect(probeIonosSmtpImplicitTlsConnectivity).toHaveBeenCalledTimes(1);
   });
 });
 
