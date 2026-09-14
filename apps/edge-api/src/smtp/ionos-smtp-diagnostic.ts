@@ -155,8 +155,30 @@ export interface SmtpDiagnosticResult {
 }
 
 const DEFAULT_PER_STAGE_TIMEOUT_MS = 3_000;
-const DEFAULT_OVERALL_TIMEOUT_MS = 8_000;
+/** Exported so `storage-alert-receiver-entrypoint.ts`'s zero-network
+ * `CONTROL_OVERALL_TIMEOUT` control can race the identical duration against
+ * the identical `withTimeout` primitive this module uses for its own
+ * `DIAG_OVERALL` stage -- proving (or disproving) the timeout/catch path in
+ * isolation from any socket/stream involvement, without duplicating the
+ * magic number. */
+export const DEFAULT_OVERALL_TIMEOUT_MS = 8_000;
 const DEFAULT_EHLO_HOSTNAME = 'alerts.siteborne.net';
+/** SUN-1222C-SMTP-ROOT-CAUSE fix: the `finally` block below used to `await`
+ * `reader.cancel()` and `currentSocket.close()` with no bound of their own
+ * -- fine when the socket is healthy, but exactly the kind of operation
+ * that can hang indefinitely on a black-holed or half-upgraded TLS
+ * connection, which is the very failure mode this probe exists to detect.
+ * When that happened, the `DIAG_OVERALL` timeout still fired internally at
+ * `overallTimeoutMs` and was still caught, but the resulting
+ * `SmtpDiagnosticResult` could never actually be `return`ed past this
+ * `finally` -- so the caller (the Service Binding fetch in
+ * `storage-alert-smtp-diagnostic-route.ts`) saw nothing until its OWN,
+ * unrelated 12s budget aborted the whole call, with zero structured result
+ * ever received. Bounding each cleanup step keeps the worst case at
+ * `overallTimeoutMs + 2 * CLEANUP_TIMEOUT_MS`, comfortably under that 12s
+ * caller budget, and guarantees this function's own `return`/`throw`
+ * always reflects the actual probe outcome, never a stuck cleanup. */
+const CLEANUP_TIMEOUT_MS = 1_000;
 
 /** Maps each stage to the outcome its own timeout resolves to -- used
  * when the OVERALL budget (rather than any individual stage's own
@@ -486,7 +508,24 @@ export async function probeIonosSmtpConnectivity(
       timedOut
     );
   } finally {
-    await reader.cancel().catch(() => {});
-    await currentSocket.close().catch(() => {});
+    // Each cleanup step is itself raced against CLEANUP_TIMEOUT_MS via the
+    // same `withTimeout` primitive the probe stages use -- if `cancel()`/
+    // `close()` doesn't settle in time, this function still returns; the
+    // abandoned promise is left to resolve/reject on its own in the
+    // background, same as any other `withTimeout` loser (see that
+    // function's own doc comment).
+    // NOTE: only `currentSocket` is ever closed here, deliberately never
+    // the original pre-TLS `socket` once `startTls()` has produced a
+    // secure socket (`currentSocket !== socket`) -- `startTls()` upgrades
+    // the SAME underlying TCP connection in place, so the original
+    // `Socket` object is superseded, not a second independent connection;
+    // closing `currentSocket` alone closes the one real connection this
+    // probe ever opened. (Verified by this module's own pre-existing
+    // tests -- `pre.closeCalls` stays `0` in every post-TLS-upgrade
+    // scenario.)
+    await withTimeout('CLEANUP_READER_CANCEL', reader.cancel(), CLEANUP_TIMEOUT_MS).catch(() => {});
+    await withTimeout('CLEANUP_SOCKET_CLOSE', currentSocket.close(), CLEANUP_TIMEOUT_MS).catch(
+      () => {}
+    );
   }
 }

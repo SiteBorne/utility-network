@@ -252,3 +252,159 @@ describe('storageAlertSmtpDiagnosticRoute', () => {
     expect(await res.json()).toEqual({ ok: true });
   });
 });
+
+describe('storageAlertSmtpDiagnosticRoute — SUN-1222C-SMTP-ROOT-CAUSE ?mode= zero-network control forwarding', () => {
+  it('?mode=IMMEDIATE forwards to the receiver /control path (not /diagnostic) and merges caller_elapsed_ms', async () => {
+    const app = appWithRoute();
+    let capturedUrl = '';
+    const { env, receiver } = fullyProvisionedEnv(async (url) => {
+      capturedUrl = url;
+      return new Response(JSON.stringify({ control: 'IMMEDIATE', result: 'OK', elapsed_ms: 1 }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+
+    const res = await app.request(
+      '/internal/storage-alert-smtp-diagnostic?mode=IMMEDIATE',
+      { method: 'POST', headers: { Authorization: `Bearer ${DIAGNOSTIC_TOKEN}` } },
+      env
+    );
+
+    expect(res.status).toBe(200);
+    expect(receiver.fetch).toHaveBeenCalledTimes(1);
+    expect(capturedUrl).toBe(`https://storage-alert.internal/control/${PATH_TOKEN}?mode=IMMEDIATE`);
+    const body = await res.json();
+    expect(body.control).toBe('IMMEDIATE');
+    expect(body.result).toBe('OK');
+    expect(body.receiver_elapsed_ms).toBe(1);
+    expect(typeof body.caller_elapsed_ms).toBe('number');
+  });
+
+  it('?mode=DELAY_250MS forwards to the receiver /control path with that mode', async () => {
+    const app = appWithRoute();
+    let capturedUrl = '';
+    const { env } = fullyProvisionedEnv(async (url) => {
+      capturedUrl = url;
+      return new Response(
+        JSON.stringify({ control: 'DELAY_250MS', result: 'OK', elapsed_ms: 251 }),
+        { status: 200, headers: { 'content-type': 'application/json' } }
+      );
+    });
+
+    const res = await app.request(
+      '/internal/storage-alert-smtp-diagnostic?mode=DELAY_250MS',
+      { method: 'POST', headers: { Authorization: `Bearer ${DIAGNOSTIC_TOKEN}` } },
+      env
+    );
+
+    expect(res.status).toBe(200);
+    expect(capturedUrl).toBe(
+      `https://storage-alert.internal/control/${PATH_TOKEN}?mode=DELAY_250MS`
+    );
+    const body = await res.json();
+    expect(body.receiver_elapsed_ms).toBe(251);
+  });
+
+  it('?mode=OVERALL_TIMEOUT forwards to the receiver /control path with that mode', async () => {
+    const app = appWithRoute();
+    let capturedUrl = '';
+    const { env } = fullyProvisionedEnv(async (url) => {
+      capturedUrl = url;
+      return new Response(
+        JSON.stringify({
+          control: 'OVERALL_TIMEOUT',
+          result: 'TIMED_OUT_AS_EXPECTED',
+          elapsed_ms: 8003,
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } }
+      );
+    });
+
+    const res = await app.request(
+      '/internal/storage-alert-smtp-diagnostic?mode=OVERALL_TIMEOUT',
+      { method: 'POST', headers: { Authorization: `Bearer ${DIAGNOSTIC_TOKEN}` } },
+      env
+    );
+
+    expect(res.status).toBe(200);
+    expect(capturedUrl).toBe(
+      `https://storage-alert.internal/control/${PATH_TOKEN}?mode=OVERALL_TIMEOUT`
+    );
+    const body = await res.json();
+    expect(body.result).toBe('TIMED_OUT_AS_EXPECTED');
+    expect(body.receiver_elapsed_ms).toBe(8003);
+    expect(typeof body.caller_elapsed_ms).toBe('number');
+  });
+
+  it('an unrecognized ?mode= value is ignored -- falls back to the real /diagnostic path, unchanged', async () => {
+    const app = appWithRoute();
+    let capturedUrl = '';
+    const { env } = fullyProvisionedEnv(async (url) => {
+      capturedUrl = url;
+      return OK_RECEIVER();
+    });
+
+    const res = await app.request(
+      '/internal/storage-alert-smtp-diagnostic?mode=BOGUS',
+      { method: 'POST', headers: { Authorization: `Bearer ${DIAGNOSTIC_TOKEN}` } },
+      env
+    );
+
+    expect(res.status).toBe(200);
+    expect(capturedUrl).toBe(`https://storage-alert.internal/diagnostic/${PATH_TOKEN}`);
+    const body = await res.json();
+    expect(body).toEqual(JSON.parse(DIAGNOSTIC_RESULT_JSON));
+  });
+
+  it('no ?mode= at all still exercises the original, unchanged real-diagnostic forwarding', async () => {
+    const app = appWithRoute();
+    let capturedUrl = '';
+    const { env } = fullyProvisionedEnv(async (url) => {
+      capturedUrl = url;
+      return OK_RECEIVER();
+    });
+
+    const res = await app.request(
+      '/internal/storage-alert-smtp-diagnostic',
+      { method: 'POST', headers: { Authorization: `Bearer ${DIAGNOSTIC_TOKEN}` } },
+      env
+    );
+
+    expect(res.status).toBe(200);
+    expect(capturedUrl).toBe(`https://storage-alert.internal/diagnostic/${PATH_TOKEN}`);
+  });
+
+  it('a control-mode request still returns a sanitized, JSON-shaped 502 on Service Binding dispatch failure, with caller_elapsed_ms and no leaked detail', async () => {
+    const app = appWithRoute();
+    const { env, receiver } = fullyProvisionedEnv(async () => {
+      throw new Error('service binding dispatch failed: internal detail should not leak');
+    });
+
+    const res = await app.request(
+      '/internal/storage-alert-smtp-diagnostic?mode=IMMEDIATE',
+      { method: 'POST', headers: { Authorization: `Bearer ${DIAGNOSTIC_TOKEN}` } },
+      env
+    );
+
+    expect(res.status).toBe(502);
+    const body = await res.json();
+    expect(body.control).toBe('IMMEDIATE');
+    expect(body.result).toBe('CALLER_TIMEOUT_OR_DISPATCH_FAILURE');
+    expect(typeof body.caller_elapsed_ms).toBe('number');
+    expect(JSON.stringify(body)).not.toContain('internal detail');
+    expect(receiver.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('still fails closed with zero receiver calls for an invalid bearer even with ?mode= present', async () => {
+    const app = appWithRoute();
+    const { env, receiver } = fullyProvisionedEnv(OK_RECEIVER);
+    const res = await app.request(
+      '/internal/storage-alert-smtp-diagnostic?mode=IMMEDIATE',
+      { method: 'POST' },
+      env
+    );
+    expect(res.status).toBe(404);
+    expect(receiver.fetch).not.toHaveBeenCalled();
+  });
+});

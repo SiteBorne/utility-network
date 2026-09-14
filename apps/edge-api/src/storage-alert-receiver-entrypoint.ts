@@ -68,7 +68,11 @@
 
 import { z } from 'zod';
 import { sendStorageAlertViaIonosSmtp } from './smtp/ionos-smtp-transport';
-import { probeIonosSmtpConnectivity } from './smtp/ionos-smtp-diagnostic';
+import {
+  probeIonosSmtpConnectivity,
+  DEFAULT_OVERALL_TIMEOUT_MS,
+} from './smtp/ionos-smtp-diagnostic';
+import { withTimeout, StageTimeoutError } from './smtp/smtp-stage-timeout';
 
 /** Mirrors `StorageAlertPayload` in
  * `control-plane/alerting/storage-alert-sweep.ts` exactly -- this module
@@ -188,6 +192,72 @@ const FROM_ADDRESS = 'storage@alerts.siteborne.net';
 const TO_ADDRESS = 'hello@siteborne.com';
 const SUBJECT = 'SITEBORNE: storage reclamation critical alert';
 
+/**
+ * SUN-1222C-SMTP-ROOT-CAUSE addendum: `POST /control/<token>?mode=...`
+ * (same `ALERT_PATH_TOKEN`, same constant-time check, same identical-404
+ * discipline) exercises the Service Binding dispatch/response path and the
+ * shared `withTimeout` primitive WITHOUT ever opening a socket -- isolates
+ * "does a call across the Service Binding return at all" and "does the
+ * timeout/catch machinery itself work" from "is the SMTP/TLS path what's
+ * actually hanging". This code path never imports or reaches
+ * `cloudflare:sockets`, `env.IONOS_SMTP_PASSWORD`, or
+ * `probeIonosSmtpConnectivity`/`sendStorageAlertViaIonosSmtp` -- see the
+ * module-level doc comment above for the full capability-surface
+ * invariant this addendum preserves.
+ */
+type ControlMode = 'IMMEDIATE' | 'DELAY_250MS' | 'OVERALL_TIMEOUT';
+
+interface ControlResult {
+  readonly control: ControlMode;
+  readonly result: 'OK' | 'TIMED_OUT_AS_EXPECTED' | 'UNEXPECTED_RESOLVE' | 'UNEXPECTED_ERROR';
+  readonly elapsed_ms: number;
+}
+
+/** Never touches a socket, a stream, or any secret -- see this function's
+ * call site doc comment. `OVERALL_TIMEOUT` races the exact same
+ * `withTimeout` primitive and the exact same duration
+ * (`DEFAULT_OVERALL_TIMEOUT_MS`, imported from `ionos-smtp-diagnostic.ts`
+ * rather than duplicated) that `probeIonosSmtpConnectivity`'s own
+ * `DIAG_OVERALL` stage uses, against a promise that can structurally never
+ * resolve -- proving (or disproving) that machinery in complete isolation
+ * from any socket/stream involvement. */
+async function runControl(mode: ControlMode): Promise<ControlResult> {
+  const startedAt = Date.now();
+  if (mode === 'IMMEDIATE') {
+    return { control: mode, result: 'OK', elapsed_ms: Date.now() - startedAt };
+  }
+  if (mode === 'DELAY_250MS') {
+    await new Promise<void>((resolve) => setTimeout(resolve, 250));
+    return { control: mode, result: 'OK', elapsed_ms: Date.now() - startedAt };
+  }
+  // mode === 'OVERALL_TIMEOUT'
+  try {
+    await withTimeout(
+      'CONTROL_OVERALL_TIMEOUT',
+      new Promise<never>(() => {}),
+      DEFAULT_OVERALL_TIMEOUT_MS
+    );
+    // Unreachable: the raced promise above never resolves or rejects on
+    // its own, so `withTimeout` can only ever settle via its own timeout
+    // rejection below. Kept as an explicit, typed branch rather than
+    // asserting `never`, so a future change to this helper fails a test
+    // instead of failing silently.
+    return { control: mode, result: 'UNEXPECTED_RESOLVE', elapsed_ms: Date.now() - startedAt };
+  } catch (err) {
+    const timedOut = err instanceof StageTimeoutError;
+    return {
+      control: mode,
+      result: timedOut ? 'TIMED_OUT_AS_EXPECTED' : 'UNEXPECTED_ERROR',
+      elapsed_ms: Date.now() - startedAt,
+    };
+  }
+}
+
+const CONTROL_MODES: readonly ControlMode[] = ['IMMEDIATE', 'DELAY_250MS', 'OVERALL_TIMEOUT'];
+function isControlMode(value: string | null): value is ControlMode {
+  return value !== null && (CONTROL_MODES as readonly string[]).includes(value);
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const NOT_FOUND = () => new Response(null, { status: 404 });
@@ -198,6 +268,19 @@ export default {
     if (!token) return NOT_FOUND(); // fail closed if unprovisioned
 
     const url = new URL(request.url);
+
+    const controlMatch = /^\/control\/([^/]+)$/.exec(url.pathname);
+    if (controlMatch) {
+      const providedControlToken = controlMatch[1];
+      if (!timingSafeEqual(providedControlToken, token)) return NOT_FOUND();
+      const mode = url.searchParams.get('mode');
+      if (!isControlMode(mode)) return NOT_FOUND();
+      const result = await runControl(mode);
+      return new Response(JSON.stringify(result), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
 
     const diagnosticMatch = /^\/diagnostic\/([^/]+)$/.exec(url.pathname);
     if (diagnosticMatch) {

@@ -49,6 +49,21 @@ import type { ServiceBindingFetcher } from '../alerting/storage-alert-service-bi
 const NOT_FOUND = () => new Response(null, { status: 404 });
 const BEARER_PREFIX = 'Bearer ';
 
+/** SUN-1222C-SMTP-ROOT-CAUSE addendum: `?mode=IMMEDIATE|DELAY_250MS|
+ * OVERALL_TIMEOUT` on this same route, same bearer, forwards to the
+ * receiver's zero-network `/control/<token>` path instead of
+ * `/diagnostic/<token>` -- isolates Service Binding dispatch/response and
+ * the shared timeout primitive from the SMTP/TLS socket path. Not present
+ * (or an unrecognized value) means the original real-diagnostic behavior,
+ * unchanged. */
+const CONTROL_MODES = ['IMMEDIATE', 'DELAY_250MS', 'OVERALL_TIMEOUT'] as const;
+type ControlMode = (typeof CONTROL_MODES)[number];
+function parseControlMode(value: string | null): ControlMode | undefined {
+  return (CONTROL_MODES as readonly string[]).includes(value ?? '')
+    ? (value as ControlMode)
+    : undefined;
+}
+
 /** Service Binding call budget -- deliberately larger than the receiver's
  * own internal overall diagnostic budget (8s default in
  * `ionos-smtp-diagnostic.ts`) so the receiver always gets to finish and
@@ -92,8 +107,14 @@ export async function storageAlertSmtpDiagnosticRoute(
   const pathToken = env.STORAGE_ALERT_PATH_TOKEN;
   if (!receiver || !pathToken) return NOT_FOUND(); // fail closed if unprovisioned
 
+  const controlMode = parseControlMode(c.req.query('mode') ?? null);
+  const targetUrl = controlMode
+    ? `https://storage-alert.internal/control/${encodeURIComponent(pathToken)}?mode=${controlMode}`
+    : `https://storage-alert.internal/diagnostic/${encodeURIComponent(pathToken)}`;
+
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), SERVICE_BINDING_TIMEOUT_MS);
+  const callerStartedAt = Date.now();
   try {
     // Same narrowing rationale as `storage-alert-qualification-route.ts`:
     // `Fetcher.fetch`'s Cloudflare-typed signature (including its own
@@ -102,21 +123,55 @@ export async function storageAlertSmtpDiagnosticRoute(
     // uses; every real Service Binding fetcher accepts a plain `string`
     // URL, an ordinary `RequestInit`, and a DOM `AbortSignal` at runtime
     // regardless.
-    const response = await (receiver as unknown as ServiceBindingFetcher).fetch(
-      `https://storage-alert.internal/diagnostic/${encodeURIComponent(pathToken)}`,
-      { method: 'POST', signal: controller.signal }
-    );
-    // Forwarded verbatim: the receiver's diagnostic JSON body is
-    // non-secret by construction (see `ionos-smtp-diagnostic.ts`).
-    const bodyText = await response.text();
-    return new Response(bodyText, {
-      status: response.status,
-      headers: { 'content-type': 'application/json' },
+    const response = await (receiver as unknown as ServiceBindingFetcher).fetch(targetUrl, {
+      method: 'POST',
+      signal: controller.signal,
     });
+    const bodyText = await response.text();
+    const callerElapsedMs = Date.now() - callerStartedAt;
+    if (!controlMode) {
+      // Unchanged real-diagnostic behavior: forwarded verbatim, the
+      // receiver's diagnostic JSON body is non-secret by construction (see
+      // `ionos-smtp-diagnostic.ts`).
+      return new Response(bodyText, {
+        status: response.status,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    // Control path: merge in this caller's own elapsed time alongside the
+    // receiver's self-reported `elapsed_ms`, so the two are directly
+    // comparable per the isolation decision matrix (a large gap between
+    // them, with the receiver side small, points at the Service Binding
+    // dispatch/response path itself rather than the receiver's own logic).
+    let receiverBody: Record<string, unknown> | undefined;
+    try {
+      const parsed: unknown = JSON.parse(bodyText);
+      if (parsed && typeof parsed === 'object') receiverBody = parsed as Record<string, unknown>;
+    } catch {
+      // Non-JSON body -- fall through to the `receiverBody === undefined`
+      // branch below rather than throwing.
+    }
+    return new Response(
+      JSON.stringify({
+        ...(receiverBody ?? { raw: bodyText }),
+        receiver_elapsed_ms: receiverBody?.elapsed_ms,
+        caller_elapsed_ms: callerElapsedMs,
+      }),
+      { status: response.status, headers: { 'content-type': 'application/json' } }
+    );
   } catch {
     // Timeout (AbortError) or Service Binding dispatch failure -- no
     // internal detail leaked.
-    return new Response(null, { status: 502 });
+    return new Response(
+      controlMode
+        ? JSON.stringify({
+            control: controlMode,
+            result: 'CALLER_TIMEOUT_OR_DISPATCH_FAILURE',
+            caller_elapsed_ms: Date.now() - callerStartedAt,
+          })
+        : null,
+      { status: 502, headers: controlMode ? { 'content-type': 'application/json' } : {} }
+    );
   } finally {
     clearTimeout(timeout);
   }

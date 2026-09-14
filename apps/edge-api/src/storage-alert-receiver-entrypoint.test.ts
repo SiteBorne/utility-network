@@ -37,9 +37,15 @@ const probeIonosSmtpConnectivity = vi.fn(
   }
 );
 
+// SUN-1222C-SMTP-ROOT-CAUSE addendum: `DEFAULT_OVERALL_TIMEOUT_MS` is
+// mocked small (rather than the real 8_000) purely so the
+// `CONTROL_OVERALL_TIMEOUT` tests below don't burn 8 real seconds each --
+// the *value itself* is never asserted against, only that the control path
+// races `withTimeout` against it and reports `TIMED_OUT_AS_EXPECTED`.
 vi.mock('./smtp/ionos-smtp-diagnostic', () => ({
   probeIonosSmtpConnectivity: (...args: unknown[]) =>
     (probeIonosSmtpConnectivity as (...a: unknown[]) => unknown)(...args),
+  DEFAULT_OVERALL_TIMEOUT_MS: 20,
 }));
 
 import worker, { type Env } from './storage-alert-receiver-entrypoint';
@@ -346,5 +352,101 @@ describe('storage-alert-receiver-entrypoint — SUN-1222C-SMTP-ROOT-CAUSE /diagn
     expect(res.status).toBeLessThan(300);
     expect(sendStorageAlertViaIonosSmtp).toHaveBeenCalledTimes(1);
     expect(probeIonosSmtpConnectivity).not.toHaveBeenCalled();
+  });
+});
+
+describe('storage-alert-receiver-entrypoint — SUN-1222C-SMTP-ROOT-CAUSE /control path (zero-network isolation controls)', () => {
+  it('mode=IMMEDIATE -> 200 with a small elapsed_ms, zero probe/send calls', async () => {
+    const env = makeEnv();
+    const res = await worker.fetch(post(`control/${TOKEN}?mode=IMMEDIATE`, undefined), env);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.control).toBe('IMMEDIATE');
+    expect(body.result).toBe('OK');
+    expect(typeof body.elapsed_ms).toBe('number');
+    expect(probeIonosSmtpConnectivity).not.toHaveBeenCalled();
+    expect(sendStorageAlertViaIonosSmtp).not.toHaveBeenCalled();
+  });
+
+  it('mode=DELAY_250MS -> 200 after an actual ~250ms async wait, zero probe/send calls', async () => {
+    const env = makeEnv();
+    const startedAt = Date.now();
+    const res = await worker.fetch(post(`control/${TOKEN}?mode=DELAY_250MS`, undefined), env);
+    const elapsedMs = Date.now() - startedAt;
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.control).toBe('DELAY_250MS');
+    expect(body.result).toBe('OK');
+    expect(elapsedMs).toBeGreaterThanOrEqual(240); // real timer, small jitter margin
+    expect(probeIonosSmtpConnectivity).not.toHaveBeenCalled();
+    expect(sendStorageAlertViaIonosSmtp).not.toHaveBeenCalled();
+  });
+
+  it('mode=OVERALL_TIMEOUT -> 200, races the real withTimeout primitive against a never-resolving promise and reports TIMED_OUT_AS_EXPECTED, zero probe/send calls', async () => {
+    const env = makeEnv();
+    const res = await worker.fetch(post(`control/${TOKEN}?mode=OVERALL_TIMEOUT`, undefined), env);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.control).toBe('OVERALL_TIMEOUT');
+    expect(body.result).toBe('TIMED_OUT_AS_EXPECTED');
+    expect(typeof body.elapsed_ms).toBe('number');
+    expect(probeIonosSmtpConnectivity).not.toHaveBeenCalled();
+    expect(sendStorageAlertViaIonosSmtp).not.toHaveBeenCalled();
+  });
+
+  it('missing mode -> 404, zero probe/send calls', async () => {
+    const env = makeEnv();
+    const res = await worker.fetch(post(`control/${TOKEN}`, undefined), env);
+    expect(res.status).toBe(404);
+    expect(probeIonosSmtpConnectivity).not.toHaveBeenCalled();
+    expect(sendStorageAlertViaIonosSmtp).not.toHaveBeenCalled();
+  });
+
+  it('unrecognized mode -> 404, zero probe/send calls', async () => {
+    const env = makeEnv();
+    const res = await worker.fetch(post(`control/${TOKEN}?mode=BOGUS`, undefined), env);
+    expect(res.status).toBe(404);
+    expect(probeIonosSmtpConnectivity).not.toHaveBeenCalled();
+    expect(sendStorageAlertViaIonosSmtp).not.toHaveBeenCalled();
+  });
+
+  it('wrong token -> identical 404, zero probe/send calls', async () => {
+    const env = makeEnv();
+    const res = await worker.fetch(
+      post(`control/${'b'.repeat(48)}?mode=IMMEDIATE`, undefined),
+      env
+    );
+    expect(res.status).toBe(404);
+    expect(probeIonosSmtpConnectivity).not.toHaveBeenCalled();
+    expect(sendStorageAlertViaIonosSmtp).not.toHaveBeenCalled();
+  });
+
+  it('GET on the control path -> 404, zero probe/send calls', async () => {
+    const req = new Request(
+      `https://storage-alert-receiver.example/control/${TOKEN}?mode=IMMEDIATE`,
+      { method: 'GET' }
+    );
+    const res = await worker.fetch(req, makeEnv());
+    expect(res.status).toBe(404);
+    expect(probeIonosSmtpConnectivity).not.toHaveBeenCalled();
+    expect(sendStorageAlertViaIonosSmtp).not.toHaveBeenCalled();
+  });
+
+  it('ALERT_PATH_TOKEN unprovisioned fails closed -> 404', async () => {
+    const env = makeEnv({ ALERT_PATH_TOKEN: undefined });
+    const res = await worker.fetch(post(`control/${TOKEN}?mode=IMMEDIATE`, undefined), env);
+    expect(res.status).toBe(404);
+  });
+
+  it('control path never reads IONOS_SMTP_PASSWORD', async () => {
+    const env = makeEnv({ IONOS_SMTP_PASSWORD: undefined });
+    const res = await worker.fetch(post(`control/${TOKEN}?mode=IMMEDIATE`, undefined), env);
+    expect(res.status).toBe(200);
+  });
+
+  it('reuses the same ALERT_PATH_TOKEN as /alert and /diagnostic -- no third receiver-side secret required', async () => {
+    const env = makeEnv();
+    const res = await worker.fetch(post(`control/${TOKEN}?mode=IMMEDIATE`, undefined), env);
+    expect(res.status).toBe(200);
   });
 });

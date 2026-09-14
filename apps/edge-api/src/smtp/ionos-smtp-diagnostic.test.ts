@@ -115,6 +115,38 @@ function makeHangingReadSocket() {
   };
 }
 
+/** A socket whose `readable` never delivers a chunk (so `reader.cancel()`
+ * in the probe's `finally` block races a stream that has a pending read),
+ * and whose own `close()` never resolves either -- reproduces the
+ * SUN-1222C-SMTP-ROOT-CAUSE cleanup hang: both cleanup operations this
+ * probe's `finally` block awaits are simultaneously unbounded. */
+function makeHangingCleanupSocket() {
+  const readable = new ReadableStream<Uint8Array>({
+    pull() {
+      return new Promise<void>(() => {});
+    },
+    cancel() {
+      return new Promise<void>(() => {});
+    },
+  });
+  const writable = new WritableStream<Uint8Array>({
+    write() {},
+  });
+  const socket = {
+    readable,
+    writable,
+    opened: Promise.resolve({}),
+    closed: new Promise<void>(() => {}),
+    close() {
+      return new Promise<void>(() => {});
+    },
+    startTls() {
+      throw new Error('startTls not configured on this fake socket');
+    },
+  } as unknown as Socket;
+  return { socket };
+}
+
 /** A socket that yields exactly `okResponses` in order, then hangs
  * forever on every subsequent read -- places a deterministic hang right
  * after a known-good prefix of the sequence. */
@@ -539,6 +571,32 @@ describe('probeIonosSmtpConnectivity — per-stage and overall timeouts', () => 
     await expect(
       probeIonosSmtpConnectivity(config(), { ...FAST, connectFn: () => hanging.socket })
     ).resolves.toMatchObject({ ok: false, timedOut: true });
+  });
+
+  it('SUN-1222C-SMTP-ROOT-CAUSE regression: still returns within overallTimeoutMs + a small bounded cleanup margin even when BOTH reader.cancel() and socket.close() hang forever in finally', async () => {
+    // Before the fix, `finally { await reader.cancel(); await
+    // currentSocket.close(); }` had no bound of its own -- the DIAG_OVERALL
+    // timeout still fired internally, but the function's actual `return`
+    // was gated behind these two unbounded awaits, so a black-holed
+    // connection could keep this promise pending indefinitely regardless
+    // of `overallTimeoutMs`. This is exactly the caller-side symptom
+    // observed in production: a 502 at ~12s (the Service Binding's own,
+    // unrelated timeout) with no structured result ever received.
+    const hanging = makeHangingCleanupSocket();
+    const overallTimeoutMs = 20;
+    const startedAt = Date.now();
+    const result = await probeIonosSmtpConnectivity(config(), {
+      perStageTimeoutMs: 5_000,
+      overallTimeoutMs,
+      connectFn: () => hanging.socket,
+    });
+    const elapsedMs = Date.now() - startedAt;
+    expect(result.ok).toBe(false);
+    expect(result.timedOut).toBe(true);
+    // Generous margin (well under the 12s caller-side Service Binding
+    // budget this regression exists to protect) rather than the literal
+    // per-cleanup-step 1s cap, to stay robust against test-runner jitter.
+    expect(elapsedMs).toBeLessThan(overallTimeoutMs + 5_000);
   });
 });
 
