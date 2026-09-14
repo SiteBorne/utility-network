@@ -53,6 +53,14 @@ export interface Env {
    * via `wrangler secret put STORAGE_ALERT_PATH_TOKEN`, never a `[vars]`
    * entry. NOT yet provisioned by this checkpoint. */
   STORAGE_ALERT_PATH_TOKEN?: string;
+  /** SUN-1222C-R4 TEMPORARY qualification-only secret — bearer token
+   * guarding `POST /internal/storage-alert-qualification`
+   * (`storage-alert-qualification-route.ts`), a scaffolding route added
+   * for exactly one end-to-end Service Binding qualification checkpoint
+   * and expected to be reverted afterward. Never a `[vars]` entry; never
+   * placed in a URL path or query string. Not read by any permanent
+   * production code path. */
+  STORAGE_ALERT_QUALIFICATION_TOKEN?: string;
   /** SUN-1000 checkpoint 1O-A: canonical Nevermined credential name,
    * matching `packages/protocol-nevermined/src/config.ts`'s own already-
    * correct `resolveNeverminedConfig` boundary (`canonical`/

@@ -30,6 +30,7 @@ import { webContextVerifiedV2CdpProductionRoute } from './control-plane/routes/p
 import { companyEvidenceGraphV2CdpProductionRoute } from './control-plane/routes/production-company-evidence-v2-cdp-route';
 import { documentEvidenceJsonV2CdpProductionRoute } from './control-plane/routes/production-document-evidence-v2-cdp-route';
 import { documentArtifactUploadRoute } from './control-plane/routes/document-artifact-upload-route';
+import { storageAlertQualificationRoute } from './control-plane/routes/storage-alert-qualification-route';
 import type { Env } from './control-plane/config/env';
 import { D1WorkflowOwnerIntentRepository } from './control-plane/repositories/d1/workflow-owner-intents';
 import { recoverPendingWorkflowOwnerIntents } from './control-plane/continuation/owner-recovery';
@@ -229,6 +230,18 @@ app.post('/v2/document/evidence-json', documentEvidenceJsonV2CdpProductionRoute)
  * `DB`/`ARTIFACTS` bindings, or it 404s.
  */
 app.post('/v2/artifacts/documents', documentArtifactUploadRoute);
+
+/**
+ * SUN-1222C-R4 — TEMPORARY qualification-only route (see
+ * `storage-alert-qualification-route.ts`'s own doc comment for the full
+ * security/scope rationale). Bearer-token gated, fails closed to `404` for
+ * every invalid request with zero Service Binding invocation; exercises
+ * the real `buildServiceBindingStorageAlertTransport` production transport
+ * with a fully server-generated, zero-real-failure payload. Expected to be
+ * reverted once the qualification checkpoint this route exists for is
+ * closed.
+ */
+app.post('/internal/storage-alert-qualification', storageAlertQualificationRoute);
 
 // SUN-1218 checkpoint X: see the `/v1/*` wildcard's own doc comment
 // above -- same correction, same reasoning, unconditional 404.
