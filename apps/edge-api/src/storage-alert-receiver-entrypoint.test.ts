@@ -133,7 +133,7 @@ beforeEach(() => {
 
 describe('storage-alert-receiver-entrypoint', () => {
   it('valid token + valid payload + successful send -> 2xx', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ STORAGE_ALERT_DELIVERY_ENABLED: 'true' });
     const res = await worker.fetch(post(`alert/${TOKEN}`, VALID_PAYLOAD), env);
     expect(res.status).toBeGreaterThanOrEqual(200);
     expect(res.status).toBeLessThan(300);
@@ -143,7 +143,7 @@ describe('storage-alert-receiver-entrypoint', () => {
   });
 
   it('uses the IONOS-subdomain sender, never the old apex sender', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ STORAGE_ALERT_DELIVERY_ENABLED: 'true' });
     const res = await worker.fetch(post(`alert/${TOKEN}`, VALID_PAYLOAD), env);
     expect(res.status).toBeLessThan(300);
     expect(sentCalls[0].config.from).toBe('storage@alerts.siteborne.net');
@@ -152,7 +152,7 @@ describe('storage-alert-receiver-entrypoint', () => {
   });
 
   it('targets smtp.ionos.com:465 (implicit TLS, SUN-1222C-SMTP-ROOT-CAUSE port migration) and passes the env-sourced password through', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ STORAGE_ALERT_DELIVERY_ENABLED: 'true' });
     await worker.fetch(post(`alert/${TOKEN}`, VALID_PAYLOAD), env);
     expect(sentCalls[0].config.host).toBe('smtp.ionos.com');
     expect(sentCalls[0].config.port).toBe(465);
@@ -187,7 +187,7 @@ describe('storage-alert-receiver-entrypoint', () => {
   });
 
   it('SMTP password unprovisioned (env.IONOS_SMTP_PASSWORD undefined) fails closed -> 502, no connection attempted', async () => {
-    const env = makeEnv({ IONOS_SMTP_PASSWORD: undefined });
+    const env = makeEnv({ IONOS_SMTP_PASSWORD: undefined, STORAGE_ALERT_DELIVERY_ENABLED: 'true' });
     const res = await worker.fetch(post(`alert/${TOKEN}`, VALID_PAYLOAD), env);
     expect(res.status).toBe(502);
     expect(sendStorageAlertViaIonosSmtp).not.toHaveBeenCalled();
@@ -261,13 +261,13 @@ describe('storage-alert-receiver-entrypoint', () => {
 
   it('SMTP send failure -> non-2xx (502)', async () => {
     sendStorageAlertViaIonosSmtp.mockRejectedValueOnce(new Error('smtp failure'));
-    const env = makeEnv();
+    const env = makeEnv({ STORAGE_ALERT_DELIVERY_ENABLED: 'true' });
     const res = await worker.fetch(post(`alert/${TOKEN}`, VALID_PAYLOAD), env);
     expect(res.status).toBe(502);
   });
 
   it('rendered envelope contains no prohibited fields and only approved content', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ STORAGE_ALERT_DELIVERY_ENABLED: 'true' });
     const res = await worker.fetch(post(`alert/${TOKEN}`, VALID_PAYLOAD), env);
     expect(res.status).toBeLessThan(300);
     const bodyText = sentCalls[0].envelope.bodyText;
@@ -379,7 +379,7 @@ describe('storage-alert-receiver-entrypoint — SUN-1222C-SMTP-ROOT-CAUSE /diagn
   });
 
   it('reuses the same ALERT_PATH_TOKEN as the /alert path -- no second receiver-side secret required', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ STORAGE_ALERT_DELIVERY_ENABLED: 'true' });
     const alertRes = await worker.fetch(post(`alert/${TOKEN}`, VALID_PAYLOAD), env);
     const diagRes = await worker.fetch(post(`diagnostic/${TOKEN}`, undefined), env);
     expect(alertRes.status).toBeLessThan(300);
@@ -387,7 +387,7 @@ describe('storage-alert-receiver-entrypoint — SUN-1222C-SMTP-ROOT-CAUSE /diagn
   });
 
   it('does not disturb the existing /alert path (both routes coexist)', async () => {
-    const env = makeEnv();
+    const env = makeEnv({ STORAGE_ALERT_DELIVERY_ENABLED: 'true' });
     const res = await worker.fetch(post(`alert/${TOKEN}`, VALID_PAYLOAD), env);
     expect(res.status).toBeLessThan(300);
     expect(sendStorageAlertViaIonosSmtp).toHaveBeenCalledTimes(1);
@@ -584,5 +584,154 @@ describe('storage-alert-receiver-entrypoint — SUN-1222C-SMTP-ROOT-CAUSE /contr
     const env = makeEnv();
     const res = await worker.fetch(post(`control/${TOKEN}?mode=IMMEDIATE`, undefined), env);
     expect(res.status).toBe(200);
+  });
+});
+
+describe('storage-alert-receiver-entrypoint — SUN-1222C delivery containment (STORAGE_ALERT_DELIVERY_ENABLED / qualification bypass)', () => {
+  const QUAL_TOKEN = 'q'.repeat(48); // stand-in for a real high-entropy qualification token
+  const QUAL_HEADER = 'X-Siteborne-Storage-Alert-Qualification';
+  const GOVERNED_QUALIFICATION_PAYLOAD = {
+    event: 'siteborne.storage_reclamation.critical_alert',
+    operation_class: 'artifact_reclamation_r2_delete_failure',
+    r2_delete_failures: 0,
+    reclaimed_count: 0,
+    swept_at: '2026-09-14T00:00:00.000Z',
+    sample_content_hashes: ['SITEBORNE-SMTP-PRODUCTION-QUALIFICATION-stand-in-uuid'],
+  };
+
+  it('DELIVERY_ENABLED absent, QUALIFICATION_TOKEN absent, ordinary request -> no SMTP', async () => {
+    const env = makeEnv();
+    const res = await worker.fetch(post(`alert/${TOKEN}`, VALID_PAYLOAD), env);
+    expect(res.status).toBe(503);
+    expect(sendStorageAlertViaIonosSmtp).not.toHaveBeenCalled();
+  });
+
+  it('DELIVERY_ENABLED=false, ordinary request -> no SMTP', async () => {
+    const env = makeEnv({ STORAGE_ALERT_DELIVERY_ENABLED: 'false' });
+    const res = await worker.fetch(post(`alert/${TOKEN}`, VALID_PAYLOAD), env);
+    expect(res.status).toBe(503);
+    expect(sendStorageAlertViaIonosSmtp).not.toHaveBeenCalled();
+  });
+
+  it('DELIVERY_ENABLED set to a non-"true" truthy-looking value -> no SMTP (exact literal match only)', async () => {
+    const env = makeEnv({ STORAGE_ALERT_DELIVERY_ENABLED: 'TRUE' });
+    const res = await worker.fetch(post(`alert/${TOKEN}`, VALID_PAYLOAD), env);
+    expect(res.status).toBe(503);
+    expect(sendStorageAlertViaIonosSmtp).not.toHaveBeenCalled();
+  });
+
+  it('DELIVERY_ENABLED=true, ordinary valid request -> SMTP allowed', async () => {
+    const env = makeEnv({ STORAGE_ALERT_DELIVERY_ENABLED: 'true' });
+    const res = await worker.fetch(post(`alert/${TOKEN}`, VALID_PAYLOAD), env);
+    expect(res.status).toBeLessThan(300);
+    expect(sendStorageAlertViaIonosSmtp).toHaveBeenCalledTimes(1);
+  });
+
+  it('DELIVERY_ENABLED absent, QUALIFICATION_TOKEN present, scheduled-shaped request without qualification header -> no SMTP', async () => {
+    const env = makeEnv({ STORAGE_ALERT_QUALIFICATION_TOKEN: QUAL_TOKEN });
+    const res = await worker.fetch(post(`alert/${TOKEN}`, GOVERNED_QUALIFICATION_PAYLOAD), env);
+    expect(res.status).toBe(503);
+    expect(sendStorageAlertViaIonosSmtp).not.toHaveBeenCalled();
+  });
+
+  it('DELIVERY_ENABLED absent, QUALIFICATION_TOKEN present, wrong qualification header -> no SMTP', async () => {
+    const env = makeEnv({ STORAGE_ALERT_QUALIFICATION_TOKEN: QUAL_TOKEN });
+    const res = await worker.fetch(
+      post(`alert/${TOKEN}`, GOVERNED_QUALIFICATION_PAYLOAD, { [QUAL_HEADER]: 'wrong-value' }),
+      env
+    );
+    expect(res.status).toBe(503);
+    expect(sendStorageAlertViaIonosSmtp).not.toHaveBeenCalled();
+  });
+
+  it('DELIVERY_ENABLED absent, QUALIFICATION_TOKEN present, correct header but non-governed payload -> no SMTP', async () => {
+    const env = makeEnv({ STORAGE_ALERT_QUALIFICATION_TOKEN: QUAL_TOKEN });
+    const res = await worker.fetch(
+      post(`alert/${TOKEN}`, VALID_PAYLOAD, { [QUAL_HEADER]: QUAL_TOKEN }),
+      env
+    );
+    expect(res.status).toBe(503);
+    expect(sendStorageAlertViaIonosSmtp).not.toHaveBeenCalled();
+  });
+
+  it('DELIVERY_ENABLED absent, QUALIFICATION_TOKEN present, correct header, governed payload -> SMTP allowed', async () => {
+    const env = makeEnv({ STORAGE_ALERT_QUALIFICATION_TOKEN: QUAL_TOKEN });
+    const res = await worker.fetch(
+      post(`alert/${TOKEN}`, GOVERNED_QUALIFICATION_PAYLOAD, { [QUAL_HEADER]: QUAL_TOKEN }),
+      env
+    );
+    expect(res.status).toBeLessThan(300);
+    expect(sendStorageAlertViaIonosSmtp).toHaveBeenCalledTimes(1);
+  });
+
+  it('DELIVERY_ENABLED=true, wrong qualification credentials, ordinary valid request -> governed only by the normal delivery gate (still allowed)', async () => {
+    const env = makeEnv({
+      STORAGE_ALERT_DELIVERY_ENABLED: 'true',
+      STORAGE_ALERT_QUALIFICATION_TOKEN: QUAL_TOKEN,
+    });
+    const res = await worker.fetch(
+      post(`alert/${TOKEN}`, VALID_PAYLOAD, { [QUAL_HEADER]: 'wrong-value' }),
+      env
+    );
+    expect(res.status).toBeLessThan(300);
+    expect(sendStorageAlertViaIonosSmtp).toHaveBeenCalledTimes(1);
+  });
+
+  it('governed qualification payload alone, with no qualification header at all, cannot bypass even when the token is provisioned', async () => {
+    const env = makeEnv({ STORAGE_ALERT_QUALIFICATION_TOKEN: QUAL_TOKEN });
+    const res = await worker.fetch(post(`alert/${TOKEN}`, GOVERNED_QUALIFICATION_PAYLOAD), env);
+    expect(res.status).toBe(503);
+    expect(sendStorageAlertViaIonosSmtp).not.toHaveBeenCalled();
+  });
+
+  it('qualification header alone cannot bypass schema validation -- malformed body still 400, zero SMTP', async () => {
+    const env = makeEnv({ STORAGE_ALERT_QUALIFICATION_TOKEN: QUAL_TOKEN });
+    const res = await worker.fetch(
+      post(`alert/${TOKEN}`, '{not json', { [QUAL_HEADER]: QUAL_TOKEN }),
+      env
+    );
+    expect(res.status).toBe(400);
+    expect(sendStorageAlertViaIonosSmtp).not.toHaveBeenCalled();
+  });
+
+  it('qualification header alone cannot bypass ALERT_PATH_TOKEN validation -- wrong path token still 404, zero SMTP', async () => {
+    const env = makeEnv({ STORAGE_ALERT_QUALIFICATION_TOKEN: QUAL_TOKEN });
+    const res = await worker.fetch(
+      post(`alert/${'wrong'.repeat(10)}`, GOVERNED_QUALIFICATION_PAYLOAD, {
+        [QUAL_HEADER]: QUAL_TOKEN,
+      }),
+      env
+    );
+    expect(res.status).toBe(404);
+    expect(sendStorageAlertViaIonosSmtp).not.toHaveBeenCalled();
+  });
+
+  it('no disabled path opens a real SMTP connection or reads IONOS_SMTP_PASSWORD', async () => {
+    const env = makeEnv({ IONOS_SMTP_PASSWORD: undefined }); // unprovisioned -- proves the gate never even reaches the password read
+    const res = await worker.fetch(post(`alert/${TOKEN}`, VALID_PAYLOAD), env);
+    expect(res.status).toBe(503); // not 502 -- never reached the password-unprovisioned check either
+    expect(sendStorageAlertViaIonosSmtp).not.toHaveBeenCalled();
+  });
+
+  it('THE RACE THIS CONTAINS: r2_delete_failures > 0, DELIVERY_ENABLED absent, QUALIFICATION_TOKEN present, scheduled-shaped caller -> receiver reached (existing behavior), SMTP transport NOT reached', async () => {
+    const env = makeEnv({ STORAGE_ALERT_QUALIFICATION_TOKEN: QUAL_TOKEN });
+    // Exactly what `reclaimStaleArtifactsScheduled` would send once a real
+    // R2 delete failure occurs -- no qualification header, because that
+    // caller has no qualification-token value in scope to construct one.
+    const scheduledShapedPayload = { ...VALID_PAYLOAD, r2_delete_failures: 7 };
+    const res = await worker.fetch(post(`alert/${TOKEN}`, scheduledShapedPayload), env);
+    // Reached the receiver and was correctly authenticated/parsed (not a 404/400) ...
+    expect(res.status).toBe(503);
+    // ... but the SMTP transport itself was never invoked: this is the exact
+    // autonomous-send race SUN-1222C's delivery containment closes.
+    expect(sendStorageAlertViaIonosSmtp).not.toHaveBeenCalled();
+  });
+
+  it('cleanup/timeout/error preservation remain intact when delivery is enabled (unaffected by containment)', async () => {
+    sendStorageAlertViaIonosSmtp.mockRejectedValueOnce(new Error('smtp failure'));
+    const env = makeEnv({ STORAGE_ALERT_DELIVERY_ENABLED: 'true' });
+    const res = await worker.fetch(post(`alert/${TOKEN}`, VALID_PAYLOAD), env);
+    expect(res.status).toBe(502);
+    expect(sendStorageAlertViaIonosSmtp).toHaveBeenCalledTimes(1);
   });
 });

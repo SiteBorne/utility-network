@@ -157,9 +157,17 @@ describe('storageAlertQualificationRoute', () => {
     expect(res.status).toBe(202);
     expect(receiver.fetch).toHaveBeenCalledTimes(1);
     expect(transportSpy).toHaveBeenCalledTimes(1);
-    // Real production transport constructor, real receiver binding, real path token.
-    expect(transportSpy).toHaveBeenCalledWith(receiver, PATH_TOKEN);
+    // Real production transport constructor, real receiver binding, real path
+    // token, and (SUN-1222C receiver-side delivery containment) the
+    // qualification-bypass header forwarded only after this route's own
+    // bearer authentication above already succeeded.
+    expect(transportSpy).toHaveBeenCalledWith(receiver, PATH_TOKEN, {
+      extraHeaders: { 'X-Siteborne-Storage-Alert-Qualification': QUALIFICATION_TOKEN },
+    });
     expect(capturedUrl).toBe(`https://storage-alert.internal/alert/${PATH_TOKEN}`);
+    expect(
+      (capturedInit?.headers as Record<string, string>)['X-Siteborne-Storage-Alert-Qualification']
+    ).toBe(QUALIFICATION_TOKEN);
 
     const body = JSON.parse(capturedInit?.body as string);
     expect(body.event).toBe('siteborne.storage_reclamation.critical_alert');

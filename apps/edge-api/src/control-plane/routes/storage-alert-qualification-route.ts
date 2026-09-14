@@ -106,7 +106,18 @@ export async function storageAlertQualificationRoute(
     // uses; every real Service Binding fetcher accepts a plain `string`
     // URL and ordinary `RequestInit` at runtime regardless.
     receiver as unknown as ServiceBindingFetcher,
-    pathToken
+    pathToken,
+    {
+      // SUN-1222C receiver-side delivery containment: this route's own
+      // bearer authentication (above) has already succeeded by this point,
+      // so forwarding `expectedToken` here (the value this route itself
+      // holds and already proved `providedToken` matches, in constant time)
+      // grants the receiver's separate, narrower qualification bypass --
+      // see `storage-alert-receiver-entrypoint.ts`'s
+      // `STORAGE_ALERT_QUALIFICATION_TOKEN`/`isGovernedQualificationPayload`
+      // doc comments for the full contract this header participates in.
+      extraHeaders: { 'X-Siteborne-Storage-Alert-Qualification': expectedToken },
+    }
   );
 
   try {

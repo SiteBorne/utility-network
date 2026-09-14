@@ -113,6 +113,56 @@ export interface Env {
    * wrangler.storage-alert-receiver.toml`; the `fetch()` handler below
    * fails closed (no SMTP connection attempted) when it is undefined. */
   readonly IONOS_SMTP_PASSWORD?: string;
+  /** SUN-1222C receiver-side delivery containment. Only the exact string
+   * `"true"` permits normal `/alert/<token>` requests to reach
+   * `sendStorageAlertViaIonosSmtp`; absent, `"false"`, or any other value
+   * fails closed. Deliberately NOT set in `wrangler.storage-alert-receiver.toml`
+   * `[vars]` -- an ordinary `versions upload`/`versions secret put` candidate
+   * can therefore never enable autonomous production email merely by
+   * existing, mirroring the fail-closed-absence design already proven for
+   * `PAID_ROUTES_ENABLED` and its siblings on `siteborne-utility-edge` (see
+   * `control-plane/config/production-payment.ts`). See `isGovernedQualificationPayload`
+   * and `STORAGE_ALERT_QUALIFICATION_TOKEN` below for the one narrow,
+   * separately-authorized bypass. */
+  readonly STORAGE_ALERT_DELIVERY_ENABLED?: string;
+  /** SUN-1222C temporary, high-entropy qualification credential -- provisioned
+   * on BOTH this Worker and `siteborne-utility-edge` only for the duration of
+   * one supervised qualification attempt, then deleted from both. Presence
+   * alone grants nothing: a request must also carry a matching
+   * `X-Siteborne-Storage-Alert-Qualification` header (constant-time compared)
+   * AND the exact governed qualification payload shape (see
+   * `isGovernedQualificationPayload`) before it may bypass
+   * `STORAGE_ALERT_DELIVERY_ENABLED`. `reclaimStaleArtifactsScheduled`'s own
+   * Service Binding call site (`../../index.ts`) never constructs this header
+   * -- it has no access to any qualification-token value at all -- so the
+   * normal minute-cron path is structurally incapable of triggering this
+   * bypass regardless of `r2_delete_failures`. */
+  readonly STORAGE_ALERT_QUALIFICATION_TOKEN?: string;
+}
+
+/** Dedicated internal header carrying the qualification credential (never a
+ * query string or path segment, so it cannot appear in access logs or
+ * Referer headers -- same rationale as `STORAGE_ALERT_QUALIFICATION_TOKEN`'s
+ * own doc comment on the edge side). Scheduled production requests never
+ * send this header; only `storage-alert-qualification-route.ts`, after its
+ * own independent bearer authentication succeeds, forwards it. */
+const QUALIFICATION_HEADER = 'X-Siteborne-Storage-Alert-Qualification';
+
+/** The narrow, fixed shape `storage-alert-qualification-route.ts` always
+ * sends: `r2_delete_failures`/`reclaimed_count` hardcoded to `0` (that route
+ * never reads real reclamation state) and exactly one sample hash carrying
+ * the route's own fixed marker prefix. Merely supplying the qualification
+ * header with the right secret is NOT sufficient to bypass
+ * `STORAGE_ALERT_DELIVERY_ENABLED` -- the payload must also match this exact
+ * governed shape, so a leaked/misused qualification token cannot be used to
+ * push arbitrary alert content through the bypass path. */
+function isGovernedQualificationPayload(payload: StorageAlertPayload): boolean {
+  return (
+    payload.r2_delete_failures === 0 &&
+    payload.reclaimed_count === 0 &&
+    payload.sample_content_hashes.length === 1 &&
+    payload.sample_content_hashes[0].startsWith('SITEBORNE-SMTP-PRODUCTION-QUALIFICATION-')
+  );
 }
 
 /** Constant-time string comparison -- deliberately does not short-circuit
@@ -376,6 +426,32 @@ export default {
 
     const parsed = StorageAlertPayloadSchema.safeParse(parsedJson);
     if (!parsed.success) return new Response(null, { status: 400 });
+
+    // SUN-1222C delivery containment gate. Ordered AFTER path-token and
+    // schema validation (so a malformed/unauthenticated request still gets
+    // 404/400, not a signal that delivery is disabled) and BEFORE any
+    // SMTP-transport code is reached -- no socket, no `IONOS_SMTP_PASSWORD`
+    // read, on any path through this block.
+    const normalDeliveryEnabled = env.STORAGE_ALERT_DELIVERY_ENABLED === 'true';
+    const qualificationToken = env.STORAGE_ALERT_QUALIFICATION_TOKEN;
+    const providedQualificationHeader = request.headers.get(QUALIFICATION_HEADER);
+    const qualificationBypassGranted =
+      !normalDeliveryEnabled &&
+      qualificationToken !== undefined &&
+      providedQualificationHeader !== null &&
+      timingSafeEqual(providedQualificationHeader, qualificationToken) &&
+      isGovernedQualificationPayload(parsed.data);
+    if (!normalDeliveryEnabled && !qualificationBypassGranted) {
+      // 503, not 502: this is an administrative/containment decision, not a
+      // transport failure -- distinguishable in logs from a real SMTP
+      // failure below, and (like every response on this path) triggers no
+      // retry logic: `reclaimStaleArtifactsScheduled`'s Service Binding
+      // transport already treats any non-2xx identically as
+      // `{ delivered: false }` with no retry of its own, and reclamation
+      // state itself was already committed to R2/D1 before this alert call
+      // was ever made, so this response cannot corrupt it either way.
+      return new Response(null, { status: 503 });
+    }
 
     const bodyText = renderAlertText(parsed.data);
 
