@@ -177,8 +177,15 @@ const DEFAULT_EHLO_HOSTNAME = 'alerts.siteborne.net';
  * ever received. Bounding each cleanup step keeps the worst case at
  * `overallTimeoutMs + 2 * CLEANUP_TIMEOUT_MS`, comfortably under that 12s
  * caller budget, and guarantees this function's own `return`/`throw`
- * always reflects the actual probe outcome, never a stuck cleanup. */
-const CLEANUP_TIMEOUT_MS = 1_000;
+ * always reflects the actual probe outcome, never a stuck cleanup.
+ *
+ * Exported (SUN-1222C-SMTP-ROOT-CAUSE Service-Binding-isolation addendum)
+ * solely so `storage-alert-receiver-entrypoint.ts`'s zero-network
+ * `CLEANUP_HANG` control mode can race the exact same budget against
+ * never-resolving stand-ins for `reader.cancel()`/`socket.close()`,
+ * proving the bounded-cleanup fix itself without duplicating the magic
+ * number or touching a real socket. */
+export const CLEANUP_TIMEOUT_MS = 1_000;
 
 /** Maps each stage to the outcome its own timeout resolves to -- used
  * when the OVERALL budget (rather than any individual stage's own

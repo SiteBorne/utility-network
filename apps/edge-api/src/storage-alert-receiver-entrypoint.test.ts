@@ -37,15 +37,17 @@ const probeIonosSmtpConnectivity = vi.fn(
   }
 );
 
-// SUN-1222C-SMTP-ROOT-CAUSE addendum: `DEFAULT_OVERALL_TIMEOUT_MS` is
-// mocked small (rather than the real 8_000) purely so the
-// `CONTROL_OVERALL_TIMEOUT` tests below don't burn 8 real seconds each --
-// the *value itself* is never asserted against, only that the control path
-// races `withTimeout` against it and reports `TIMED_OUT_AS_EXPECTED`.
+// SUN-1222C-SMTP-ROOT-CAUSE addendum: `DEFAULT_OVERALL_TIMEOUT_MS` and
+// `CLEANUP_TIMEOUT_MS` are both mocked small (rather than the real 8_000 /
+// 1_000) purely so the `CONTROL_OVERALL_TIMEOUT`/`CONTROL_CLEANUP_HANG`
+// tests below don't burn real seconds each -- the *values themselves* are
+// never asserted against, only that the control path races `withTimeout`
+// against them and reports the expected classification.
 vi.mock('./smtp/ionos-smtp-diagnostic', () => ({
   probeIonosSmtpConnectivity: (...args: unknown[]) =>
     (probeIonosSmtpConnectivity as (...a: unknown[]) => unknown)(...args),
   DEFAULT_OVERALL_TIMEOUT_MS: 20,
+  CLEANUP_TIMEOUT_MS: 10,
 }));
 
 import worker, { type Env } from './storage-alert-receiver-entrypoint';
@@ -390,6 +392,24 @@ describe('storage-alert-receiver-entrypoint — SUN-1222C-SMTP-ROOT-CAUSE /contr
     expect(body.control).toBe('OVERALL_TIMEOUT');
     expect(body.result).toBe('TIMED_OUT_AS_EXPECTED');
     expect(typeof body.elapsed_ms).toBe('number');
+    expect(probeIonosSmtpConnectivity).not.toHaveBeenCalled();
+    expect(sendStorageAlertViaIonosSmtp).not.toHaveBeenCalled();
+  });
+
+  it('mode=CLEANUP_HANG -> 200, races the real withTimeout primitive/CLEANUP_TIMEOUT_MS against two never-resolving stand-ins for reader.cancel()/socket.close() and still returns OK, zero probe/send calls', async () => {
+    const env = makeEnv();
+    const startedAt = Date.now();
+    const res = await worker.fetch(post(`control/${TOKEN}?mode=CLEANUP_HANG`, undefined), env);
+    const elapsedMs = Date.now() - startedAt;
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.control).toBe('CLEANUP_HANG');
+    expect(body.result).toBe('OK');
+    expect(typeof body.elapsed_ms).toBe('number');
+    // Proves the handler actually returned instead of hanging forever on
+    // the never-resolving stand-ins -- bounded by the mocked
+    // `CLEANUP_TIMEOUT_MS`, not by the test's own timeout.
+    expect(elapsedMs).toBeLessThan(2000);
     expect(probeIonosSmtpConnectivity).not.toHaveBeenCalled();
     expect(sendStorageAlertViaIonosSmtp).not.toHaveBeenCalled();
   });

@@ -71,6 +71,7 @@ import { sendStorageAlertViaIonosSmtp } from './smtp/ionos-smtp-transport';
 import {
   probeIonosSmtpConnectivity,
   DEFAULT_OVERALL_TIMEOUT_MS,
+  CLEANUP_TIMEOUT_MS,
 } from './smtp/ionos-smtp-diagnostic';
 import { withTimeout, StageTimeoutError } from './smtp/smtp-stage-timeout';
 
@@ -205,7 +206,7 @@ const SUBJECT = 'SITEBORNE: storage reclamation critical alert';
  * module-level doc comment above for the full capability-surface
  * invariant this addendum preserves.
  */
-type ControlMode = 'IMMEDIATE' | 'DELAY_250MS' | 'OVERALL_TIMEOUT';
+type ControlMode = 'IMMEDIATE' | 'DELAY_250MS' | 'OVERALL_TIMEOUT' | 'CLEANUP_HANG';
 
 interface ControlResult {
   readonly control: ControlMode;
@@ -230,6 +231,33 @@ async function runControl(mode: ControlMode): Promise<ControlResult> {
     await new Promise<void>((resolve) => setTimeout(resolve, 250));
     return { control: mode, result: 'OK', elapsed_ms: Date.now() - startedAt };
   }
+  if (mode === 'CLEANUP_HANG') {
+    // SUN-1222C-SMTP-ROOT-CAUSE Service-Binding-isolation addendum: proves
+    // the bounded-cleanup fix in `ionos-smtp-diagnostic.ts`'s `finally`
+    // block in complete isolation from any socket/stream/TLS involvement.
+    // `hangingReaderCancel`/`hangingSocketClose` are the *only* test
+    // doubles anywhere in this control mode -- structurally identical
+    // never-resolving `Promise`s standing in for `reader.cancel()` and
+    // `currentSocket.close()` -- raced against the exact same
+    // `withTimeout` primitive and exported `CLEANUP_TIMEOUT_MS` budget the
+    // real fix uses, never a reimplementation of it. The Service Binding
+    // dispatch that carries this result back to the caller is the real
+    // Miniflare/Cloudflare one; nothing about the RPC/HTTP path is mocked.
+    const hangingReaderCancel = new Promise<void>(() => {});
+    const hangingSocketClose = new Promise<void>(() => {});
+    const results = await Promise.allSettled([
+      withTimeout('CONTROL_CLEANUP_READER_CANCEL', hangingReaderCancel, CLEANUP_TIMEOUT_MS),
+      withTimeout('CONTROL_CLEANUP_SOCKET_CLOSE', hangingSocketClose, CLEANUP_TIMEOUT_MS),
+    ]);
+    const bothBoundedTimeouts = results.every(
+      (r) => r.status === 'rejected' && r.reason instanceof StageTimeoutError
+    );
+    return {
+      control: mode,
+      result: bothBoundedTimeouts ? 'OK' : 'UNEXPECTED_ERROR',
+      elapsed_ms: Date.now() - startedAt,
+    };
+  }
   // mode === 'OVERALL_TIMEOUT'
   try {
     await withTimeout(
@@ -253,7 +281,12 @@ async function runControl(mode: ControlMode): Promise<ControlResult> {
   }
 }
 
-const CONTROL_MODES: readonly ControlMode[] = ['IMMEDIATE', 'DELAY_250MS', 'OVERALL_TIMEOUT'];
+const CONTROL_MODES: readonly ControlMode[] = [
+  'IMMEDIATE',
+  'DELAY_250MS',
+  'OVERALL_TIMEOUT',
+  'CLEANUP_HANG',
+];
 function isControlMode(value: string | null): value is ControlMode {
   return value !== null && (CONTROL_MODES as readonly string[]).includes(value);
 }

@@ -337,6 +337,33 @@ describe('storageAlertSmtpDiagnosticRoute — SUN-1222C-SMTP-ROOT-CAUSE ?mode= z
     expect(typeof body.caller_elapsed_ms).toBe('number');
   });
 
+  it('?mode=CLEANUP_HANG forwards to the receiver /control path with that mode', async () => {
+    const app = appWithRoute();
+    let capturedUrl = '';
+    const { env } = fullyProvisionedEnv(async (url) => {
+      capturedUrl = url;
+      return new Response(
+        JSON.stringify({ control: 'CLEANUP_HANG', result: 'OK', elapsed_ms: 1002 }),
+        { status: 200, headers: { 'content-type': 'application/json' } }
+      );
+    });
+
+    const res = await app.request(
+      '/internal/storage-alert-smtp-diagnostic?mode=CLEANUP_HANG',
+      { method: 'POST', headers: { Authorization: `Bearer ${DIAGNOSTIC_TOKEN}` } },
+      env
+    );
+
+    expect(res.status).toBe(200);
+    expect(capturedUrl).toBe(
+      `https://storage-alert.internal/control/${PATH_TOKEN}?mode=CLEANUP_HANG`
+    );
+    const body = await res.json();
+    expect(body.result).toBe('OK');
+    expect(body.receiver_elapsed_ms).toBe(1002);
+    expect(typeof body.caller_elapsed_ms).toBe('number');
+  });
+
   it('an unrecognized ?mode= value is ignored -- falls back to the real /diagnostic path, unchanged', async () => {
     const app = appWithRoute();
     let capturedUrl = '';

@@ -56,7 +56,7 @@ const BEARER_PREFIX = 'Bearer ';
  * the shared timeout primitive from the SMTP/TLS socket path. Not present
  * (or an unrecognized value) means the original real-diagnostic behavior,
  * unchanged. */
-const CONTROL_MODES = ['IMMEDIATE', 'DELAY_250MS', 'OVERALL_TIMEOUT'] as const;
+const CONTROL_MODES = ['IMMEDIATE', 'DELAY_250MS', 'OVERALL_TIMEOUT', 'CLEANUP_HANG'] as const;
 type ControlMode = (typeof CONTROL_MODES)[number];
 function parseControlMode(value: string | null): ControlMode | undefined {
   return (CONTROL_MODES as readonly string[]).includes(value ?? '')

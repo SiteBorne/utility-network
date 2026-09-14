@@ -18,6 +18,7 @@
     "build": "tsc && tsc -m ESNext --outDir dist/esm && mv dist/esm/*.mjs dist/ 2>/dev/null || true",
     "test": "vitest run",
     "test:workerd": "vitest run --config vitest.workerd.config.ts",
+    "test:workerd:service-binding": "vitest run --config vitest.service-binding.config.ts",
     "lint": "eslint src/ --ignore-pattern 'src/generated/**'",
     "typecheck": "tsc --project tsconfig.json --noEmit --pretty false && tsc --project tsconfig.live-tests.json --noEmit --pretty false",
     "generate:input-validators": "tsx scripts/generate-input-validators.mts",
@@ -47,6 +48,7 @@
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "0.12.0",
     "@cloudflare/workers-types": "^4.20240800.0",
+    "esbuild": "0.28.1",
     "@hono/node-server": "2.1.1",
     "@modelcontextprotocol/client": "2.0.0",
     "@nevermined-io/payments": "1.10.0",
