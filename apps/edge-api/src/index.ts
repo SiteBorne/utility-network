@@ -31,6 +31,7 @@ import { companyEvidenceGraphV2CdpProductionRoute } from './control-plane/routes
 import { documentEvidenceJsonV2CdpProductionRoute } from './control-plane/routes/production-document-evidence-v2-cdp-route';
 import { documentArtifactUploadRoute } from './control-plane/routes/document-artifact-upload-route';
 import { storageAlertQualificationRoute } from './control-plane/routes/storage-alert-qualification-route';
+import { storageAlertSmtpDiagnosticRoute } from './control-plane/routes/storage-alert-smtp-diagnostic-route';
 import type { Env } from './control-plane/config/env';
 import { D1WorkflowOwnerIntentRepository } from './control-plane/repositories/d1/workflow-owner-intents';
 import { recoverPendingWorkflowOwnerIntents } from './control-plane/continuation/owner-recovery';
@@ -242,6 +243,20 @@ app.post('/v2/artifacts/documents', documentArtifactUploadRoute);
  * closed.
  */
 app.post('/internal/storage-alert-qualification', storageAlertQualificationRoute);
+
+/**
+ * SUN-1222C-SMTP-ROOT-CAUSE — TEMPORARY, non-delivery SMTP connectivity
+ * diagnostic route (see `storage-alert-smtp-diagnostic-route.ts`'s own
+ * doc comment). Bearer-token gated with its OWN secret
+ * (`STORAGE_ALERT_SMTP_DIAGNOSTIC_TOKEN`, distinct from the qualification
+ * route's), fails closed to `404` for every invalid request with zero
+ * Service Binding invocation; the one Service Binding call it can make
+ * runs `probeIonosSmtpConnectivity` on the receiver, which is
+ * structurally incapable of authenticating or sending mail. Expected to
+ * be reverted alongside the qualification route once the SMTP root-cause
+ * investigation this route exists for is closed.
+ */
+app.post('/internal/storage-alert-smtp-diagnostic', storageAlertSmtpDiagnosticRoute);
 
 // SUN-1218 checkpoint X: see the `/v1/*` wildcard's own doc comment
 // above -- same correction, same reasoning, unconditional 404.

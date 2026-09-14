@@ -53,10 +53,22 @@
  *     token, not the raw body, not the parsed payload, not the rendered
  *     email text. On failure this returns a bare non-2xx status with no
  *     response body content derived from the request.
+ *
+ * SUN-1222C-SMTP-ROOT-CAUSE addendum: `POST /diagnostic/<token>` (same
+ * `ALERT_PATH_TOKEN`, same constant-time check, same identical-404
+ * discipline for every invalid request) runs `probeIonosSmtpConnectivity`
+ * (`smtp/ionos-smtp-diagnostic.ts`) instead of `sendStorageAlertViaIonosSmtp`
+ * -- a bounded, non-delivery connectivity probe that never reads
+ * `env.IONOS_SMTP_PASSWORD` and structurally cannot authenticate or send
+ * mail (see that module's own doc comment). Its JSON response body is
+ * safe to return verbatim: every field is either a server-sent reply
+ * code/text, a stage name, an elapsed duration, or a boolean -- never a
+ * credential, because this path never reads one.
  */
 
 import { z } from 'zod';
 import { sendStorageAlertViaIonosSmtp } from './smtp/ionos-smtp-transport';
+import { probeIonosSmtpConnectivity } from './smtp/ionos-smtp-diagnostic';
 
 /** Mirrors `StorageAlertPayload` in
  * `control-plane/alerting/storage-alert-sweep.ts` exactly -- this module
@@ -186,6 +198,18 @@ export default {
     if (!token) return NOT_FOUND(); // fail closed if unprovisioned
 
     const url = new URL(request.url);
+
+    const diagnosticMatch = /^\/diagnostic\/([^/]+)$/.exec(url.pathname);
+    if (diagnosticMatch) {
+      const providedDiagnosticToken = diagnosticMatch[1];
+      if (!timingSafeEqual(providedDiagnosticToken, token)) return NOT_FOUND();
+      const result = await probeIonosSmtpConnectivity({ host: SMTP_HOST, port: SMTP_PORT });
+      return new Response(JSON.stringify(result), {
+        status: result.ok ? 200 : 502,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+
     const match = /^\/alert\/([^/]+)$/.exec(url.pathname);
     if (!match) return NOT_FOUND();
 

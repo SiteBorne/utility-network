@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { SmtpDiagnosticResult } from './smtp/ionos-smtp-diagnostic';
 
 const sentCalls: Array<{
   config: {
@@ -19,6 +20,26 @@ const sendStorageAlertViaIonosSmtp = vi.fn(async (config, envelope) => {
 vi.mock('./smtp/ionos-smtp-transport', () => ({
   sendStorageAlertViaIonosSmtp: (...args: unknown[]) =>
     (sendStorageAlertViaIonosSmtp as (...a: unknown[]) => unknown)(...args),
+}));
+
+const diagnosticCalls: Array<{ host: string; port: number }> = [];
+const DEFAULT_DIAGNOSTIC_RESULT: SmtpDiagnosticResult = {
+  ok: true,
+  reachedStage: 'COMPLETE',
+  outcome: 'QUIT_OK',
+  timedOut: false,
+  elapsedMsByStage: { SMTP_GREETING: 12 },
+};
+const probeIonosSmtpConnectivity = vi.fn(
+  async (config: { host: string; port: number }): Promise<SmtpDiagnosticResult> => {
+    diagnosticCalls.push(config);
+    return DEFAULT_DIAGNOSTIC_RESULT;
+  }
+);
+
+vi.mock('./smtp/ionos-smtp-diagnostic', () => ({
+  probeIonosSmtpConnectivity: (...args: unknown[]) =>
+    (probeIonosSmtpConnectivity as (...a: unknown[]) => unknown)(...args),
 }));
 
 import worker, { type Env } from './storage-alert-receiver-entrypoint';
@@ -55,6 +76,12 @@ beforeEach(() => {
   sendStorageAlertViaIonosSmtp.mockClear();
   sendStorageAlertViaIonosSmtp.mockImplementation(async (config, envelope) => {
     sentCalls.push({ config, envelope } as (typeof sentCalls)[number]);
+  });
+  diagnosticCalls.length = 0;
+  probeIonosSmtpConnectivity.mockClear();
+  probeIonosSmtpConnectivity.mockImplementation(async (config) => {
+    diagnosticCalls.push(config as { host: string; port: number });
+    return DEFAULT_DIAGNOSTIC_RESULT;
   });
 });
 
@@ -229,5 +256,95 @@ describe('storage-alert-receiver-entrypoint', () => {
     const res = await worker.fetch(post(`alert/${'wrong'.repeat(10)}`, VALID_PAYLOAD), env);
     const text = await res.text();
     expect(text).toBe('');
+  });
+});
+
+describe('storage-alert-receiver-entrypoint — SUN-1222C-SMTP-ROOT-CAUSE /diagnostic path', () => {
+  it('valid token + successful probe -> 200 with the probe result as JSON, zero SMTP send attempted', async () => {
+    const env = makeEnv();
+    const res = await worker.fetch(post(`diagnostic/${TOKEN}`, undefined), env);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toEqual(DEFAULT_DIAGNOSTIC_RESULT);
+    expect(probeIonosSmtpConnectivity).toHaveBeenCalledTimes(1);
+    expect(sendStorageAlertViaIonosSmtp).not.toHaveBeenCalled();
+  });
+
+  it('targets smtp.ionos.com:587, identically to the real send path', async () => {
+    const env = makeEnv();
+    await worker.fetch(post(`diagnostic/${TOKEN}`, undefined), env);
+    expect(diagnosticCalls[0]).toEqual({ host: 'smtp.ionos.com', port: 587 });
+  });
+
+  it('failed probe -> 502 with the failure detail as JSON, zero SMTP send attempted', async () => {
+    probeIonosSmtpConnectivity.mockResolvedValueOnce({
+      ok: false,
+      reachedStage: 'SMTP_GREETING',
+      outcome: 'SMTP_GREETING_TIMEOUT',
+      failedStage: 'SMTP_GREETING',
+      timedOut: true,
+      elapsedMsByStage: {},
+      detail: 'timed out after 3000ms',
+    });
+    const env = makeEnv();
+    const res = await worker.fetch(post(`diagnostic/${TOKEN}`, undefined), env);
+    expect(res.status).toBe(502);
+    const body = await res.json();
+    expect(body.failedStage).toBe('SMTP_GREETING');
+    expect(body.outcome).toBe('SMTP_GREETING_TIMEOUT');
+    expect(sendStorageAlertViaIonosSmtp).not.toHaveBeenCalled();
+  });
+
+  it('never reads IONOS_SMTP_PASSWORD -- the probe still runs even when it is unprovisioned', async () => {
+    const env = makeEnv({ IONOS_SMTP_PASSWORD: undefined });
+    const res = await worker.fetch(post(`diagnostic/${TOKEN}`, undefined), env);
+    expect(res.status).toBe(200); // unlike /alert/<token>, never fails closed on a missing SMTP password
+    expect(probeIonosSmtpConnectivity).toHaveBeenCalledTimes(1);
+  });
+
+  it('invalid token on the diagnostic path -> identical 404, zero probe calls', async () => {
+    const env = makeEnv();
+    const res = await worker.fetch(post(`diagnostic/${'b'.repeat(48)}`, undefined), env);
+    expect(res.status).toBe(404);
+    expect(probeIonosSmtpConnectivity).not.toHaveBeenCalled();
+  });
+
+  it('missing token segment (wrong path) -> 404, zero probe calls', async () => {
+    const env = makeEnv();
+    const res = await worker.fetch(post('diagnostic/', undefined), env);
+    expect(res.status).toBe(404);
+    expect(probeIonosSmtpConnectivity).not.toHaveBeenCalled();
+  });
+
+  it('GET on the diagnostic path -> 404, zero probe calls', async () => {
+    const req = new Request(`https://storage-alert-receiver.example/diagnostic/${TOKEN}`, {
+      method: 'GET',
+    });
+    const res = await worker.fetch(req, makeEnv());
+    expect(res.status).toBe(404);
+    expect(probeIonosSmtpConnectivity).not.toHaveBeenCalled();
+  });
+
+  it('ALERT_PATH_TOKEN unprovisioned fails closed -> 404, zero probe calls', async () => {
+    const env = makeEnv({ ALERT_PATH_TOKEN: undefined });
+    const res = await worker.fetch(post(`diagnostic/${TOKEN}`, undefined), env);
+    expect(res.status).toBe(404);
+    expect(probeIonosSmtpConnectivity).not.toHaveBeenCalled();
+  });
+
+  it('reuses the same ALERT_PATH_TOKEN as the /alert path -- no second receiver-side secret required', async () => {
+    const env = makeEnv();
+    const alertRes = await worker.fetch(post(`alert/${TOKEN}`, VALID_PAYLOAD), env);
+    const diagRes = await worker.fetch(post(`diagnostic/${TOKEN}`, undefined), env);
+    expect(alertRes.status).toBeLessThan(300);
+    expect(diagRes.status).toBe(200);
+  });
+
+  it('does not disturb the existing /alert path (both routes coexist)', async () => {
+    const env = makeEnv();
+    const res = await worker.fetch(post(`alert/${TOKEN}`, VALID_PAYLOAD), env);
+    expect(res.status).toBeLessThan(300);
+    expect(sendStorageAlertViaIonosSmtp).toHaveBeenCalledTimes(1);
+    expect(probeIonosSmtpConnectivity).not.toHaveBeenCalled();
   });
 });
