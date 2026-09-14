@@ -14,11 +14,15 @@
  *
  * Transport: direct authenticated SMTP to the operator's own IONOS
  * mailbox (`storage@alerts.siteborne.net` -> `hello@siteborne.com`) over
- * `cloudflare:sockets`, via `smtp/ionos-smtp-transport.ts` -- STARTTLS on
- * port 587, then `AUTH PLAIN`. This replaced an earlier design built on
- * Cloudflare Email Routing / the `send_email` binding, abandoned before
- * deployment once the operator chose the IONOS-SMTP architecture instead
- * (see that module's own doc comment for the full protocol sequence).
+ * `cloudflare:sockets`, via `smtp/ionos-smtp-transport.ts` -- implicit TLS
+ * on port 465, then `AUTH PLAIN` (migrated from STARTTLS on port 587 by
+ * SUN-1222C-SMTP-ROOT-CAUSE, after a live non-delivery probe isolated the
+ * 587 failure to the STARTTLS upgrade step specifically and a second probe
+ * proved 465 completes cleanly -- see that module's own doc comment for
+ * both probes' results and the full current protocol sequence). This
+ * replaced an earlier design built on Cloudflare Email Routing / the
+ * `send_email` binding, abandoned before deployment once the operator
+ * chose the IONOS-SMTP architecture instead.
  *
  * NOT YET DEPLOYED. This file is frozen local configuration only, exactly
  * like `workflow-host-entrypoint.ts` before its own deploy authorization --
@@ -189,6 +193,12 @@ function renderAlertText(payload: StorageAlertPayload): string {
  * -- this module only supplies the envelope (`SMTP_HOST`/.../`TO_ADDRESS`
  * below) and the already-rendered plain-text body. */
 const SMTP_HOST = 'smtp.ionos.com';
+// SUN-1222C-SMTP-ROOT-CAUSE port migration: `SMTP_PORT` (587, STARTTLS) is
+// now used ONLY by the still-preserved, non-delivery
+// `probeIonosSmtpConnectivity` forensic/regression diagnostic below --
+// real production delivery moved to `IMPLICIT_TLS_PORT` (465, defined
+// further down alongside its own diagnostic), see
+// `smtp/ionos-smtp-transport.ts`'s doc comment for why.
 const SMTP_PORT = 587;
 const FROM_ADDRESS = 'storage@alerts.siteborne.net';
 const TO_ADDRESS = 'hello@siteborne.com';
@@ -376,7 +386,15 @@ export default {
       await sendStorageAlertViaIonosSmtp(
         {
           host: SMTP_HOST,
-          port: SMTP_PORT,
+          // SUN-1222C-SMTP-ROOT-CAUSE port migration: production delivery
+          // now uses implicit TLS on 465, not STARTTLS on 587 -- see
+          // `smtp/ionos-smtp-transport.ts`'s own doc comment for the two
+          // live probes that isolated the 587 failure to the STARTTLS
+          // upgrade step and proved 465 completes cleanly. `SMTP_PORT`
+          // (587) remains in use only by the still-preserved, non-delivery
+          // `probeIonosSmtpConnectivity` forensic/regression diagnostic
+          // above -- never by this send path anymore.
+          port: IMPLICIT_TLS_PORT,
           username: FROM_ADDRESS,
           password,
           from: FROM_ADDRESS,

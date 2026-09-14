@@ -12,7 +12,7 @@ import { encodeAuthPlainInitialResponse } from './smtp-message';
 // than the real 1_000ms) purely so the bounded-cleanup tests below don't
 // burn a real second each -- the *value itself* is never asserted against,
 // only that the transport's `finally` block races `reader.cancel()`/
-// `currentSocket.close()` against it instead of awaiting them unbounded.
+// `socket.close()` against it instead of awaiting them unbounded.
 // `withTimeout`/`StageTimeoutError` are re-exported from the real module
 // unchanged so every other stage timeout in this file keeps its real
 // behavior.
@@ -21,8 +21,11 @@ vi.mock('./smtp-stage-timeout', async (importOriginal) => {
   return { ...actual, CLEANUP_TIMEOUT_MS: 10 };
 });
 
+// SUN-1222C-SMTP-ROOT-CAUSE port migration: 465/implicit TLS, not
+// 587/STARTTLS -- see `ionos-smtp-transport.ts`'s own doc comment for the
+// two live probes that proved this.
 const HOST = 'smtp.ionos.com';
-const PORT = 587;
+const PORT = 465;
 const USERNAME = 'storage@alerts.siteborne.net';
 const PASSWORD = 'fake-mailbox-password-does-not-touch-network';
 const FROM = 'storage@alerts.siteborne.net';
@@ -32,7 +35,9 @@ const TO = 'hello@siteborne.com';
  * `read()` call (as already-encoded chunks -- a caller may pass a string
  * or, to force a mid-line split, an array of `Uint8Array` fragments for a
  * single queued response), and every `writer.write()` call is captured
- * verbatim (decoded to text) in `writes`, in order. */
+ * verbatim (decoded to text) in `writes`, in order. There is exactly one
+ * socket for the whole implicit-TLS lifecycle -- no `startTls()` on this
+ * fake at all, since the production transport never calls it. */
 function makeScriptedSocket(responses: Array<string | Uint8Array[]>) {
   const writes: string[] = [];
   let closeCalls = 0;
@@ -65,9 +70,6 @@ function makeScriptedSocket(responses: Array<string | Uint8Array[]>) {
     async close() {
       closeCalls++;
     },
-    startTls() {
-      throw new Error('startTls not configured on this fake socket');
-    },
   } as unknown as Socket;
 
   return {
@@ -79,28 +81,10 @@ function makeScriptedSocket(responses: Array<string | Uint8Array[]>) {
   };
 }
 
-/** Wires a pre-TLS fake socket whose `startTls()` returns a second,
- * independent fake socket -- exactly Cloudflare's real contract (a brand
- * new `Socket` layered over the same connection). Returns both fakes so
- * a test can assert on each side's `writes` independently: proof that
- * nothing after the TLS upgrade ever touches the pre-TLS socket again. */
-function makeTlsSocketPair(
-  preTlsResponses: Array<string | Uint8Array[]>,
-  postTlsResponses: Array<string | Uint8Array[]>
-) {
-  const pre = makeScriptedSocket(preTlsResponses);
-  const post = makeScriptedSocket(postTlsResponses);
-  (pre.socket as unknown as { startTls: () => Socket }).startTls = () => post.socket;
-  return { pre, post };
-}
-
 const GREETING = '220 mreueus003.schlund.de ESMTP Nemesis ready\r\n';
-const EHLO1_WITH_STARTTLS = '250-mreueus003.schlund.de\r\n250-PIPELINING\r\n250 STARTTLS\r\n';
-const EHLO1_WITHOUT_STARTTLS = '250-mreueus003.schlund.de\r\n250 PIPELINING\r\n';
-const STARTTLS_ACK = '220 2.0.0 Ready to start TLS\r\n';
-const EHLO2_WITH_PLAIN =
+const EHLO_WITH_PLAIN =
   '250-mreueus003.schlund.de\r\n250-AUTH LOGIN PLAIN\r\n250 SIZE 141557760\r\n';
-const EHLO2_WITHOUT_PLAIN = '250-mreueus003.schlund.de\r\n250 AUTH LOGIN\r\n';
+const EHLO_WITHOUT_PLAIN = '250-mreueus003.schlund.de\r\n250 AUTH LOGIN\r\n';
 const AUTH_OK = '235 2.7.0 Authentication successful\r\n';
 const MAIL_OK = '250 2.1.0 Sender OK\r\n';
 const RCPT_OK = '250 2.1.5 Recipient OK\r\n';
@@ -122,83 +106,80 @@ function config() {
   return { host: HOST, port: PORT, username: USERNAME, password: PASSWORD, from: FROM, to: TO };
 }
 
-describe('sendStorageAlertViaIonosSmtp — successful lifecycle', () => {
-  it('completes the full STARTTLS + AUTH PLAIN + send sequence', async () => {
-    const { pre, post } = makeTlsSocketPair(
-      [GREETING, EHLO1_WITH_STARTTLS, STARTTLS_ACK],
-      [EHLO2_WITH_PLAIN, AUTH_OK, MAIL_OK, RCPT_OK, DATA_GO, SUBMIT_OK, QUIT_OK]
-    );
+describe('sendStorageAlertViaIonosSmtp — successful lifecycle (implicit TLS)', () => {
+  it('completes the full implicit-TLS + AUTH PLAIN + send sequence, and never issues STARTTLS', async () => {
+    const scripted = makeScriptedSocket([
+      GREETING,
+      EHLO_WITH_PLAIN,
+      AUTH_OK,
+      MAIL_OK,
+      RCPT_OK,
+      DATA_GO,
+      SUBMIT_OK,
+      QUIT_OK,
+    ]);
+    const { socket, writes } = scripted;
     let capturedAddress: unknown;
     let capturedOptions: unknown;
     const connectFn: ConnectFn = (address, options) => {
       capturedAddress = address;
       capturedOptions = options;
-      return pre.socket;
+      return socket;
     };
 
     await sendStorageAlertViaIonosSmtp(config(), ENVELOPE, { ...DEPS, connectFn });
 
     expect(capturedAddress).toEqual({ hostname: HOST, port: PORT });
-    expect(capturedOptions).toEqual({ secureTransport: 'starttls' });
+    // SUN-1222C-SMTP-ROOT-CAUSE port migration: implicit TLS, not STARTTLS.
+    expect(capturedOptions).toEqual({ secureTransport: 'on' });
 
-    // Pre-TLS socket: exactly EHLO then STARTTLS, nothing more -- proves
-    // the old reader/writer are abandoned after the TLS upgrade (nothing
-    // written to this socket happens during or after it).
-    expect(pre.writes).toEqual(['EHLO alerts.siteborne.net\r\n', 'STARTTLS\r\n']);
-
-    // Post-TLS socket: EHLO happens again (capabilities re-read over TLS),
-    // strictly before AUTH, which is strictly before the envelope/data
-    // commands.
-    expect(post.writes[0]).toBe('EHLO alerts.siteborne.net\r\n');
+    // Exactly one EHLO (no plaintext-then-secure split), then AUTH, then
+    // the envelope/data commands -- in order.
+    expect(writes[0]).toBe('EHLO alerts.siteborne.net\r\n');
     const expectedAuthPayload = encodeAuthPlainInitialResponse(USERNAME, PASSWORD);
-    expect(post.writes[1]).toBe(`AUTH PLAIN ${expectedAuthPayload}\r\n`);
-    expect(post.writes[2]).toBe(`MAIL FROM:<${FROM}>\r\n`);
-    expect(post.writes[3]).toBe(`RCPT TO:<${TO}>\r\n`);
-    expect(post.writes[4]).toBe('DATA\r\n');
-    expect(post.writes[6]).toBe('QUIT\r\n');
+    expect(writes[1]).toBe(`AUTH PLAIN ${expectedAuthPayload}\r\n`);
+    expect(writes[2]).toBe(`MAIL FROM:<${FROM}>\r\n`);
+    expect(writes[3]).toBe(`RCPT TO:<${TO}>\r\n`);
+    expect(writes[4]).toBe('DATA\r\n');
+    expect(writes[6]).toBe('QUIT\r\n');
+
+    // No STARTTLS command is ever written to the wire.
+    expect(writes.some((w) => w.startsWith('STARTTLS'))).toBe(false);
 
     // The message itself: CRLF-normalized, correct headers, dot-stuffed,
     // properly terminated.
-    const dataPayload = post.writes[5];
+    const dataPayload = writes[5];
     expect(dataPayload).toContain('From: storage@alerts.siteborne.net\r\n');
     expect(dataPayload).toContain('Date: Sun, 13 Sep 2026 06:38:02 +0000\r\n');
     expect(dataPayload).toContain('Message-ID: <deadbeefcafe@alerts.siteborne.net>\r\n');
     expect(dataPayload).toContain('r2_delete_failures: 3\r\nreclaimed_count: 12');
     expect(dataPayload.endsWith('\r\n.\r\n')).toBe(true);
 
-    // The socket actually used at the end (post-TLS) was closed.
-    expect(post.closeCalls).toBe(1);
+    expect(scripted.closeCalls).toBe(1);
 
     // The plaintext password never appears on the wire in any form other
     // than the correctly base64-encoded AUTH PLAIN payload.
-    for (const write of [...pre.writes, ...post.writes]) {
+    for (const write of writes) {
       expect(write).not.toContain(PASSWORD);
     }
   });
 
-  it('never sends AUTH before the TLS upgrade', async () => {
-    const { pre, post } = makeTlsSocketPair(
-      [GREETING, EHLO1_WITH_STARTTLS, STARTTLS_ACK],
-      [EHLO2_WITH_PLAIN, AUTH_OK, MAIL_OK, RCPT_OK, DATA_GO, SUBMIT_OK, QUIT_OK]
-    );
-    await sendStorageAlertViaIonosSmtp(config(), ENVELOPE, {
-      ...DEPS,
-      connectFn: () => pre.socket,
-    });
-    expect(pre.writes.some((w) => w.startsWith('AUTH'))).toBe(false);
-    expect(post.writes[0]).toBe('EHLO alerts.siteborne.net\r\n');
-  });
-
   it('tolerates a missing/garbled QUIT reply without failing the send', async () => {
-    const { pre, post } = makeTlsSocketPair(
-      [GREETING, EHLO1_WITH_STARTTLS, STARTTLS_ACK],
-      [EHLO2_WITH_PLAIN, AUTH_OK, MAIL_OK, RCPT_OK, DATA_GO, SUBMIT_OK] // no QUIT reply queued
-    );
+    const scripted = makeScriptedSocket([
+      GREETING,
+      EHLO_WITH_PLAIN,
+      AUTH_OK,
+      MAIL_OK,
+      RCPT_OK,
+      DATA_GO,
+      SUBMIT_OK, // no QUIT reply queued
+    ]);
+    const { socket, writes } = scripted;
     await expect(
-      sendStorageAlertViaIonosSmtp(config(), ENVELOPE, { ...DEPS, connectFn: () => pre.socket })
+      sendStorageAlertViaIonosSmtp(config(), ENVELOPE, { ...DEPS, connectFn: () => socket })
     ).resolves.toBeUndefined();
-    expect(post.writes[6]).toBe('QUIT\r\n');
-    expect(post.closeCalls).toBe(1);
+    expect(writes[6]).toBe('QUIT\r\n');
+    expect(scripted.closeCalls).toBe(1);
   });
 
   it('handles a greeting response split across multiple TCP chunks', async () => {
@@ -208,12 +189,18 @@ describe('sendStorageAlertViaIonosSmtp — successful lifecycle', () => {
       encoder.encode('ueus003.schlund.de rea'),
       encoder.encode('dy\r\n'),
     ];
-    const { pre } = makeTlsSocketPair(
-      [splitGreeting, EHLO1_WITH_STARTTLS, STARTTLS_ACK],
-      [EHLO2_WITH_PLAIN, AUTH_OK, MAIL_OK, RCPT_OK, DATA_GO, SUBMIT_OK, QUIT_OK]
-    );
+    const { socket } = makeScriptedSocket([
+      splitGreeting,
+      EHLO_WITH_PLAIN,
+      AUTH_OK,
+      MAIL_OK,
+      RCPT_OK,
+      DATA_GO,
+      SUBMIT_OK,
+      QUIT_OK,
+    ]);
     await expect(
-      sendStorageAlertViaIonosSmtp(config(), ENVELOPE, { ...DEPS, connectFn: () => pre.socket })
+      sendStorageAlertViaIonosSmtp(config(), ENVELOPE, { ...DEPS, connectFn: () => socket })
     ).resolves.toBeUndefined();
   });
 });
@@ -229,115 +216,102 @@ describe('sendStorageAlertViaIonosSmtp — failure stages', () => {
     return err as SmtpTransportError;
   }
 
-  it('SMTP_CONNECT_FAILED when the socket cannot be constructed', async () => {
+  it('SMTP_TLS_CONNECT_FAILED when the socket cannot be constructed', async () => {
     await expectStage(() => {
       throw new Error('DNS resolution failed');
-    }, 'SMTP_CONNECT_FAILED');
+    }, 'SMTP_TLS_CONNECT_FAILED');
   });
 
   it('SMTP_GREETING_REJECTED on a non-220 greeting', async () => {
-    const { pre } = makeTlsSocketPair(['421 service not available\r\n'], []);
-    await expectStage(() => pre.socket, 'SMTP_GREETING_REJECTED');
+    const { socket } = makeScriptedSocket(['421 service not available\r\n']);
+    await expectStage(() => socket, 'SMTP_GREETING_REJECTED');
   });
 
-  it('SMTP_EHLO_FAILED on a non-250 pre-TLS EHLO reply', async () => {
-    const { pre } = makeTlsSocketPair([GREETING, '502 command not implemented\r\n'], []);
-    await expectStage(() => pre.socket, 'SMTP_EHLO_FAILED');
+  it('SMTP_EHLO_FAILED on a non-250 EHLO reply', async () => {
+    const { socket } = makeScriptedSocket([GREETING, '502 command not implemented\r\n']);
+    await expectStage(() => socket, 'SMTP_EHLO_FAILED');
   });
 
-  it('SMTP_STARTTLS_UNAVAILABLE when STARTTLS is not advertised, and never attempts it', async () => {
-    const { pre } = makeTlsSocketPair([GREETING, EHLO1_WITHOUT_STARTTLS], []);
-    await expectStage(() => pre.socket, 'SMTP_STARTTLS_UNAVAILABLE');
-    expect(pre.writes.some((w) => w.startsWith('STARTTLS'))).toBe(false);
-  });
-
-  it('SMTP_STARTTLS_REJECTED on a non-220 STARTTLS reply', async () => {
-    const { pre } = makeTlsSocketPair(
-      [GREETING, EHLO1_WITH_STARTTLS, '454 TLS not available\r\n'],
-      []
-    );
-    await expectStage(() => pre.socket, 'SMTP_STARTTLS_REJECTED');
-  });
-
-  it('SMTP_EHLO_FAILED on a non-250 post-TLS EHLO reply', async () => {
-    const { pre } = makeTlsSocketPair(
-      [GREETING, EHLO1_WITH_STARTTLS, STARTTLS_ACK],
-      ['502 command not implemented\r\n']
-    );
-    await expectStage(() => pre.socket, 'SMTP_EHLO_FAILED');
-  });
-
-  it('SMTP_AUTH_PLAIN_UNAVAILABLE when PLAIN is not advertised post-TLS, and AUTH is never sent', async () => {
-    const { pre, post } = makeTlsSocketPair(
-      [GREETING, EHLO1_WITH_STARTTLS, STARTTLS_ACK],
-      [EHLO2_WITHOUT_PLAIN]
-    );
-    await expectStage(() => pre.socket, 'SMTP_AUTH_PLAIN_UNAVAILABLE');
-    expect(post.writes.some((w) => w.startsWith('AUTH'))).toBe(false);
+  it('SMTP_AUTH_PLAIN_UNAVAILABLE when PLAIN is not advertised, and AUTH is never sent', async () => {
+    const { socket, writes } = makeScriptedSocket([GREETING, EHLO_WITHOUT_PLAIN]);
+    await expectStage(() => socket, 'SMTP_AUTH_PLAIN_UNAVAILABLE');
+    expect(writes.some((w) => w.startsWith('AUTH'))).toBe(false);
   });
 
   it('SMTP_AUTH_FAILED on a non-235 AUTH reply, without leaking the password in the error', async () => {
-    const { pre } = makeTlsSocketPair(
-      [GREETING, EHLO1_WITH_STARTTLS, STARTTLS_ACK],
-      [EHLO2_WITH_PLAIN, '535 5.7.8 Authentication failed\r\n']
-    );
-    const err = await expectStage(() => pre.socket, 'SMTP_AUTH_FAILED');
+    const { socket } = makeScriptedSocket([
+      GREETING,
+      EHLO_WITH_PLAIN,
+      '535 5.7.8 Authentication failed\r\n',
+    ]);
+    const err = await expectStage(() => socket, 'SMTP_AUTH_FAILED');
     expect(err.message).not.toContain(PASSWORD);
     expect(err.message).not.toContain(encodeAuthPlainInitialResponse(USERNAME, PASSWORD));
   });
 
   it('SMTP_MAIL_FROM_REJECTED on a non-2xx MAIL FROM reply', async () => {
-    const { pre } = makeTlsSocketPair(
-      [GREETING, EHLO1_WITH_STARTTLS, STARTTLS_ACK],
-      [EHLO2_WITH_PLAIN, AUTH_OK, '550 5.1.0 Sender rejected\r\n']
-    );
-    await expectStage(() => pre.socket, 'SMTP_MAIL_FROM_REJECTED');
+    const { socket } = makeScriptedSocket([
+      GREETING,
+      EHLO_WITH_PLAIN,
+      AUTH_OK,
+      '550 5.1.0 Sender rejected\r\n',
+    ]);
+    await expectStage(() => socket, 'SMTP_MAIL_FROM_REJECTED');
   });
 
   it('SMTP_RCPT_TO_REJECTED on a non-2xx RCPT TO reply', async () => {
-    const { pre } = makeTlsSocketPair(
-      [GREETING, EHLO1_WITH_STARTTLS, STARTTLS_ACK],
-      [EHLO2_WITH_PLAIN, AUTH_OK, MAIL_OK, '550 5.1.1 Recipient rejected\r\n']
-    );
-    await expectStage(() => pre.socket, 'SMTP_RCPT_TO_REJECTED');
+    const { socket } = makeScriptedSocket([
+      GREETING,
+      EHLO_WITH_PLAIN,
+      AUTH_OK,
+      MAIL_OK,
+      '550 5.1.1 Recipient rejected\r\n',
+    ]);
+    await expectStage(() => socket, 'SMTP_RCPT_TO_REJECTED');
   });
 
   it('SMTP_DATA_REJECTED on a non-354 DATA reply', async () => {
-    const { pre } = makeTlsSocketPair(
-      [GREETING, EHLO1_WITH_STARTTLS, STARTTLS_ACK],
-      [EHLO2_WITH_PLAIN, AUTH_OK, MAIL_OK, RCPT_OK, '503 5.5.1 Bad sequence\r\n']
-    );
-    await expectStage(() => pre.socket, 'SMTP_DATA_REJECTED');
+    const { socket } = makeScriptedSocket([
+      GREETING,
+      EHLO_WITH_PLAIN,
+      AUTH_OK,
+      MAIL_OK,
+      RCPT_OK,
+      '503 5.5.1 Bad sequence\r\n',
+    ]);
+    await expectStage(() => socket, 'SMTP_DATA_REJECTED');
   });
 
   it('SMTP_MESSAGE_REJECTED on a non-2xx post-DATA reply', async () => {
-    const { pre } = makeTlsSocketPair(
-      [GREETING, EHLO1_WITH_STARTTLS, STARTTLS_ACK],
-      [EHLO2_WITH_PLAIN, AUTH_OK, MAIL_OK, RCPT_OK, DATA_GO, '554 5.6.0 Message rejected\r\n']
-    );
-    await expectStage(() => pre.socket, 'SMTP_MESSAGE_REJECTED');
+    const { socket } = makeScriptedSocket([
+      GREETING,
+      EHLO_WITH_PLAIN,
+      AUTH_OK,
+      MAIL_OK,
+      RCPT_OK,
+      DATA_GO,
+      '554 5.6.0 Message rejected\r\n',
+    ]);
+    await expectStage(() => socket, 'SMTP_MESSAGE_REJECTED');
   });
 
-  it('closes the currently-active socket even on failure', async () => {
-    const { pre, post } = makeTlsSocketPair(
-      [GREETING, EHLO1_WITH_STARTTLS, STARTTLS_ACK],
-      [EHLO2_WITH_PLAIN, '535 5.7.8 Authentication failed\r\n']
-    );
+  it('closes the socket even on failure', async () => {
+    const scripted = makeScriptedSocket([
+      GREETING,
+      EHLO_WITH_PLAIN,
+      '535 5.7.8 Authentication failed\r\n',
+    ]);
     await sendStorageAlertViaIonosSmtp(config(), ENVELOPE, {
       ...DEPS,
-      connectFn: () => pre.socket,
+      connectFn: () => scripted.socket,
     }).catch(() => {});
-    // The post-TLS socket is the "currently active" one at the point of
-    // failure (auth happens after the upgrade), so it -- not the
-    // abandoned pre-TLS socket -- must be the one actually closed.
-    expect(post.closeCalls).toBe(1);
-    expect(pre.closeCalls).toBe(0);
+    expect(scripted.closeCalls).toBe(1);
   });
 });
 
 /** A socket whose `readable` never delivers a chunk and never closes --
- * simulates a remote that accepted the TCP connection (or, for the very
- * first read, one whose handshake silently black-holes) but never sends
+ * simulates a remote that accepted the connection (or, for the very first
+ * read, one whose handshake silently black-holes) but never sends
  * anything: `read()` stays pending forever, exactly the wallTime=9979ms/
  * cpuTime=4ms signature observed in the second live qualification
  * attempt. `writable` accepts writes normally so a hang can be placed
@@ -363,9 +337,6 @@ function makeHangingReadSocket() {
     closed: Promise.resolve(),
     async close() {
       closeCalls++;
-    },
-    startTls() {
-      throw new Error('startTls not configured on this fake socket');
     },
   } as unknown as Socket;
   return {
@@ -397,27 +368,28 @@ describe('sendStorageAlertViaIonosSmtp — per-stage and overall timeouts', () =
     return err as SmtpTransportError;
   }
 
-  it('SMTP_GREETING_REJECTED when the greeting never arrives, once the TCP connection has opened', async () => {
+  it('SMTP_GREETING_REJECTED when the greeting never arrives, once the connection has opened', async () => {
     // `makeHangingReadSocket()`'s `opened` already resolves immediately
-    // (`Promise.resolve({})`) -- this proves the two stages are now
-    // distinct: the TCP-open stage passes, and the hang is correctly
+    // (`Promise.resolve({})`) -- this proves the two stages are distinct:
+    // the connect+TLS-open stage passes, and the hang is correctly
     // attributed to the greeting-read stage, not conflated with it.
     const hanging = makeHangingReadSocket();
     await expectTimeoutStage(() => hanging.socket, 'SMTP_GREETING_REJECTED');
     expect(hanging.closeCalls).toBe(1);
   });
 
-  it('SMTP_CONNECT_FAILED when socket.opened never resolves (TCP connect that never completes)', async () => {
-    // Reported stage alone is the proof this is attributed to the TCP-open
-    // stage and not the greeting-read stage further down the sequence
-    // (`guarded` records `lastStage` immediately before each stage begins,
-    // so an in-flight hang can only ever surface under the stage that was
-    // actually awaiting -- see `sendStorageAlertViaIonosSmtp`'s own doc
-    // comment on step 0 vs. step 1). Note: this fake `readable`'s `pull`
-    // does fire on its own shortly after construction -- that is the
-    // Streams spec's own automatic fill-to-`highWaterMark` behavior, not
-    // evidence of a `read()` call from this module's protocol logic, so it
-    // is deliberately not asserted on here.
+  it('SMTP_TLS_CONNECT_FAILED when socket.opened never resolves (connect+TLS handshake that never completes)', async () => {
+    // Reported stage alone is the proof this is attributed to the
+    // connect+TLS-open stage and not the greeting-read stage further down
+    // the sequence (`guarded` records `lastStage` immediately before each
+    // stage begins, so an in-flight hang can only ever surface under the
+    // stage that was actually awaiting -- see
+    // `sendStorageAlertViaIonosSmtp`'s own doc comment on step 0 vs. step
+    // 1). Note: this fake `readable`'s `pull` does fire on its own shortly
+    // after construction -- that is the Streams spec's own automatic
+    // fill-to-`highWaterMark` behavior, not evidence of a `read()` call
+    // from this module's protocol logic, so it is deliberately not
+    // asserted on here.
     let closeCalls = 0;
     const socket = {
       readable: new ReadableStream<Uint8Array>({ pull: () => new Promise<void>(() => {}) }),
@@ -427,16 +399,13 @@ describe('sendStorageAlertViaIonosSmtp — per-stage and overall timeouts', () =
       async close() {
         closeCalls++;
       },
-      startTls() {
-        throw new Error('not configured');
-      },
     } as unknown as Socket;
 
-    await expectTimeoutStage(() => socket, 'SMTP_CONNECT_FAILED');
+    await expectTimeoutStage(() => socket, 'SMTP_TLS_CONNECT_FAILED');
     expect(closeCalls).toBe(1);
   });
 
-  it('SMTP_CONNECT_FAILED when socket.opened rejects (e.g. connection refused), and the rejection reason is preserved', async () => {
+  it('SMTP_TLS_CONNECT_FAILED when socket.opened rejects (e.g. TLS handshake or connection failure), and the rejection reason is preserved', async () => {
     let closeCalls = 0;
     const socket = {
       readable: new ReadableStream<Uint8Array>({ pull: () => new Promise<void>(() => {}) }),
@@ -446,9 +415,6 @@ describe('sendStorageAlertViaIonosSmtp — per-stage and overall timeouts', () =
       async close() {
         closeCalls++;
       },
-      startTls() {
-        throw new Error('not configured');
-      },
     } as unknown as Socket;
 
     const err = await sendStorageAlertViaIonosSmtp(config(), ENVELOPE, {
@@ -457,12 +423,12 @@ describe('sendStorageAlertViaIonosSmtp — per-stage and overall timeouts', () =
       connectFn: () => socket,
     }).catch((e) => e);
     expect(err).toBeInstanceOf(SmtpTransportError);
-    expect((err as SmtpTransportError).stage).toBe('SMTP_CONNECT_FAILED');
+    expect((err as SmtpTransportError).stage).toBe('SMTP_TLS_CONNECT_FAILED');
     expect((err as SmtpTransportError).message).toContain('connection refused');
     expect(closeCalls).toBe(1);
   });
 
-  it('SMTP_EHLO_FAILED when the pre-TLS EHLO response never arrives', async () => {
+  it('SMTP_EHLO_FAILED when the EHLO response never arrives', async () => {
     // A socket that yields exactly the greeting, then hangs forever
     // (never closes) for every subsequent read -- deterministically
     // places the hang at the EHLO-response stage.
@@ -483,100 +449,15 @@ describe('sendStorageAlertViaIonosSmtp — per-stage and overall timeouts', () =
       opened: Promise.resolve({}),
       closed: Promise.resolve(),
       async close() {},
-      startTls() {
-        throw new Error('not configured');
-      },
     } as unknown as Socket;
     await expectTimeoutStage(() => socket, 'SMTP_EHLO_FAILED');
-  });
-
-  it('SMTP_STARTTLS_REJECTED when the STARTTLS response never arrives', async () => {
-    const readable = new ReadableStream<Uint8Array>({
-      pull: (() => {
-        let n = 0;
-        return (controller: ReadableStreamDefaultController<Uint8Array>) => {
-          n++;
-          if (n === 1) return void controller.enqueue(new TextEncoder().encode(GREETING));
-          if (n === 2)
-            return void controller.enqueue(new TextEncoder().encode(EHLO1_WITH_STARTTLS));
-          return new Promise<void>(() => {});
-        };
-      })(),
-    });
-    const writable = new WritableStream<Uint8Array>({ write() {} });
-    const socket = {
-      readable,
-      writable,
-      opened: Promise.resolve({}),
-      closed: Promise.resolve(),
-      async close() {},
-      startTls() {
-        throw new Error('not configured');
-      },
-    } as unknown as Socket;
-    await expectTimeoutStage(() => socket, 'SMTP_STARTTLS_REJECTED');
-  });
-
-  it('SMTP_TLS_SOCKET_OPEN_FAILED when startTls() itself never resolves', async () => {
-    const { pre } = makeTlsSocketPair([GREETING, EHLO1_WITH_STARTTLS, STARTTLS_ACK], []);
-    (pre.socket as unknown as { startTls: () => Promise<never> }).startTls = () =>
-      new Promise<never>(() => {});
-    await expectTimeoutStage(() => pre.socket, 'SMTP_TLS_SOCKET_OPEN_FAILED');
-  });
-
-  it("SMTP_TLS_SOCKET_OPEN_FAILED when STARTTLS is accepted but the secure socket's own .opened never resolves -- and the secure (not pre-TLS) socket is the one closed", async () => {
-    // Proves the two are now independently observable: the STARTTLS SMTP
-    // response (220) is accepted, `startTls()` itself resolves
-    // immediately, but the returned secure socket's `.opened` promise
-    // hangs -- distinctly attributed to SMTP_TLS_SOCKET_OPEN_FAILED, not
-    // to the STARTTLS command stage.
-    const { pre, post } = makeTlsSocketPair([GREETING, EHLO1_WITH_STARTTLS, STARTTLS_ACK], []);
-    let postOpenedCalls = 0;
-    Object.defineProperty(post.socket, 'opened', {
-      get() {
-        postOpenedCalls++;
-        return new Promise<never>(() => {}); // never resolves
-      },
-    });
-    await expectTimeoutStage(() => pre.socket, 'SMTP_TLS_SOCKET_OPEN_FAILED');
-    expect(postOpenedCalls).toBeGreaterThan(0);
-    // The secure socket is the authoritative one at the point of failure
-    // (it was assigned to `currentSocket` before `.opened` was awaited),
-    // so it -- not the abandoned pre-TLS socket -- must be the one closed.
-    expect(post.closeCalls).toBe(1);
-    expect(pre.closeCalls).toBe(0);
-  });
-
-  it("SMTP_TLS_SOCKET_OPEN_FAILED when the secure socket's .opened rejects, and the rejection reason is preserved", async () => {
-    const { pre, post } = makeTlsSocketPair([GREETING, EHLO1_WITH_STARTTLS, STARTTLS_ACK], []);
-    Object.defineProperty(post.socket, 'opened', {
-      get: () => Promise.reject(new Error('tls handshake failed: bad certificate')),
-    });
-    const err = await sendStorageAlertViaIonosSmtp(config(), ENVELOPE, {
-      ...DEPS,
-      ...TIMEOUTS,
-      connectFn: () => pre.socket,
-    }).catch((e) => e);
-    expect(err).toBeInstanceOf(SmtpTransportError);
-    expect((err as SmtpTransportError).stage).toBe('SMTP_TLS_SOCKET_OPEN_FAILED');
-    expect((err as SmtpTransportError).message).toContain('tls handshake failed');
-    expect(post.closeCalls).toBe(1);
-    expect(pre.closeCalls).toBe(0);
-  });
-
-  it('SMTP_EHLO_FAILED when the post-TLS EHLO response never arrives', async () => {
-    const post = makeHangingReadSocket();
-    const { pre } = makeTlsSocketPair([GREETING, EHLO1_WITH_STARTTLS, STARTTLS_ACK], []);
-    (pre.socket as unknown as { startTls: () => Socket }).startTls = () => post.socket;
-    await expectTimeoutStage(() => pre.socket, 'SMTP_EHLO_FAILED');
-    expect(post.closeCalls).toBe(1);
   });
 
   it('SMTP_AUTH_FAILED when the AUTH reply never arrives (SMTP auth timeout)', async () => {
     const readable = new ReadableStream<Uint8Array>({
       pull: (() => {
         let n = 0;
-        const lines = [EHLO2_WITH_PLAIN];
+        const lines = [GREETING, EHLO_WITH_PLAIN];
         return (controller: ReadableStreamDefaultController<Uint8Array>) => {
           if (n < lines.length) {
             controller.enqueue(new TextEncoder().encode(lines[n]));
@@ -587,25 +468,21 @@ describe('sendStorageAlertViaIonosSmtp — per-stage and overall timeouts', () =
         };
       })(),
     });
-    const post = {
-      socket: {
-        readable,
-        writable: new WritableStream({ write() {} }),
-        opened: Promise.resolve({}),
-        closed: Promise.resolve(),
-        async close() {},
-      } as unknown as Socket,
-    };
-    const { pre } = makeTlsSocketPair([GREETING, EHLO1_WITH_STARTTLS, STARTTLS_ACK], []);
-    (pre.socket as unknown as { startTls: () => Socket }).startTls = () => post.socket;
-    await expectTimeoutStage(() => pre.socket, 'SMTP_AUTH_FAILED');
+    const socket = {
+      readable,
+      writable: new WritableStream({ write() {} }),
+      opened: Promise.resolve({}),
+      closed: Promise.resolve(),
+      async close() {},
+    } as unknown as Socket;
+    await expectTimeoutStage(() => socket, 'SMTP_AUTH_FAILED');
   });
 
   it('SMTP_MESSAGE_REJECTED when the final DATA-acceptance reply never arrives (DATA/final-acceptance timeout)', async () => {
     const readable = new ReadableStream<Uint8Array>({
       pull: (() => {
         let n = 0;
-        const lines = [EHLO2_WITH_PLAIN, AUTH_OK, MAIL_OK, RCPT_OK, DATA_GO];
+        const lines = [GREETING, EHLO_WITH_PLAIN, AUTH_OK, MAIL_OK, RCPT_OK, DATA_GO];
         return (controller: ReadableStreamDefaultController<Uint8Array>) => {
           if (n < lines.length) {
             controller.enqueue(new TextEncoder().encode(lines[n]));
@@ -616,18 +493,14 @@ describe('sendStorageAlertViaIonosSmtp — per-stage and overall timeouts', () =
         };
       })(),
     });
-    const post = {
-      socket: {
-        readable,
-        writable: new WritableStream({ write() {} }),
-        opened: Promise.resolve({}),
-        closed: Promise.resolve(),
-        async close() {},
-      } as unknown as Socket,
-    };
-    const { pre } = makeTlsSocketPair([GREETING, EHLO1_WITH_STARTTLS, STARTTLS_ACK], []);
-    (pre.socket as unknown as { startTls: () => Socket }).startTls = () => post.socket;
-    await expectTimeoutStage(() => pre.socket, 'SMTP_MESSAGE_REJECTED');
+    const socket = {
+      readable,
+      writable: new WritableStream({ write() {} }),
+      opened: Promise.resolve({}),
+      closed: Promise.resolve(),
+      async close() {},
+    } as unknown as Socket;
+    await expectTimeoutStage(() => socket, 'SMTP_MESSAGE_REJECTED');
   });
 
   it('closes the socket on every timeout, not just protocol rejections', async () => {
@@ -647,10 +520,10 @@ describe('sendStorageAlertViaIonosSmtp — per-stage and overall timeouts', () =
   });
 
   it('an overall timeout well below any single stage budget still names the real stage in flight', async () => {
-    // `hanging.socket.opened` resolves immediately, so the TCP-open stage
-    // (step 0) completes and the overall timeout fires while the greeting
-    // read (step 1) is in flight -- hence SMTP_GREETING_REJECTED, not
-    // SMTP_CONNECT_FAILED.
+    // `hanging.socket.opened` resolves immediately, so the connect+TLS-open
+    // stage (step 0) completes and the overall timeout fires while the
+    // greeting read (step 1) is in flight -- hence SMTP_GREETING_REJECTED,
+    // not SMTP_TLS_CONNECT_FAILED.
     const hanging = makeHangingReadSocket();
     const err = await sendStorageAlertViaIonosSmtp(config(), ENVELOPE, {
       ...DEPS,
@@ -664,16 +537,13 @@ describe('sendStorageAlertViaIonosSmtp — per-stage and overall timeouts', () =
     expect(hanging.closeCalls).toBe(1);
   });
 
-  it('an overall timeout that fires while the TCP connection is still opening names SMTP_CONNECT_FAILED', async () => {
+  it('an overall timeout that fires while the connection is still opening names SMTP_TLS_CONNECT_FAILED', async () => {
     const socket = {
       readable: new ReadableStream<Uint8Array>({ pull: () => new Promise<void>(() => {}) }),
       writable: new WritableStream<Uint8Array>({ write() {} }),
       opened: new Promise<never>(() => {}), // never resolves
       closed: Promise.resolve(),
       async close() {},
-      startTls() {
-        throw new Error('not configured');
-      },
     } as unknown as Socket;
     const err = await sendStorageAlertViaIonosSmtp(config(), ENVELOPE, {
       ...DEPS,
@@ -682,30 +552,36 @@ describe('sendStorageAlertViaIonosSmtp — per-stage and overall timeouts', () =
       connectFn: () => socket,
     }).catch((e) => e);
     expect(err).toBeInstanceOf(SmtpTransportError);
-    expect((err as SmtpTransportError).stage).toBe('SMTP_CONNECT_FAILED');
+    expect((err as SmtpTransportError).stage).toBe('SMTP_TLS_CONNECT_FAILED');
     expect((err as SmtpTransportError).message).toContain('overall SMTP timeout');
   });
 
   it('a fast, fully successful send is unaffected by short timeout budgets', async () => {
-    const { pre, post } = makeTlsSocketPair(
-      [GREETING, EHLO1_WITH_STARTTLS, STARTTLS_ACK],
-      [EHLO2_WITH_PLAIN, AUTH_OK, MAIL_OK, RCPT_OK, DATA_GO, SUBMIT_OK, QUIT_OK]
-    );
+    const scripted = makeScriptedSocket([
+      GREETING,
+      EHLO_WITH_PLAIN,
+      AUTH_OK,
+      MAIL_OK,
+      RCPT_OK,
+      DATA_GO,
+      SUBMIT_OK,
+      QUIT_OK,
+    ]);
     await expect(
       sendStorageAlertViaIonosSmtp(config(), ENVELOPE, {
         ...DEPS,
         ...TIMEOUTS,
-        connectFn: () => pre.socket,
+        connectFn: () => scripted.socket,
       })
     ).resolves.toBeUndefined();
-    expect(post.closeCalls).toBe(1);
+    expect(scripted.closeCalls).toBe(1);
   });
 });
 
-/** Builds a post-TLS scripted socket, exactly like `makeScriptedSocket`,
- * except its underlying `readable`'s `cancel()` and/or `close()` can be
- * configured to hang forever -- proves the `finally` block's bounded
- * cleanup (`CLEANUP_TIMEOUT_MS`, mocked to 10ms above) still lets
+/** Builds a scripted socket, exactly like `makeScriptedSocket`, except its
+ * underlying `readable`'s `cancel()` and/or `close()` can be configured to
+ * hang forever -- proves the `finally` block's bounded cleanup
+ * (`CLEANUP_TIMEOUT_MS`, mocked to 10ms above) still lets
  * `sendStorageAlertViaIonosSmtp` return instead of waiting on either
  * indefinitely. */
 function makeCleanupHangSocket(
@@ -755,9 +631,6 @@ function makeCleanupHangSocket(
       if (opts.hangClose) return new Promise<void>(() => {}); // never resolves
       return Promise.resolve();
     },
-    startTls() {
-      throw new Error('startTls not configured on this fake socket');
-    },
   } as unknown as Socket;
 
   return {
@@ -781,75 +654,76 @@ describe('sendStorageAlertViaIonosSmtp — bounded cleanup (SUN-1222C-SMTP-ROOT-
   const CLEANUP_BOUND_MS = 500;
 
   it('reader.cancel() hangs forever -> cleanup timeout expires -> send still resolves normally', async () => {
-    const { pre } = makeTlsSocketPair([GREETING, EHLO1_WITH_STARTTLS, STARTTLS_ACK], []);
-    const post = makeCleanupHangSocket(
-      [EHLO2_WITH_PLAIN, AUTH_OK, MAIL_OK, RCPT_OK, DATA_GO, SUBMIT_OK, QUIT_OK],
+    const hanging = makeCleanupHangSocket(
+      [GREETING, EHLO_WITH_PLAIN, AUTH_OK, MAIL_OK, RCPT_OK, DATA_GO, SUBMIT_OK, QUIT_OK],
       { hangCancel: true }
     );
-    (pre.socket as unknown as { startTls: () => Socket }).startTls = () => post.socket;
 
     const start = Date.now();
     await expect(
-      sendStorageAlertViaIonosSmtp(config(), ENVELOPE, { ...DEPS, connectFn: () => pre.socket })
+      sendStorageAlertViaIonosSmtp(config(), ENVELOPE, {
+        ...DEPS,
+        connectFn: () => hanging.socket,
+      })
     ).resolves.toBeUndefined();
     expect(Date.now() - start).toBeLessThan(CLEANUP_BOUND_MS);
-    expect(post.cancelCalls).toBe(1);
+    expect(hanging.cancelCalls).toBe(1);
     // The still-hanging cancel() must not have prevented close() from
     // running too -- both cleanup steps are independent, sequential awaits.
-    expect(post.closeCalls).toBe(1);
+    expect(hanging.closeCalls).toBe(1);
   });
 
-  it('currentSocket.close() hangs forever -> cleanup timeout expires -> send still resolves normally', async () => {
-    const { pre } = makeTlsSocketPair([GREETING, EHLO1_WITH_STARTTLS, STARTTLS_ACK], []);
-    const post = makeCleanupHangSocket(
-      [EHLO2_WITH_PLAIN, AUTH_OK, MAIL_OK, RCPT_OK, DATA_GO, SUBMIT_OK, QUIT_OK],
+  it('socket.close() hangs forever -> cleanup timeout expires -> send still resolves normally', async () => {
+    const hanging = makeCleanupHangSocket(
+      [GREETING, EHLO_WITH_PLAIN, AUTH_OK, MAIL_OK, RCPT_OK, DATA_GO, SUBMIT_OK, QUIT_OK],
       { hangClose: true }
     );
-    (pre.socket as unknown as { startTls: () => Socket }).startTls = () => post.socket;
 
     const start = Date.now();
     await expect(
-      sendStorageAlertViaIonosSmtp(config(), ENVELOPE, { ...DEPS, connectFn: () => pre.socket })
+      sendStorageAlertViaIonosSmtp(config(), ENVELOPE, {
+        ...DEPS,
+        connectFn: () => hanging.socket,
+      })
     ).resolves.toBeUndefined();
     expect(Date.now() - start).toBeLessThan(CLEANUP_BOUND_MS);
-    expect(post.closeCalls).toBe(1);
+    expect(hanging.closeCalls).toBe(1);
   });
 
-  it('both reader.cancel() and currentSocket.close() hang forever -> total cleanup remains bounded', async () => {
-    const { pre } = makeTlsSocketPair([GREETING, EHLO1_WITH_STARTTLS, STARTTLS_ACK], []);
-    const post = makeCleanupHangSocket(
-      [EHLO2_WITH_PLAIN, AUTH_OK, MAIL_OK, RCPT_OK, DATA_GO, SUBMIT_OK, QUIT_OK],
+  it('both reader.cancel() and socket.close() hang forever -> total cleanup remains bounded', async () => {
+    const hanging = makeCleanupHangSocket(
+      [GREETING, EHLO_WITH_PLAIN, AUTH_OK, MAIL_OK, RCPT_OK, DATA_GO, SUBMIT_OK, QUIT_OK],
       { hangCancel: true, hangClose: true }
     );
-    (pre.socket as unknown as { startTls: () => Socket }).startTls = () => post.socket;
 
     const start = Date.now();
     await expect(
-      sendStorageAlertViaIonosSmtp(config(), ENVELOPE, { ...DEPS, connectFn: () => pre.socket })
+      sendStorageAlertViaIonosSmtp(config(), ENVELOPE, {
+        ...DEPS,
+        connectFn: () => hanging.socket,
+      })
     ).resolves.toBeUndefined();
     expect(Date.now() - start).toBeLessThan(CLEANUP_BOUND_MS);
-    expect(post.cancelCalls).toBe(1);
-    expect(post.closeCalls).toBe(1);
+    expect(hanging.cancelCalls).toBe(1);
+    expect(hanging.closeCalls).toBe(1);
   });
 
   it('a hanging cleanup does not replace a genuine SMTP failure — the original classified stage/message survive', async () => {
-    // The send itself fails at AUTH (535); the post-TLS socket's cleanup
-    // then hangs on both steps. The thrown error must still be the
-    // original SMTP_AUTH_FAILED classification, not a cleanup-related
-    // error or a generic cancellation -- the `.catch(() => {})` after each
-    // bounded cleanup race ensures a cleanup timeout can never itself
-    // become (or replace) the thrown error.
-    const { pre } = makeTlsSocketPair([GREETING, EHLO1_WITH_STARTTLS, STARTTLS_ACK], []);
-    const post = makeCleanupHangSocket([EHLO2_WITH_PLAIN, '535 5.7.8 Authentication failed\r\n'], {
-      hangCancel: true,
-      hangClose: true,
-    });
-    (pre.socket as unknown as { startTls: () => Socket }).startTls = () => post.socket;
+    // The send itself fails at AUTH (535); cleanup then hangs on both
+    // steps. The thrown error must still be the original
+    // SMTP_AUTH_FAILED classification, not a cleanup-related error or a
+    // generic cancellation -- the `.catch(() => {})` after each bounded
+    // cleanup race ensures a cleanup timeout can never itself become (or
+    // replace) the thrown error.
+    const { socket } = makeCleanupHangSocket(
+      [GREETING, EHLO_WITH_PLAIN, '535 5.7.8 Authentication failed\r\n'],
+      { hangCancel: true, hangClose: true }
+    );
 
     const start = Date.now();
     const err = await sendStorageAlertViaIonosSmtp(config(), ENVELOPE, {
       ...DEPS,
-      connectFn: () => pre.socket,
+      connectFn: () => socket,
     }).catch((e) => e);
     expect(Date.now() - start).toBeLessThan(CLEANUP_BOUND_MS);
     expect(err).toBeInstanceOf(SmtpTransportError);
@@ -860,10 +734,9 @@ describe('sendStorageAlertViaIonosSmtp — bounded cleanup (SUN-1222C-SMTP-ROOT-
 
   it('a hanging cleanup after an SMTP_OVERALL timeout does not prevent the timeout error from surfacing', async () => {
     // The greeting never arrives (a per-stage-budget-driven hang), and
-    // THIS (pre-TLS) socket's own cancel()/close() would also hang forever
-    // -- proves the bounded-cleanup fix covers the pre-TLS
-    // `currentSocket === socket` path too, not just the post-TLS one the
-    // other tests above exercise.
+    // this socket's own cancel()/close() would also hang forever -- proves
+    // the bounded-cleanup fix covers the only socket in this (single-
+    // socket, implicit-TLS) lifecycle.
     let cancelCalls = 0;
     let closeCalls = 0;
     const socket = {
@@ -881,9 +754,6 @@ describe('sendStorageAlertViaIonosSmtp — bounded cleanup (SUN-1222C-SMTP-ROOT-
         closeCalls++;
         return new Promise<void>(() => {}); // never resolves
       },
-      startTls() {
-        throw new Error('not configured');
-      },
     } as unknown as Socket;
 
     const start = Date.now();
@@ -899,5 +769,30 @@ describe('sendStorageAlertViaIonosSmtp — bounded cleanup (SUN-1222C-SMTP-ROOT-
     expect((err as SmtpTransportError).message).toContain('timed out');
     expect(cancelCalls).toBe(1);
     expect(closeCalls).toBe(1);
+  });
+});
+
+describe('sendStorageAlertViaIonosSmtp — credential isolation from diagnostics', () => {
+  it('reads/uses the password only via the explicit config parameter, never a module-level or ambient source', async () => {
+    // Structural proof, not just behavioral: this transport module has no
+    // `Env` import and no reference to `IONOS_SMTP_PASSWORD` as an
+    // identifier anywhere -- the password only ever flows through
+    // `IonosSmtpConfig.password`, supplied by the caller (the entrypoint,
+    // which alone reads `env.IONOS_SMTP_PASSWORD`). Exercised here via the
+    // successful-lifecycle assertions above that the password appears on
+    // the wire only inside the correctly-encoded AUTH PLAIN payload.
+    const { socket, writes } = makeScriptedSocket([
+      GREETING,
+      EHLO_WITH_PLAIN,
+      AUTH_OK,
+      MAIL_OK,
+      RCPT_OK,
+      DATA_GO,
+      SUBMIT_OK,
+      QUIT_OK,
+    ]);
+    await sendStorageAlertViaIonosSmtp(config(), ENVELOPE, { ...DEPS, connectFn: () => socket });
+    const authWrite = writes.find((w) => w.startsWith('AUTH PLAIN'));
+    expect(authWrite).toBe(`AUTH PLAIN ${encodeAuthPlainInitialResponse(USERNAME, PASSWORD)}\r\n`);
   });
 });

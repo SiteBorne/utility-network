@@ -151,11 +151,11 @@ describe('storage-alert-receiver-entrypoint', () => {
     expect(sentCalls[0].config.from).not.toBe('storage-alert@siteborne.net');
   });
 
-  it('targets smtp.ionos.com:587 and passes the env-sourced password through', async () => {
+  it('targets smtp.ionos.com:465 (implicit TLS, SUN-1222C-SMTP-ROOT-CAUSE port migration) and passes the env-sourced password through', async () => {
     const env = makeEnv();
     await worker.fetch(post(`alert/${TOKEN}`, VALID_PAYLOAD), env);
     expect(sentCalls[0].config.host).toBe('smtp.ionos.com');
-    expect(sentCalls[0].config.port).toBe(587);
+    expect(sentCalls[0].config.port).toBe(465);
     expect(sentCalls[0].config.password).toBe(PASSWORD);
   });
 
