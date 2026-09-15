@@ -1,95 +1,93 @@
 /**
- * SUN-1222C-SMTP-ROOT-CAUSE Service-Binding-isolation addendum.
+ * SUN-1222C closure.
  *
  * Runs inside a real Miniflare/workerd runtime (`vitest.service-binding.config.ts`)
  * against a real, runtime-level Service Binding between two real Worker
- * instances -- the actual, unmodified caller route
- * (`storageAlertSmtpDiagnosticRoute`) and the actual, unmodified receiver
- * Worker (`storage-alert-receiver-entrypoint.ts`). Nothing about the
- * Service Binding dispatch/response path is mocked; `CONTROL_CLEANUP_HANG`
- * is the only mode that substitutes anything at all, and what it
- * substitutes is two never-resolving `Promise`s standing in for
- * `reader.cancel()`/`socket.close()` -- see that control mode's own doc
- * comment in `storage-alert-receiver-entrypoint.ts`.
+ * instances -- the actual, unmodified `buildServiceBindingStorageAlertTransport`
+ * production transport (the caller fixture) and the actual, unmodified
+ * receiver Worker (`storage-alert-receiver-entrypoint.ts`). Nothing about
+ * the Service Binding dispatch/response path is mocked.
+ *
+ * Exercises the PERMANENT architecture -- path-token check, schema
+ * validation, and the `STORAGE_ALERT_DELIVERY_ENABLED` fail-closed gate --
+ * through a real Service Binding. The earlier SUN-1222C-SMTP-ROOT-CAUSE
+ * version of this suite exercised the temporary `/control` zero-network
+ * isolation modes (`CONTROL_IMMEDIATE`/`DELAY_250MS`/`OVERALL_TIMEOUT`/
+ * `CLEANUP_HANG`), removed from the receiver once the Service Binding
+ * timeout/cleanup machinery they existed to isolate was proven correct and
+ * the SMTP root cause was closed; see git history for that version.
+ * `ionos-smtp-transport.test.ts`'s own bounded-cleanup tests (which mock
+ * `cloudflare:sockets` directly) remain the regression proof that a real
+ * hanging `reader.cancel()`/`socket.close()` still returns within
+ * `CLEANUP_TIMEOUT_MS` -- a transport-module concern that needs no Service
+ * Binding to prove.
  *
  * Zero external network access: no `cloudflare:sockets`, no
- * `smtp.ionos.com`, no `fetch()` to any external host. Zero production
- * secrets: the receiver Worker in this test is provisioned with only a
- * fixed, non-random, test-only `ALERT_PATH_TOKEN` literal and no
- * `IONOS_SMTP_PASSWORD` binding at all (see `vitest.service-binding.config.ts`).
- * Zero Cloudflare account access, zero Wrangler writes, zero production
- * deployment of any kind.
+ * `smtp.ionos.com`, no `fetch()` to any external host -- every test here
+ * gets a fail-closed response (`STORAGE_ALERT_DELIVERY_ENABLED` is left
+ * unbound in `vitest.service-binding.config.ts`) before the receiver ever
+ * reaches its SMTP-transport code. Zero production secrets: the receiver
+ * Worker in this test is provisioned with only a fixed, non-random,
+ * test-only `ALERT_PATH_TOKEN` literal and no `IONOS_SMTP_PASSWORD`
+ * binding at all. Zero Cloudflare account access, zero Wrangler writes,
+ * zero production deployment of any kind.
  */
 import { describe, expect, it } from 'vitest';
 import { SELF } from 'cloudflare:test';
 
-const DIAGNOSTIC_TOKEN = 'test-only-diagnostic-token-not-a-secret';
+const PATH_TOKEN = 'test-only-path-token-not-a-secret';
 
-interface ControlResponseBody {
-  readonly control: string;
-  readonly result: string;
-  readonly receiver_elapsed_ms?: number;
-  readonly caller_elapsed_ms?: number;
+const VALID_PAYLOAD = {
+  event: 'siteborne.storage_reclamation.critical_alert',
+  operation_class: 'artifact_reclamation_r2_delete_failure',
+  r2_delete_failures: 3,
+  reclaimed_count: 12,
+  swept_at: '2026-09-15T00:00:00.000Z',
+  sample_content_hashes: ['abc123'],
+};
+
+interface DispatchOutcome {
+  readonly delivered: boolean;
 }
 
-async function callControl(
-  mode: 'IMMEDIATE' | 'DELAY_250MS' | 'OVERALL_TIMEOUT' | 'CLEANUP_HANG'
-): Promise<{ response: Response; body: ControlResponseBody; callerElapsedMs: number }> {
+async function dispatch(
+  pathToken: string,
+  payload: unknown
+): Promise<{ outcome: DispatchOutcome; elapsedMs: number }> {
   const startedAt = Date.now();
-  const response = await SELF.fetch(
-    `https://caller.test/internal/storage-alert-smtp-diagnostic?mode=${mode}`,
-    { method: 'POST', headers: { authorization: `Bearer ${DIAGNOSTIC_TOKEN}` } }
-  );
-  const callerElapsedMs = Date.now() - startedAt;
-  const body = (await response.json()) as ControlResponseBody;
-  return { response, body, callerElapsedMs };
+  const response = await SELF.fetch('https://caller.test/dispatch', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ pathToken, payload }),
+  });
+  const elapsedMs = Date.now() - startedAt;
+  const outcome = (await response.json()) as DispatchOutcome;
+  return { outcome, elapsedMs };
 }
 
-describe('storage-alert Service Binding timeout isolation (real Miniflare Service Binding, zero external network)', () => {
-  it('CONTROL_IMMEDIATE: immediate receiver response propagates through the real Service Binding', async () => {
-    const { response, body, callerElapsedMs } = await callControl('IMMEDIATE');
-    expect(response.status).toBe(200);
-    expect(body.control).toBe('IMMEDIATE');
-    expect(body.result).toBe('OK');
-    expect(body.receiver_elapsed_ms).toBeLessThan(500);
-    expect(callerElapsedMs).toBeLessThan(2000);
+describe('storage-alert Service Binding (real Miniflare Service Binding, zero external network)', () => {
+  it("ordinary valid alert, STORAGE_ALERT_DELIVERY_ENABLED absent: the receiver's fail-closed 503 propagates through the real Service Binding as delivered=false, quickly", async () => {
+    const { outcome, elapsedMs } = await dispatch(PATH_TOKEN, VALID_PAYLOAD);
+    expect(outcome).toEqual({ delivered: false });
+    expect(elapsedMs).toBeLessThan(2000);
   }, 15_000);
 
-  it('CONTROL_DELAY_250MS: ~250ms async receiver response propagates normally, no caller timeout', async () => {
-    const { response, body, callerElapsedMs } = await callControl('DELAY_250MS');
-    expect(response.status).toBe(200);
-    expect(body.control).toBe('DELAY_250MS');
-    expect(body.result).toBe('OK');
-    expect(body.receiver_elapsed_ms).toBeGreaterThanOrEqual(200);
-    expect(body.receiver_elapsed_ms).toBeLessThan(2000);
-    expect(callerElapsedMs).toBeLessThan(3000);
+  it("wrong ALERT_PATH_TOKEN: the receiver's identical-404 auth failure propagates through the real Service Binding as delivered=false", async () => {
+    const { outcome, elapsedMs } = await dispatch('wrong-token-value', VALID_PAYLOAD);
+    expect(outcome).toEqual({ delivered: false });
+    expect(elapsedMs).toBeLessThan(2000);
   }, 15_000);
 
-  it('CONTROL_OVERALL_TIMEOUT: the real 8s receiver overall-timeout classification returns through the Service Binding before the caller real 12s outer timeout', async () => {
-    const { response, body, callerElapsedMs } = await callControl('OVERALL_TIMEOUT');
-    expect(response.status).toBe(200);
-    expect(body.control).toBe('OVERALL_TIMEOUT');
-    expect(body.result).toBe('TIMED_OUT_AS_EXPECTED');
-    // Real, unmocked DEFAULT_OVERALL_TIMEOUT_MS = 8_000 in this suite.
-    expect(body.receiver_elapsed_ms).toBeGreaterThanOrEqual(7500);
-    expect(body.receiver_elapsed_ms).toBeLessThan(9500);
-    // Proves the caller received the receiver's OWN structured result,
-    // not its own 12_000ms AbortController firing: strictly less than
-    // that outer deadline, and close to the receiver's own elapsed time
-    // rather than sitting at ~12000ms.
-    expect(callerElapsedMs).toBeLessThan(11_000);
-    expect(callerElapsedMs).toBeGreaterThanOrEqual((body.receiver_elapsed_ms ?? 0) - 200);
-  }, 20_000);
+  it("malformed payload (fails schema): the receiver's 400 propagates through the real Service Binding as delivered=false", async () => {
+    const { outcome, elapsedMs } = await dispatch(PATH_TOKEN, { not: 'a valid payload' });
+    expect(outcome).toEqual({ delivered: false });
+    expect(elapsedMs).toBeLessThan(2000);
+  }, 15_000);
 
-  it('CONTROL_CLEANUP_HANG: bounded cleanup (real CLEANUP_TIMEOUT_MS budget) still lets the handler return through the Service Binding even when both cleanup stand-ins never resolve -- the SUN-1222C-SMTP-ROOT-CAUSE regression, proven across a real Service Binding', async () => {
-    const { response, body, callerElapsedMs } = await callControl('CLEANUP_HANG');
-    expect(response.status).toBe(200);
-    expect(body.control).toBe('CLEANUP_HANG');
-    expect(body.result).toBe('OK');
-    // Real, unmocked CLEANUP_TIMEOUT_MS = 1_000 raced twice (reader +
-    // socket stand-ins); bounded well under a second-scale ceiling, not
-    // hanging until the caller's own 12s deadline.
-    expect(body.receiver_elapsed_ms).toBeLessThan(3000);
-    expect(callerElapsedMs).toBeLessThan(5000);
+  it('THE RACE THIS CONTAINS, proven across a real Service Binding: r2_delete_failures > 0, STORAGE_ALERT_DELIVERY_ENABLED absent -> receiver is reached (real dispatch, real auth, real schema parse) but the containment gate still reports delivered=false -- the SMTP transport is never invoked', async () => {
+    const scheduledShapedPayload = { ...VALID_PAYLOAD, r2_delete_failures: 7 };
+    const { outcome, elapsedMs } = await dispatch(PATH_TOKEN, scheduledShapedPayload);
+    expect(outcome).toEqual({ delivered: false });
+    expect(elapsedMs).toBeLessThan(2000);
   }, 15_000);
 });

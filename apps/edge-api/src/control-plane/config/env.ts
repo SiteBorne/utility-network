@@ -53,27 +53,17 @@ export interface Env {
    * via `wrangler secret put STORAGE_ALERT_PATH_TOKEN`, never a `[vars]`
    * entry. NOT yet provisioned by this checkpoint. */
   STORAGE_ALERT_PATH_TOKEN?: string;
-  /** SUN-1222C-R4 TEMPORARY qualification-only secret — bearer token
-   * guarding `POST /internal/storage-alert-qualification`
-   * (`storage-alert-qualification-route.ts`), a scaffolding route added
-   * for exactly one end-to-end Service Binding qualification checkpoint
-   * and expected to be reverted afterward. Never a `[vars]` entry; never
-   * placed in a URL path or query string. Not read by any permanent
-   * production code path. */
-  STORAGE_ALERT_QUALIFICATION_TOKEN?: string;
-  /** SUN-1222C-SMTP-ROOT-CAUSE TEMPORARY diagnostic-only secret -- bearer
-   * token guarding `POST /internal/storage-alert-smtp-diagnostic`
-   * (`storage-alert-smtp-diagnostic-route.ts`), deliberately a SEPARATE
-   * secret from `STORAGE_ALERT_QUALIFICATION_TOKEN` even though both
-   * route to the same receiver: this one can only ever trigger
-   * `probeIonosSmtpConnectivity` (no AUTH, no MAIL FROM/RCPT TO/DATA, no
-   * possible email send -- see that module's own doc comment), so it is
-   * safe to reason about and rotate independently of the email-capable
-   * qualification token. Never a `[vars]` entry; never placed in a URL
-   * path or query string. Not read by any permanent production code
-   * path; expected to be reverted alongside the qualification route once
-   * the SMTP root-cause investigation this route exists for is closed. */
-  STORAGE_ALERT_SMTP_DIAGNOSTIC_TOKEN?: string;
+  // SUN-1222C closure: `STORAGE_ALERT_QUALIFICATION_TOKEN` and
+  // `STORAGE_ALERT_SMTP_DIAGNOSTIC_TOKEN` (and the scaffolding routes they
+  // guarded, `storage-alert-qualification-route.ts` and
+  // `storage-alert-smtp-diagnostic-route.ts`) were temporary, single-use
+  // checkpoints — real end-to-end delivery was qualified (mailbox-confirmed)
+  // and the SMTP root cause (STARTTLS-upgrade-specific TLS handshake hang on
+  // port 587; port 465 implicit TLS confirmed clean) was isolated. Both
+  // routes and their secrets were removed from this Worker once evidenced;
+  // see git history for the qualification/diagnostic-era implementation and
+  // `storage-alert-receiver-entrypoint.ts`'s own doc comment for what
+  // remains permanently.
   /** SUN-1000 checkpoint 1O-A: canonical Nevermined credential name,
    * matching `packages/protocol-nevermined/src/config.ts`'s own already-
    * correct `resolveNeverminedConfig` boundary (`canonical`/

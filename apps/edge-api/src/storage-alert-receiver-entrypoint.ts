@@ -58,27 +58,24 @@
  *     email text. On failure this returns a bare non-2xx status with no
  *     response body content derived from the request.
  *
- * SUN-1222C-SMTP-ROOT-CAUSE addendum: `POST /diagnostic/<token>` (same
- * `ALERT_PATH_TOKEN`, same constant-time check, same identical-404
- * discipline for every invalid request) runs `probeIonosSmtpConnectivity`
- * (`smtp/ionos-smtp-diagnostic.ts`) instead of `sendStorageAlertViaIonosSmtp`
- * -- a bounded, non-delivery connectivity probe that never reads
- * `env.IONOS_SMTP_PASSWORD` and structurally cannot authenticate or send
- * mail (see that module's own doc comment). Its JSON response body is
- * safe to return verbatim: every field is either a server-sent reply
- * code/text, a stage name, an elapsed duration, or a boolean -- never a
- * credential, because this path never reads one.
+ * SUN-1222C closure: the `POST /control/<token>` (Service-Binding/timeout
+ * machinery isolation) and `POST /diagnostic/<token>` (non-delivery SMTP
+ * connectivity probes, both port 587 STARTTLS and port 465 implicit TLS)
+ * routes that previously lived here have been removed now that the SMTP
+ * root-cause investigation they existed for is closed -- the STARTTLS
+ * upgrade step on port 587 was isolated as the failure point, port 465
+ * implicit TLS was proven clean, and the Service Binding timeout/cleanup
+ * machinery was proven correct (both live, via those diagnostics, and in
+ * the permanent Miniflare/workerd regression suite, which needs no live
+ * route). `smtp/ionos-smtp-diagnostic.ts`, `smtp/ionos-smtp-implicit-tls-diagnostic.ts`,
+ * and their own unit tests remain on disk as the forensic/regression record
+ * of that investigation; they are simply no longer imported or reachable
+ * from this Worker's `fetch` handler. See git history for the removed
+ * routes' implementation.
  */
 
 import { z } from 'zod';
 import { sendStorageAlertViaIonosSmtp } from './smtp/ionos-smtp-transport';
-import {
-  probeIonosSmtpConnectivity,
-  DEFAULT_OVERALL_TIMEOUT_MS,
-  CLEANUP_TIMEOUT_MS,
-} from './smtp/ionos-smtp-diagnostic';
-import { probeIonosSmtpImplicitTlsConnectivity } from './smtp/ionos-smtp-implicit-tls-diagnostic';
-import { withTimeout, StageTimeoutError } from './smtp/smtp-stage-timeout';
 
 /** Mirrors `StorageAlertPayload` in
  * `control-plane/alerting/storage-alert-sweep.ts` exactly -- this module
@@ -121,49 +118,23 @@ export interface Env {
    * can therefore never enable autonomous production email merely by
    * existing, mirroring the fail-closed-absence design already proven for
    * `PAID_ROUTES_ENABLED` and its siblings on `siteborne-utility-edge` (see
-   * `control-plane/config/production-payment.ts`). See `isGovernedQualificationPayload`
-   * and `STORAGE_ALERT_QUALIFICATION_TOKEN` below for the one narrow,
-   * separately-authorized bypass. */
+   * `control-plane/config/production-payment.ts`). This is the sole
+   * mechanism for a real send -- the one narrow, separately-authorized
+   * qualification bypass that once let a single supervised, governed-payload
+   * request through while this flag was absent/false has been removed now
+   * that qualification is complete; see git history for its
+   * implementation. */
   readonly STORAGE_ALERT_DELIVERY_ENABLED?: string;
-  /** SUN-1222C temporary, high-entropy qualification credential -- provisioned
-   * on BOTH this Worker and `siteborne-utility-edge` only for the duration of
-   * one supervised qualification attempt, then deleted from both. Presence
-   * alone grants nothing: a request must also carry a matching
-   * `X-Siteborne-Storage-Alert-Qualification` header (constant-time compared)
-   * AND the exact governed qualification payload shape (see
-   * `isGovernedQualificationPayload`) before it may bypass
-   * `STORAGE_ALERT_DELIVERY_ENABLED`. `reclaimStaleArtifactsScheduled`'s own
-   * Service Binding call site (`../../index.ts`) never constructs this header
-   * -- it has no access to any qualification-token value at all -- so the
-   * normal minute-cron path is structurally incapable of triggering this
-   * bypass regardless of `r2_delete_failures`. */
-  readonly STORAGE_ALERT_QUALIFICATION_TOKEN?: string;
 }
 
-/** Dedicated internal header carrying the qualification credential (never a
- * query string or path segment, so it cannot appear in access logs or
- * Referer headers -- same rationale as `STORAGE_ALERT_QUALIFICATION_TOKEN`'s
- * own doc comment on the edge side). Scheduled production requests never
- * send this header; only `storage-alert-qualification-route.ts`, after its
- * own independent bearer authentication succeeds, forwards it. */
-const QUALIFICATION_HEADER = 'X-Siteborne-Storage-Alert-Qualification';
-
-/** The narrow, fixed shape `storage-alert-qualification-route.ts` always
- * sends: `r2_delete_failures`/`reclaimed_count` hardcoded to `0` (that route
- * never reads real reclamation state) and exactly one sample hash carrying
- * the route's own fixed marker prefix. Merely supplying the qualification
- * header with the right secret is NOT sufficient to bypass
- * `STORAGE_ALERT_DELIVERY_ENABLED` -- the payload must also match this exact
- * governed shape, so a leaked/misused qualification token cannot be used to
- * push arbitrary alert content through the bypass path. */
-function isGovernedQualificationPayload(payload: StorageAlertPayload): boolean {
-  return (
-    payload.r2_delete_failures === 0 &&
-    payload.reclaimed_count === 0 &&
-    payload.sample_content_hashes.length === 1 &&
-    payload.sample_content_hashes[0].startsWith('SITEBORNE-SMTP-PRODUCTION-QUALIFICATION-')
-  );
-}
+// SUN-1222C closure: `STORAGE_ALERT_QUALIFICATION_TOKEN`, the
+// `X-Siteborne-Storage-Alert-Qualification` header it gated, and
+// `isGovernedQualificationPayload` (the narrow governed-payload check that
+// bounded what that bypass could push through) have been removed now that
+// the one supervised qualification attempt they existed for is complete and
+// mailbox-confirmed. The permanent, sole mechanism for a real send is now
+// `STORAGE_ALERT_DELIVERY_ENABLED === 'true'` below -- see git history for
+// the removed bypass's implementation.
 
 /** Constant-time string comparison -- deliberately does not short-circuit
  * on the first mismatched byte, so response timing cannot be used to
@@ -243,128 +214,10 @@ function renderAlertText(payload: StorageAlertPayload): string {
  * -- this module only supplies the envelope (`SMTP_HOST`/.../`TO_ADDRESS`
  * below) and the already-rendered plain-text body. */
 const SMTP_HOST = 'smtp.ionos.com';
-// SUN-1222C-SMTP-ROOT-CAUSE port migration: `SMTP_PORT` (587, STARTTLS) is
-// now used ONLY by the still-preserved, non-delivery
-// `probeIonosSmtpConnectivity` forensic/regression diagnostic below --
-// real production delivery moved to `IMPLICIT_TLS_PORT` (465, defined
-// further down alongside its own diagnostic), see
-// `smtp/ionos-smtp-transport.ts`'s doc comment for why.
-const SMTP_PORT = 587;
+const IMPLICIT_TLS_PORT = 465;
 const FROM_ADDRESS = 'storage@alerts.siteborne.net';
 const TO_ADDRESS = 'hello@siteborne.com';
 const SUBJECT = 'SITEBORNE: storage reclamation critical alert';
-
-/** SUN-1222C-SMTP-ROOT-CAUSE addendum: `POST /diagnostic/<token>?mode=
- * IONOS_IMPLICIT_TLS_465` (same token, same constant-time check, same
- * identical-404 discipline) runs `probeIonosSmtpImplicitTlsConnectivity`
- * (`smtp/ionos-smtp-implicit-tls-diagnostic.ts`) against port 465 instead of
- * `probeIonosSmtpConnectivity` against port 587 -- isolates whether Cloudflare
- * Workers can complete ANY TLS handshake against this IONOS service from
- * whether the failure is specific to the STARTTLS upgrade sequence. Absent or
- * any other `mode` value leaves the original port-587 STARTTLS probe
- * unchanged. Identically to the 587 probe, this path never imports or reaches
- * `env.IONOS_SMTP_PASSWORD`, `AUTH`, `MAIL FROM`, `RCPT TO`, `DATA`, or
- * `startTls()` -- see that module's own doc comment.*/
-const IMPLICIT_TLS_PORT = 465;
-const DIAGNOSTIC_MODE_IMPLICIT_TLS_465 = 'IONOS_IMPLICIT_TLS_465';
-
-/**
- * SUN-1222C-SMTP-ROOT-CAUSE addendum: `POST /control/<token>?mode=...`
- * (same `ALERT_PATH_TOKEN`, same constant-time check, same identical-404
- * discipline) exercises the Service Binding dispatch/response path and the
- * shared `withTimeout` primitive WITHOUT ever opening a socket -- isolates
- * "does a call across the Service Binding return at all" and "does the
- * timeout/catch machinery itself work" from "is the SMTP/TLS path what's
- * actually hanging". This code path never imports or reaches
- * `cloudflare:sockets`, `env.IONOS_SMTP_PASSWORD`, or
- * `probeIonosSmtpConnectivity`/`sendStorageAlertViaIonosSmtp` -- see the
- * module-level doc comment above for the full capability-surface
- * invariant this addendum preserves.
- */
-type ControlMode = 'IMMEDIATE' | 'DELAY_250MS' | 'OVERALL_TIMEOUT' | 'CLEANUP_HANG';
-
-interface ControlResult {
-  readonly control: ControlMode;
-  readonly result: 'OK' | 'TIMED_OUT_AS_EXPECTED' | 'UNEXPECTED_RESOLVE' | 'UNEXPECTED_ERROR';
-  readonly elapsed_ms: number;
-}
-
-/** Never touches a socket, a stream, or any secret -- see this function's
- * call site doc comment. `OVERALL_TIMEOUT` races the exact same
- * `withTimeout` primitive and the exact same duration
- * (`DEFAULT_OVERALL_TIMEOUT_MS`, imported from `ionos-smtp-diagnostic.ts`
- * rather than duplicated) that `probeIonosSmtpConnectivity`'s own
- * `DIAG_OVERALL` stage uses, against a promise that can structurally never
- * resolve -- proving (or disproving) that machinery in complete isolation
- * from any socket/stream involvement. */
-async function runControl(mode: ControlMode): Promise<ControlResult> {
-  const startedAt = Date.now();
-  if (mode === 'IMMEDIATE') {
-    return { control: mode, result: 'OK', elapsed_ms: Date.now() - startedAt };
-  }
-  if (mode === 'DELAY_250MS') {
-    await new Promise<void>((resolve) => setTimeout(resolve, 250));
-    return { control: mode, result: 'OK', elapsed_ms: Date.now() - startedAt };
-  }
-  if (mode === 'CLEANUP_HANG') {
-    // SUN-1222C-SMTP-ROOT-CAUSE Service-Binding-isolation addendum: proves
-    // the bounded-cleanup fix in `ionos-smtp-diagnostic.ts`'s `finally`
-    // block in complete isolation from any socket/stream/TLS involvement.
-    // `hangingReaderCancel`/`hangingSocketClose` are the *only* test
-    // doubles anywhere in this control mode -- structurally identical
-    // never-resolving `Promise`s standing in for `reader.cancel()` and
-    // `currentSocket.close()` -- raced against the exact same
-    // `withTimeout` primitive and exported `CLEANUP_TIMEOUT_MS` budget the
-    // real fix uses, never a reimplementation of it. The Service Binding
-    // dispatch that carries this result back to the caller is the real
-    // Miniflare/Cloudflare one; nothing about the RPC/HTTP path is mocked.
-    const hangingReaderCancel = new Promise<void>(() => {});
-    const hangingSocketClose = new Promise<void>(() => {});
-    const results = await Promise.allSettled([
-      withTimeout('CONTROL_CLEANUP_READER_CANCEL', hangingReaderCancel, CLEANUP_TIMEOUT_MS),
-      withTimeout('CONTROL_CLEANUP_SOCKET_CLOSE', hangingSocketClose, CLEANUP_TIMEOUT_MS),
-    ]);
-    const bothBoundedTimeouts = results.every(
-      (r) => r.status === 'rejected' && r.reason instanceof StageTimeoutError
-    );
-    return {
-      control: mode,
-      result: bothBoundedTimeouts ? 'OK' : 'UNEXPECTED_ERROR',
-      elapsed_ms: Date.now() - startedAt,
-    };
-  }
-  // mode === 'OVERALL_TIMEOUT'
-  try {
-    await withTimeout(
-      'CONTROL_OVERALL_TIMEOUT',
-      new Promise<never>(() => {}),
-      DEFAULT_OVERALL_TIMEOUT_MS
-    );
-    // Unreachable: the raced promise above never resolves or rejects on
-    // its own, so `withTimeout` can only ever settle via its own timeout
-    // rejection below. Kept as an explicit, typed branch rather than
-    // asserting `never`, so a future change to this helper fails a test
-    // instead of failing silently.
-    return { control: mode, result: 'UNEXPECTED_RESOLVE', elapsed_ms: Date.now() - startedAt };
-  } catch (err) {
-    const timedOut = err instanceof StageTimeoutError;
-    return {
-      control: mode,
-      result: timedOut ? 'TIMED_OUT_AS_EXPECTED' : 'UNEXPECTED_ERROR',
-      elapsed_ms: Date.now() - startedAt,
-    };
-  }
-}
-
-const CONTROL_MODES: readonly ControlMode[] = [
-  'IMMEDIATE',
-  'DELAY_250MS',
-  'OVERALL_TIMEOUT',
-  'CLEANUP_HANG',
-];
-function isControlMode(value: string | null): value is ControlMode {
-  return value !== null && (CONTROL_MODES as readonly string[]).includes(value);
-}
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -376,37 +229,6 @@ export default {
     if (!token) return NOT_FOUND(); // fail closed if unprovisioned
 
     const url = new URL(request.url);
-
-    const controlMatch = /^\/control\/([^/]+)$/.exec(url.pathname);
-    if (controlMatch) {
-      const providedControlToken = controlMatch[1];
-      if (!timingSafeEqual(providedControlToken, token)) return NOT_FOUND();
-      const mode = url.searchParams.get('mode');
-      if (!isControlMode(mode)) return NOT_FOUND();
-      const result = await runControl(mode);
-      return new Response(JSON.stringify(result), {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-      });
-    }
-
-    const diagnosticMatch = /^\/diagnostic\/([^/]+)$/.exec(url.pathname);
-    if (diagnosticMatch) {
-      const providedDiagnosticToken = diagnosticMatch[1];
-      if (!timingSafeEqual(providedDiagnosticToken, token)) return NOT_FOUND();
-      const diagnosticMode = url.searchParams.get('mode');
-      const result =
-        diagnosticMode === DIAGNOSTIC_MODE_IMPLICIT_TLS_465
-          ? await probeIonosSmtpImplicitTlsConnectivity({
-              host: SMTP_HOST,
-              port: IMPLICIT_TLS_PORT,
-            })
-          : await probeIonosSmtpConnectivity({ host: SMTP_HOST, port: SMTP_PORT });
-      return new Response(JSON.stringify(result), {
-        status: result.ok ? 200 : 502,
-        headers: { 'content-type': 'application/json' },
-      });
-    }
 
     const match = /^\/alert\/([^/]+)$/.exec(url.pathname);
     if (!match) return NOT_FOUND();
@@ -431,17 +253,13 @@ export default {
     // schema validation (so a malformed/unauthenticated request still gets
     // 404/400, not a signal that delivery is disabled) and BEFORE any
     // SMTP-transport code is reached -- no socket, no `IONOS_SMTP_PASSWORD`
-    // read, on any path through this block.
+    // read, on any path through this block. This is now the sole gate on a
+    // real send: the qualification bypass that once let one supervised,
+    // governed-payload request through while this flag was absent/false has
+    // been removed now that qualification is complete -- see this file's
+    // own history for that bypass's implementation.
     const normalDeliveryEnabled = env.STORAGE_ALERT_DELIVERY_ENABLED === 'true';
-    const qualificationToken = env.STORAGE_ALERT_QUALIFICATION_TOKEN;
-    const providedQualificationHeader = request.headers.get(QUALIFICATION_HEADER);
-    const qualificationBypassGranted =
-      !normalDeliveryEnabled &&
-      qualificationToken !== undefined &&
-      providedQualificationHeader !== null &&
-      timingSafeEqual(providedQualificationHeader, qualificationToken) &&
-      isGovernedQualificationPayload(parsed.data);
-    if (!normalDeliveryEnabled && !qualificationBypassGranted) {
+    if (!normalDeliveryEnabled) {
       // 503, not 502: this is an administrative/containment decision, not a
       // transport failure -- distinguishable in logs from a real SMTP
       // failure below, and (like every response on this path) triggers no
@@ -463,13 +281,10 @@ export default {
         {
           host: SMTP_HOST,
           // SUN-1222C-SMTP-ROOT-CAUSE port migration: production delivery
-          // now uses implicit TLS on 465, not STARTTLS on 587 -- see
+          // uses implicit TLS on 465, not STARTTLS on 587 -- see
           // `smtp/ionos-smtp-transport.ts`'s own doc comment for the two
           // live probes that isolated the 587 failure to the STARTTLS
-          // upgrade step and proved 465 completes cleanly. `SMTP_PORT`
-          // (587) remains in use only by the still-preserved, non-delivery
-          // `probeIonosSmtpConnectivity` forensic/regression diagnostic
-          // above -- never by this send path anymore.
+          // upgrade step and proved 465 completes cleanly.
           port: IMPLICIT_TLS_PORT,
           username: FROM_ADDRESS,
           password,

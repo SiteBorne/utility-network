@@ -36,18 +36,6 @@ const DEFAULT_TIMEOUT_MS = 10_000;
 
 export interface BuildServiceBindingStorageAlertTransportOptions {
   readonly timeoutMs?: number;
-  /** SUN-1222C qualification-only addendum: additional headers merged into
-   * every request this transport instance sends. Exists solely so
-   * `storage-alert-qualification-route.ts` can forward the receiver-side
-   * `X-Siteborne-Storage-Alert-Qualification` bypass header AFTER its own
-   * independent bearer authentication succeeds -- see that route's doc
-   * comment and `storage-alert-receiver-entrypoint.ts`'s
-   * `STORAGE_ALERT_QUALIFICATION_TOKEN` doc comment for the full bypass
-   * contract. `reclaimStaleArtifactsScheduled` (`../../index.ts`) never
-   * passes this option -- it has no qualification-token value in scope to
-   * pass -- so the normal minute-cron path remains structurally incapable
-   * of constructing this header regardless of `r2_delete_failures`. */
-  readonly extraHeaders?: Readonly<Record<string, string>>;
 }
 
 /**
@@ -73,7 +61,6 @@ export function buildServiceBindingStorageAlertTransport(
   options: BuildServiceBindingStorageAlertTransportOptions = {}
 ): StorageAlertTransport {
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const extraHeaders = options.extraHeaders ?? {};
 
   return async function deliver(payload: StorageAlertPayload): Promise<{ delivered: boolean }> {
     const controller = new AbortController();
@@ -83,7 +70,7 @@ export function buildServiceBindingStorageAlertTransport(
         `https://storage-alert.internal/alert/${encodeURIComponent(pathToken)}`,
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...extraHeaders },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
           signal: controller.signal,
         }

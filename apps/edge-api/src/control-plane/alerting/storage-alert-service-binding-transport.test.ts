@@ -105,37 +105,18 @@ describe('buildServiceBindingStorageAlertTransport', () => {
     await expect(transport(PAYLOAD)).resolves.toEqual({ delivered: false });
   });
 
-  describe('SUN-1222C extraHeaders (receiver-side qualification bypass forwarding)', () => {
-    it('with no extraHeaders option, sends only Content-Type -- no qualification header of any kind', async () => {
-      let capturedInit: RequestInit | undefined;
-      const fetcher = fakeFetcher(async (_url, init) => {
-        capturedInit = init;
-        return new Response(null, { status: 202 });
-      });
-      const transport = buildServiceBindingStorageAlertTransport(fetcher, 'tok');
-
-      await transport(PAYLOAD);
-
-      const headers = capturedInit?.headers as Record<string, string>;
-      expect(headers).toEqual({ 'Content-Type': 'application/json' });
-      expect(Object.keys(headers)).not.toContain('X-Siteborne-Storage-Alert-Qualification');
+  it('SUN-1222C closure: sends only Content-Type -- the transport has no mechanism to attach any other header (the qualification-only extraHeaders option and its receiver-side bypass were removed once qualification was evidenced)', async () => {
+    let capturedInit: RequestInit | undefined;
+    const fetcher = fakeFetcher(async (_url, init) => {
+      capturedInit = init;
+      return new Response(null, { status: 202 });
     });
+    const transport = buildServiceBindingStorageAlertTransport(fetcher, 'tok');
 
-    it('with extraHeaders supplied, merges them alongside Content-Type', async () => {
-      let capturedInit: RequestInit | undefined;
-      const fetcher = fakeFetcher(async (_url, init) => {
-        capturedInit = init;
-        return new Response(null, { status: 202 });
-      });
-      const transport = buildServiceBindingStorageAlertTransport(fetcher, 'tok', {
-        extraHeaders: { 'X-Siteborne-Storage-Alert-Qualification': 'temp-qual-token' },
-      });
+    await transport(PAYLOAD);
 
-      await transport(PAYLOAD);
-
-      const headers = capturedInit?.headers as Record<string, string>;
-      expect(headers['Content-Type']).toBe('application/json');
-      expect(headers['X-Siteborne-Storage-Alert-Qualification']).toBe('temp-qual-token');
-    });
+    const headers = capturedInit?.headers as Record<string, string>;
+    expect(headers).toEqual({ 'Content-Type': 'application/json' });
+    expect(Object.keys(headers)).not.toContain('X-Siteborne-Storage-Alert-Qualification');
   });
 });

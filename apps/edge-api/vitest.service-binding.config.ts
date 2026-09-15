@@ -1,30 +1,41 @@
 /**
- * SUN-1222C-SMTP-ROOT-CAUSE Service-Binding-isolation addendum — a
- * deliberately SEPARATE Vitest config (mirrors `vitest.workerd.config.ts`'s
- * own separation rationale exactly) standing up a REAL, local-only
- * `@cloudflare/vitest-pool-workers` Service Binding between two real
- * Miniflare Workers:
+ * SUN-1222C closure — a deliberately SEPARATE Vitest config (mirrors
+ * `vitest.workerd.config.ts`'s own separation rationale exactly) standing
+ * up a REAL, local-only `@cloudflare/vitest-pool-workers` Service Binding
+ * between two real Miniflare Workers:
  *
- *   caller  (tests/workerd/fixtures/service-binding-diagnostic-caller.ts,
- *            the real `storageAlertSmtpDiagnosticRoute` handler, unmodified)
+ *   caller  (tests/workerd/fixtures/service-binding-alert-caller.ts, the
+ *            real `buildServiceBindingStorageAlertTransport` production
+ *            transport, unmodified)
  *       ↓ real Miniflare Service Binding (STORAGE_ALERT_RECEIVER)
  *   receiver (../../src/storage-alert-receiver-entrypoint.ts, the real
  *             production receiver Worker module, unmodified)
  *
- * Exists to answer, entirely locally and with zero external network
- * access, zero Cloudflare account access, and zero production secrets:
- * "does the receiver's real bounded timeout/catch/finally path return a
- * structured response through an actual runtime-level Service Binding
- * before the caller's own outer timeout fires?" — see
- * `tests/workerd/service-binding-timeout.workerd-test.ts`.
+ * Exercises the PERMANENT `/alert/<token>` architecture (path-token check,
+ * schema validation, `STORAGE_ALERT_DELIVERY_ENABLED` fail-closed gate)
+ * through a real runtime-level Service Binding — the earlier
+ * SUN-1222C-SMTP-ROOT-CAUSE version of this suite exercised the temporary
+ * `/control` zero-network isolation modes, both removed from the receiver
+ * once the Service-Binding timeout/cleanup machinery they were built to
+ * isolate was proven correct and the SMTP root cause was closed (see
+ * `tests/workerd/service-binding-timeout.workerd-test.ts` and git history
+ * for that version). See `ionos-smtp-transport.test.ts` for the
+ * unit-level proof that bounded cleanup survives a real hanging
+ * `reader.cancel()`/`socket.close()` — this suite proves real Service
+ * Binding dispatch/propagation of the permanent gate's results instead,
+ * which needs no socket simulation.
  *
  * Never deployed, never referenced by any `wrangler deploy`/`versions
- * upload`/`versions deploy` command anywhere in this repository. The two
- * bearer-style values below (`STORAGE_ALERT_SMTP_DIAGNOSTIC_TOKEN`,
- * `STORAGE_ALERT_PATH_TOKEN`/`ALERT_PATH_TOKEN`) are fixed, non-random,
- * test-only literals — never a production secret, never read from a real
- * Cloudflare account or `.dev.vars` — and are only meaningful within this
- * ephemeral in-memory Miniflare instance.
+ * upload`/`versions deploy` command anywhere in this repository. The
+ * `STORAGE_ALERT_PATH_TOKEN`/`ALERT_PATH_TOKEN` value below is a fixed,
+ * non-random, test-only literal — never a production secret, never read
+ * from a real Cloudflare account or `.dev.vars` — and is only meaningful
+ * within this ephemeral in-memory Miniflare instance. `IONOS_SMTP_PASSWORD`
+ * is deliberately left unbound: every test in this suite either keeps
+ * `STORAGE_ALERT_DELIVERY_ENABLED` unset (so the send path is never
+ * reached) or explicitly exercises the "unprovisioned password fails
+ * closed" branch, so its real value must never exist inside this test
+ * process regardless.
  */
 import path from 'node:path';
 import fs from 'node:fs';
@@ -34,7 +45,6 @@ import { defineWorkersConfig } from '@cloudflare/vitest-pool-workers/config';
 const COMPATIBILITY_DATE = '2026-08-05';
 const COMPATIBILITY_FLAGS = ['nodejs_compat'];
 
-const TEST_ONLY_DIAGNOSTIC_TOKEN = 'test-only-diagnostic-token-not-a-secret';
 const TEST_ONLY_PATH_TOKEN = 'test-only-path-token-not-a-secret';
 const RECEIVER_WORKER_NAME = 'test-storage-alert-receiver';
 
@@ -85,14 +95,10 @@ export default defineWorkersConfig({
     include: ['tests/workerd/service-binding-timeout.workerd-test.ts'],
     poolOptions: {
       workers: {
-        main: './tests/workerd/fixtures/service-binding-diagnostic-caller.ts',
+        main: './tests/workerd/fixtures/service-binding-alert-caller.ts',
         miniflare: {
           compatibilityDate: COMPATIBILITY_DATE,
           compatibilityFlags: COMPATIBILITY_FLAGS,
-          bindings: {
-            STORAGE_ALERT_SMTP_DIAGNOSTIC_TOKEN: TEST_ONLY_DIAGNOSTIC_TOKEN,
-            STORAGE_ALERT_PATH_TOKEN: TEST_ONLY_PATH_TOKEN,
-          },
           // The real runtime-level Service Binding under test -- NOT a
           // mocked/plain-function `serviceBindings` entry. Points at the
           // auxiliary Worker's `name` below, which Miniflare resolves to
@@ -114,13 +120,15 @@ export default defineWorkersConfig({
               compatibilityFlags: COMPATIBILITY_FLAGS,
               bindings: {
                 ALERT_PATH_TOKEN: TEST_ONLY_PATH_TOKEN,
-                // Deliberately NOT set: `IONOS_SMTP_PASSWORD`. Every
-                // control-mode branch this test exercises returns before
-                // that binding is ever read (see
+                // Deliberately NOT set: `STORAGE_ALERT_DELIVERY_ENABLED`
+                // (so the send path is never reached at all -- every test
+                // in this suite gets the fail-closed 503) and
+                // `IONOS_SMTP_PASSWORD` (so even if that gate were somehow
+                // bypassed, the send would fail closed before touching
+                // `cloudflare:sockets` -- see
                 // `storage-alert-receiver-entrypoint.ts`'s own module-level
-                // doc comment on the capability-surface invariant), and
-                // its real value must never exist inside this test
-                // process regardless.
+                // doc comment on the capability-surface invariant). Neither
+                // real value may ever exist inside this test process.
               },
             },
           ],
