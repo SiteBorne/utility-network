@@ -45,6 +45,29 @@ describe('computeModelDigest', () => {
     const modelB = makeFixtureModel([svc]);
     expect(await computeModelDigest(modelA)).not.toBe(await computeModelDigest(modelB));
   });
+
+  // METADATA-VCM-IMPL-02: legacyBasePriceDeclared was not explicitly
+  // addressed by METADATA-VCM-04's digest-inclusion decision (only
+  // "excluded from economic validation" and "not projected as a live
+  // price" were specified). This package's one, pre-existing digest
+  // policy -- hash the whole service object minus the named volatile
+  // timestamp fields, with no other field-level allowlist/denylist -- is
+  // unchanged by this checkpoint and already governs the sibling
+  // legacyMaximumPriceDeclared field identically. legacyBasePriceDeclared
+  // therefore participates in the model/service digest by the same,
+  // pre-existing rule; this test proves it mechanically rather than
+  // asserting it by assumption.
+  it('changes when legacyBasePriceDeclared changes (EVIDENCE/HISTORICAL field still participates via the pre-existing whole-object digest policy)', async () => {
+    const modelA = makeFixtureModel();
+    const svc = makeFixtureService({
+      economics: {
+        ...makeFixtureService().economics,
+        legacyBasePriceDeclared: { amount: '0.999' as never, currency: 'USD' },
+      },
+    });
+    const modelB = makeFixtureModel([svc]);
+    expect(await computeModelDigest(modelA)).not.toBe(await computeModelDigest(modelB));
+  });
 });
 
 describe('computeServiceDigest', () => {

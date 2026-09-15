@@ -76,13 +76,30 @@ export interface SchemeNetworkSupport {
 
 export interface ServiceEconomics {
   readonly pricingPolicyVersion: PricingPolicyVersion;
-  /** The price a caller is normally charged (registry `base_price`). */
+  /** The price a caller is normally charged. Resolved from the current
+   * governed pricing authority (governance/RISK_LIMITS.yaml's
+   * `max_price_usd_per_service`, via `primaryPricingKey()` ->
+   * `resolveServiceMaxPriceUsd()` -- the exact same call `governedMaxPrice`
+   * makes), NOT from the legacy registry's frozen `base_price`. See
+   * METADATA-VCM-04 §I-III/§VII for why: `base_price` is release-scoped
+   * evidence, not a current economic authority (see
+   * `legacyBasePriceDeclared` below). */
   readonly listPrice: Price;
   /** The governance ceiling for `listPrice`, resolved from
    * governance/RISK_LIMITS.yaml's `max_price_usd_per_service` via the exact
    * family-specific tier key (see legacy/pricing-map.ts) -- never a
    * client-suppliable value. */
   readonly governedMaxPrice: Price;
+  /** EVIDENCE/HISTORICAL, transitional: the legacy registry's own frozen
+   * `base_price`, preserved verbatim for lossless round-trip and
+   * contract-release provenance (METADATA-VCM-04 §IV). NOT validated
+   * against `governedMaxPrice` -- it is explicitly documented, in
+   * `packages/protocol-x402/src/bazaar/registry-source.ts:9-11`, as not an
+   * economic authority, and is allowed to diverge from the live governed
+   * price by design. NOT projected as a current live price by any protocol
+   * adapter. Never read `listPrice`, `governedMaxPrice`, or any runtime
+   * price from this field. */
+  readonly legacyBasePriceDeclared: Price;
   /** Transitional, non-normative: the legacy registry's own `maximum_price`
    * field, preserved verbatim for lossless round-trip. This is a *third*
    * economic concept the legacy format publishes (the advertised ceiling of

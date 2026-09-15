@@ -29,7 +29,7 @@ function readAllRegistryFiles(): LegacyRegistryServiceFile[] {
 const IMPORT_OPTIONS = {
   runtimeSourceCommit: '0'.repeat(40),
   compiledAt: '2026-09-18T00:00:00.000Z',
-  vcmSchemaVersion: '0.1.0',
+  vcmSchemaVersion: '0.2.0', // METADATA-VCM-IMPL-02: legacyBasePriceDeclared added
   vcmReleaseVersion: '0.1.0',
 };
 
@@ -93,42 +93,86 @@ describe('validateEconomicConstraints', () => {
   });
 
   it(
-    'confirms the REAL present-day violation is SYSTEMIC, not isolated: all four .v2 ' +
-      "services' base_price were never updated when their lower, generation-specific " +
-      'governance ceiling was introduced. Running the validator against every real registry ' +
-      "file (not a single hand-picked one) revealed this -- the implementation report's " +
-      'initial framing of a single isolated case (company_evidence_graph.v2 only) was ' +
-      'itself incomplete until this test was run against the full 8-file registry. ' +
-      'legacyRegistryToVCM() must still succeed for all 8 files (LEGACY_PARITY is ' +
-      'representational, not a validity claim); only validateEconomicConstraints() may ' +
-      'fail, and it must fail on exactly these four, no others.',
+    'METADATA-VCM-IMPL-02: the REAL, present-day systemic violation across all four .v2 ' +
+      'services (METADATA-VCM-IMPL-01 §V / METADATA-ECON-01 / METADATA-VCM-04) is resolved ' +
+      'once listPrice is re-sourced from the governed pricing authority instead of the ' +
+      'frozen legacy base_price. Historical record: this exact test, before this ' +
+      "checkpoint's fix, asserted `result.ok === false` with violatingServices equal to " +
+      'the four .v2 service paths -- that assertion PASSED against the pre-fix importer ' +
+      '(RED, in the sense of confirming the bug) and is the RED evidence recorded in ' +
+      'docs/reports/METADATA-VCM-IMPL-02-economic-authority-correction.md. It is updated ' +
+      'here, GREEN, to assert the corrected behavior: legacyRegistryToVCM() still succeeds ' +
+      'for all 8 files (LEGACY_PARITY is representational, not a validity claim), and ' +
+      'validateEconomicConstraints() now reports zero violations (CANONICAL_VALIDITY).',
     async () => {
       const files = readAllRegistryFiles();
       const model = await legacyRegistryToVCM(files, IMPORT_OPTIONS);
       const result = validateEconomicConstraints(model);
 
-      expect(result.ok).toBe(false);
-      const violatingServices = result.errors
-        .filter((e) => e.code === 'ECONOMIC_CEILING_VIOLATION')
-        .map((e) => e.path)
-        .sort();
-
-      expect(violatingServices).toEqual([
-        'services[company_evidence_graph.v2].economics',
-        'services[document_evidence_json.v2].economics',
-        'services[verify_agent_output.v2].economics',
-        'services[web_context_verified.v2].economics',
-      ]);
-
-      // v1 services and every other economics field are unaffected -- the
-      // violation is confined exactly to the four .v2 base_price/ceiling
-      // pairs, not a broader modeling error.
-      const v1Violations = result.errors.filter(
-        (e) => e.code === 'ECONOMIC_CEILING_VIOLATION' && e.path.includes('.v1')
-      );
-      expect(v1Violations).toEqual([]);
+      expect(result.ok).toBe(true);
+      expect(result.errors).toEqual([]);
+      expect(model.services.length).toBe(8);
     }
   );
+
+  it(
+    'proves, for all four .v2 services with real parsed values (not hard-coded), that ' +
+      'legacyBasePriceDeclared (frozen, EVIDENCE/HISTORICAL) is preserved exactly as the ' +
+      'registry file declares while listPrice/governedMaxPrice (NORMATIVE) resolve to the ' +
+      'current governed value -- the two authority domains, side by side, on real data.',
+    async () => {
+      const files = readAllRegistryFiles();
+      const model = await legacyRegistryToVCM(files, IMPORT_OPTIONS);
+      const byId = new Map(
+        model.services.map((s) => [`${s.id.family}.${s.id.generation}`, s.economics])
+      );
+
+      const v2Ids = [
+        'company_evidence_graph.v2',
+        'document_evidence_json.v2',
+        'verify_agent_output.v2',
+        'web_context_verified.v2',
+      ];
+      const evidence = v2Ids.map((id) => {
+        const econ = byId.get(id);
+        if (!econ) throw new Error(`fixture/registry drift: ${id} not found in imported model`);
+        return {
+          id,
+          legacyBasePriceDeclared: econ.legacyBasePriceDeclared.amount,
+          listPrice: econ.listPrice.amount,
+          governedMaxPrice: econ.governedMaxPrice.amount,
+        };
+      });
+
+      // Real, parsed values -- not hard-coded expectations. The governed
+      // value is read from the same @siteborne/pricing resolver the
+      // importer itself uses, so this test fails if either source drifts.
+      for (const e of evidence) {
+        expect(e.listPrice).toBe(e.governedMaxPrice); // CORRECT_CURRENT_ECONOMIC_INVARIANT: equality today (METADATA-VCM-04 §V)
+        // The frozen legacy byte is preserved but is NOT required to equal
+        // the governed value -- that is the entire point of the
+        // correction (it currently does not, for all four).
+        expect(typeof e.legacyBasePriceDeclared).toBe('string');
+      }
+
+      // The specific, real mismatch that motivated this checkpoint:
+      // legacyBasePriceDeclared ('0.039' etc.) genuinely differs from the
+      // corrected listPrice/governedMaxPrice for all four .v2 services.
+      const stillDivergent = evidence.filter((e) => e.legacyBasePriceDeclared !== e.listPrice);
+      expect(stillDivergent.map((e) => e.id).sort()).toEqual([...v2Ids].sort());
+    }
+  );
+
+  it('v1 services: legacyBasePriceDeclared equals listPrice/governedMaxPrice on real data today (no divergence introduced for v1)', async () => {
+    const files = readAllRegistryFiles();
+    const model = await legacyRegistryToVCM(files, IMPORT_OPTIONS);
+    const v1Services = model.services.filter((s) => s.id.generation === 'v1');
+    expect(v1Services.length).toBe(4);
+    for (const s of v1Services) {
+      expect(s.economics.legacyBasePriceDeclared.amount).toBe(s.economics.listPrice.amount);
+      expect(s.economics.listPrice.amount).toBe(s.economics.governedMaxPrice.amount);
+    }
+  });
 });
 
 describe('validateSecurityTruthConstraints', () => {

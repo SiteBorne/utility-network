@@ -251,11 +251,15 @@ export function importOneService(legacy: LegacyRegistryServiceFile): CanonicalSe
     },
     economics: {
       pricingPolicyVersion: resolvePricingSourceVersion(),
-      listPrice: {
+      // listPrice and governedMaxPrice both resolve from the same governed
+      // pricing authority (METADATA-VCM-04 §III/§VII) -- the frozen legacy
+      // base_price is preserved separately below, never promoted here.
+      listPrice: { amount: parseUsdAmount(governedMaxAmount), currency: 'USD' },
+      governedMaxPrice: { amount: parseUsdAmount(governedMaxAmount), currency: 'USD' },
+      legacyBasePriceDeclared: {
         amount: parseUsdAmount(legacy.base_price.amount),
         currency: 'USD',
       },
-      governedMaxPrice: { amount: parseUsdAmount(governedMaxAmount), currency: 'USD' },
       legacyMaximumPriceDeclared: {
         amount: parseUsdAmount(legacy.maximum_price.amount),
         currency: 'USD',

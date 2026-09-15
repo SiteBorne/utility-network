@@ -29,6 +29,7 @@ export function makeFixtureService(overrides: Partial<CanonicalService> = {}): C
       pricingPolicyVersion: '1.0.0',
       listPrice: { amount: parseUsdAmount('0.039'), currency: 'USD' },
       governedMaxPrice: { amount: parseUsdAmount('0.039'), currency: 'USD' },
+      legacyBasePriceDeclared: { amount: parseUsdAmount('0.039'), currency: 'USD' },
       legacyMaximumPriceDeclared: { amount: parseUsdAmount('0.19'), currency: 'USD' },
       supportedSchemes: [
         { scheme: 'exact', networks: ['eip155', 'solana'] },
@@ -111,7 +112,10 @@ export function makeFixtureModel(
 ): CanonicalStaticModel {
   return {
     modelIdentity: {
-      vcmSchemaVersion: parseSemVer('0.1.0'),
+      // 0.2.0: METADATA-VCM-IMPL-02 added ServiceEconomics.legacyBasePriceDeclared
+      // (shape change, discipline marker only -- METADATA-VCM-04 §IX, zero
+      // external consumers so no compatibility break is possible).
+      vcmSchemaVersion: parseSemVer('0.2.0'),
       vcmReleaseVersion: parseSemVer('0.1.0'),
       modelDigest: parseSha256Digest(`sha256:${'0'.repeat(64)}`),
       compiledAt: '2026-09-18T00:00:00.000Z',

@@ -36,8 +36,12 @@ export function projectOneService(service: CanonicalService): LegacyRegistryServ
     pcc_version: service.contract.pcc.wireVersion.raw,
     pricing_schemes: service.economics.supportedSchemes.map((s) => s.scheme),
     base_price: {
-      amount: service.economics.listPrice.amount,
-      currency: service.economics.listPrice.currency,
+      // Reconstructed from the preserved frozen byte, not from listPrice
+      // (METADATA-VCM-04 §VII): listPrice is now sourced from the current
+      // governed pricing authority and is no longer byte-identical to the
+      // legacy registry's frozen base_price for the four .v2 services.
+      amount: service.economics.legacyBasePriceDeclared.amount,
+      currency: service.economics.legacyBasePriceDeclared.currency,
     },
     maximum_price: {
       amount: service.economics.legacyMaximumPriceDeclared.amount,

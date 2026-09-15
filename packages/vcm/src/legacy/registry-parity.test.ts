@@ -26,7 +26,7 @@ function readAllRegistryFiles(): LegacyRegistryServiceFile[] {
 const IMPORT_OPTIONS = {
   runtimeSourceCommit: '0'.repeat(40),
   compiledAt: '2026-09-18T00:00:00.000Z',
-  vcmSchemaVersion: '0.1.0',
+  vcmSchemaVersion: '0.2.0', // METADATA-VCM-IMPL-02: legacyBasePriceDeclared added
   vcmReleaseVersion: '0.1.0',
 };
 

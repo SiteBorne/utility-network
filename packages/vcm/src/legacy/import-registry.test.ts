@@ -88,4 +88,86 @@ describe('importOneService', () => {
     );
     expect(service.economics.governedMaxPrice.amount).toBe('0.0312');
   });
+
+  // METADATA-VCM-IMPL-02 (METADATA-VCM-04 §VII): listPrice must be sourced
+  // from the current governed pricing authority, never from the frozen
+  // legacy registry base_price. RED before the fix: the pre-correction
+  // importer set listPrice from legacy.base_price ('0.039'), so this
+  // assertion failed (listPrice.amount was '0.039', not '0.0312') -- the
+  // exact same real mismatch validators.test.ts's systemic-violation test
+  // independently discovered via validateEconomicConstraints.
+  it('sources listPrice from the governed pricing authority, not the frozen legacy base_price, for a v2 tier where they differ', () => {
+    const service = importOneService(
+      validLegacyFile({
+        service_id: 'company_evidence_graph.v2',
+        service_version: 'v2',
+        base_price: { amount: '0.039', currency: 'USD' }, // the real, frozen registry value
+      })
+    );
+    expect(service.economics.listPrice.amount).toBe('0.0312'); // governed, not 0.039
+    expect(service.economics.governedMaxPrice.amount).toBe('0.0312');
+    expect(service.economics.legacyBasePriceDeclared.amount).toBe('0.039'); // frozen byte, preserved
+  });
+
+  it('legacyBasePriceDeclared preserves the frozen legacy base_price verbatim even when it equals the governed price (v1)', () => {
+    const service = importOneService(validLegacyFile()); // v1: base_price '0.039' == governed '0.039'
+    expect(service.economics.legacyBasePriceDeclared.amount).toBe('0.039');
+    expect(service.economics.listPrice.amount).toBe('0.039');
+    expect(service.economics.governedMaxPrice.amount).toBe('0.039');
+  });
+});
+
+describe('authority separation: legacy base_price vs. governed listPrice', () => {
+  it('changing only the frozen legacy base_price changes legacyBasePriceDeclared but NOT listPrice/governedMaxPrice', () => {
+    const a = importOneService(
+      validLegacyFile({
+        service_id: 'company_evidence_graph.v2',
+        service_version: 'v2',
+        base_price: { amount: '0.039', currency: 'USD' },
+      })
+    );
+    const b = importOneService(
+      validLegacyFile({
+        service_id: 'company_evidence_graph.v2',
+        service_version: 'v2',
+        base_price: { amount: '0.050', currency: 'USD' }, // only this differs
+      })
+    );
+    expect(a.economics.legacyBasePriceDeclared.amount).toBe('0.039');
+    expect(b.economics.legacyBasePriceDeclared.amount).toBe('0.050');
+    expect(a.economics.legacyBasePriceDeclared.amount).not.toBe(
+      b.economics.legacyBasePriceDeclared.amount
+    );
+    // the governed facts are completely unaffected by the frozen byte change
+    expect(a.economics.listPrice).toEqual(b.economics.listPrice);
+    expect(a.economics.governedMaxPrice).toEqual(b.economics.governedMaxPrice);
+  });
+
+  it('changing the governed pricing tier (v1 -> v2, same frozen base_price forced) changes listPrice/governedMaxPrice but NOT legacyBasePriceDeclared', () => {
+    const v1 = importOneService(
+      validLegacyFile({
+        service_id: 'company_evidence_graph.v1',
+        service_version: 'v1',
+        base_price: { amount: '0.039', currency: 'USD' }, // forced identical on both
+      })
+    );
+    const v2 = importOneService(
+      validLegacyFile({
+        service_id: 'company_evidence_graph.v2',
+        service_version: 'v2',
+        base_price: { amount: '0.039', currency: 'USD' }, // forced identical on both
+      })
+    );
+    // the frozen byte is identical by construction
+    expect(v1.economics.legacyBasePriceDeclared.amount).toBe('0.039');
+    expect(v2.economics.legacyBasePriceDeclared.amount).toBe('0.039');
+    expect(v1.economics.legacyBasePriceDeclared.amount).toBe(
+      v2.economics.legacyBasePriceDeclared.amount
+    );
+    // but the governed authority differs per generation, and listPrice follows it
+    expect(v1.economics.listPrice.amount).toBe('0.039');
+    expect(v2.economics.listPrice.amount).toBe('0.0312');
+    expect(v1.economics.listPrice.amount).not.toBe(v2.economics.listPrice.amount);
+    expect(v1.economics.governedMaxPrice.amount).not.toBe(v2.economics.governedMaxPrice.amount);
+  });
 });
