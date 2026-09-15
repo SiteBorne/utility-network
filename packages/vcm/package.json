@@ -1,0 +1,33 @@
+{
+  "name": "@siteborne/vcm",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Verified Canonical Metadata Model (VCM) truth core: CanonicalStaticModel, RuntimeStateOverlay, EffectiveMetadataView, and the legacy registry/services/*.json transitional importer/projector. Shadow implementation only -- no existing metadata consumer reads this package yet.",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc && tsc -m ESNext --outDir dist/esm && mv dist/esm/*.mjs dist/ 2>/dev/null || true",
+    "test": "vitest run",
+    "lint": "eslint src/",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@siteborne/pcc-schema": "workspace:*",
+    "@siteborne/pricing": "workspace:*",
+    "yaml": "^2.5.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0",
+    "vitest": "^3.2.7",
+    "eslint": "^9.0.0"
+  }
+}

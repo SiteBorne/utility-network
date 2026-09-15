@@ -527,6 +527,31 @@ importers:
         specifier: ^3.2.7
         version: 3.2.7(@types/node@22.10.5)(jsdom@26.0.0)
 
+  packages/vcm:
+    dependencies:
+      '@siteborne/pcc-schema':
+        specifier: workspace:*
+        version: link:../pcc-schema
+      '@siteborne/pricing':
+        specifier: workspace:*
+        version: link:../pricing
+      yaml:
+        specifier: ^2.5.0
+        version: 2.7.0
+      zod:
+        specifier: ^3.23.0
+        version: 3.25.76
+    devDependencies:
+      eslint:
+        specifier: ^9.0.0
+        version: 9.18.0
+      typescript:
+        specifier: ^5.5.0
+        version: 5.7.3
+      vitest:
+        specifier: ^3.2.7
+        version: 3.2.7(@types/node@22.10.5)(jsdom@26.0.0)
+
   packages/verification:
     dependencies:
       '@noble/ed25519':
@@ -3499,9 +3524,6 @@ packages:
 
   long@5.3.2:
     resolution: {integrity: sha512-mNAgZ1GmyNhD7AuqnTG3/VQ26o760+ZYBPKjPvugO8+nLbYfX6TVpJPseBvopbdY+qpZ/lKUnmEc1LeZYS3QAA==}
-
-  loupe@3.1.2:
-    resolution: {integrity: sha512-23I4pFZHmAemUnz8WZXbYRSKYj801VDaNv9ETuMh7IrMc7VuVVSo+Z9iLE3ni30+U48iDWfi30d3twAXBYmnCg==}
 
   loupe@3.2.1:
     resolution: {integrity: sha512-CdzqowRJCeLU72bHvWqwRBBlLcMEtIvGrlvef74kMnV2AolS9Y8xUv1I0U/MNAWMhBlKIoyuEgoJ0t/bbwHbLQ==}
@@ -6601,7 +6623,7 @@ snapshots:
       assertion-error: 2.0.1
       check-error: 2.1.1
       deep-eql: 5.0.2
-      loupe: 3.1.2
+      loupe: 3.2.1
       pathval: 2.0.0
 
   chalk@4.1.2:
@@ -7392,8 +7414,6 @@ snapshots:
   lodash@4.18.1: {}
 
   long@5.3.2: {}
-
-  loupe@3.1.2: {}
 
   loupe@3.2.1: {}
 
