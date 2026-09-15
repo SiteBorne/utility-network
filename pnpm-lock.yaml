@@ -535,6 +535,15 @@ importers:
       '@siteborne/pricing':
         specifier: workspace:*
         version: link:../pricing
+      '@siteborne/protocol-a2a':
+        specifier: workspace:*
+        version: link:../protocol-a2a
+      '@siteborne/protocol-mcp':
+        specifier: workspace:*
+        version: link:../protocol-mcp
+      '@siteborne/protocol-x402':
+        specifier: workspace:*
+        version: link:../protocol-x402
       yaml:
         specifier: ^2.5.0
         version: 2.7.0

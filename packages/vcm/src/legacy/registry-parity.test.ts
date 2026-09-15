@@ -26,7 +26,7 @@ function readAllRegistryFiles(): LegacyRegistryServiceFile[] {
 const IMPORT_OPTIONS = {
   runtimeSourceCommit: '0'.repeat(40),
   compiledAt: '2026-09-18T00:00:00.000Z',
-  vcmSchemaVersion: '0.2.0', // METADATA-VCM-IMPL-02: legacyBasePriceDeclared added
+  vcmSchemaVersion: '0.3.0', // METADATA-VCM-IMPL-03A temporal exposure split
   vcmReleaseVersion: '0.1.0',
 };
 
@@ -58,5 +58,24 @@ describe('registry parity law', () => {
     const files = readAllRegistryFiles();
     const model = await legacyRegistryToVCM(files, IMPORT_OPTIONS);
     expect(model.services.length).toBe(8);
+  });
+
+  it('derives current A2A and MCP exposure independently of frozen planned declarations', async () => {
+    const files = readAllRegistryFiles();
+    const model = await legacyRegistryToVCM(files, IMPORT_OPTIONS);
+    const serviceExposures = model.services.flatMap((service) => service.currentStaticExposures);
+
+    expect(serviceExposures.filter((exposure) => exposure.surface === 'a2a')).toHaveLength(8);
+    expect(serviceExposures.filter((exposure) => exposure.surface === 'mcp')).toHaveLength(4);
+    expect(
+      model.currentStaticUtilityExposures.filter((exposure) => exposure.surface === 'mcp')
+    ).toHaveLength(2);
+    expect(
+      model.services.every(
+        (service) =>
+          service.releaseProtocolExposureDeclared.a2a === 'planned' &&
+          service.releaseProtocolExposureDeclared.mcp === 'planned'
+      )
+    ).toBe(true);
   });
 });

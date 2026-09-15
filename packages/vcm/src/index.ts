@@ -13,6 +13,8 @@ export * from './service-id';
 export * from './types';
 export * from './evidence';
 export * from './runtime-overlay';
+export * from './current-exposure';
+export * from './current-authority-inputs';
 export * from './effective-view';
 export * from './digests';
 export * from './validators';

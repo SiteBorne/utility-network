@@ -2,7 +2,7 @@
  * vcmToLegacyRegistry() (Master Reference Part II §XVIII). The reverse
  * projection needed solely for migration parity -- reproduces today's
  * registry/services/*.json shape exactly, using the legacy-preserved
- * fields (legacyProtocolExposureDeclared, legacyMaximumPriceDeclared,
+ * fields (releaseProtocolExposureDeclared, releaseMaximumPriceDeclared,
  * legacyProductionEnabledDeclared, legacyUpdatedAt), never the
  * VCM-native/corrected values. No protocol adapter beyond this legacy
  * registry projection is authorized in this checkpoint.
@@ -40,12 +40,12 @@ export function projectOneService(service: CanonicalService): LegacyRegistryServ
       // (METADATA-VCM-04 §VII): listPrice is now sourced from the current
       // governed pricing authority and is no longer byte-identical to the
       // legacy registry's frozen base_price for the four .v2 services.
-      amount: service.economics.legacyBasePriceDeclared.amount,
-      currency: service.economics.legacyBasePriceDeclared.currency,
+      amount: service.economics.releaseBasePriceDeclared.amount,
+      currency: service.economics.releaseBasePriceDeclared.currency,
     },
     maximum_price: {
-      amount: service.economics.legacyMaximumPriceDeclared.amount,
-      currency: service.economics.legacyMaximumPriceDeclared.currency,
+      amount: service.economics.releaseMaximumPriceDeclared.amount,
+      currency: service.economics.releaseMaximumPriceDeclared.currency,
     },
     execution_mode: primary.executionMode,
     maximum_input_bytes: primary.maximumInputBytes,
@@ -54,7 +54,7 @@ export function projectOneService(service: CanonicalService): LegacyRegistryServ
     promotion_state: service.lifecycleState.toLowerCase(),
     production_enabled: service.legacyProductionEnabledDeclared,
     declared_limitations: [...service.declaredLimitations],
-    protocols: { ...service.legacyProtocolExposureDeclared },
+    protocols: { ...service.releaseProtocolExposureDeclared },
     updated_at: service.legacyUpdatedAt,
   };
 }

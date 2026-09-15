@@ -46,26 +46,92 @@ describe('computeModelDigest', () => {
     expect(await computeModelDigest(modelA)).not.toBe(await computeModelDigest(modelB));
   });
 
-  // METADATA-VCM-IMPL-02: legacyBasePriceDeclared was not explicitly
+  // METADATA-VCM-IMPL-02: releaseBasePriceDeclared was not explicitly
   // addressed by METADATA-VCM-04's digest-inclusion decision (only
   // "excluded from economic validation" and "not projected as a live
   // price" were specified). This package's one, pre-existing digest
   // policy -- hash the whole service object minus the named volatile
   // timestamp fields, with no other field-level allowlist/denylist -- is
   // unchanged by this checkpoint and already governs the sibling
-  // legacyMaximumPriceDeclared field identically. legacyBasePriceDeclared
+  // releaseMaximumPriceDeclared field identically. releaseBasePriceDeclared
   // therefore participates in the model/service digest by the same,
   // pre-existing rule; this test proves it mechanically rather than
   // asserting it by assumption.
-  it('changes when legacyBasePriceDeclared changes (EVIDENCE/HISTORICAL field still participates via the pre-existing whole-object digest policy)', async () => {
+  it('changes when releaseBasePriceDeclared changes (EVIDENCE/HISTORICAL field still participates via the pre-existing whole-object digest policy)', async () => {
     const modelA = makeFixtureModel();
     const svc = makeFixtureService({
       economics: {
         ...makeFixtureService().economics,
-        legacyBasePriceDeclared: { amount: '0.999' as never, currency: 'USD' },
+        releaseBasePriceDeclared: { amount: '0.999' as never, currency: 'USD' },
       },
     });
     const modelB = makeFixtureModel([svc]);
+    expect(await computeModelDigest(modelA)).not.toBe(await computeModelDigest(modelB));
+  });
+
+  it('changes when a release protocol declaration changes', async () => {
+    const serviceA = makeFixtureService();
+    const serviceB = makeFixtureService({
+      releaseProtocolExposureDeclared: {
+        ...serviceA.releaseProtocolExposureDeclared,
+        mcp: 'enabled',
+      },
+    });
+
+    expect(await computeModelDigest(makeFixtureModel([serviceA]))).not.toBe(
+      await computeModelDigest(makeFixtureModel([serviceB]))
+    );
+    expect(await computeServiceDigest(serviceA)).not.toBe(await computeServiceDigest(serviceB));
+  });
+
+  it('changes model and service digests when current static exposure changes', async () => {
+    const serviceA = makeFixtureService();
+    const serviceB = makeFixtureService({
+      currentStaticExposures: [
+        {
+          surface: 'mcp',
+          registrationId: 'siteborne_company_evidence_graph',
+          operationId: 'evaluate',
+          exposureShape: 'standalone_tool',
+          provenance: {
+            sourcePackage: '@siteborne/protocol-mcp',
+            sourceModule: 'src/constants.ts#MCP_SERVICE_TOOLS',
+            sourceRegistrationId: 'siteborne_company_evidence_graph',
+            runtimeSourceCommit: 'a'.repeat(40) as never,
+            derivationMethod: 'typed_export',
+          },
+        },
+      ],
+    });
+
+    expect(await computeModelDigest(makeFixtureModel([serviceA]))).not.toBe(
+      await computeModelDigest(makeFixtureModel([serviceB]))
+    );
+    expect(await computeServiceDigest(serviceA)).not.toBe(await computeServiceDigest(serviceB));
+  });
+
+  it('changes the model digest when a current static utility exposure changes', async () => {
+    const modelA = makeFixtureModel();
+    const modelB = {
+      ...modelA,
+      currentStaticUtilityExposures: [
+        {
+          surface: 'mcp' as const,
+          registrationId: 'siteborne_get_quote',
+          operationId: 'get_quote',
+          exposureShape: 'standalone_tool' as const,
+          utilityKind: 'quote_request' as const,
+          provenance: {
+            sourcePackage: '@siteborne/protocol-mcp',
+            sourceModule: 'src/constants.ts#MCP_TOOL_NAMES',
+            sourceRegistrationId: 'siteborne_get_quote',
+            runtimeSourceCommit: 'a'.repeat(40) as never,
+            derivationMethod: 'typed_export' as const,
+          },
+        },
+      ],
+    };
+
     expect(await computeModelDigest(modelA)).not.toBe(await computeModelDigest(modelB));
   });
 });
@@ -102,10 +168,10 @@ describe('computeRuntimeOverlayDigest', () => {
     const overlayA = emptyOverlay('2026-09-18T00:00:00.000Z' as never);
     const overlayB = {
       ...overlayA,
-      routes: [
+      protocolActivations: [
         {
-          serviceId: 'company_evidence_graph.v1' as const,
-          interactionOperationId: 'evaluate',
+          surface: 'mcp' as const,
+          registrationId: 'siteborne_company_evidence_graph',
           runtimeEnabled: true,
           economicAdmissionEnabled: false,
         },
@@ -114,6 +180,25 @@ describe('computeRuntimeOverlayDigest', () => {
     expect(await computeRuntimeOverlayDigest(overlayA)).not.toBe(
       await computeRuntimeOverlayDigest(overlayB)
     );
+  });
+
+  it('operational activation changes do not change the static model digest', async () => {
+    const model = makeFixtureModel();
+    const before = await computeModelDigest(model);
+    const overlay = {
+      ...emptyOverlay('2026-09-18T00:00:00.000Z' as never),
+      protocolActivations: [
+        {
+          surface: 'mcp' as const,
+          registrationId: 'siteborne_company_evidence_graph',
+          runtimeEnabled: true,
+          economicAdmissionEnabled: true,
+        },
+      ],
+    };
+
+    await computeRuntimeOverlayDigest(overlay);
+    expect(await computeModelDigest(model)).toBe(before);
   });
 });
 

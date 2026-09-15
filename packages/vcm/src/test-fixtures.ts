@@ -29,8 +29,8 @@ export function makeFixtureService(overrides: Partial<CanonicalService> = {}): C
       pricingPolicyVersion: '1.0.0',
       listPrice: { amount: parseUsdAmount('0.039'), currency: 'USD' },
       governedMaxPrice: { amount: parseUsdAmount('0.039'), currency: 'USD' },
-      legacyBasePriceDeclared: { amount: parseUsdAmount('0.039'), currency: 'USD' },
-      legacyMaximumPriceDeclared: { amount: parseUsdAmount('0.19'), currency: 'USD' },
+      releaseBasePriceDeclared: { amount: parseUsdAmount('0.039'), currency: 'USD' },
+      releaseMaximumPriceDeclared: { amount: parseUsdAmount('0.19'), currency: 'USD' },
       supportedSchemes: [
         { scheme: 'exact', networks: ['eip155', 'solana'] },
         { scheme: 'upto', networks: ['eip155'] },
@@ -48,47 +48,10 @@ export function makeFixtureService(overrides: Partial<CanonicalService> = {}): C
         destructive: false,
       },
     ],
+    currentStaticExposures: [],
     declaredLimitations: [],
     authorizationClassification: 'public',
-    protocolExposure: [
-      {
-        surface: 'a2a',
-        capabilityExists: true,
-        protocolExposed: false,
-        exposureShape: 'not_exposed',
-      },
-      {
-        surface: 'mcp',
-        capabilityExists: true,
-        protocolExposed: false,
-        exposureShape: 'not_exposed',
-      },
-      {
-        surface: 'openapi',
-        capabilityExists: true,
-        protocolExposed: false,
-        exposureShape: 'not_exposed',
-      },
-      {
-        surface: 'x402',
-        capabilityExists: true,
-        protocolExposed: false,
-        exposureShape: 'not_exposed',
-      },
-      {
-        surface: 'bazaar',
-        capabilityExists: true,
-        protocolExposed: false,
-        exposureShape: 'not_exposed',
-      },
-      {
-        surface: 'nevermined',
-        capabilityExists: true,
-        protocolExposed: false,
-        exposureShape: 'not_exposed',
-      },
-    ],
-    legacyProtocolExposureDeclared: {
+    releaseProtocolExposureDeclared: {
       x402: 'planned',
       mcp: 'planned',
       a2a: 'planned',
@@ -112,10 +75,10 @@ export function makeFixtureModel(
 ): CanonicalStaticModel {
   return {
     modelIdentity: {
-      // 0.2.0: METADATA-VCM-IMPL-02 added ServiceEconomics.legacyBasePriceDeclared
-      // (shape change, discipline marker only -- METADATA-VCM-04 §IX, zero
-      // external consumers so no compatibility break is possible).
-      vcmSchemaVersion: parseSemVer('0.2.0'),
+      // 0.3.0: METADATA-VCM-IMPL-03A separated frozen release declarations,
+      // current static exposure, operational activation, and external
+      // publication. VCM still has zero external consumers.
+      vcmSchemaVersion: parseSemVer('0.3.0'),
       vcmReleaseVersion: parseSemVer('0.1.0'),
       modelDigest: parseSha256Digest(`sha256:${'0'.repeat(64)}`),
       compiledAt: '2026-09-18T00:00:00.000Z',
@@ -127,6 +90,29 @@ export function makeFixtureModel(
       homepageUri: parseUriString('https://siteborne.com'),
     },
     services,
+    currentStaticUtilityExposures: [],
+    currentX402ProtocolCapability: {
+      protocolVersion: 2,
+      supportedSchemes: { exact: ['eip155', 'solana'], upto: ['eip155'] },
+      provenance: {
+        sourcePackage: '@siteborne/protocol-x402',
+        sourceModule: 'src/version.ts+src/network/schemes.ts',
+        sourceRegistrationId: 'SUPPORTED_X402_VERSION+SITEBORNE_SUPPORTED_X402_SCHEMES',
+        runtimeSourceCommit: 'a'.repeat(40) as never,
+        derivationMethod: 'typed_export',
+      },
+    },
+    currentBazaarProjectionSupport: {
+      projectionSupported: false,
+      serviceIds: [],
+      provenance: {
+        sourcePackage: '@siteborne/protocol-x402',
+        sourceModule: 'src/bazaar/registry-source.ts#ALL_BAZAAR_SERVICE_IDS',
+        sourceRegistrationId: 'ALL_BAZAAR_SERVICE_IDS',
+        runtimeSourceCommit: 'a'.repeat(40) as never,
+        derivationMethod: 'typed_export',
+      },
+    },
     pricingPolicyVersion: '1.0.0',
     compatibility: [],
   };

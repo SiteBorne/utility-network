@@ -7,7 +7,7 @@
  * mechanism").
  */
 import type { GitSha, Sha256Digest, UriString, UsdAmount } from './primitives';
-import type { CanonicalServiceId } from './service-id';
+import type { CanonicalServiceId, CanonicalServiceIdValue } from './service-id';
 import type {
   ContractReleaseVersion,
   PccSchemaRelease,
@@ -83,7 +83,7 @@ export interface ServiceEconomics {
    * makes), NOT from the legacy registry's frozen `base_price`. See
    * METADATA-VCM-04 §I-III/§VII for why: `base_price` is release-scoped
    * evidence, not a current economic authority (see
-   * `legacyBasePriceDeclared` below). */
+   * `releaseBasePriceDeclared` below). */
   readonly listPrice: Price;
   /** The governance ceiling for `listPrice`, resolved from
    * governance/RISK_LIMITS.yaml's `max_price_usd_per_service` via the exact
@@ -99,17 +99,17 @@ export interface ServiceEconomics {
    * price by design. NOT projected as a current live price by any protocol
    * adapter. Never read `listPrice`, `governedMaxPrice`, or any runtime
    * price from this field. */
-  readonly legacyBasePriceDeclared: Price;
+  readonly releaseBasePriceDeclared: Price;
   /** Transitional, non-normative: the legacy registry's own `maximum_price`
    * field, preserved verbatim for lossless round-trip. This is a *third*
    * economic concept the legacy format publishes (the advertised ceiling of
    * a variable-cost/"upto" job) that the frozen four-concept economic model
    * (listPrice/governedMaxPrice/effectiveRuntimePrice/quotedTransactionAmount)
    * has no slot for. It is carried through exactly like
-   * `legacyProtocolExposureDeclared` -- preserved, not validated, not
+   * `releaseProtocolExposureDeclared` -- preserved, not validated, not
    * treated as canonical -- pending a reviewed decision on where (or
    * whether) it belongs in the canonical model. */
-  readonly legacyMaximumPriceDeclared: Price;
+  readonly releaseMaximumPriceDeclared: Price;
   readonly supportedSchemes: readonly SchemeNetworkSupport[];
 }
 
@@ -159,9 +159,8 @@ export interface ServiceContractRef {
 }
 
 // ---------------------------------------------------------------------------
-// Protocol exposure -- capability / exposure / activation stay distinct.
-// Only capabilityExists + protocolExposed + exposureShape live here
-// (static). runtimeEnabled/economicAdmissionEnabled live in the overlay.
+// Protocol exposure -- release declaration, current static registration,
+// operational activation, and external publication are distinct facts.
 // ---------------------------------------------------------------------------
 export type ProtocolSurface = 'a2a' | 'mcp' | 'openapi' | 'x402' | 'bazaar' | 'nevermined';
 export const PROTOCOL_SURFACES: readonly ProtocolSurface[] = [
@@ -174,26 +173,62 @@ export const PROTOCOL_SURFACES: readonly ProtocolSurface[] = [
 ];
 
 export type ExposureShape =
+  | 'standalone_tool'
   | 'standalone_endpoint'
-  | 'inline_within_another_operation'
-  | 'not_exposed';
+  | 'inline_operation'
+  | 'skill';
+export const EXPOSURE_SHAPES: readonly ExposureShape[] = [
+  'standalone_tool',
+  'standalone_endpoint',
+  'inline_operation',
+  'skill',
+];
 
-export interface StaticProtocolExposure {
-  readonly surface: ProtocolSurface;
-  readonly capabilityExists: true;
-  readonly protocolExposed: boolean;
-  readonly exposureShape: ExposureShape;
+export interface CurrentExposureProvenance {
+  readonly sourcePackage: string;
+  readonly sourceModule: string;
+  readonly sourceRegistrationId: string;
+  readonly runtimeSourceCommit: GitSha;
+  readonly derivationMethod: 'typed_export';
 }
 
-/** The legacy registry's own `protocols.<surface>` value, preserved
- * verbatim during the transitional period (Master Reference Part II
- * "Two-track protocol-exposure field during transition"). Today every
- * value in every registry file is "planned" -- confirmed by direct
- * inspection of all 8 files, not assumed. Correcting this to the real,
- * code-derived `protocolExposed` value is a separate reviewed migration
- * step (Part I §14 step 2), explicitly out of scope for this checkpoint. */
-export type LegacyProtocolExposureValue = 'planned' | 'live' | 'deprecated';
-export const LEGACY_PROTOCOL_EXPOSURE_SURFACES = [
+export interface CurrentStaticProtocolExposure {
+  readonly surface: ProtocolSurface;
+  readonly registrationId: string;
+  readonly operationId: string;
+  readonly exposureShape: ExposureShape;
+  readonly provenance: CurrentExposureProvenance;
+}
+
+export interface CurrentStaticUtilityExposure extends CurrentStaticProtocolExposure {
+  readonly utilityKind: 'quote_request' | 'health_check';
+}
+
+export interface CurrentX402ProtocolCapability {
+  readonly protocolVersion: number;
+  readonly supportedSchemes: Readonly<Record<'exact' | 'upto', readonly SettlementNetworkFamily[]>>;
+  readonly provenance: CurrentExposureProvenance;
+}
+
+/** Static capability to construct a local Bazaar projection. This does not
+ * claim that a listing has been submitted, indexed, or externally published. */
+export interface CurrentBazaarProjectionSupport {
+  readonly projectionSupported: boolean;
+  readonly serviceIds: readonly CanonicalServiceIdValue[];
+  readonly provenance: CurrentExposureProvenance;
+}
+
+/** The accepted registry release's own declaration vocabulary. These values
+ * are compatibility evidence only and never determine current exposure. */
+export const RELEASE_PROTOCOL_EXPOSURE_VALUES = [
+  'planned',
+  'scaffolded',
+  'tested',
+  'enabled',
+  'not_enabled',
+] as const;
+export type ReleaseProtocolExposureValue = (typeof RELEASE_PROTOCOL_EXPOSURE_VALUES)[number];
+export const RELEASE_PROTOCOL_EXPOSURE_SURFACES = [
   'x402',
   'mcp',
   'a2a',
@@ -202,9 +237,9 @@ export const LEGACY_PROTOCOL_EXPOSURE_SURFACES = [
   'coinbase_bazaar',
   'mcp_registry',
 ] as const;
-export type LegacyProtocolExposureSurface = (typeof LEGACY_PROTOCOL_EXPOSURE_SURFACES)[number];
-export type LegacyProtocolExposureDeclared = Readonly<
-  Record<LegacyProtocolExposureSurface, LegacyProtocolExposureValue>
+export type ReleaseProtocolExposureSurface = (typeof RELEASE_PROTOCOL_EXPOSURE_SURFACES)[number];
+export type ReleaseProtocolExposureDeclaration = Readonly<
+  Record<ReleaseProtocolExposureSurface, ReleaseProtocolExposureValue>
 >;
 
 // ---------------------------------------------------------------------------
@@ -251,15 +286,15 @@ export interface CanonicalService {
   readonly contract: ServiceContractRef;
   readonly economics: ServiceEconomics;
   readonly interactions: readonly CanonicalInteraction[];
+  readonly currentStaticExposures: readonly CurrentStaticProtocolExposure[];
   readonly declaredLimitations: readonly string[];
   readonly authorizationClassification: AuthorizationClassification;
-  readonly protocolExposure: readonly StaticProtocolExposure[];
-  readonly legacyProtocolExposureDeclared: LegacyProtocolExposureDeclared;
+  readonly releaseProtocolExposureDeclared: ReleaseProtocolExposureDeclaration;
   /** Transitional, non-normative: the legacy registry's own
    * `production_enabled` boolean, preserved verbatim for lossless
    * round-trip. Authority Map step 2 explicitly removes this as
    * present-tense static truth (production enablement is an OPERATIONAL,
-   * RuntimeStateOverlay fact -- see RouteRuntimeState.runtimeEnabled) --
+   * RuntimeStateOverlay fact -- see OperationalProtocolActivation) --
    * this field exists only so the legacy projector can reproduce today's
    * file exactly, never as a canonical VCM fact a consumer should read. */
   readonly legacyProductionEnabledDeclared: boolean;
@@ -304,6 +339,9 @@ export interface CanonicalStaticModel {
   readonly modelIdentity: MetadataModelIdentity;
   readonly organization: OrganizationIdentity;
   readonly services: readonly CanonicalService[];
+  readonly currentStaticUtilityExposures: readonly CurrentStaticUtilityExposure[];
+  readonly currentX402ProtocolCapability: CurrentX402ProtocolCapability;
+  readonly currentBazaarProjectionSupport: CurrentBazaarProjectionSupport;
   readonly pricingPolicyVersion: PricingPolicyVersion;
   readonly compatibility: readonly CompatibilityDeclaration[];
 }

@@ -15,7 +15,8 @@ import type { CanonicalService, CanonicalStaticModel } from './types';
 import type { RuntimeStateOverlay } from './runtime-overlay';
 import type { EffectiveMetadataView } from './effective-view';
 
-/** organization + services + pricingPolicyVersion + compatibility +
+/** organization + services + current static protocol facts +
+ * pricingPolicyVersion + compatibility +
  * vcmSchemaVersion (structural shape). Excludes vcmReleaseVersion,
  * modelDigest, and compiledAt -- those describe *this compiled instance*,
  * not the content. */
@@ -26,6 +27,9 @@ export async function computeModelDigest(model: CanonicalStaticModel): Promise<S
     services: [...model.services].sort((a, b) =>
       `${a.id.family}.${a.id.generation}`.localeCompare(`${b.id.family}.${b.id.generation}`)
     ),
+    currentStaticUtilityExposures: model.currentStaticUtilityExposures,
+    currentX402ProtocolCapability: model.currentX402ProtocolCapability,
+    currentBazaarProjectionSupport: model.currentBazaarProjectionSupport,
     pricingPolicyVersion: model.pricingPolicyVersion,
     compatibility: model.compatibility,
   };
@@ -46,7 +50,15 @@ export async function computeRuntimeOverlayDigest(
 ): Promise<Sha256Digest> {
   const input = {
     deploymentVersion: overlay.deploymentVersion,
-    routes: overlay.routes,
+    protocolActivations: overlay.protocolActivations,
+    externalPublications: overlay.externalPublications.map(
+      ({ surface, registrationId, publicationState, evidenceRef }) => ({
+        surface,
+        registrationId,
+        publicationState,
+        evidenceRef,
+      })
+    ),
     economics: overlay.economics,
     security: overlay.security.map(({ mechanismKind, measuredLevel, evidenceRef }) => ({
       mechanismKind,
@@ -66,7 +78,11 @@ export async function computeRuntimeOverlayDigest(
 export async function computeEffectiveViewDigest(
   view: EffectiveMetadataView
 ): Promise<Sha256Digest> {
-  const input = { organizationPublicName: view.organizationPublicName, services: view.services };
+  const input = {
+    organizationPublicName: view.organizationPublicName,
+    services: view.services,
+    utilityExposures: view.utilityExposures,
+  };
   return (await hashCanonical(input)) as Sha256Digest;
 }
 

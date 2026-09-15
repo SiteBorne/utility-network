@@ -18,6 +18,9 @@
  * fail on real data without blocking representation).
  */
 import { resolvePricingSourceVersion, resolveServiceMaxPriceUsd } from '@siteborne/pricing';
+import { SITEBORNE_SUPPORTED_X402_SCHEMES } from '@siteborne/protocol-x402';
+import { deriveCurrentProtocolAuthorityInputs } from '../current-authority-inputs';
+import { deriveCurrentCodeExposure } from '../current-exposure';
 import {
   parseGitSha,
   parseSemVer,
@@ -34,19 +37,19 @@ import type {
   CanonicalStaticModel,
   ExecutionMode,
   LatencyClass,
-  LegacyProtocolExposureDeclared,
   LifecycleState,
-  ProtocolSurface,
+  ReleaseProtocolExposureDeclaration,
+  ReleaseProtocolExposureValue,
   SchemeNetworkSupport,
   SecurityCapability,
-  StaticProtocolExposure,
 } from '../types';
 import {
   AUTHORIZATION_CLASSIFICATIONS,
   EXECUTION_MODES,
   LATENCY_CLASSES,
   LIFECYCLE_STATES,
-  PROTOCOL_SURFACES,
+  RELEASE_PROTOCOL_EXPOSURE_SURFACES,
+  RELEASE_PROTOCOL_EXPOSURE_VALUES,
 } from '../types';
 import type { LegacyRegistryServiceFile } from './types';
 import { computeModelDigest } from '../digests';
@@ -84,11 +87,6 @@ function requireMember<T extends string>(
  * files (which only list scheme names in `pricing_schemes`, no networks),
  * so this checkpoint reads it from the source that actually declares it
  * rather than fabricating a network list. */
-const SCHEME_NETWORKS: Readonly<Record<'exact' | 'upto', readonly ('eip155' | 'solana')[]>> = {
-  exact: ['eip155', 'solana'],
-  upto: ['eip155'],
-};
-
 /** packages/protocol-mcp/src/server.ts:555 -- the single annotations block
  * generated once and applied identically to every one of the four
  * primary-service-call MCP tools (verified 2026-09-18: grep finds exactly
@@ -102,18 +100,6 @@ const PRIMARY_INTERACTION_HINTS = {
   destructive: false,
   idempotent: true,
 } as const;
-
-const LEGACY_SURFACE_TO_PROTOCOL_SURFACE: Partial<
-  Record<keyof LegacyRegistryServiceFile['protocols'], ProtocolSurface>
-> = {
-  a2a: 'a2a',
-  mcp: 'mcp',
-  x402: 'x402',
-  nevermined: 'nevermined',
-  coinbase_bazaar: 'bazaar',
-  // 'agentverse' and 'mcp_registry' have no VCM ProtocolSurface counterpart
-  // today; preserved only in legacyProtocolExposureDeclared.
-};
 
 function importOrganization() {
   // packages/protocol-a2a/src/card.ts:131,143-144 -- not present in any
@@ -132,35 +118,21 @@ function importOrganization() {
   };
 }
 
-function importProtocolExposure(
+function importReleaseProtocolExposure(
   serviceId: string,
   legacy: LegacyRegistryServiceFile['protocols']
-): { exposure: StaticProtocolExposure[]; declared: LegacyProtocolExposureDeclared } {
-  const declared = { ...legacy } as unknown as LegacyProtocolExposureDeclared;
-  const exposure: StaticProtocolExposure[] = PROTOCOL_SURFACES.map((surface) => {
-    const legacyKey = (
-      Object.entries(LEGACY_SURFACE_TO_PROTOCOL_SURFACE) as [
-        keyof LegacyRegistryServiceFile['protocols'],
-        ProtocolSurface,
-      ][]
-    ).find(([, mapped]) => mapped === surface)?.[0];
-    // 'openapi' has no legacy analog at all (the legacy protocols block
-    // never tracked it) -- and every mapped surface's legacy value is
-    // "planned" in all 8 files today, confirmed by direct inspection.
-    // Correcting either fact from real code state is explicitly deferred
-    // (Master Reference Part I §14 step 2 / this checkpoint's §XXII) --
-    // this importer stays conservative rather than asserting exposure it
-    // has not verified.
-    const legacyValue = legacyKey ? legacy[legacyKey] : undefined;
-    const protocolExposed = legacyValue === 'live';
-    return {
+): ReleaseProtocolExposureDeclaration {
+  return Object.fromEntries(
+    RELEASE_PROTOCOL_EXPOSURE_SURFACES.map((surface) => [
       surface,
-      capabilityExists: true,
-      protocolExposed,
-      exposureShape: protocolExposed ? 'standalone_endpoint' : 'not_exposed',
-    };
-  });
-  return { exposure, declared };
+      requireMember<ReleaseProtocolExposureValue>(
+        serviceId,
+        `protocols.${surface}`,
+        legacy[surface],
+        RELEASE_PROTOCOL_EXPOSURE_VALUES
+      ),
+    ])
+  ) as unknown as ReleaseProtocolExposureDeclaration;
 }
 
 function importSecurityCapabilities(): SecurityCapability[] {
@@ -223,10 +195,16 @@ export function importOneService(legacy: LegacyRegistryServiceFile): CanonicalSe
       'exact',
       'upto',
     ] as const);
-    return { scheme, networks: SCHEME_NETWORKS[scheme] };
+    return {
+      scheme,
+      networks: [...SITEBORNE_SUPPORTED_X402_SCHEMES[scheme]] as ('eip155' | 'solana')[],
+    };
   });
 
-  const { exposure, declared } = importProtocolExposure(legacy.service_id, legacy.protocols);
+  const releaseProtocolExposureDeclared = importReleaseProtocolExposure(
+    legacy.service_id,
+    legacy.protocols
+  );
 
   return {
     id,
@@ -256,11 +234,11 @@ export function importOneService(legacy: LegacyRegistryServiceFile): CanonicalSe
       // base_price is preserved separately below, never promoted here.
       listPrice: { amount: parseUsdAmount(governedMaxAmount), currency: 'USD' },
       governedMaxPrice: { amount: parseUsdAmount(governedMaxAmount), currency: 'USD' },
-      legacyBasePriceDeclared: {
+      releaseBasePriceDeclared: {
         amount: parseUsdAmount(legacy.base_price.amount),
         currency: 'USD',
       },
-      legacyMaximumPriceDeclared: {
+      releaseMaximumPriceDeclared: {
         amount: parseUsdAmount(legacy.maximum_price.amount),
         currency: 'USD',
       },
@@ -276,10 +254,10 @@ export function importOneService(legacy: LegacyRegistryServiceFile): CanonicalSe
         ...PRIMARY_INTERACTION_HINTS,
       },
     ],
+    currentStaticExposures: [],
     declaredLimitations: [...legacy.declared_limitations],
     authorizationClassification,
-    protocolExposure: exposure,
-    legacyProtocolExposureDeclared: declared,
+    releaseProtocolExposureDeclared,
     legacyProductionEnabledDeclared: legacy.production_enabled,
     legacyUpdatedAt: legacy.updated_at,
     securityCapabilities: importSecurityCapabilities(),
@@ -297,11 +275,25 @@ export async function legacyRegistryToVCM(
   legacyFiles: readonly LegacyRegistryServiceFile[],
   options: ImportOptions
 ): Promise<CanonicalStaticModel> {
-  const services = [...legacyFiles]
+  const importedServices = [...legacyFiles]
     .map(importOneService)
     .sort((a, b) =>
       `${a.id.family}.${a.id.generation}`.localeCompare(`${b.id.family}.${b.id.generation}`)
     );
+  const currentExposure = deriveCurrentCodeExposure(importedServices, options.runtimeSourceCommit);
+  const currentProtocolAuthority = deriveCurrentProtocolAuthorityInputs(
+    importedServices,
+    options.runtimeSourceCommit
+  );
+  const services = importedServices.map((service) => {
+    const serviceId = `${service.id.family}.${service.id.generation}`;
+    return {
+      ...service,
+      currentStaticExposures: currentExposure.serviceExposures
+        .filter((assignment) => assignment.serviceId === serviceId)
+        .map((assignment) => assignment.exposure),
+    };
+  });
 
   const modelWithoutDigest: CanonicalStaticModel = {
     modelIdentity: {
@@ -313,6 +305,9 @@ export async function legacyRegistryToVCM(
     },
     organization: importOrganization(),
     services,
+    currentStaticUtilityExposures: currentExposure.utilityExposures,
+    currentX402ProtocolCapability: currentProtocolAuthority.x402ProtocolCapability,
+    currentBazaarProjectionSupport: currentProtocolAuthority.bazaarProjectionSupport,
     pricingPolicyVersion: resolvePricingSourceVersion(),
     compatibility: [
       {

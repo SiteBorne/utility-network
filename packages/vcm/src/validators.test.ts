@@ -29,7 +29,7 @@ function readAllRegistryFiles(): LegacyRegistryServiceFile[] {
 const IMPORT_OPTIONS = {
   runtimeSourceCommit: '0'.repeat(40),
   compiledAt: '2026-09-18T00:00:00.000Z',
-  vcmSchemaVersion: '0.2.0', // METADATA-VCM-IMPL-02: legacyBasePriceDeclared added
+  vcmSchemaVersion: '0.3.0', // METADATA-VCM-IMPL-03A temporal exposure split
   vcmReleaseVersion: '0.1.0',
 };
 
@@ -117,7 +117,7 @@ describe('validateEconomicConstraints', () => {
 
   it(
     'proves, for all four .v2 services with real parsed values (not hard-coded), that ' +
-      'legacyBasePriceDeclared (frozen, EVIDENCE/HISTORICAL) is preserved exactly as the ' +
+      'releaseBasePriceDeclared (frozen, EVIDENCE/HISTORICAL) is preserved exactly as the ' +
       'registry file declares while listPrice/governedMaxPrice (NORMATIVE) resolve to the ' +
       'current governed value -- the two authority domains, side by side, on real data.',
     async () => {
@@ -138,7 +138,7 @@ describe('validateEconomicConstraints', () => {
         if (!econ) throw new Error(`fixture/registry drift: ${id} not found in imported model`);
         return {
           id,
-          legacyBasePriceDeclared: econ.legacyBasePriceDeclared.amount,
+          releaseBasePriceDeclared: econ.releaseBasePriceDeclared.amount,
           listPrice: econ.listPrice.amount,
           governedMaxPrice: econ.governedMaxPrice.amount,
         };
@@ -152,24 +152,24 @@ describe('validateEconomicConstraints', () => {
         // The frozen legacy byte is preserved but is NOT required to equal
         // the governed value -- that is the entire point of the
         // correction (it currently does not, for all four).
-        expect(typeof e.legacyBasePriceDeclared).toBe('string');
+        expect(typeof e.releaseBasePriceDeclared).toBe('string');
       }
 
       // The specific, real mismatch that motivated this checkpoint:
-      // legacyBasePriceDeclared ('0.039' etc.) genuinely differs from the
+      // releaseBasePriceDeclared ('0.039' etc.) genuinely differs from the
       // corrected listPrice/governedMaxPrice for all four .v2 services.
-      const stillDivergent = evidence.filter((e) => e.legacyBasePriceDeclared !== e.listPrice);
+      const stillDivergent = evidence.filter((e) => e.releaseBasePriceDeclared !== e.listPrice);
       expect(stillDivergent.map((e) => e.id).sort()).toEqual([...v2Ids].sort());
     }
   );
 
-  it('v1 services: legacyBasePriceDeclared equals listPrice/governedMaxPrice on real data today (no divergence introduced for v1)', async () => {
+  it('v1 services: releaseBasePriceDeclared equals listPrice/governedMaxPrice on real data today (no divergence introduced for v1)', async () => {
     const files = readAllRegistryFiles();
     const model = await legacyRegistryToVCM(files, IMPORT_OPTIONS);
     const v1Services = model.services.filter((s) => s.id.generation === 'v1');
     expect(v1Services.length).toBe(4);
     for (const s of v1Services) {
-      expect(s.economics.legacyBasePriceDeclared.amount).toBe(s.economics.listPrice.amount);
+      expect(s.economics.releaseBasePriceDeclared.amount).toBe(s.economics.listPrice.amount);
       expect(s.economics.listPrice.amount).toBe(s.economics.governedMaxPrice.amount);
     }
   });
@@ -212,40 +212,44 @@ describe('validateRuntimeOverlay', () => {
     expect(validateRuntimeOverlay(overlay, model).ok).toBe(true);
   });
 
-  it('rejects an overlay referencing an unknown service', () => {
+  it('rejects operational activation without a matching static exposure', () => {
     const model = makeFixtureModel();
     const overlay = {
       ...emptyOverlay('2026-09-18T00:00:00.000Z' as never),
-      routes: [
+      protocolActivations: [
         {
-          serviceId: 'document_evidence_json.v2' as const,
-          interactionOperationId: 'evaluate',
+          surface: 'mcp' as const,
+          registrationId: 'unknown_tool',
           runtimeEnabled: true,
-          economicAdmissionEnabled: false,
+          economicAdmissionEnabled: true,
         },
       ],
     };
     const result = validateRuntimeOverlay(overlay, model);
     expect(result.ok).toBe(false);
-    expect(result.errors.map((e) => e.code)).toContain('OVERLAY_UNKNOWN_SERVICE');
+    expect(result.errors.map((e) => e.code)).toContain(
+      'OPERATIONAL_ACTIVATION_WITHOUT_STATIC_EXPOSURE'
+    );
   });
 
-  it('rejects an overlay referencing an unknown operationId on a known service', () => {
+  it('rejects external publication without a matching static exposure', () => {
     const model = makeFixtureModel();
     const overlay = {
       ...emptyOverlay('2026-09-18T00:00:00.000Z' as never),
-      routes: [
+      externalPublications: [
         {
-          serviceId: 'company_evidence_graph.v1' as const,
-          interactionOperationId: 'nonexistent_operation',
-          runtimeEnabled: true,
-          economicAdmissionEnabled: false,
+          surface: 'bazaar' as const,
+          registrationId: 'unknown_listing',
+          publicationState: 'PUBLISHED' as const,
+          measuredAt: '2026-09-18T00:00:00.000Z' as never,
         },
       ],
     };
     const result = validateRuntimeOverlay(overlay, model);
     expect(result.ok).toBe(false);
-    expect(result.errors.map((e) => e.code)).toContain('OVERLAY_UNKNOWN_OPERATION');
+    expect(result.errors.map((e) => e.code)).toContain(
+      'EXTERNAL_PUBLICATION_WITHOUT_STATIC_EXPOSURE'
+    );
   });
 
   it('rejects an overlay price exceeding the governed ceiling', () => {

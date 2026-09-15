@@ -1,10 +1,11 @@
 /**
  * A faithful type for today's registry/services/*.json shape (Master
  * Reference Part II §XVI). Treated purely as input data -- including known
- * stale fields (`protocols.*` is "planned" everywhere, confirmed by direct
- * inspection of all 8 files on 2026-09-18) -- never corrected during
- * import.
+ * frozen release fields (`protocols.*` is "planned" everywhere, confirmed
+ * by direct inspection of all 8 files on 2026-09-18) -- never corrected or
+ * reinterpreted during import.
  */
+import type { ReleaseProtocolExposureValue } from '../types';
 
 export interface LegacyPriceAmount {
   amount: string;
@@ -12,13 +13,13 @@ export interface LegacyPriceAmount {
 }
 
 export interface LegacyProtocolsBlock {
-  x402: string;
-  mcp: string;
-  a2a: string;
-  nevermined: string;
-  agentverse: string;
-  coinbase_bazaar: string;
-  mcp_registry: string;
+  x402: ReleaseProtocolExposureValue;
+  mcp: ReleaseProtocolExposureValue;
+  a2a: ReleaseProtocolExposureValue;
+  nevermined: ReleaseProtocolExposureValue;
+  agentverse: ReleaseProtocolExposureValue;
+  coinbase_bazaar: ReleaseProtocolExposureValue;
+  mcp_registry: ReleaseProtocolExposureValue;
 }
 
 export interface LegacyRegistryServiceFile {

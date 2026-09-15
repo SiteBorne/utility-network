@@ -43,7 +43,7 @@ function validLegacyFile(
 
 describe('projectOneService: base_price reconstruction (METADATA-VCM-04 §VII)', () => {
   it(
-    'reconstructs the frozen legacy base_price from legacyBasePriceDeclared, NOT from the ' +
+    'reconstructs the frozen legacy base_price from releaseBasePriceDeclared, NOT from the ' +
       'corrected listPrice -- so a round-trip through VCM continues to emit the original ' +
       'frozen .v2 registry value even though the canonical governed price is now lower',
     () => {
@@ -52,9 +52,9 @@ describe('projectOneService: base_price reconstruction (METADATA-VCM-04 §VII)',
 
       // sanity: the correction is actually in effect for this fixture
       expect(service.economics.listPrice.amount).toBe('0.0312');
-      expect(service.economics.legacyBasePriceDeclared.amount).toBe('0.039');
+      expect(service.economics.releaseBasePriceDeclared.amount).toBe('0.039');
       expect(service.economics.listPrice.amount).not.toBe(
-        service.economics.legacyBasePriceDeclared.amount
+        service.economics.releaseBasePriceDeclared.amount
       );
 
       const projected = projectOneService(service);
@@ -66,4 +66,28 @@ describe('projectOneService: base_price reconstruction (METADATA-VCM-04 §VII)',
       expect(projected.base_price.amount).not.toBe(service.economics.listPrice.amount);
     }
   );
+
+  it('projects the frozen release declaration even when current MCP code is registered', () => {
+    const service = importOneService(validLegacyFile());
+    const withCurrentMcpExposure = {
+      ...service,
+      currentStaticExposures: [
+        {
+          surface: 'mcp' as const,
+          registrationId: 'siteborne_company_evidence_graph',
+          operationId: 'evaluate',
+          exposureShape: 'standalone_tool' as const,
+          provenance: {
+            sourcePackage: '@siteborne/protocol-mcp',
+            sourceModule: 'src/constants.ts#MCP_SERVICE_TOOLS',
+            sourceRegistrationId: 'siteborne_company_evidence_graph',
+            runtimeSourceCommit: 'a'.repeat(40) as never,
+            derivationMethod: 'typed_export' as const,
+          },
+        },
+      ],
+    };
+
+    expect(projectOneService(withCurrentMcpExposure).protocols.mcp).toBe('planned');
+  });
 });

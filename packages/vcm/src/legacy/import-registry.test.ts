@@ -76,10 +76,44 @@ describe('importOneService', () => {
     );
   });
 
-  it('preserves the exact legacy protocol declaration verbatim (all "planned")', () => {
+  it('preserves the exact release protocol declaration without deriving current exposure', () => {
     const service = importOneService(validLegacyFile());
-    expect(service.legacyProtocolExposureDeclared.mcp).toBe('planned');
-    expect(service.protocolExposure.find((p) => p.surface === 'mcp')?.protocolExposed).toBe(false);
+    expect(service.releaseProtocolExposureDeclared.mcp).toBe('planned');
+    expect(service.currentStaticExposures).toEqual([]);
+  });
+
+  it('accepts the complete release-schema protocol vocabulary without deriving current exposure', () => {
+    const statuses = ['planned', 'scaffolded', 'tested', 'enabled', 'not_enabled'] as const;
+    for (const status of statuses) {
+      const service = importOneService(
+        validLegacyFile({
+          protocols: {
+            x402: status,
+            mcp: status,
+            a2a: status,
+            nevermined: status,
+            agentverse: status,
+            coinbase_bazaar: status,
+            mcp_registry: status,
+          },
+        })
+      );
+      expect(service.releaseProtocolExposureDeclared.mcp).toBe(status);
+      expect(service.currentStaticExposures).toEqual([]);
+    }
+  });
+
+  it('rejects a protocol status outside the release schema vocabulary', () => {
+    expect(() =>
+      importOneService(
+        validLegacyFile({
+          protocols: {
+            ...validLegacyFile().protocols,
+            mcp: 'live' as never,
+          },
+        })
+      )
+    ).toThrowError(/protocols\.mcp/);
   });
 
   it('resolves the governed max price from the real governance source for a v2 family/tier', () => {
@@ -106,19 +140,19 @@ describe('importOneService', () => {
     );
     expect(service.economics.listPrice.amount).toBe('0.0312'); // governed, not 0.039
     expect(service.economics.governedMaxPrice.amount).toBe('0.0312');
-    expect(service.economics.legacyBasePriceDeclared.amount).toBe('0.039'); // frozen byte, preserved
+    expect(service.economics.releaseBasePriceDeclared.amount).toBe('0.039'); // frozen byte, preserved
   });
 
-  it('legacyBasePriceDeclared preserves the frozen legacy base_price verbatim even when it equals the governed price (v1)', () => {
+  it('releaseBasePriceDeclared preserves the frozen legacy base_price verbatim even when it equals the governed price (v1)', () => {
     const service = importOneService(validLegacyFile()); // v1: base_price '0.039' == governed '0.039'
-    expect(service.economics.legacyBasePriceDeclared.amount).toBe('0.039');
+    expect(service.economics.releaseBasePriceDeclared.amount).toBe('0.039');
     expect(service.economics.listPrice.amount).toBe('0.039');
     expect(service.economics.governedMaxPrice.amount).toBe('0.039');
   });
 });
 
 describe('authority separation: legacy base_price vs. governed listPrice', () => {
-  it('changing only the frozen legacy base_price changes legacyBasePriceDeclared but NOT listPrice/governedMaxPrice', () => {
+  it('changing only the frozen legacy base_price changes releaseBasePriceDeclared but NOT listPrice/governedMaxPrice', () => {
     const a = importOneService(
       validLegacyFile({
         service_id: 'company_evidence_graph.v2',
@@ -133,17 +167,17 @@ describe('authority separation: legacy base_price vs. governed listPrice', () =>
         base_price: { amount: '0.050', currency: 'USD' }, // only this differs
       })
     );
-    expect(a.economics.legacyBasePriceDeclared.amount).toBe('0.039');
-    expect(b.economics.legacyBasePriceDeclared.amount).toBe('0.050');
-    expect(a.economics.legacyBasePriceDeclared.amount).not.toBe(
-      b.economics.legacyBasePriceDeclared.amount
+    expect(a.economics.releaseBasePriceDeclared.amount).toBe('0.039');
+    expect(b.economics.releaseBasePriceDeclared.amount).toBe('0.050');
+    expect(a.economics.releaseBasePriceDeclared.amount).not.toBe(
+      b.economics.releaseBasePriceDeclared.amount
     );
     // the governed facts are completely unaffected by the frozen byte change
     expect(a.economics.listPrice).toEqual(b.economics.listPrice);
     expect(a.economics.governedMaxPrice).toEqual(b.economics.governedMaxPrice);
   });
 
-  it('changing the governed pricing tier (v1 -> v2, same frozen base_price forced) changes listPrice/governedMaxPrice but NOT legacyBasePriceDeclared', () => {
+  it('changing the governed pricing tier (v1 -> v2, same frozen base_price forced) changes listPrice/governedMaxPrice but NOT releaseBasePriceDeclared', () => {
     const v1 = importOneService(
       validLegacyFile({
         service_id: 'company_evidence_graph.v1',
@@ -159,10 +193,10 @@ describe('authority separation: legacy base_price vs. governed listPrice', () =>
       })
     );
     // the frozen byte is identical by construction
-    expect(v1.economics.legacyBasePriceDeclared.amount).toBe('0.039');
-    expect(v2.economics.legacyBasePriceDeclared.amount).toBe('0.039');
-    expect(v1.economics.legacyBasePriceDeclared.amount).toBe(
-      v2.economics.legacyBasePriceDeclared.amount
+    expect(v1.economics.releaseBasePriceDeclared.amount).toBe('0.039');
+    expect(v2.economics.releaseBasePriceDeclared.amount).toBe('0.039');
+    expect(v1.economics.releaseBasePriceDeclared.amount).toBe(
+      v2.economics.releaseBasePriceDeclared.amount
     );
     // but the governed authority differs per generation, and listPrice follows it
     expect(v1.economics.listPrice.amount).toBe('0.039');

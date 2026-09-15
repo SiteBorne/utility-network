@@ -15,17 +15,23 @@ import type { SecurityMechanismKind } from './types';
 import type { SettlementNetworkFamily } from './types';
 import type { DeploymentVersion } from './versions';
 import type { EvidenceRef } from './evidence';
+import type { ProtocolSurface } from './types';
 import { UNKNOWN, type MeasuredOrUnmeasured, type Unknown_ } from './sentinels';
 import { NOT_CONFIGURED, type NotConfigured } from './sentinels';
 
-export interface RouteRuntimeState {
-  readonly serviceId: CanonicalServiceIdValue;
-  readonly interactionOperationId: string;
-  /** ANDed against static `protocolExposed` by the resolver -- can only
-   * narrow an already-exposed interaction down to disabled, never the
-   * reverse. */
+export interface OperationalProtocolActivation {
+  readonly surface: ProtocolSurface;
+  readonly registrationId: string;
   readonly runtimeEnabled: boolean;
   readonly economicAdmissionEnabled: boolean;
+}
+
+export interface ExternalPublicationState {
+  readonly surface: ProtocolSurface;
+  readonly registrationId: string;
+  readonly publicationState: MeasuredOrUnmeasured<'PUBLISHED' | 'NOT_PUBLISHED'>;
+  readonly measuredAt?: IsoTimestamp;
+  readonly evidenceRef?: EvidenceRef;
 }
 
 export interface EconomicRuntimeState {
@@ -57,7 +63,8 @@ export interface QualificationRuntimeState {
 export interface RuntimeStateOverlay {
   readonly observedAt: IsoTimestamp;
   readonly deploymentVersion: DeploymentVersion;
-  readonly routes: readonly RouteRuntimeState[];
+  readonly protocolActivations: readonly OperationalProtocolActivation[];
+  readonly externalPublications: readonly ExternalPublicationState[];
   readonly economics: readonly EconomicRuntimeState[];
   readonly security: readonly SecurityRuntimeState[];
   readonly qualification: readonly QualificationRuntimeState[];
@@ -70,7 +77,8 @@ export function emptyOverlay(observedAt: IsoTimestamp): RuntimeStateOverlay {
   return {
     observedAt,
     deploymentVersion: UNKNOWN,
-    routes: [],
+    protocolActivations: [],
+    externalPublications: [],
     economics: [],
     security: [],
     qualification: [],

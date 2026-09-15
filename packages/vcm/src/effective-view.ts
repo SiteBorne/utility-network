@@ -11,7 +11,10 @@ import type { CanonicalServiceIdValue } from './service-id';
 import { toServiceIdValue } from './service-id';
 import type {
   CanonicalStaticModel,
+  CurrentStaticProtocolExposure,
+  ExposureShape,
   Price,
+  ProtocolSurface,
   SecurityMechanismKind,
   SecurityTruthLevel,
 } from './types';
@@ -21,9 +24,16 @@ import { UNMEASURED, type MeasuredOrUnmeasured } from './sentinels';
 export interface EffectiveInteractionView {
   readonly operationId: string;
   readonly capabilityExists: true;
-  readonly protocolExposed: boolean;
+  readonly currentStaticExposures: readonly EffectiveCurrentExposureView[];
+}
+
+export interface EffectiveCurrentExposureView {
+  readonly surface: ProtocolSurface;
+  readonly registrationId: string;
+  readonly exposureShape: ExposureShape;
   readonly runtimeEnabled: boolean;
   readonly economicAdmissionEnabled: boolean;
+  readonly externalPublication: MeasuredOrUnmeasured<'PUBLISHED' | 'NOT_PUBLISHED'>;
 }
 
 export interface EffectiveSecurityView {
@@ -46,6 +56,7 @@ export interface EffectiveMetadataView {
   readonly digest: Sha256Digest;
   readonly organizationPublicName: string;
   readonly services: readonly EffectiveServiceView[];
+  readonly utilityExposures: readonly EffectiveCurrentExposureView[];
   readonly generatedAt: IsoTimestamp; // excluded from the digest
 }
 
@@ -56,26 +67,28 @@ function byString<T>(key: (item: T) => string) {
   return (a: T, b: T): number => (key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0);
 }
 
-function resolveInteraction(
-  serviceIdValue: CanonicalServiceIdValue,
-  operationId: string,
-  staticProtocolExposed: boolean,
+function resolveExposure(
+  exposure: CurrentStaticProtocolExposure,
   overlay: RuntimeStateOverlay
-): EffectiveInteractionView {
-  const route = overlay.routes.find(
-    (r) => r.serviceId === serviceIdValue && r.interactionOperationId === operationId
+): EffectiveCurrentExposureView {
+  const activation = overlay.protocolActivations.find(
+    (candidate) =>
+      candidate.surface === exposure.surface && candidate.registrationId === exposure.registrationId
   );
-  // Narrowing law: effective exposure/enablement can never exceed what the
-  // static model declared, and an overlay entry can only ever disable, not
-  // enable, something the static model marked unexposed.
-  const runtimeEnabled = staticProtocolExposed && (route?.runtimeEnabled ?? false);
-  const economicAdmissionEnabled = runtimeEnabled && (route?.economicAdmissionEnabled ?? false);
+  const publication = overlay.externalPublications.find(
+    (candidate) =>
+      candidate.surface === exposure.surface && candidate.registrationId === exposure.registrationId
+  );
+  const runtimeEnabled = activation?.runtimeEnabled ?? false;
+  const economicAdmissionEnabled =
+    runtimeEnabled && (activation?.economicAdmissionEnabled ?? false);
   return {
-    operationId,
-    capabilityExists: true,
-    protocolExposed: staticProtocolExposed,
+    surface: exposure.surface,
+    registrationId: exposure.registrationId,
+    exposureShape: exposure.exposureShape,
     runtimeEnabled,
     economicAdmissionEnabled,
+    externalPublication: publication?.publicationState ?? UNMEASURED,
   };
 }
 
@@ -112,19 +125,16 @@ export async function project(
     .sort(byString((s) => toServiceIdValue(s.id)))
     .map((service) => {
       const serviceIdValue = toServiceIdValue(service.id);
-      const staticallyExposedSurfaces = new Set(
-        service.protocolExposure.filter((p) => p.protocolExposed).map((p) => p.surface)
-      );
       const interactions = [...service.interactions]
         .sort(byString((i) => i.operationId))
-        .map((interaction) =>
-          resolveInteraction(
-            serviceIdValue,
-            interaction.operationId,
-            staticallyExposedSurfaces.size > 0,
-            overlay
-          )
-        );
+        .map((interaction) => ({
+          operationId: interaction.operationId,
+          capabilityExists: true as const,
+          currentStaticExposures: service.currentStaticExposures
+            .filter((exposure) => exposure.operationId === interaction.operationId)
+            .sort(byString((exposure) => `${exposure.surface}:${exposure.registrationId}`))
+            .map((exposure) => resolveExposure(exposure, overlay)),
+        }));
       const security = [...service.securityCapabilities]
         .sort(byString((s) => s.mechanism.kind))
         .map((cap) => resolveSecurity(cap.mechanism.kind, cap.truthLevel, overlay));
@@ -140,9 +150,14 @@ export async function project(
       };
     });
 
+  const utilityExposures = [...staticModel.currentStaticUtilityExposures]
+    .sort(byString((exposure) => `${exposure.surface}:${exposure.registrationId}`))
+    .map((exposure) => resolveExposure(exposure, overlay));
+
   const digestInput = {
     organizationPublicName: staticModel.organization.publicName,
     services,
+    utilityExposures,
   };
   const digest = (await hashCanonical(digestInput)) as Sha256Digest;
 
@@ -150,6 +165,7 @@ export async function project(
     digest,
     organizationPublicName: staticModel.organization.publicName,
     services,
+    utilityExposures,
     generatedAt: options.generatedAt,
   };
 }

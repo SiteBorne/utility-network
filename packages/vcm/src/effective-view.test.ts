@@ -4,67 +4,69 @@ import { emptyOverlay } from './runtime-overlay';
 import { makeFixtureModel, makeFixtureService } from './test-fixtures';
 
 const GENERATED_AT = '2026-09-18T00:00:00.000Z' as never;
+const MCP_EXPOSURE = {
+  surface: 'mcp' as const,
+  registrationId: 'siteborne_company_evidence_graph',
+  operationId: 'evaluate',
+  exposureShape: 'standalone_tool' as const,
+  provenance: {
+    sourcePackage: '@siteborne/protocol-mcp',
+    sourceModule: 'src/constants.ts#MCP_SERVICE_TOOLS',
+    sourceRegistrationId: 'siteborne_company_evidence_graph',
+    runtimeSourceCommit: 'a'.repeat(40) as never,
+    derivationMethod: 'typed_export' as const,
+  },
+};
 
 describe('project() -- the narrowing law', () => {
   it('an empty overlay resolves every interaction to disabled, even when statically exposed', async () => {
-    const svc = makeFixtureService({
-      protocolExposure: makeFixtureService().protocolExposure.map((p) =>
-        p.surface === 'mcp'
-          ? { ...p, protocolExposed: true, exposureShape: 'standalone_endpoint' }
-          : p
-      ),
-    });
+    const svc = makeFixtureService({ currentStaticExposures: [MCP_EXPOSURE] });
     const model = makeFixtureModel([svc]);
     const overlay = emptyOverlay(GENERATED_AT);
     const view = await project(model, overlay, { generatedAt: GENERATED_AT });
 
-    expect(view.services[0].interactions[0].protocolExposed).toBe(true);
-    expect(view.services[0].interactions[0].runtimeEnabled).toBe(false);
-    expect(view.services[0].interactions[0].economicAdmissionEnabled).toBe(false);
+    const exposure = view.services[0].interactions[0].currentStaticExposures[0];
+    expect(exposure.registrationId).toBe(MCP_EXPOSURE.registrationId);
+    expect(exposure.runtimeEnabled).toBe(false);
+    expect(exposure.economicAdmissionEnabled).toBe(false);
   });
 
   it('an overlay cannot widen a statically-unexposed interaction to enabled', async () => {
-    const svc = makeFixtureService(); // every surface protocolExposed=false by default
+    const svc = makeFixtureService();
     const model = makeFixtureModel([svc]);
     const overlay = {
       ...emptyOverlay(GENERATED_AT),
-      routes: [
+      protocolActivations: [
         {
-          serviceId: 'company_evidence_graph.v1' as const,
-          interactionOperationId: 'evaluate',
+          surface: 'mcp' as const,
+          registrationId: 'not_registered',
           runtimeEnabled: true, // attempt to widen
           economicAdmissionEnabled: true,
         },
       ],
     };
     const view = await project(model, overlay, { generatedAt: GENERATED_AT });
-    expect(view.services[0].interactions[0].runtimeEnabled).toBe(false);
-    expect(view.services[0].interactions[0].economicAdmissionEnabled).toBe(false);
+    expect(view.services[0].interactions[0].currentStaticExposures).toEqual([]);
   });
 
   it('economicAdmissionEnabled cannot be true while runtimeEnabled is false', async () => {
-    const svc = makeFixtureService({
-      protocolExposure: makeFixtureService().protocolExposure.map((p) =>
-        p.surface === 'mcp'
-          ? { ...p, protocolExposed: true, exposureShape: 'standalone_endpoint' }
-          : p
-      ),
-    });
+    const svc = makeFixtureService({ currentStaticExposures: [MCP_EXPOSURE] });
     const model = makeFixtureModel([svc]);
     const overlay = {
       ...emptyOverlay(GENERATED_AT),
-      routes: [
+      protocolActivations: [
         {
-          serviceId: 'company_evidence_graph.v1' as const,
-          interactionOperationId: 'evaluate',
+          surface: 'mcp' as const,
+          registrationId: MCP_EXPOSURE.registrationId,
           runtimeEnabled: false,
           economicAdmissionEnabled: true, // attempt to skip straight to admission
         },
       ],
     };
     const view = await project(model, overlay, { generatedAt: GENERATED_AT });
-    expect(view.services[0].interactions[0].runtimeEnabled).toBe(false);
-    expect(view.services[0].interactions[0].economicAdmissionEnabled).toBe(false);
+    const exposure = view.services[0].interactions[0].currentStaticExposures[0];
+    expect(exposure.runtimeEnabled).toBe(false);
+    expect(exposure.economicAdmissionEnabled).toBe(false);
   });
 
   it('a mechanism statically IMPLEMENTED-only cannot be reported ACTIVE regardless of overlay claim', async () => {

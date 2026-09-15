@@ -20,7 +20,7 @@
 import { usdToMicro } from '@siteborne/pricing';
 import { isSha256Digest } from './primitives';
 import { toServiceIdValue } from './service-id';
-import { isLifecycleState } from './types';
+import { EXPOSURE_SHAPES, isLifecycleState } from './types';
 import type { CanonicalService, CanonicalStaticModel } from './types';
 import type { RuntimeStateOverlay } from './runtime-overlay';
 import { computeModelDigest } from './digests';
@@ -50,6 +50,8 @@ function fail(errors: ValidationError[]): ValidationResult {
 export function validateCanonicalModel(model: CanonicalStaticModel): ValidationResult {
   const errors: ValidationError[] = [];
   const seenServiceIds = new Set<string>();
+  const seenExposureRegistrations = new Set<string>();
+  const seenProtocolOperations = new Set<string>();
 
   for (const service of model.services) {
     const idValue = toServiceIdValue(service.id);
@@ -92,15 +94,68 @@ export function validateCanonicalModel(model: CanonicalStaticModel): ValidationR
       }
     }
 
-    for (const exposure of service.protocolExposure) {
-      if (exposure.protocolExposed && exposure.exposureShape === 'not_exposed') {
+    for (const exposure of service.currentStaticExposures) {
+      const registrationKey = `${exposure.surface}:${exposure.registrationId}`;
+      const operationKey = `${exposure.surface}:service:${idValue}:${exposure.operationId}`;
+      if (!(EXPOSURE_SHAPES as readonly string[]).includes(exposure.exposureShape)) {
         errors.push({
-          code: 'INCONSISTENT_PROTOCOL_EXPOSURE',
-          path: `services[${idValue}].protocolExposure[${exposure.surface}]`,
-          message: 'protocolExposed=true but exposureShape="not_exposed"',
+          code: 'UNSUPPORTED_EXPOSURE_SHAPE',
+          path: `services[${idValue}].currentStaticExposures[${registrationKey}]`,
+          message: `unsupported exposure shape "${exposure.exposureShape}"`,
         });
       }
+      if (!seenOperationIds.has(exposure.operationId)) {
+        errors.push({
+          code: 'CURRENT_EXPOSURE_UNKNOWN_OPERATION',
+          path: `services[${idValue}].currentStaticExposures[${registrationKey}]`,
+          message: `current exposure references unknown operation "${exposure.operationId}"`,
+        });
+      }
+      if (seenExposureRegistrations.has(registrationKey)) {
+        errors.push({
+          code: 'DUPLICATE_CURRENT_REGISTRATION',
+          path: `services[${idValue}].currentStaticExposures[${registrationKey}]`,
+          message: `duplicate current registration "${registrationKey}"`,
+        });
+      }
+      seenExposureRegistrations.add(registrationKey);
+      if (seenProtocolOperations.has(operationKey)) {
+        errors.push({
+          code: 'DUPLICATE_PROTOCOL_OPERATION_EXPOSURE',
+          path: `services[${idValue}].currentStaticExposures[${operationKey}]`,
+          message: `duplicate protocol/operation exposure "${operationKey}"`,
+        });
+      }
+      seenProtocolOperations.add(operationKey);
     }
+  }
+
+  for (const exposure of model.currentStaticUtilityExposures) {
+    const registrationKey = `${exposure.surface}:${exposure.registrationId}`;
+    const operationKey = `${exposure.surface}:utility:${exposure.operationId}`;
+    if (!(EXPOSURE_SHAPES as readonly string[]).includes(exposure.exposureShape)) {
+      errors.push({
+        code: 'UNSUPPORTED_EXPOSURE_SHAPE',
+        path: `currentStaticUtilityExposures[${registrationKey}]`,
+        message: `unsupported exposure shape "${exposure.exposureShape}"`,
+      });
+    }
+    if (seenExposureRegistrations.has(registrationKey)) {
+      errors.push({
+        code: 'DUPLICATE_CURRENT_REGISTRATION',
+        path: `currentStaticUtilityExposures[${registrationKey}]`,
+        message: `duplicate current registration "${registrationKey}"`,
+      });
+    }
+    seenExposureRegistrations.add(registrationKey);
+    if (seenProtocolOperations.has(operationKey)) {
+      errors.push({
+        code: 'DUPLICATE_PROTOCOL_OPERATION_EXPOSURE',
+        path: `currentStaticUtilityExposures[${operationKey}]`,
+        message: `duplicate protocol/operation exposure "${operationKey}"`,
+      });
+    }
+    seenProtocolOperations.add(operationKey);
   }
 
   return errors.length === 0 ? ok() : fail(errors);
@@ -176,22 +231,35 @@ export function validateRuntimeOverlay(
     model.services.map((s) => [toServiceIdValue(s.id), s])
   );
 
-  for (const route of overlay.routes) {
-    const service = serviceById.get(route.serviceId);
-    if (!service) {
+  const staticExposureKeys = new Set([
+    ...model.services.flatMap((service) =>
+      service.currentStaticExposures.map(
+        (exposure) => `${exposure.surface}:${exposure.registrationId}`
+      )
+    ),
+    ...model.currentStaticUtilityExposures.map(
+      (exposure) => `${exposure.surface}:${exposure.registrationId}`
+    ),
+  ]);
+
+  for (const activation of overlay.protocolActivations) {
+    const key = `${activation.surface}:${activation.registrationId}`;
+    if (!staticExposureKeys.has(key)) {
       errors.push({
-        code: 'OVERLAY_UNKNOWN_SERVICE',
-        path: `routes[${route.serviceId}]`,
-        message: `overlay references unknown service "${route.serviceId}"`,
+        code: 'OPERATIONAL_ACTIVATION_WITHOUT_STATIC_EXPOSURE',
+        path: `protocolActivations[${key}]`,
+        message: `operational activation references unregistered static exposure "${key}"`,
       });
-      continue;
     }
-    const knownOperationIds = new Set(service.interactions.map((i) => i.operationId));
-    if (!knownOperationIds.has(route.interactionOperationId)) {
+  }
+
+  for (const publication of overlay.externalPublications) {
+    const key = `${publication.surface}:${publication.registrationId}`;
+    if (!staticExposureKeys.has(key)) {
       errors.push({
-        code: 'OVERLAY_UNKNOWN_OPERATION',
-        path: `routes[${route.serviceId}].${route.interactionOperationId}`,
-        message: `overlay references unknown operationId "${route.interactionOperationId}" on service "${route.serviceId}"`,
+        code: 'EXTERNAL_PUBLICATION_WITHOUT_STATIC_EXPOSURE',
+        path: `externalPublications[${key}]`,
+        message: `external publication references unregistered static exposure "${key}"`,
       });
     }
   }
