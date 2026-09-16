@@ -102,4 +102,46 @@ describe('MCP metadata shadow_compare -- adversarial VCM behavior never reaches 
     spy.mockRestore();
     errorSpy.mockRestore();
   });
+
+  it('a throwing VCM comparator never changes the served response', async () => {
+    vi.resetModules();
+    const vcmModule = await import('@siteborne/vcm');
+    const spy = vi.spyOn(vcmModule, 'compareProjections').mockImplementation(() => {
+      throw new Error('VCM comparator exploded');
+    });
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    const { response, tools } = await callToolsList({
+      MCP_METADATA_PROJECTION_MODE: 'shadow_compare',
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(response.status).toBe(200);
+    expect(tools).toHaveLength(6);
+
+    spy.mockRestore();
+    errorSpy.mockRestore();
+  });
+
+  it('a throwing comparison telemetry sink never changes the served response', async () => {
+    vi.resetModules();
+    const telemetryModule = await import(
+      '../src/control-plane/telemetry/metadata-projection-telemetry'
+    );
+    const spy = vi
+      .spyOn(telemetryModule, 'recordMetadataProjectionComparison')
+      .mockImplementation(() => {
+        throw new Error('comparison telemetry exploded');
+      });
+
+    const { response, tools } = await callToolsList({
+      MCP_METADATA_PROJECTION_MODE: 'shadow_compare',
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(response.status).toBe(200);
+    expect(tools).toHaveLength(6);
+
+    spy.mockRestore();
+  });
 });

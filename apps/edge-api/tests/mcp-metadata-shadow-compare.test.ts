@@ -1,20 +1,26 @@
 /**
  * METADATA-VCM-IMPL-04A: MCP dual-render integration, compare-only. The
- * real `tools/list` response is served over SSE (`text/event-stream`,
- * `event: message` / `data: {...}` framing) -- confirmed by direct
- * inspection of `mcpRoute`'s real output, not assumed. Comparison happens
- * inline per request against the tool list *already served on this exact
- * response* (no second synthetic client<->server transport), and must
- * never alter what the real caller receives.
+ * real `tools/list` response may be served as JSON or SSE. Comparison
+ * happens inline per request against the tool list *already served on this
+ * exact response* (no second synthetic client<->server transport), and
+ * must never alter what the real caller receives.
  */
-import { describe, expect, it, vi } from 'vitest';
+import * as protocolMcp from '@siteborne/protocol-mcp';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { app } from '../src/index';
 
-async function callToolsList(extraEnv: Record<string, string> = {}): Promise<{
-  response: Response;
-  tools: Array<{ name: string }>;
-}> {
-  const response = await app.request(
+vi.mock('@siteborne/protocol-mcp', async () => {
+  const actual =
+    await vi.importActual<typeof import('@siteborne/protocol-mcp')>('@siteborne/protocol-mcp');
+  return { ...actual };
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+async function callRawToolsList(extraEnv: Record<string, string> = {}): Promise<Response> {
+  return app.request(
     '/mcp',
     {
       method: 'POST',
@@ -27,10 +33,21 @@ async function callToolsList(extraEnv: Record<string, string> = {}): Promise<{
     },
     { SELLER_WALLET_ADDRESS: '0x7f44a2dd237938F18632d4CcA40f4c690295E6E1', ...extraEnv } as never
   );
+}
+
+async function callToolsList(extraEnv: Record<string, string> = {}): Promise<{
+  response: Response;
+  tools: Array<Record<string, unknown> & { name: string }>;
+  body: string;
+}> {
+  const response = await callRawToolsList(extraEnv);
   const text = await response.text();
+  const contentType = response.headers.get('content-type')?.toLowerCase() ?? '';
   const dataLine = text.split('\n').find((line) => line.startsWith('data:'));
-  const parsed = JSON.parse((dataLine ?? '').slice('data:'.length).trim());
-  return { response, tools: parsed.result.tools };
+  const parsed = contentType.includes('application/json')
+    ? JSON.parse(text)
+    : JSON.parse((dataLine ?? '').slice('data:'.length).trim());
+  return { response, tools: parsed.result.tools, body: text };
 }
 
 function collectStructuredLogLines(spies: {
@@ -86,8 +103,10 @@ describe('MCP metadata projection mode -- shadow_compare', () => {
   it('computes and compares the VCM shadow tool list and records a match (real data already proven parity)', async () => {
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    await callToolsList({ MCP_METADATA_PROJECTION_MODE: 'shadow_compare' });
+    const observed = await callToolsList({ MCP_METADATA_PROJECTION_MODE: 'shadow_compare' });
     await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(observed.response.headers.get('content-type')).toContain('text/event-stream');
+    expect(observed.tools).toHaveLength(6);
     const lines = collectStructuredLogLines({ log: logSpy, error: errorSpy });
     expect(
       lines.some((l) => l.event === 'metadata_projection_compare_total' && l.surface === 'mcp')
@@ -96,6 +115,96 @@ describe('MCP metadata projection mode -- shadow_compare', () => {
       lines.some((l) => l.event === 'metadata_projection_match_total' && l.surface === 'mcp')
     ).toBe(true);
     expect(lines.some((l) => l.event === 'metadata_projection_fallback_total')).toBe(false);
+    logSpy.mockRestore();
+    errorSpy.mockRestore();
+  });
+
+  it.each([
+    {
+      name: 'malformed application/json',
+      contentType: 'application/json',
+      body: '{"jsonrpc":"2.0","id":17,"result":',
+    },
+    {
+      name: 'application/json without result.tools',
+      contentType: 'application/json',
+      body: JSON.stringify({ jsonrpc: '2.0', id: 17, result: { resources: [] } }),
+    },
+    {
+      name: 'malformed text/event-stream data frame',
+      contentType: 'text/event-stream',
+      body: 'event: message\ndata: {"jsonrpc":"2.0","id":17,"result":\n\n',
+    },
+  ])(
+    'fails closed observationally for $name while serving the real response unchanged',
+    async ({ contentType, body }) => {
+      const transportSpy = vi.spyOn(protocolMcp, 'createSiteborneMcpHonoApp').mockReturnValue({
+        fetch: async () =>
+          new Response(body, { status: 200, headers: { 'content-type': contentType } }),
+      } as never);
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+      const response = await callRawToolsList({ MCP_METADATA_PROJECTION_MODE: 'shadow_compare' });
+      const servedBody = await response.text();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get('content-type')).toContain(contentType);
+      expect(servedBody).toBe(body);
+      const lines = collectStructuredLogLines({ log: logSpy, error: errorSpy });
+      expect(
+        lines.some(
+          (line) =>
+            line.event === 'metadata_projection_compare_total' ||
+            line.event === 'metadata_projection_match_total'
+        )
+      ).toBe(false);
+
+      transportSpy.mockRestore();
+      logSpy.mockRestore();
+      errorSpy.mockRestore();
+    }
+  );
+
+  it('models the live application/json JSON-RPC tools/list representation and records a six-tool match without changing the served bytes', async () => {
+    const baseline = await callToolsList();
+    expect(baseline.tools).toHaveLength(6);
+    const jsonBody = JSON.stringify({
+      jsonrpc: '2.0',
+      id: 17,
+      result: { tools: baseline.tools },
+    });
+    const transportSpy = vi.spyOn(protocolMcp, 'createSiteborneMcpHonoApp').mockReturnValue({
+      fetch: async () =>
+        new Response(jsonBody, {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+    } as never);
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    const observed = await callToolsList({ MCP_METADATA_PROJECTION_MODE: 'shadow_compare' });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(observed.response.status).toBe(200);
+    expect(observed.response.headers.get('content-type')).toContain('application/json');
+    expect(observed.body).toBe(jsonBody);
+    expect(observed.tools).toHaveLength(6);
+    const lines = collectStructuredLogLines({ log: logSpy, error: errorSpy });
+    expect(
+      lines.some(
+        (line) => line.event === 'metadata_projection_compare_total' && line.surface === 'mcp'
+      )
+    ).toBe(true);
+    expect(
+      lines.some(
+        (line) => line.event === 'metadata_projection_match_total' && line.surface === 'mcp'
+      )
+    ).toBe(true);
+
+    transportSpy.mockRestore();
     logSpy.mockRestore();
     errorSpy.mockRestore();
   });

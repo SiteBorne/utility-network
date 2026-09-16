@@ -123,26 +123,63 @@ async function readJsonRpcMethod(request: Request): Promise<string | undefined> 
   }
 }
 
-/** The real transport serves every response (including `tools/list`) as
- * `text/event-stream` (`event: message` / `data: {...}` framing) --
- * confirmed by direct inspection, not assumed. Parses only what this
- * checkpoint needs: the `result.tools` array of the one `message` event a
- * non-streaming `tools/list` call produces. */
+/** A legitimate `tools/list` response may arrive either as a direct JSON-RPC
+ * `application/json` document or as a JSON-RPC `data:` frame inside
+ * `text/event-stream`. The shadow observer accepts both representations and
+ * parses only what it needs: an actual `result.tools` array. Any malformed or
+ * unrecognized observation fails closed without affecting the real response. */
 async function extractToolsListFromResponse(
   response: Response
 ): Promise<readonly McpToolDefinition[] | undefined> {
   try {
     const text = await response.text();
-    for (const line of text.split('\n')) {
-      if (!line.startsWith('data:')) continue;
-      const parsed = JSON.parse(line.slice('data:'.length).trim()) as {
-        result?: { tools?: unknown };
-      };
-      if (Array.isArray(parsed.result?.tools)) {
-        return parsed.result?.tools as McpToolDefinition[];
+
+    const extractTools = (value: unknown): readonly McpToolDefinition[] | undefined => {
+      if (typeof value !== 'object' || value === null) return undefined;
+      const result = (value as { result?: unknown }).result;
+      if (typeof result !== 'object' || result === null) return undefined;
+      const tools = (result as { tools?: unknown }).tools;
+      return Array.isArray(tools) ? (tools as McpToolDefinition[]) : undefined;
+    };
+
+    const parseJson = (): readonly McpToolDefinition[] | undefined => {
+      try {
+        return extractTools(JSON.parse(text));
+      } catch {
+        return undefined;
       }
+    };
+
+    const parseEventStream = (): readonly McpToolDefinition[] | undefined => {
+      for (const line of text.split('\n')) {
+        if (!line.startsWith('data:')) continue;
+        try {
+          const tools = extractTools(JSON.parse(line.slice('data:'.length).trim()));
+          if (tools) return tools;
+        } catch {
+          // A malformed observational frame is ignored; keep looking for a
+          // valid JSON-RPC message without affecting the served response.
+        }
+      }
+      return undefined;
+    };
+
+    const contentType = response.headers
+      .get('content-type')
+      ?.split(';', 1)[0]
+      ?.trim()
+      .toLowerCase();
+    if (contentType === 'application/json' || contentType?.endsWith('+json')) {
+      return parseJson();
     }
-    return undefined;
+    if (contentType === 'text/event-stream') {
+      return parseEventStream();
+    }
+
+    // Missing or unfamiliar content types are observationally fail-safe: an
+    // exact recognized JSON-RPC shape may still be read, but no other payload
+    // is promoted into a comparison input.
+    return parseJson() ?? parseEventStream();
   } catch {
     return undefined;
   }
