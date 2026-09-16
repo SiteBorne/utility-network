@@ -1,4 +1,13 @@
-import { createSiteborneA2aHonoApp, type CreateSiteborneA2aOptions } from '@siteborne/protocol-a2a';
+import {
+  buildUnsignedSiteborneAgentCard,
+  createSiteborneA2aHonoApp,
+  type CreateSiteborneA2aOptions,
+} from '@siteborne/protocol-a2a';
+import {
+  buildRealA2aShadowContext,
+  getRuntimeEffectiveView,
+  projectA2aFromVcm,
+} from '@siteborne/vcm';
 import type { Context } from 'hono';
 import type { Env } from '../control-plane/config/env';
 import { resolveAgentCardSigningIdentity } from '../control-plane/config/agent-card-signing';
@@ -6,7 +15,59 @@ import {
   resolveEffectiveProductionStatusByServiceId,
   type EffectiveDiscoveryEnv,
 } from '../control-plane/config/production-payment';
+import type { SiteborneServiceId } from '@siteborne/protocol-x402';
 import { resolveMtlsProductionActive } from '../control-plane/config/mtls-production-capability';
+import {
+  parseMetadataProjectionMode,
+  resolveAuthorizedMetadataProjectionMode,
+} from '../control-plane/config/metadata-projection-mode';
+import { runShadowComparison } from '../control-plane/metadata/shadow-comparison-runner';
+
+/** Unreleased/dev builds have no real git SHA available; `getRuntimeEffectiveView`
+ * only uses this as a cache/provenance key, never to gate behavior, so a
+ * fixed placeholder is correct here (VCM-06 never requires a real commit
+ * for `shadow_compare`, only for a future `QualificationRecord`, out of
+ * this checkpoint's scope). */
+const UNRELEASED_RUNTIME_SOURCE_COMMIT = '0'.repeat(40);
+
+/** METADATA-VCM-06 §IX/§XI, METADATA-VCM-IMPL-04A: run only at this same
+ * per-isolate cache-rebuild point, never per request. Uses the identical
+ * `effectiveProductionStatusByServiceId`/`mtlsProductionActive` values the
+ * real card already builds from, so both producers see byte-identical
+ * overlay inputs (VCM-06 §IX). Never awaited by the caller for its
+ * result -- `runShadowComparison` returns `void` and can only ever affect
+ * telemetry, never the served card. VCM never receives
+ * `AGENT_CARD_SIGNING_PRIVATE_KEY`/`_KEY_ID`; this runs entirely on
+ * unsigned card content, before the signing boundary below. */
+function scheduleA2aShadowComparison(
+  mode: 'legacy' | 'shadow_compare',
+  effectiveProductionStatusByServiceId: Partial<Record<SiteborneServiceId, boolean>>,
+  mtlsProductionActive: boolean
+): Promise<void> {
+  if (mode !== 'shadow_compare') return Promise.resolve();
+  return runShadowComparison({
+    surface: 'a2a',
+    existing: buildUnsignedSiteborneAgentCard(
+      effectiveProductionStatusByServiceId,
+      mtlsProductionActive
+    ),
+    buildShadow: async () => {
+      const effective = await getRuntimeEffectiveView(UNRELEASED_RUNTIME_SOURCE_COMMIT);
+      const context = buildRealA2aShadowContext(
+        effectiveProductionStatusByServiceId,
+        mtlsProductionActive
+      );
+      return projectA2aFromVcm(effective, context);
+    },
+    governedDifferences: [
+      {
+        pathPattern: /^signatures/,
+        classification: 'INTENTIONAL_GOVERNED_DIFFERENCE',
+        reason: 'Signing is a separate boundary; both sides are pre-signature.',
+      },
+    ],
+  });
+}
 
 const A2A_ALLOWED_HOSTS = [
   'utility.siteborne.net',
@@ -22,9 +83,29 @@ let cachedA2aAppCacheKey: string | undefined;
 
 type A2aAppEnv = Pick<
   Env,
-  'AGENT_CARD_SIGNING_PRIVATE_KEY' | 'AGENT_CARD_SIGNING_KEY_ID' | 'DB' | 'MTLS_PRODUCTION_ACTIVE'
+  | 'AGENT_CARD_SIGNING_PRIVATE_KEY'
+  | 'AGENT_CARD_SIGNING_KEY_ID'
+  | 'DB'
+  | 'MTLS_PRODUCTION_ACTIVE'
+  | 'A2A_METADATA_PROJECTION_MODE'
 > &
   EffectiveDiscoveryEnv;
+
+/** Defensive fallback matching `x402-service.ts#safeGetExecutionCtx` --
+ * `c.executionCtx` throws when no real `ExecutionContext` was bound (true
+ * of plain `app.request(path, init)` calls in this repo's own test
+ * suites), so a background task without one just runs un-awaited instead
+ * of via `waitUntil`. `runShadowComparison` never rejects, so this is safe
+ * either way. */
+function safeGetExecutionCtx(
+  c: Context
+): { waitUntil(promise: Promise<unknown>): void } | undefined {
+  try {
+    return c.executionCtx;
+  } catch {
+    return undefined;
+  }
+}
 
 /** `context.env` is optional in Hono's generic `Context` typing (every
  * other route in this file's neighborhood -- e.g.
@@ -76,18 +157,33 @@ const EMPTY_A2A_APP_ENV: A2aAppEnv = {
  * truthfully declare `securitySchemes.mtls` -- included in the cache key
  * below for the same reason every other computed boolean already is.
  */
-function resolveA2aApp(env: A2aAppEnv): ReturnType<typeof createSiteborneA2aHonoApp> {
+function resolveA2aApp(
+  env: A2aAppEnv,
+  scheduleBackground: (promise: Promise<unknown>) => void = () => undefined
+): ReturnType<typeof createSiteborneA2aHonoApp> {
   const hasDb = Boolean(env.DB);
   const effectiveProductionStatusByServiceId = resolveEffectiveProductionStatusByServiceId(
     env,
     hasDb
   );
   const mtlsProductionActive = resolveMtlsProductionActive(env);
+  // METADATA-VCM-IMPL-04A: included in the cache key alongside every other
+  // computed input, for the same reason `mtlsProductionActive` is (see the
+  // SUN-1220P2/SUN-1222C doc comment above) -- a real deployment never
+  // changes `env` mid-isolate (mode is baked into a Worker Version at
+  // creation, VCM-06 §XVIII), but this keeps the cache-rebuild point (and
+  // therefore the comparison scheduled at it) correctly re-entered by any
+  // test exercising multiple modes against the same imported `app`.
+  const authorizedMode = resolveAuthorizedMetadataProjectionMode(
+    parseMetadataProjectionMode(env.A2A_METADATA_PROJECTION_MODE, 'a2a'),
+    'a2a'
+  );
   const cacheKey = JSON.stringify([
     env.AGENT_CARD_SIGNING_PRIVATE_KEY ?? '',
     env.AGENT_CARD_SIGNING_KEY_ID ?? '',
     effectiveProductionStatusByServiceId,
     mtlsProductionActive,
+    authorizedMode,
   ]);
   if (!cachedA2aAppPromise || cachedA2aAppCacheKey !== cacheKey) {
     cachedA2aAppCacheKey = cacheKey;
@@ -108,6 +204,17 @@ function resolveA2aApp(env: A2aAppEnv): ReturnType<typeof createSiteborneA2aHono
         effectiveProductionStatusByServiceId,
         mtlsProductionActive,
       };
+      // METADATA-VCM-06 §IX: scheduled at this exact cache-rebuild point,
+      // not per request. Runs on unsigned content only, entirely before
+      // (and independent of) the signing call `createSiteborneA2aHonoApp`
+      // performs internally -- VCM never sees `signingIdentity`.
+      scheduleBackground(
+        scheduleA2aShadowComparison(
+          authorizedMode,
+          effectiveProductionStatusByServiceId,
+          mtlsProductionActive
+        )
+      );
       return createSiteborneA2aHonoApp(options);
     })();
   }
@@ -125,5 +232,13 @@ function resolveA2aApp(env: A2aAppEnv): ReturnType<typeof createSiteborneA2aHono
  * accepted x402 path.
  */
 export async function a2aRoute(context: Context<{ Bindings: Env }>): Promise<Response> {
-  return (await resolveA2aApp(context.env ?? EMPTY_A2A_APP_ENV)).fetch(context.req.raw);
+  const executionCtx = safeGetExecutionCtx(context);
+  const scheduleBackground = executionCtx
+    ? (promise: Promise<unknown>) => executionCtx.waitUntil(promise)
+    : (promise: Promise<unknown>) => {
+        void promise;
+      };
+  return (await resolveA2aApp(context.env ?? EMPTY_A2A_APP_ENV, scheduleBackground)).fetch(
+    context.req.raw
+  );
 }

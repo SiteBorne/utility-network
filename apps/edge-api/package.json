@@ -34,6 +34,7 @@
     "@siteborne/protocol-x402": "workspace:*",
     "@siteborne/provider-adapters": "workspace:*",
     "@siteborne/service-runtime": "workspace:*",
+    "@siteborne/vcm": "workspace:*",
     "@siteborne/verification": "workspace:*",
     "@x402/core": "^2.21.0",
     "@x402/evm": "^2.21.0",

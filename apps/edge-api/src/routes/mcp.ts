@@ -10,6 +10,12 @@ import {
   resolvePaymentNetwork,
   type SiteborneServiceId,
 } from '@siteborne/protocol-x402';
+import {
+  buildRealMcpShadowContext,
+  getRuntimeEffectiveView,
+  projectMcpToolsFromVcm,
+  type McpToolDefinition,
+} from '@siteborne/vcm';
 import type { Context } from 'hono';
 import type { Env } from '../control-plane/config/env';
 import {
@@ -21,6 +27,11 @@ import {
   createMcpX402ServiceBoundary,
   type McpX402RouteHandler,
 } from '../control-plane/mcp/x402-mcp-adapter';
+import {
+  parseMetadataProjectionMode,
+  resolveAuthorizedMetadataProjectionMode,
+} from '../control-plane/config/metadata-projection-mode';
+import { runShadowComparison } from '../control-plane/metadata/shadow-comparison-runner';
 import { companyEvidenceGraphV2CdpProductionRoute } from '../control-plane/routes/production-company-evidence-v2-cdp-route';
 import { webContextVerifiedV2CdpProductionRoute } from '../control-plane/routes/production-web-context-v2-cdp-route';
 import { documentEvidenceJsonV2CdpProductionRoute } from '../control-plane/routes/production-document-evidence-v2-cdp-route';
@@ -33,7 +44,9 @@ import { verifyAgentOutputV2CdpProductionRoute } from '../control-plane/routes/p
 // payment verification, executor selection, or settlement; it only
 // translates the MCP wire shape into a request these functions already
 // accept, and translates their real Response back.
-const MCP_X402_PRODUCTION_HANDLERS: Readonly<Partial<Record<SiteborneServiceId, McpX402RouteHandler>>> = {
+const MCP_X402_PRODUCTION_HANDLERS: Readonly<
+  Partial<Record<SiteborneServiceId, McpX402RouteHandler>>
+> = {
   'company_evidence_graph.v2': companyEvidenceGraphV2CdpProductionRoute,
   'web_context_verified.v2': webContextVerifiedV2CdpProductionRoute,
   'document_evidence_json.v2': documentEvidenceJsonV2CdpProductionRoute,
@@ -80,6 +93,89 @@ async function readBoundedMcpRequest(request: Request): Promise<Request | null> 
     offset += chunk.byteLength;
   }
   return new Request(request, { body });
+}
+
+/** See `routes/a2a.ts`'s identical helper -- `c.executionCtx` throws when
+ * no real `ExecutionContext` was bound (every plain `app.request(path,
+ * init)` call in this repo's test suites), so a background comparison
+ * without one just runs un-awaited instead of via `waitUntil`.
+ * `runShadowComparison` never rejects, so this is safe either way. */
+function safeGetExecutionCtx(
+  c: Context
+): { waitUntil(promise: Promise<unknown>): void } | undefined {
+  try {
+    return c.executionCtx;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Unreleased/dev builds have no real git SHA available -- see
+ * `routes/a2a.ts`'s identical constant/rationale. */
+const UNRELEASED_RUNTIME_SOURCE_COMMIT = '0'.repeat(40);
+
+async function readJsonRpcMethod(request: Request): Promise<string | undefined> {
+  try {
+    const body = JSON.parse(await request.text()) as { method?: unknown };
+    return typeof body.method === 'string' ? body.method : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** The real transport serves every response (including `tools/list`) as
+ * `text/event-stream` (`event: message` / `data: {...}` framing) --
+ * confirmed by direct inspection, not assumed. Parses only what this
+ * checkpoint needs: the `result.tools` array of the one `message` event a
+ * non-streaming `tools/list` call produces. */
+async function extractToolsListFromResponse(
+  response: Response
+): Promise<readonly McpToolDefinition[] | undefined> {
+  try {
+    const text = await response.text();
+    for (const line of text.split('\n')) {
+      if (!line.startsWith('data:')) continue;
+      const parsed = JSON.parse(line.slice('data:'.length).trim()) as {
+        result?: { tools?: unknown };
+      };
+      if (Array.isArray(parsed.result?.tools)) {
+        return parsed.result?.tools as McpToolDefinition[];
+      }
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * METADATA-VCM-06 §IX/§XII, METADATA-VCM-IMPL-04A: compares against the
+ * tool list *already served on this exact response* -- not a second
+ * synthetic client<->server transport round trip -- so there is nothing to
+ * independently re-derive; VCM only supplies the `definition` content
+ * that would flow into the existing `registerTool()` call sites (§IV),
+ * never a handler. Silently returns (no comparison) for any MCP method
+ * other than `tools/list`, since that is the only response shape this
+ * checkpoint models.
+ */
+async function scheduleMcpShadowComparison(
+  mode: 'legacy' | 'shadow_compare',
+  requestForMethodSniffing: Request,
+  responseForToolsSniffing: Response
+): Promise<void> {
+  if (mode !== 'shadow_compare') return;
+  const method = await readJsonRpcMethod(requestForMethodSniffing);
+  if (method !== 'tools/list') return;
+  const realTools = await extractToolsListFromResponse(responseForToolsSniffing);
+  if (!realTools) return;
+  await runShadowComparison({
+    surface: 'mcp',
+    existing: realTools,
+    buildShadow: async () => {
+      const effective = await getRuntimeEffectiveView(UNRELEASED_RUNTIME_SOURCE_COMMIT);
+      return projectMcpToolsFromVcm(effective, buildRealMcpShadowContext(realTools));
+    },
+  });
 }
 
 /**
@@ -156,5 +252,35 @@ export async function mcpRoute(context: Context<{ Bindings: Env }>): Promise<Res
     };
   }
 
-  return createSiteborneMcpHonoApp(options).fetch(boundedRequest);
+  const authorizedMode = resolveAuthorizedMetadataProjectionMode(
+    parseMetadataProjectionMode(context.env?.MCP_METADATA_PROJECTION_MODE, 'mcp'),
+    'mcp'
+  );
+  // Cloned *before* the real fetch consumes `boundedRequest`'s body -- both
+  // copies remain independently readable since the body is already a
+  // static, fully-buffered Uint8Array at this point (`readBoundedMcpRequest`).
+  const requestForMethodSniffing =
+    authorizedMode === 'shadow_compare' ? boundedRequest.clone() : undefined;
+
+  const response = await createSiteborneMcpHonoApp(options).fetch(boundedRequest);
+
+  if (authorizedMode === 'shadow_compare' && requestForMethodSniffing) {
+    // Cloned before returning `response` up the stack -- nothing has begun
+    // reading its body yet, so this never affects what the real caller
+    // receives (METADATA-VCM-06 §XVI: legacy remains served regardless).
+    const responseForToolsSniffing = response.clone();
+    const comparison = scheduleMcpShadowComparison(
+      authorizedMode,
+      requestForMethodSniffing,
+      responseForToolsSniffing
+    );
+    const executionCtx = safeGetExecutionCtx(context);
+    if (executionCtx) {
+      executionCtx.waitUntil(comparison);
+    } else {
+      void comparison;
+    }
+  }
+
+  return response;
 }

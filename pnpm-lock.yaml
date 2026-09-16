@@ -93,6 +93,9 @@ importers:
       '@siteborne/service-runtime':
         specifier: workspace:*
         version: link:../../packages/service-runtime
+      '@siteborne/vcm':
+        specifier: workspace:*
+        version: link:../../packages/vcm
       '@siteborne/verification':
         specifier: workspace:*
         version: link:../../packages/verification

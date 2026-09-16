@@ -227,6 +227,19 @@ export interface Env {
    * today) makes production economically unreachable regardless of every
    * other flag. */
   PRODUCTION_ENABLED?: string;
+  /** METADATA-VCM-06 §VI/§VII, METADATA-VCM-IMPL-04A. Closed four-value
+   * enum (`legacy | shadow_compare | vcm_primary_compare | vcm_only`),
+   * ordinary (not out-of-band) vars, deliberately independent per surface
+   * so A2A and MCP metadata-producer migration is promotable/canaried/
+   * rolled back separately — see `metadata-projection-mode.ts`. Absent or
+   * any value not exactly one of the four literals fails safe to
+   * `'legacy'`; `vcm_primary_compare`/`vcm_only` are recognized but
+   * refused as servable until a later, explicitly authorized checkpoint.
+   * Fully orthogonal to every economic var (`PAID_ROUTES_ENABLED`,
+   * `SELLER_WALLET_ADDRESS`, any CDP credential) — this checkpoint reads,
+   * writes, and reinterprets none of them. */
+  A2A_METADATA_PROJECTION_MODE?: string;
+  MCP_METADATA_PROJECTION_MODE?: string;
   /** ADR 0055's per-action human bootstrap authorization. Must be the
    * exact literal `'true'`, and per the ADR is meant to be set for one
    * specific, bounded, explicitly-authorized action — never left on as
