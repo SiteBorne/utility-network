@@ -265,3 +265,281 @@ SAFE_TO_BUILD_REPLACEMENT_ZERO_PERCENT_CANDIDATE = YES
 This is local build-readiness evidence only. It does not authorize a Worker
 upload, deployment, version override, traffic change, or any other Cloudflare
 mutation. Human authorization is required before the next Cloudflare mutation.
+
+## X. Live zero-percent qualification and closure
+
+This section freezes the independently supplied live qualification evidence for
+the repaired R3 candidate. It records the already-completed qualification; this
+report-only closure performed no Cloudflare read or mutation, did not upload a
+Worker, and did not change traffic, configuration, secrets, routes, triggers,
+bindings, pricing, protocol behavior, metadata modes, or economic behavior.
+
+### X.1 Source provenance
+
+| Provenance fact                           | Verified value                             |
+| ----------------------------------------- | ------------------------------------------ |
+| Implementation commit                     | `42be7e9105356a12b4d6fddf9d823d872e12f25c` |
+| Pre-live evidence commit                  | `91f3d62c38ff40fbc6fefff850be03564e33a051` |
+| Remote qualification branch               | `metadata-vcm-qualification`               |
+| Independently verified remote HEAD        | `91f3d62c38ff40fbc6fefff850be03564e33a051` |
+| Implementation reachable from remote HEAD | YES                                        |
+
+The R3 Worker version message encoded the pre-live evidence commit exactly. The
+implementation commit is reachable from that commit, so the qualified Worker has
+a reviewable source lineage through both the parser repair and its local
+evidence.
+
+```text
+SOURCE_PROVENANCE = PASS
+```
+
+### X.2 Candidate history and repaired defect
+
+The original R2 zero-percent candidate was:
+
+```text
+R2_CANDIDATE_VERSION = 97b54092-ce5d-43e1-86ff-572b67bbc87c
+```
+
+R2 exposed a real observer defect. Its MCP endpoint correctly served HTTP 200,
+`application/json`, JSON-RPC 2.0, and an array containing all six expected tools
+at `result.tools`. The MCP shadow observer nevertheless searched only for SSE
+`data:` frames. It returned before `runShadowComparison()` and therefore emitted
+no MCP comparison telemetry.
+
+R3 changed only that observational parser. It did not change the MCP endpoint,
+transport, tool definitions, handlers, protocol negotiation, VCM comparison
+semantics, pricing, or economic behavior. The live R3 evidence below proves that
+the JSON response now reaches the unchanged comparison path.
+
+### X.3 Repaired R3 candidate and active deployment
+
+| Deployment fact                 | Verified value                                 |
+| ------------------------------- | ---------------------------------------------- |
+| Candidate version               | `1a3ea07b-5885-49d2-9cd0-d176c4313bd0`         |
+| Worker version number           | `95`                                           |
+| Version-message source commit   | `91f3d62c38ff40fbc6fefff850be03564e33a051`     |
+| Tag                             | `metadata-vcm-04b-r3-shadow-compare-candidate` |
+| Deployment ID                   | `ffe3f701-9eae-4023-879f-72df1489dcdb`         |
+| Deployment strategy             | `percentage`                                   |
+| Production baseline             | `38cbf4dd-52fd-4afc-ad34-626a2e6454d3` at 100% |
+| R3 candidate                    | `1a3ea07b-5885-49d2-9cd0-d176c4313bd0` at 0%   |
+| Normal traffic reaching R3      | 0%                                             |
+| R2 present in active deployment | NO                                             |
+
+The candidate configuration was independently inspected before deployment. It
+retained the production resources, bindings, runtime compatibility, handlers, 14
+secret binding names, and 16 ordinary production variables. It added only:
+
+```text
+A2A_METADATA_PROJECTION_MODE = shadow_compare
+MCP_METADATA_PROJECTION_MODE = shadow_compare
+```
+
+`PAID_ROUTES_ENABLED` remained `false`. No unrelated candidate configuration
+drift was observed. No secret value is included in this report.
+
+### X.4 Live A2A zero-percent qualification
+
+The version override targeted only:
+
+```text
+1a3ea07b-5885-49d2-9cd0-d176c4313bd0
+```
+
+Request and response evidence:
+
+| Fact                    | Observed value                         |
+| ----------------------- | -------------------------------------- |
+| Endpoint                | `GET /.well-known/agent-card.json`     |
+| HTTP status             | `200`                                  |
+| Content type            | `application/a2a+json`                 |
+| Response size           | `10998` bytes                          |
+| Tail outcome            | `ok`                                   |
+| Tail response status    | `200`                                  |
+| Tail `scriptVersion.id` | `1a3ea07b-5885-49d2-9cd0-d176c4313bd0` |
+
+Candidate-only telemetry contained:
+
+```text
+metadata_projection_compare_total surface=a2a
+metadata_projection_match_total surface=a2a
+```
+
+The exact candidate version therefore served the response and completed a
+matching A2A shadow comparison.
+
+```text
+A2A_CANDIDATE_VERSION_PROVEN = YES
+A2A_LIVE_SHADOW_COMPARE = PASS
+A2A_COMPARE_RESULT = MATCH
+```
+
+### X.5 Live MCP zero-percent qualification
+
+The version override targeted only:
+
+```text
+1a3ea07b-5885-49d2-9cd0-d176c4313bd0
+```
+
+Request and response evidence:
+
+| Fact                    | Observed value                         |
+| ----------------------- | -------------------------------------- |
+| Endpoint                | `POST /mcp`                            |
+| MCP protocol version    | `2026-07-28`                           |
+| MCP method              | `tools/list`                           |
+| HTTP status             | `200`                                  |
+| Content type            | `application/json`                     |
+| Response size           | `133807` bytes                         |
+| Tail outcome            | `ok`                                   |
+| Tail response status    | `200`                                  |
+| Tail `scriptVersion.id` | `1a3ea07b-5885-49d2-9cd0-d176c4313bd0` |
+
+Candidate-only telemetry contained:
+
+```text
+metadata_projection_compare_total surface=mcp
+metadata_projection_match_total surface=mcp
+```
+
+The exact R3 candidate therefore parsed the live JSON-RPC representation,
+reached the unchanged semantic comparator, and recorded a match. This is the
+live proof that the R2 JSON-observer defect was repaired.
+
+```text
+MCP_CANDIDATE_VERSION_PROVEN = YES
+MCP_LIVE_SHADOW_COMPARE = PASS
+MCP_COMPARE_RESULT = MATCH
+R2_JSON_OBSERVER_DEFECT_REPAIRED_LIVE = YES
+```
+
+### X.6 Public production non-regression
+
+The following probes used no version override and continued to reach ordinary
+production routing:
+
+| Public endpoint                                       | Result                               |
+| ----------------------------------------------------- | ------------------------------------ |
+| `https://utility.siteborne.net/health`                | HTTP 200, `application/json`         |
+| `https://utility.siteborne.net/ready`                 | HTTP 200, `application/json`         |
+| `https://siteborne.net/.well-known/mcp-registry-auth` | HTTP 200, `text/plain;charset=UTF-8` |
+
+```text
+PUBLIC_PRODUCTION_NON_REGRESSION = PASS
+```
+
+### X.7 Production economic and binding baseline
+
+The serving production version was re-inspected after candidate qualification:
+
+```text
+SERVING_PRODUCTION_VERSION = 38cbf4dd-52fd-4afc-ad34-626a2e6454d3
+```
+
+The confirmed ordinary economic and route-control variables included:
+
+```text
+PAID_ROUTES_ENABLED = false
+PRODUCTION_ENABLED = true
+PAYMENT_ENVIRONMENT = production
+PRODUCTION_CDP_CREDENTIALS_APPROVED = true
+HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP = true
+
+VERIFY_V2_CDP_ROUTE_ENABLED = true
+WEB_CONTEXT_V2_CDP_ROUTE_ENABLED = true
+COMPANY_EVIDENCE_GRAPH_V2_CDP_ROUTE_ENABLED = false
+DOCUMENT_EVIDENCE_JSON_V2_CDP_ROUTE_ENABLED = false
+DOCUMENT_ARTIFACT_UPLOAD_ROUTE_ENABLED = false
+```
+
+Production retained 16 plaintext variables and 14 secret binding names. No
+secret value was read into or copied into this report.
+
+The verified production resources and bindings remained:
+
+- D1
+- R2
+- KV
+- `JOBS` queue
+- `EVENTS` queue
+- `PaidContinuationWorkflow`
+- AI
+- Browser
+- `STORAGE_ALERT_RECEIVER` service binding
+
+The runtime remained:
+
+```text
+compatibility_date = 2026-08-05
+compatibility_flags = nodejs_compat
+usage_model = standard
+```
+
+```text
+PRODUCTION_ECONOMIC_BASELINE = PASS
+PRODUCTION_BINDING_BASELINE = PASS
+ECONOMIC_CONFIG_DRIFT = 0
+```
+
+### X.8 Production cron invariant
+
+A candidate-independent tail attached specifically to serving production version
+`38cbf4dd-52fd-4afc-ad34-626a2e6454d3` captured a real scheduled event:
+
+```text
+cron = * * * * *
+outcome = ok
+scriptVersion.id = 38cbf4dd-52fd-4afc-ad34-626a2e6454d3
+```
+
+No trigger deployment or cron mutation occurred.
+
+```text
+SCHEDULED_HANDLER_EXECUTING = YES
+CRON_EXPRESSION = * * * * *
+CRON_OUTCOME = ok
+PRODUCTION_CRON_VERSION_PROVEN = YES
+TRIGGER_MUTATION = NO
+```
+
+### X.9 Authority and traffic boundary
+
+This qualification proves only that the existing legacy-serving runtime and the
+VCM shadow projections agree live for A2A and MCP on an exact 0%-traffic
+candidate. The legacy runtime remains the serving producer. VCM remains a
+compare-only shadow. No current or future traffic canary is approved by this
+evidence.
+
+```text
+NORMAL_TRAFFIC_TO_CANDIDATE = 0%
+VCM_PRIMARY_SERVING = NO
+AUTHORITY_INVERSION = NO
+TRAFFIC_CANARY_APPROVED = NO
+```
+
+### X.10 Final R3 closure
+
+```text
+METADATA_VCM_IMPL_04B_R3_LIVE = PASS
+SOURCE_PROVENANCE = PASS
+LOCAL_QUALIFICATION = PASS
+A2A_ZERO_PERCENT_SHADOW = PASS
+A2A_COMPARE = MATCH
+MCP_ZERO_PERCENT_SHADOW = PASS
+MCP_COMPARE = MATCH
+R2_DEFECT_REPAIRED_LIVE = YES
+PUBLIC_PRODUCTION_NON_REGRESSION = PASS
+PRODUCTION_ECONOMIC_BASELINE = PASS
+PRODUCTION_BINDING_BASELINE = PASS
+PRODUCTION_CRON_INVARIANT = PASS
+NORMAL_TRAFFIC_TO_CANDIDATE = 0%
+VCM_PRIMARY_SERVING = NO
+AUTHORITY_INVERSION = NO
+SAFE_TO_CLOSE_04B_R3 = YES
+```
+
+The recommended next step is a separate, explicitly human-authorized decision
+checkpoint before any traffic canary, promotion, or other Cloudflare mutation.
+This closure itself authorizes none of those actions.
