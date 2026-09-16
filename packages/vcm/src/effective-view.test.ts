@@ -134,4 +134,47 @@ describe('project() -- the narrowing law', () => {
     expect(JSON.stringify(model)).toBe(modelBefore);
     expect(JSON.stringify(overlay)).toBe(overlayBefore);
   });
+
+  // METADATA-VCM-IMPL-03B: protocol shadow projections need static facts
+  // (A2A skill tags, x402 extension declaredLimitations/schema refs) that
+  // existed on CanonicalService but were not yet threaded through this view.
+  it('passes through capabilities, declaredLimitations, authorizationClassification, and contract unchanged', async () => {
+    const svc = makeFixtureService({
+      capabilities: ['alpha_capability', 'beta_capability'],
+      declaredLimitations: ['no_real_time_guarantee'],
+      authorizationClassification: 'buyer_authorized',
+    });
+    const model = makeFixtureModel([svc]);
+    const overlay = emptyOverlay(GENERATED_AT);
+    const view = await project(model, overlay, { generatedAt: GENERATED_AT });
+    const service = view.services[0];
+    expect(service.capabilities).toEqual(['alpha_capability', 'beta_capability']);
+    expect(service.declaredLimitations).toEqual(['no_real_time_guarantee']);
+    expect(service.authorizationClassification).toBe('buyer_authorized');
+    expect(service.contract).toEqual(svc.contract);
+  });
+
+  it('passes through interaction readOnly/destructive/idempotent unchanged', async () => {
+    const svc = makeFixtureService({
+      interactions: [
+        {
+          operationId: 'evaluate',
+          kind: 'primary_service_call',
+          executionMode: 'async',
+          maximumInputBytes: 1048576,
+          expectedLatencyClass: 'slow',
+          readOnly: true,
+          idempotent: false,
+          destructive: true,
+        },
+      ],
+    });
+    const model = makeFixtureModel([svc]);
+    const overlay = emptyOverlay(GENERATED_AT);
+    const view = await project(model, overlay, { generatedAt: GENERATED_AT });
+    const interaction = view.services[0].interactions[0];
+    expect(interaction.readOnly).toBe(true);
+    expect(interaction.destructive).toBe(true);
+    expect(interaction.idempotent).toBe(false);
+  });
 });

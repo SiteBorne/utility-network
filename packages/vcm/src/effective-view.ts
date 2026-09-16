@@ -10,6 +10,7 @@ import type { IsoTimestamp, Sha256Digest } from './primitives';
 import type { CanonicalServiceIdValue } from './service-id';
 import { toServiceIdValue } from './service-id';
 import type {
+  AuthorizationClassification,
   CanonicalStaticModel,
   CurrentStaticProtocolExposure,
   ExposureShape,
@@ -17,6 +18,7 @@ import type {
   ProtocolSurface,
   SecurityMechanismKind,
   SecurityTruthLevel,
+  ServiceContractRef,
 } from './types';
 import type { RuntimeStateOverlay } from './runtime-overlay';
 import { UNMEASURED, type MeasuredOrUnmeasured } from './sentinels';
@@ -24,6 +26,13 @@ import { UNMEASURED, type MeasuredOrUnmeasured } from './sentinels';
 export interface EffectiveInteractionView {
   readonly operationId: string;
   readonly capabilityExists: true;
+  /** Pass-through of `CanonicalInteraction.{readOnly,destructive,idempotent}`
+   * (METADATA-VCM-IMPL-03B) -- needed by protocol shadow projections (MCP
+   * tool annotations) that were not previously threaded through this view.
+   * Static-only: no overlay measures or narrows these. */
+  readonly readOnly: boolean;
+  readonly destructive: boolean;
+  readonly idempotent: boolean;
   readonly currentStaticExposures: readonly EffectiveCurrentExposureView[];
 }
 
@@ -46,6 +55,14 @@ export interface EffectiveServiceView {
   readonly title: string;
   readonly description: string;
   readonly lifecycleState: string;
+  /** Pass-through of `CanonicalService.capabilities` (METADATA-VCM-IMPL-03B
+   * §"EffectiveMetadataView extension") -- needed by protocol shadow
+   * projections (A2A skill tags) that were not previously threaded through
+   * this view. Static-only: no overlay narrows or measures it. */
+  readonly capabilities: readonly string[];
+  readonly declaredLimitations: readonly string[];
+  readonly authorizationClassification: AuthorizationClassification;
+  readonly contract: ServiceContractRef;
   readonly interactions: readonly EffectiveInteractionView[];
   readonly security: readonly EffectiveSecurityView[];
   readonly listPrice: Price;
@@ -130,6 +147,9 @@ export async function project(
         .map((interaction) => ({
           operationId: interaction.operationId,
           capabilityExists: true as const,
+          readOnly: interaction.readOnly,
+          destructive: interaction.destructive,
+          idempotent: interaction.idempotent,
           currentStaticExposures: service.currentStaticExposures
             .filter((exposure) => exposure.operationId === interaction.operationId)
             .sort(byString((exposure) => `${exposure.surface}:${exposure.registrationId}`))
@@ -143,6 +163,10 @@ export async function project(
         title: service.title,
         description: service.description,
         lifecycleState: service.lifecycleState,
+        capabilities: service.capabilities,
+        declaredLimitations: service.declaredLimitations,
+        authorizationClassification: service.authorizationClassification,
+        contract: service.contract,
         interactions,
         security,
         listPrice: service.economics.listPrice,
