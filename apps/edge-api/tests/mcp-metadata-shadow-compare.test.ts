@@ -242,6 +242,128 @@ describe('MCP metadata projection mode -- shadow_compare', () => {
   });
 });
 
+describe('MCP metadata projection mode -- vcm_primary_compare', () => {
+  it('vcm_primary_compare selects six matching VCM definitions before app construction', async () => {
+    const actualCreate = protocolMcp.createSiteborneMcpHonoApp;
+    let selectedOptions: protocolMcp.CreateSiteborneMcpOptions | undefined;
+    const createSpy = vi
+      .spyOn(protocolMcp, 'createSiteborneMcpHonoApp')
+      .mockImplementation((options) => {
+        selectedOptions = options;
+        return actualCreate(options);
+      });
+
+    const { response, tools } = await callToolsList({
+      MCP_METADATA_PROJECTION_MODE: 'vcm_primary_compare',
+    });
+
+    expect(response.status).toBe(200);
+    expect(createSpy).toHaveBeenCalledTimes(1);
+    expect(selectedOptions?.toolDefinitions).toHaveLength(6);
+    expect(tools.map(({ name, title, description }) => ({ name, title, description }))).toEqual(
+      selectedOptions?.toolDefinitions?.map(({ name, title, description }) => ({
+        name,
+        title,
+        description,
+      }))
+    );
+    expect(tools.map((tool) => tool.name)).toEqual([
+      'siteborne_company_evidence_graph',
+      'siteborne_web_context_verified',
+      'siteborne_document_evidence_json',
+      'siteborne_verify_agent_output',
+      'siteborne_get_quote',
+      'siteborne_get_service_health',
+    ]);
+
+    createSpy.mockRestore();
+  });
+
+  it('passes only definition data and no executable handler from VCM', async () => {
+    let selectedDefinitions: readonly protocolMcp.SiteborneMcpToolDefinition[] | undefined;
+    const actualCreate = protocolMcp.createSiteborneMcpHonoApp;
+    const createSpy = vi
+      .spyOn(protocolMcp, 'createSiteborneMcpHonoApp')
+      .mockImplementation((options) => {
+        selectedDefinitions = options.toolDefinitions;
+        return actualCreate(options);
+      });
+
+    await callToolsList({ MCP_METADATA_PROJECTION_MODE: 'vcm_primary_compare' });
+
+    expect(selectedDefinitions).toHaveLength(6);
+    for (const definition of selectedDefinitions ?? []) {
+      expect(definition).not.toHaveProperty('handler');
+      expect(definition).not.toHaveProperty('execute');
+      expect(definition).not.toHaveProperty('callback');
+    }
+
+    createSpy.mockRestore();
+  });
+
+  it('serves selected definitions through application/json tools/list', async () => {
+    let selectedDefinitions: readonly protocolMcp.SiteborneMcpToolDefinition[] | undefined;
+    const createSpy = vi
+      .spyOn(protocolMcp, 'createSiteborneMcpHonoApp')
+      .mockImplementation((options) => {
+        selectedDefinitions = options.toolDefinitions;
+        return {
+          fetch: async () =>
+            Response.json({ jsonrpc: '2.0', id: 1, result: { tools: options.toolDefinitions } }),
+        } as never;
+      });
+
+    const observed = await callToolsList({
+      MCP_METADATA_PROJECTION_MODE: 'vcm_primary_compare',
+    });
+
+    expect(observed.response.status).toBe(200);
+    expect(observed.response.headers.get('content-type')).toContain('application/json');
+    expect(observed.tools).toEqual(selectedDefinitions);
+    expect(observed.tools).toHaveLength(6);
+
+    createSpy.mockRestore();
+  });
+
+  it('serves selected definitions through text/event-stream tools/list', async () => {
+    const observed = await callToolsList({
+      MCP_METADATA_PROJECTION_MODE: 'vcm_primary_compare',
+    });
+
+    expect(observed.response.status).toBe(200);
+    expect(observed.response.headers.get('content-type')).toContain('text/event-stream');
+    expect(observed.tools).toHaveLength(6);
+  });
+
+  it('emits primary attempt success compare and match for every valid primary tools/list', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    const observed = await callToolsList({
+      MCP_METADATA_PROJECTION_MODE: 'vcm_primary_compare',
+    });
+    expect(observed.response.status).toBe(200);
+
+    const lines = collectStructuredLogLines({ log: logSpy, error: errorSpy });
+    for (const event of [
+      'metadata_projection_primary_attempt_total',
+      'metadata_projection_primary_success_total',
+      'metadata_projection_compare_total',
+      'metadata_projection_match_total',
+    ]) {
+      expect(
+        lines.some(
+          (line) =>
+            line.event === event && line.surface === 'mcp' && line.mode === 'vcm_primary_compare'
+        )
+      ).toBe(true);
+    }
+
+    logSpy.mockRestore();
+    errorSpy.mockRestore();
+  });
+});
+
 describe('MCP metadata projection mode -- unauthorized future modes refuse to serve VCM', () => {
   it('vcm_only behaves exactly like legacy: served tools unchanged, zero comparison', async () => {
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);

@@ -1,8 +1,12 @@
 import {
+  assertValidSiteborneMcpToolDefinitions,
+  buildLegacySiteborneMcpToolDefinitions,
+  buildSiteborneMcpDefinitionAuthorityInputs,
   createSiteborneMcpHonoApp,
   MCP_SERVICE_TOOLS,
   type CreateSiteborneMcpOptions,
   type McpServiceHealthStatus,
+  type SiteborneMcpToolDefinition,
 } from '@siteborne/protocol-mcp';
 import {
   assertPreproductionNetwork,
@@ -11,6 +15,7 @@ import {
   type SiteborneServiceId,
 } from '@siteborne/protocol-x402';
 import {
+  buildCurrentMcpProjectionContext,
   buildRealMcpShadowContext,
   getRuntimeEffectiveView,
   projectMcpToolsFromVcm,
@@ -32,6 +37,8 @@ import {
   resolveAuthorizedMetadataProjectionMode,
 } from '../control-plane/config/metadata-projection-mode';
 import { runShadowComparison } from '../control-plane/metadata/shadow-comparison-runner';
+import { selectPrimaryProjection } from '../control-plane/metadata/primary-comparison-selector';
+import { recordMetadataProjectionLifecycle } from '../control-plane/telemetry/metadata-projection-telemetry';
 import { companyEvidenceGraphV2CdpProductionRoute } from '../control-plane/routes/production-company-evidence-v2-cdp-route';
 import { webContextVerifiedV2CdpProductionRoute } from '../control-plane/routes/production-web-context-v2-cdp-route';
 import { documentEvidenceJsonV2CdpProductionRoute } from '../control-plane/routes/production-document-evidence-v2-cdp-route';
@@ -215,6 +222,19 @@ async function scheduleMcpShadowComparison(
   });
 }
 
+function recordMcpHandlerConstructionFailure(): void {
+  try {
+    recordMetadataProjectionLifecycle({
+      event: 'metadata_projection_primary_failure_total',
+      surface: 'mcp',
+      mode: 'vcm_primary_compare',
+      reason: 'handler_construction',
+    });
+  } catch {
+    // Telemetry is observational and cannot change fail-closed construction.
+  }
+}
+
 /**
  * Credential-independent MCP endpoint. Each HTTP request receives a fresh
  * official SDK handler/server. Service tools use protocol-mcp's closed
@@ -293,13 +313,42 @@ export async function mcpRoute(context: Context<{ Bindings: Env }>): Promise<Res
     parseMetadataProjectionMode(context.env?.MCP_METADATA_PROJECTION_MODE, 'mcp'),
     'mcp'
   );
+
+  let selectedOptions = options;
+  if (authorizedMode === 'vcm_primary_compare') {
+    const selection = await selectPrimaryProjection<readonly SiteborneMcpToolDefinition[]>({
+      surface: 'mcp',
+      buildLegacy: () => {
+        const definitions = buildLegacySiteborneMcpToolDefinitions(options);
+        assertValidSiteborneMcpToolDefinitions(definitions);
+        return definitions;
+      },
+      buildPrimary: async () => {
+        const effective = await getRuntimeEffectiveView(UNRELEASED_RUNTIME_SOURCE_COMMIT);
+        const authority = buildSiteborneMcpDefinitionAuthorityInputs(options);
+        return projectMcpToolsFromVcm(
+          effective,
+          buildCurrentMcpProjectionContext(authority)
+        ) as readonly SiteborneMcpToolDefinition[];
+      },
+      validatePrimary: assertValidSiteborneMcpToolDefinitions,
+    });
+    selectedOptions = { ...options, toolDefinitions: selection.selected };
+  }
+
   // Cloned *before* the real fetch consumes `boundedRequest`'s body -- both
   // copies remain independently readable since the body is already a
   // static, fully-buffered Uint8Array at this point (`readBoundedMcpRequest`).
   const requestForMethodSniffing =
     authorizedMode === 'shadow_compare' ? boundedRequest.clone() : undefined;
 
-  const response = await createSiteborneMcpHonoApp(options).fetch(boundedRequest);
+  let response: Response;
+  try {
+    response = await createSiteborneMcpHonoApp(selectedOptions).fetch(boundedRequest);
+  } catch (error) {
+    if (authorizedMode === 'vcm_primary_compare') recordMcpHandlerConstructionFailure();
+    throw error;
+  }
 
   if (authorizedMode === 'shadow_compare' && requestForMethodSniffing) {
     // Cloned before returning `response` up the stack -- nothing has begun
