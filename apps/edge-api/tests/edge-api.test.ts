@@ -16,6 +16,8 @@ describe('apps/edge-api - foundation endpoints', () => {
         })
       );
       expect(json.standard).toBe('Proof-Carrying Context v1.0.0');
+      expect(json.status).toBe('not_ready');
+      expect(String(json.status)).not.toMatch(/foundation|preproduction/);
       expect(Array.isArray(json.services)).toBe(true);
       expect((json.services as unknown[]).length).toBe(4);
     });
@@ -42,15 +44,15 @@ describe('apps/edge-api - foundation endpoints', () => {
   });
 
   describe('GET /ready', () => {
-    it('returns not_ready in foundation phase', async () => {
+    it('returns not_ready in unconfigured phase without runtime bindings', async () => {
       const res = await app.request('/ready');
       expect(res.status).toBe(200);
       const json = (await res.json()) as Record<string, unknown>;
       expect(json.status).toBe('not_ready');
-      expect(json.phase).toBe('foundation');
+      expect(json.phase).toBe('unconfigured');
       expect(json.production_services_enabled).toBe(false);
       expect(Array.isArray(json.blocked_external)).toBe(true);
-      expect((json.blocked_external as unknown[]).length).toBeGreaterThan(0);
+      expect(json.blocked_external).toEqual(['production_environment_not_configured']);
       expect(json.reason).toBeDefined();
     });
 

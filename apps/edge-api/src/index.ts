@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { healthRoute } from './routes/health';
 import { readinessRoute } from './routes/readiness';
+import { derivePublicReleaseState } from './routes/public-release-state';
 import { mcpRoute } from './routes/mcp';
 import { a2aRoute } from './routes/a2a';
 import { mcpRegistryAuthRoute } from './routes/mcp-registry-auth';
@@ -244,11 +245,12 @@ app.post('/v2/artifacts/documents', documentArtifactUploadRoute);
 // above -- same correction, same reasoning, unconditional 404.
 app.all('/v2/*', (c) => c.notFound());
 
-app.get('/', (c) => {
+app.get('/', async (c) => {
+  const releaseState = await derivePublicReleaseState(c.env);
   return c.json({
     name: 'SITEBORNE Utility Network',
     version: '0.0.0',
-    status: 'preproduction foundation',
+    status: releaseState.status,
     domains: {
       human: 'siteborne.com',
       machine: 'siteborne.net',

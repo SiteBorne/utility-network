@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { validateReadinessResponse } from '@siteborne/contracts';
-import { resolveEffectiveProductionStatusByServiceId } from '../control-plane/config/production-payment';
 import type { Env } from '../control-plane/config/env';
+import { derivePublicReleaseState } from './public-release-state';
 
 export const readinessRoute = new Hono<{ Bindings: Env }>();
 
@@ -18,28 +18,21 @@ export const readinessRoute = new Hono<{ Bindings: Env }>();
  * paid production service active", never specifically "verify_agent_
  * output.v2 active" -- proven by this comment's own prior wording, not
  * assumed; adding a second service changes the IMPLEMENTATION, not the
- * SEMANTIC MEANING). `status`/`phase`/`reason` remain unchanged
- * (SUN-1220Q1 §9/§4D): they describe broader platform readiness, not any
- * one service's runtime state. */
-readinessRoute.get('/', (c) => {
-  const hasDb = Boolean(c.env?.DB);
-  const env = c.env;
-  const productionServicesEnabled = Object.values(
-    resolveEffectiveProductionStatusByServiceId(env, hasDb)
-  ).some(Boolean);
-
+ * SEMANTIC MEANING).
+ *
+ * PRODUCTION-RELEASE-TRUTHFULNESS-01 separates that capability fact from
+ * public-runtime readiness. `derivePublicReleaseState` owns status, phase,
+ * real dependency blockers, and reason; paid activation remains an
+ * independently derived field and may truthfully be false while the public
+ * runtime is ready. */
+readinessRoute.get('/', async (c) => {
+  const state = await derivePublicReleaseState(c.env);
   const response = {
-    status: 'not_ready' as const,
-    phase: 'foundation',
-    production_services_enabled: productionServicesEnabled,
-    // SUN-1220Q1: `cloudflare_account_configuration`, `seller_wallet`, and
-    // `cdp_credentials` are proven resolved by direct evidence (this
-    // session's own `production:preflight` PASS; SUN-1220O's real
-    // settlement). The remaining three have no evidence source in this
-    // repository to check and are carried forward unchanged, not guessed.
-    blocked_external: ['ionos_dns_migration', 'nevermined_credentials', 'registry_publication'],
-    reason:
-      'Service contracts and production dependencies are not yet verified. Only health/readiness endpoints available.',
+    status: state.status,
+    phase: state.phase,
+    production_services_enabled: state.productionServicesEnabled,
+    blocked_external: state.blockers,
+    reason: state.reason,
   };
 
   const validated = validateReadinessResponse(response);

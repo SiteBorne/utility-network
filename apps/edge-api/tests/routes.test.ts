@@ -148,19 +148,14 @@ describe('Health and Readiness Routes', () => {
     expect(body.uptime_seconds).toBeDefined();
   });
 
-  it('GET /ready returns not_ready with correct phase', async () => {
+  it('GET /ready fails safely when release configuration is absent', async () => {
     const res = await app.request('/ready');
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.status).toBe('not_ready');
-    expect(body.phase).toBe('foundation');
+    expect(body.phase).toBe('unconfigured');
     expect(body.production_services_enabled).toBe(false);
-    // SUN-1220Q1/Q2: `cloudflare_account_configuration` was proven stale
-    // (this repository's own production:preflight passes and a real
-    // paid route has settled a live payment) and removed from
-    // blocked_external. `ionos_dns_migration` has no evidence source in
-    // this repository to check and is carried forward unchanged.
-    expect(body.blocked_external).toContain('ionos_dns_migration');
+    expect(body.blocked_external).toEqual(['production_environment_not_configured']);
     expect(body.reason).toBeDefined();
   });
 });

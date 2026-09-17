@@ -13,9 +13,11 @@
  * to the one field of `/ready` this checkpoint is scoped to.
  *
  * These tests exercise the real app (`../src/index`) end to end with two
- * env variants: known-good-equivalent (every gate off, no DB) and
- * candidate-equivalent (every gate on, DB present -- matching
- * SUN-1220P3's qualified discovery-fixed candidate configuration).
+ * intentionally incomplete env variants to retain the economic-overlay
+ * regression coverage. PRODUCTION-RELEASE-TRUTHFULNESS-01 separately tests
+ * a complete public-production environment and requires these incomplete
+ * fixtures to fail readiness for current reasons rather than old foundation
+ * blockers.
  */
 import { describe, it, expect } from 'vitest';
 import type { D1Database } from '@cloudflare/workers-types';
@@ -135,7 +137,9 @@ describe('SUN-1220Q2 — /ready production_services_enabled truthfulness', () =>
   });
 
   it('CASE G: HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP false -> false', async () => {
-    const { body } = await getReady(withOverride({ HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP: 'false' }));
+    const { body } = await getReady(
+      withOverride({ HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP: 'false' })
+    );
     expect(body.production_services_enabled).toBe(false);
   });
 
@@ -159,9 +163,8 @@ describe('SUN-1220Q2 — /ready production_services_enabled truthfulness', () =>
   });
 });
 
-describe('SUN-1220Q2 — /ready blocked_external correction', () => {
+describe('SUN-1220Q2 — /ready historical blocker removal', () => {
   const STALE_BLOCKERS = ['cloudflare_account_configuration', 'seller_wallet', 'cdp_credentials'];
-  const UNPROVEN_BLOCKERS = ['ionos_dns_migration', 'nevermined_credentials', 'registry_publication'];
 
   it('no longer lists the three Q1-proven-stale blockers (known-good env)', async () => {
     const { body } = await getReady(KNOWN_GOOD_EQUIVALENT_ENV);
@@ -177,38 +180,32 @@ describe('SUN-1220Q2 — /ready blocked_external correction', () => {
     }
   });
 
-  it('still lists all three unproven blockers, unconditionally', async () => {
-    const known = await getReady(KNOWN_GOOD_EQUIVALENT_ENV);
-    const candidate = await getReady(CANDIDATE_EQUIVALENT_ENV);
-    for (const unproven of UNPROVEN_BLOCKERS) {
-      expect(known.body.blocked_external).toContain(unproven);
-      expect(candidate.body.blocked_external).toContain(unproven);
-    }
-  });
-
-  it('blocked_external contains exactly the 3 unproven items, nothing else', async () => {
+  it('does not carry forward resolved or optional foundation-era blockers', async () => {
     const { body } = await getReady(CANDIDATE_EQUIVALENT_ENV);
-    expect([...body.blocked_external].sort()).toEqual([...UNPROVEN_BLOCKERS].sort());
+    expect(body.blocked_external).not.toEqual(
+      expect.arrayContaining([
+        'ionos_dns_migration',
+        'nevermined_credentials',
+        'registry_publication',
+      ])
+    );
   });
 });
 
-describe('SUN-1220Q2 — /ready global status/phase/reason preservation', () => {
-  it('status/phase/reason unchanged by env for known-good', async () => {
+describe('truthful release-state derivation for incomplete test fixtures', () => {
+  it('does not expose the obsolete foundation phase', async () => {
     const { body } = await getReady(KNOWN_GOOD_EQUIVALENT_ENV);
     expect(body.status).toBe('not_ready');
-    expect(body.phase).toBe('foundation');
-    expect(body.reason).toBe(
-      'Service contracts and production dependencies are not yet verified. Only health/readiness endpoints available.'
-    );
+    expect(body.phase).toBe('unconfigured');
+    expect(body.blocked_external).toEqual(['production_environment_not_configured']);
   });
 
-  it('status/phase/reason unchanged by env for fully qualified candidate (global platform readiness is broader than one service)', async () => {
+  it('does not confuse paid-service activation with public release readiness', async () => {
     const { body } = await getReady(CANDIDATE_EQUIVALENT_ENV);
     expect(body.status).toBe('not_ready');
-    expect(body.phase).toBe('foundation');
-    expect(body.reason).toBe(
-      'Service contracts and production dependencies are not yet verified. Only health/readiness endpoints available.'
-    );
+    expect(body.phase).toBe('unconfigured');
+    expect(body.production_services_enabled).toBe(true);
+    expect(body.blocked_external).toEqual(['production_environment_not_configured']);
   });
 });
 

@@ -16,18 +16,11 @@
         line-height: 1.6;
       }
       .status {
-        background: #fef3c7;
-        border: 1px solid #f59e0b;
+        background: #ecfdf5;
+        border: 1px solid #10b981;
         border-radius: 4px;
         padding: 1rem;
         margin: 1rem 0;
-      }
-      .service {
-        background: #f3f4f6;
-        padding: 0.5rem;
-        margin: 0.25rem 0;
-        border-radius: 4px;
-        font-family: monospace;
       }
       code {
         background: #f3f4f6;
@@ -40,7 +33,8 @@
     <h1>SITEBORNE Utility Network</h1>
 
     <div class="status">
-      <strong>Status:</strong> Preproduction Foundation (SUN-0001 complete, SUN-0002 in progress)
+      <strong>Status:</strong> Production public runtime ready. Paid services are disabled by
+      policy.
     </div>
 
     <h2>Domains</h2>
@@ -59,26 +53,18 @@
       input/output hashes, provenance, verification results, and an Ed25519 signed receipt.
     </p>
 
-    <h2>Planned Services</h2>
-    <div class="service">company_evidence_graph.v1 — POST /v1/company/evidence-graph — $0.039</div>
-    <div class="service">
-      web_context_verified.v1 — POST /v1/web/context — $0.009 direct / $0.029 rendered
-    </div>
-    <div class="service">
-      document_evidence_json.v1 — POST /v1/document/evidence-json — $0.012 native / $0.019 OCR /
-      $0.029 table
-    </div>
-    <div class="service">
-      verify_agent_output.v1 — POST /v1/verify/agent-output — $0.019 standard / $0.049 independent
-    </div>
+    <h2>Machine Service Origin</h2>
+    <p>
+      Current discovery metadata, schemas, health, A2A, MCP, OpenAPI, and catalog surfaces are
+      published at <code>https://utility.siteborne.net</code>. Paid invocation remains disabled by
+      policy for the initial quiescent production release.
+    </p>
 
-    <h2>Protocols (Planned)</h2>
+    <h2>Protocol Surfaces</h2>
     <ul>
-      <li>x402 v2 — Base/USDC, exact & upto schemes, Coinbase CDP facilitator</li>
+      <li>x402 v2 — capability metadata published; economic admission disabled</li>
       <li>MCP — Remote Streamable HTTP, <code>net.siteborne/utility</code> namespace</li>
       <li>A2A 1.0 — Signed Agent Card at <code>/.well-known/agent-card.json</code></li>
-      <li>Nevermined — Pay-as-you-go plans</li>
-      <li>Agentverse — Public agent registration</li>
       <li>OpenAPI — Machine-readable contracts</li>
     </ul>
 
@@ -92,8 +78,7 @@
     <hr />
     <p>
       <small
-        >This is a machine-first static page. No payment endpoints, registry entries, or live
-        services exist yet.</small
+        >This is the machine-first network identity page. It performs no service execution.</small
       >
     </p>
   </body>
