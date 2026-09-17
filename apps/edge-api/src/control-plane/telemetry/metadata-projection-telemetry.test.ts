@@ -4,7 +4,10 @@
  * failure must never take down static machine metadata).
  */
 import { describe, expect, it, vi } from 'vitest';
-import { recordMetadataProjectionComparison } from './metadata-projection-telemetry';
+import {
+  recordMetadataProjectionComparison,
+  recordMetadataProjectionLifecycle,
+} from './metadata-projection-telemetry';
 
 describe('recordMetadataProjectionComparison', () => {
   it('emits compare_total and match_total on a clean match', () => {
@@ -81,6 +84,29 @@ describe('recordMetadataProjectionComparison', () => {
         fellBackToLegacy: false,
       })
     ).not.toThrow();
+    spy.mockRestore();
+  });
+});
+
+describe('recordMetadataProjectionLifecycle', () => {
+  it('emits the closed primary lifecycle and mode fields without payload content', () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    recordMetadataProjectionLifecycle({
+      event: 'metadata_projection_primary_failure_total',
+      surface: 'mcp',
+      mode: 'vcm_primary_compare',
+      reason: 'projector',
+    });
+
+    expect(spy).toHaveBeenCalledTimes(1);
+    const line = JSON.parse(spy.mock.calls[0]![0] as string);
+    expect(line).toEqual({
+      event: 'metadata_projection_primary_failure_total',
+      surface: 'mcp',
+      mode: 'vcm_primary_compare',
+      reason: 'projector',
+    });
+    expect(JSON.stringify(line)).not.toMatch(/tools|skills|inputSchema|outputSchema|payload/);
     spy.mockRestore();
   });
 });

@@ -22,10 +22,41 @@
  */
 import type { DifferenceSummary } from '@siteborne/vcm';
 
+export type MetadataProjectionTelemetryMode = 'shadow_compare' | 'vcm_primary_compare';
+
+export type MetadataProjectionFailureReason =
+  | 'projector'
+  | 'validation'
+  | 'mismatch'
+  | 'comparator'
+  | 'legacy_reference'
+  | 'both_producers'
+  | 'signing'
+  | 'handler_construction';
+
+export type MetadataProjectionLifecycleEvent =
+  | 'metadata_projection_primary_attempt_total'
+  | 'metadata_projection_primary_success_total'
+  | 'metadata_projection_primary_failure_total'
+  | 'metadata_projection_legacy_reference_attempt_total'
+  | 'metadata_projection_comparator_failure_total'
+  | 'metadata_projection_validation_failure_total'
+  | 'metadata_projection_fallback_total'
+  | 'metadata_projection_signing_failure_total';
+
 export interface MetadataProjectionComparisonEvent {
   readonly surface: 'a2a' | 'mcp';
   readonly differenceSummary: DifferenceSummary;
   readonly fellBackToLegacy: boolean;
+  readonly mode?: MetadataProjectionTelemetryMode;
+  readonly fallbackReason?: MetadataProjectionFailureReason;
+}
+
+export interface MetadataProjectionLifecycleRecord {
+  readonly event: MetadataProjectionLifecycleEvent;
+  readonly surface: 'a2a' | 'mcp';
+  readonly mode: MetadataProjectionTelemetryMode;
+  readonly reason?: MetadataProjectionFailureReason;
 }
 
 function safeLog(payload: Record<string, unknown>): void {
@@ -38,22 +69,37 @@ function safeLog(payload: Record<string, unknown>): void {
 }
 
 export function recordMetadataProjectionComparison(event: MetadataProjectionComparisonEvent): void {
-  const { surface, differenceSummary, fellBackToLegacy } = event;
-  safeLog({ event: 'metadata_projection_compare_total', surface });
+  const { surface, differenceSummary, fellBackToLegacy, mode, fallbackReason } = event;
+  safeLog({ event: 'metadata_projection_compare_total', surface, ...(mode ? { mode } : {}) });
 
   const mismatchCount = differenceSummary.UNEXPLAINED_DIFFERENCE;
   if (mismatchCount === 0) {
-    safeLog({ event: 'metadata_projection_match_total', surface });
+    safeLog({ event: 'metadata_projection_match_total', surface, ...(mode ? { mode } : {}) });
   } else {
     safeLog({
       event: 'metadata_projection_mismatch_total',
       surface,
       domain: 'static_semantic',
       differenceCount: mismatchCount,
+      ...(mode ? { mode } : {}),
     });
   }
 
   if (fellBackToLegacy) {
-    safeLog({ event: 'metadata_projection_fallback_total', surface });
+    safeLog({
+      event: 'metadata_projection_fallback_total',
+      surface,
+      ...(mode ? { mode } : {}),
+      ...(fallbackReason ? { reason: fallbackReason } : {}),
+    });
   }
+}
+
+export function recordMetadataProjectionLifecycle(event: MetadataProjectionLifecycleRecord): void {
+  safeLog({
+    event: event.event,
+    surface: event.surface,
+    mode: event.mode,
+    ...(event.reason ? { reason: event.reason } : {}),
+  });
 }
