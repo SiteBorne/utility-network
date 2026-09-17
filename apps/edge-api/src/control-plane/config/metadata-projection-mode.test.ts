@@ -47,29 +47,35 @@ describe('parseMetadataProjectionMode', () => {
 });
 
 describe('resolveAuthorizedMetadataProjectionMode', () => {
-  it('legacy passes through unchanged', () => {
-    expect(resolveAuthorizedMetadataProjectionMode('legacy', 'a2a')).toBe('legacy');
+  it.each(['a2a', 'mcp'] as const)('authorizes legacy independently for %s', (surface) => {
+    expect(resolveAuthorizedMetadataProjectionMode('legacy', surface)).toBe('legacy');
   });
 
-  it('shadow_compare passes through unchanged (authorized this checkpoint)', () => {
-    expect(resolveAuthorizedMetadataProjectionMode('shadow_compare', 'mcp')).toBe('shadow_compare');
-  });
+  it.each(['a2a', 'mcp'] as const)(
+    'authorizes shadow_compare independently for %s',
+    (surface) => {
+      expect(resolveAuthorizedMetadataProjectionMode('shadow_compare', surface)).toBe(
+        'shadow_compare'
+      );
+    }
+  );
 
-  it('vcm_primary_compare is refused down to legacy and logs once, naming the surface', () => {
+  it.each(['a2a', 'mcp'] as const)(
+    'authorizes vcm_primary_compare independently for %s',
+    (surface) => {
+      expect(resolveAuthorizedMetadataProjectionMode('vcm_primary_compare', surface)).toBe(
+        'vcm_primary_compare'
+      );
+    }
+  );
+
+  it.each(['a2a', 'mcp'] as const)('refuses vcm_only independently for %s', (surface) => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    expect(resolveAuthorizedMetadataProjectionMode('vcm_primary_compare', 'a2a')).toBe('legacy');
+    expect(resolveAuthorizedMetadataProjectionMode('vcm_only', surface)).toBe('legacy');
     expect(spy).toHaveBeenCalledTimes(1);
     const [line] = spy.mock.calls[0] as [string];
-    expect(line).toContain('a2a');
-    expect(line).toContain('vcm_primary_compare');
-    expect(line).toContain('NOT_AUTHORIZED_IN_IMPL_04A');
-    spy.mockRestore();
-  });
-
-  it('vcm_only is refused down to legacy and logs once', () => {
-    const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    expect(resolveAuthorizedMetadataProjectionMode('vcm_only', 'mcp')).toBe('legacy');
-    expect(spy).toHaveBeenCalledTimes(1);
+    expect(line).toContain(surface);
+    expect(line).toContain('vcm_only');
     spy.mockRestore();
   });
 
@@ -80,4 +86,22 @@ describe('resolveAuthorizedMetadataProjectionMode', () => {
     expect(authorized).toBe('legacy');
     spy.mockRestore();
   });
+
+  it.each(['a2a', 'mcp'] as const)(
+    'keeps an invalid raw value safely resolved to legacy for %s',
+    (surface) => {
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      const parsed = parseMetadataProjectionMode('not-a-mode', surface);
+      expect(resolveAuthorizedMetadataProjectionMode(parsed, surface)).toBe('legacy');
+      spy.mockRestore();
+    }
+  );
+
+  it.each(['a2a', 'mcp'] as const)(
+    'keeps a missing raw value safely resolved to legacy for %s',
+    (surface) => {
+      const parsed = parseMetadataProjectionMode(undefined, surface);
+      expect(resolveAuthorizedMetadataProjectionMode(parsed, surface)).toBe('legacy');
+    }
+  );
 });

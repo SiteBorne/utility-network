@@ -9,12 +9,9 @@
  * rather than inventing a new parsing convention.
  *
  * `vcm_primary_compare` and `vcm_only` are real members of this closed
- * type (VCM-06 §V explicitly requires a four-value enum), but
- * `resolveAuthorizedMetadataProjectionMode` refuses to let either one
- * actually serve in this checkpoint (VCM-IMPL-04A §V/§XIV) -- the parser
- * recognizes the literal; the *authorization* gate is a separate, later
- * check, so a future checkpoint can lift the gate without touching the
- * parser or its four-literal type at all.
+ * type (VCM-06 §V explicitly requires a four-value enum). The separate
+ * authorization gate permits the independently compared primary mode while
+ * continuing to refuse `vcm_only`, without weakening this parser.
  */
 export const METADATA_PROJECTION_MODES = [
   'legacy',
@@ -58,27 +55,22 @@ export function parseMetadataProjectionMode(
 }
 
 /**
- * `legacy` and `shadow_compare` are the only modes this checkpoint may
- * ever exercise as *serving* behavior (VCM-IMPL-04A §V). `vcm_primary_
- * compare`/`vcm_only` are recognized upstream by the parser (the type
- * stays closed and four-valued per VCM-06) but are refused here with an
- * explicit, logged fallback to `legacy` rather than silently being treated
- * the same as an invalid string -- the distinction matters for a future
- * authorization-boundary checkpoint that only needs to change this one
- * function, not reintroduce the parser's closed enum.
+ * `legacy`, `shadow_compare`, and `vcm_primary_compare` are authorized.
+ * `vcm_only` remains structurally refused with an explicit logged fallback
+ * to `legacy`; parity qualification never authorizes sole VCM serving.
  */
 export function resolveAuthorizedMetadataProjectionMode(
   mode: MetadataProjectionMode,
   surface: MetadataProjectionSurface
-): 'legacy' | 'shadow_compare' {
-  if (mode === 'legacy' || mode === 'shadow_compare') return mode;
+): 'legacy' | 'shadow_compare' | 'vcm_primary_compare' {
+  if (mode !== 'vcm_only') return mode;
   console.error(
     JSON.stringify({
       event: 'metadata_projection_mode_not_yet_authorized',
       surface,
       requestedMode: mode,
       resolvedTo: 'legacy',
-      reason: 'NOT_AUTHORIZED_IN_IMPL_04A',
+      reason: 'VCM_ONLY_NOT_AUTHORIZED',
     })
   );
   return 'legacy';
