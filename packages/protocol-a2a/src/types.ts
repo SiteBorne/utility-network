@@ -1,4 +1,5 @@
 import type { SiteborneServiceId } from '@siteborne/protocol-x402';
+import type { AgentCard } from '@a2a-js/sdk';
 import type { SiteborneA2aSigningIdentity } from './signing';
 
 export interface SiteborneA2aInvocation {
@@ -40,6 +41,10 @@ export interface A2aServiceExecutionBoundary {
 }
 
 export interface CreateSiteborneA2aOptions {
+  /** A complete unsigned card selected by an upstream metadata authority.
+   * The transport rejects pre-signed input, then uses the existing signer
+   * and verifier exactly once. Omission preserves the legacy card builder. */
+  unsignedAgentCard?: AgentCard;
   serviceBoundary?: A2aServiceExecutionBoundary;
   allowedHosts?: readonly string[];
   allowedOrigins?: readonly string[];

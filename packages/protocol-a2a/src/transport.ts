@@ -123,12 +123,16 @@ function originAllowed(request: Request, allowedOrigins: readonly string[]): boo
  */
 export async function createSiteborneA2aHonoApp(options: CreateSiteborneA2aOptions = {}) {
   const identity = options.signingIdentity ?? (await createLocalA2aSigningIdentity());
-  const signedCard = await identity.sign(
+  const unsignedCard =
+    options.unsignedAgentCard ??
     buildUnsignedSiteborneAgentCard(
       options.effectiveProductionStatusByServiceId,
       options.mtlsProductionActive
-    )
-  );
+    );
+  if (unsignedCard.signatures.length > 0) {
+    throw new Error('supplied Agent Card must be unsigned');
+  }
+  const signedCard = await identity.sign(unsignedCard);
   await identity.verify(signedCard);
   const app = new Hono();
   const allowedHosts = options.allowedHosts ?? DEFAULT_ALLOWED_HOSTS;

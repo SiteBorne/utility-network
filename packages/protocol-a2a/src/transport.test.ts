@@ -10,11 +10,28 @@ import {
   A2A_PROTOCOL_VERSION,
   SITEBORNE_A2A_ORIGIN,
   SITEBORNE_SERVICE_IDS,
+  buildUnsignedSiteborneAgentCard,
+  createLocalA2aSigningIdentity,
   createSiteborneA2aHonoApp,
   type A2aServiceExecutionBoundary,
+  type SiteborneA2aSigningIdentity,
 } from './index';
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
+
+async function controlledSigningIdentity(): Promise<{
+  identity: SiteborneA2aSigningIdentity;
+  sign: ReturnType<typeof vi.fn<SiteborneA2aSigningIdentity['sign']>>;
+  verify: ReturnType<typeof vi.fn<SiteborneA2aSigningIdentity['verify']>>;
+}> {
+  const real = await createLocalA2aSigningIdentity();
+  const sign = vi.fn(real.sign);
+  const verify = vi.fn(real.verify);
+  return { identity: { ...real, sign, verify }, sign, verify };
+}
 
 function dataMessage(
   messageId: string,
@@ -103,6 +120,100 @@ function taskFromRpcResponse(value: unknown) {
 }
 
 describe('A2A v1 local Hono transport', () => {
+  it('signs the supplied unsigned Agent Card instead of rebuilding legacy content', async () => {
+    const supplied = buildUnsignedSiteborneAgentCard();
+    supplied.description = 'selected VCM description';
+    const { identity, sign, verify } = await controlledSigningIdentity();
+
+    const app = await createSiteborneA2aHonoApp({
+      signingIdentity: identity,
+      unsignedAgentCard: supplied,
+    });
+    const response = await app.request(`${SITEBORNE_A2A_ORIGIN}/.well-known/agent-card.json`);
+    const card = AgentCard.fromJSON(await response.json());
+
+    expect(sign).toHaveBeenCalledTimes(1);
+    expect(sign).toHaveBeenCalledWith(supplied);
+    expect(verify).toHaveBeenCalledTimes(1);
+    expect(card.description).toBe('selected VCM description');
+  });
+
+  it('keeps the legacy unsigned builder as the default when no card is supplied', async () => {
+    const { identity, sign, verify } = await controlledSigningIdentity();
+
+    await createSiteborneA2aHonoApp({ signingIdentity: identity });
+
+    expect(sign).toHaveBeenCalledTimes(1);
+    expect(sign.mock.calls[0]![0]).toEqual(buildUnsignedSiteborneAgentCard());
+    expect(verify).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects supplied content that already contains a signature', async () => {
+    const real = await createLocalA2aSigningIdentity();
+    const preSigned = await real.sign(buildUnsignedSiteborneAgentCard());
+    const { identity, sign, verify } = await controlledSigningIdentity();
+
+    await expect(
+      createSiteborneA2aHonoApp({ signingIdentity: identity, unsignedAgentCard: preSigned })
+    ).rejects.toThrow('unsigned');
+    expect(sign).not.toHaveBeenCalled();
+    expect(verify).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when signing rejects and does not attempt a second card', async () => {
+    const real = await createLocalA2aSigningIdentity();
+    const sign = vi
+      .fn<SiteborneA2aSigningIdentity['sign']>()
+      .mockRejectedValue(new Error('signing unavailable'));
+    const verify = vi.fn<SiteborneA2aSigningIdentity['verify']>();
+    const identity: SiteborneA2aSigningIdentity = { ...real, sign, verify };
+
+    await expect(
+      createSiteborneA2aHonoApp({
+        signingIdentity: identity,
+        unsignedAgentCard: buildUnsignedSiteborneAgentCard(),
+      })
+    ).rejects.toThrow('signing unavailable');
+    expect(sign).toHaveBeenCalledTimes(1);
+    expect(verify).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when immediate signature verification rejects', async () => {
+    const real = await createLocalA2aSigningIdentity();
+    const sign = vi.fn(real.sign);
+    const verify = vi
+      .fn<SiteborneA2aSigningIdentity['verify']>()
+      .mockRejectedValue(new Error('verification unavailable'));
+    const identity: SiteborneA2aSigningIdentity = { ...real, sign, verify };
+
+    await expect(
+      createSiteborneA2aHonoApp({
+        signingIdentity: identity,
+        unsignedAgentCard: buildUnsignedSiteborneAgentCard(),
+      })
+    ).rejects.toThrow('verification unavailable');
+    expect(sign).toHaveBeenCalledTimes(1);
+    expect(verify).toHaveBeenCalledTimes(1);
+  });
+
+  it('publishes one immutable signed card after the caller mutates its original unsigned object', async () => {
+    const supplied = buildUnsignedSiteborneAgentCard();
+    supplied.description = 'selected before signing';
+    const { identity, sign, verify } = await controlledSigningIdentity();
+    const app = await createSiteborneA2aHonoApp({
+      signingIdentity: identity,
+      unsignedAgentCard: supplied,
+    });
+
+    supplied.description = 'mutated after construction';
+    const response = await app.request(`${SITEBORNE_A2A_ORIGIN}/.well-known/agent-card.json`);
+    const card = AgentCard.fromJSON(await response.json());
+
+    expect(card.description).toBe('selected before signing');
+    expect(sign).toHaveBeenCalledTimes(1);
+    expect(verify).toHaveBeenCalledTimes(1);
+  });
+
   it('discovers and verifies the signed card through the canonical well-known route', async () => {
     const { app } = await createLocalClient();
     const response = await app.request(`${SITEBORNE_A2A_ORIGIN}/.well-known/agent-card.json`);
