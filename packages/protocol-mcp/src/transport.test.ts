@@ -10,10 +10,15 @@ import {
   MCP_PROTOCOL_VERSION,
   MCP_SERVER_NAME,
   MCP_TOOL_NAMES,
+  assertValidSiteborneMcpToolDefinitions,
+  buildLegacySiteborneMcpToolDefinitions,
+  buildSiteborneMcpDefinitionAuthorityInputs,
   createSiteborneMcpHonoApp,
   createSiteborneMcpServer,
+  type CreateSiteborneMcpOptions,
   type McpInvocationContext,
   type McpServiceExecutionBoundary,
+  type SiteborneMcpToolDefinition,
 } from './index';
 
 const SERVICE_TOOL_MATRIX = [
@@ -108,6 +113,150 @@ async function readJsonRpcResult(response: Response): Promise<{
 }
 
 describe('SITEBORNE MCP 2026-07-28 Hono transport', () => {
+  it('the pure legacy definition builder reproduces the current six tools/list definitions', async () => {
+    const options: CreateSiteborneMcpOptions = {
+      quote: {
+        network: 'eip155:84532',
+        asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7c',
+        payee: '0x7f44a2dd237938F18632d4CcA40f4c690295E6E1',
+      },
+      health: { production_ready: false, production_enabled: false },
+    };
+    const definitions = buildLegacySiteborneMcpToolDefinitions(options);
+    const app = createSiteborneMcpHonoApp({
+      ...options,
+      allowedHosts: ['test.local'],
+      allowedOrigins: ['test.local'],
+    });
+    const client = await connectClient(app);
+    clients.push(client);
+    const listed = await client.listTools();
+
+    expect(listed.tools).toEqual(definitions);
+  });
+
+  it('authority inputs derive utility schemas through the SDK Standard JSON Schema path', () => {
+    const authority = buildSiteborneMcpDefinitionAuthorityInputs({});
+    const quote = authority.utilityTools.find((tool) => tool.name === 'siteborne_get_quote');
+    const health = authority.utilityTools.find(
+      (tool) => tool.name === 'siteborne_get_service_health'
+    );
+
+    expect(quote?.inputSchema).toMatchObject({
+      $schema: 'https://json-schema.org/draft/2020-12/schema',
+      type: 'object',
+    });
+    expect(quote?.outputSchema).toMatchObject({ type: 'object' });
+    expect(health?.inputSchema).toMatchObject({ type: 'object', properties: {} });
+    expect(health?.outputSchema).toMatchObject({ type: 'object' });
+  });
+
+  it('definition validation accepts exactly MCP_TOOL_NAMES once each', () => {
+    const definitions = buildLegacySiteborneMcpToolDefinitions({});
+    expect(() => assertValidSiteborneMcpToolDefinitions(definitions)).not.toThrow();
+  });
+
+  it('definition validation rejects a missing canonical tool', () => {
+    const definitions = buildLegacySiteborneMcpToolDefinitions({}).slice(1);
+    expect(() => assertValidSiteborneMcpToolDefinitions(definitions)).toThrow('exactly');
+  });
+
+  it('definition validation rejects an extra tool', () => {
+    const definitions = buildLegacySiteborneMcpToolDefinitions({});
+    const extra = { ...definitions[0]!, name: 'siteborne_extra' } as SiteborneMcpToolDefinition;
+    expect(() => assertValidSiteborneMcpToolDefinitions([...definitions, extra])).toThrow(
+      'exactly'
+    );
+  });
+
+  it('definition validation rejects a duplicate tool', () => {
+    const definitions = buildLegacySiteborneMcpToolDefinitions({});
+    expect(() =>
+      assertValidSiteborneMcpToolDefinitions([...definitions.slice(0, -1), definitions[0]!])
+    ).toThrow('duplicate');
+  });
+
+  it('definition validation rejects an unknown tool name', () => {
+    const definitions = buildLegacySiteborneMcpToolDefinitions({});
+    const unknown = { ...definitions[0]!, name: 'siteborne_unknown' } as SiteborneMcpToolDefinition;
+    expect(() =>
+      assertValidSiteborneMcpToolDefinitions([unknown, ...definitions.slice(1)])
+    ).toThrow('unknown');
+  });
+
+  it('definition validation rejects missing input or output schema', () => {
+    const definitions = buildLegacySiteborneMcpToolDefinitions({});
+    const missingInput = {
+      ...definitions[0]!,
+      inputSchema: undefined,
+    } as unknown as SiteborneMcpToolDefinition;
+    const missingOutput = {
+      ...definitions[0]!,
+      outputSchema: undefined,
+    } as unknown as SiteborneMcpToolDefinition;
+    expect(() =>
+      assertValidSiteborneMcpToolDefinitions([missingInput, ...definitions.slice(1)])
+    ).toThrow('schema');
+    expect(() =>
+      assertValidSiteborneMcpToolDefinitions([missingOutput, ...definitions.slice(1)])
+    ).toThrow('schema');
+  });
+
+  it('a supplied matching definition array reaches tools/list unchanged', async () => {
+    const definitions = buildLegacySiteborneMcpToolDefinitions({}).map((definition) => ({
+      ...definition,
+      description: `${definition.description} selected-definition`,
+    }));
+    const app = createSiteborneMcpHonoApp({
+      toolDefinitions: definitions,
+      allowedHosts: ['test.local'],
+      allowedOrigins: ['test.local'],
+    });
+    const client = await connectClient(app);
+    clients.push(client);
+
+    const listed = await client.listTools();
+
+    expect(listed.tools).toEqual(definitions);
+  });
+
+  it('selected definitions register exactly once in MCP_TOOL_NAMES order', async () => {
+    const definitions = buildLegacySiteborneMcpToolDefinitions({});
+    const app = createSiteborneMcpHonoApp({
+      toolDefinitions: [...definitions].reverse(),
+      allowedHosts: ['test.local'],
+      allowedOrigins: ['test.local'],
+    });
+    const client = await connectClient(app);
+    clients.push(client);
+
+    const listed = await client.listTools();
+
+    expect(listed.tools.map((tool) => tool.name)).toEqual(MCP_TOOL_NAMES);
+  });
+
+  it('definition selection cannot supply or invoke an executable handler', () => {
+    const definition = buildLegacySiteborneMcpToolDefinitions({})[0]!;
+    const handlerBearingDefinition: SiteborneMcpToolDefinition = {
+      ...definition,
+      // @ts-expect-error VCM-selected definitions cannot carry executable behavior.
+      handler: vi.fn(),
+    };
+    // @ts-expect-error Runtime options expose definitions, never a handler map.
+    const handlerBearingOptions: CreateSiteborneMcpOptions = { handlers: {} };
+    expect(definition).not.toHaveProperty('handler');
+    void handlerBearingDefinition;
+    void handlerBearingOptions;
+  });
+
+  it('all four selected service definitions retain their v2 service bindings', () => {
+    const definitions = buildLegacySiteborneMcpToolDefinitions({});
+    for (const [toolName, serviceId] of SERVICE_TOOL_MATRIX) {
+      const definition = definitions.find((candidate) => candidate.name === toolName);
+      expect(definition?._meta?.['net.siteborne/serviceId']).toBe(serviceId);
+    }
+  });
+
   it('constructs a complete isolated server instance', () => {
     expect(createSiteborneMcpServer).not.toThrow();
   });

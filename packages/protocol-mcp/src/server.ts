@@ -2,7 +2,9 @@ import {
   createMcpHandler,
   fromJsonSchema,
   McpServer,
+  type AnyToolHandler,
   type JsonSchemaType,
+  type StandardSchemaWithJSON,
 } from '@modelcontextprotocol/server';
 import { createMcpHonoApp } from '@modelcontextprotocol/hono';
 import {
@@ -21,6 +23,8 @@ import {
   MCP_SERVER_NAME,
   MCP_SERVER_VERSION,
   MCP_SERVICE_TOOLS,
+  MCP_TOOL_NAMES,
+  type SiteborneMcpToolName,
 } from './constants';
 import {
   MCP_SERVICE_INPUT_SCHEMAS,
@@ -32,6 +36,10 @@ import type {
   McpInvocationContext,
   McpQuoteConfiguration,
   McpServiceExecutionBoundary,
+  SiteborneMcpDefinitionAuthorityInputs,
+  SiteborneMcpServiceDefinitionAuthorityInput,
+  SiteborneMcpToolDefinition,
+  SiteborneMcpUtilityDefinitionAuthorityInput,
 } from './types';
 import {
   attachPaymentResponseMeta,
@@ -132,6 +140,14 @@ const healthOutputSchema = z
     ),
   })
   .strict();
+
+const healthInputSchema = z.object({}).strict();
+
+const QUOTE_TOOL_DESCRIPTION =
+  'Build a canonical x402 payment quote for one SITEBORNE service and exact request input. Use when: an agent needs the governed price, payee, resource, expiry, and payment requirement before deciding whether to invoke a paid service. Do not use when: evidence work is required now (use the matching siteborne_company_evidence_graph, siteborne_web_context_verified, siteborne_document_evidence_json, or siteborne_verify_agent_output tool), or only availability is needed (use siteborne_get_service_health). Behavior: quote-only and read-only; it hashes the proposed input, selects exact or upto pricing, and does not execute the underlying paid service, verify payment, call a provider, create a Workflow, or settle. Returns: an expiring input-bound quote and x402 payment requirement whose amount is either fixed or an authorized maximum.';
+
+const HEALTH_TOOL_DESCRIPTION =
+  'Report MCP server readiness and production-enable status for each SITEBORNE service. Use when: an agent must check protocol availability, tool count, or whether a service is currently production-enabled before selecting a paid tool. Do not use when: a quote is needed (use siteborne_get_quote) or company, web, document, or agent-output evidence work is required (use the corresponding SITEBORNE service tool). Behavior: read-only and credential-independent; it does not perform paid evidence work, create quotes, verify payment, call providers, write service state, create Workflows, or settle. Returns: the server and protocol versions plus truthful local, production, and external-publication status for all four evidence services.';
 
 const SERVICE_INPUT_DESCRIPTION_OVERRIDES: Readonly<
   Record<SiteborneServiceId, Readonly<Record<string, string>>>
@@ -535,135 +551,210 @@ async function buildCanonicalQuote(
   };
 }
 
+function standardInputJsonSchema(schema: StandardSchemaWithJSON): JsonSchemaType {
+  return schema['~standard'].jsonSchema.input({ target: 'draft-2020-12' }) as JsonSchemaType;
+}
+
+function standardOutputJsonSchema(schema: StandardSchemaWithJSON): JsonSchemaType {
+  return schema['~standard'].jsonSchema.output({ target: 'draft-2020-12' }) as JsonSchemaType;
+}
+
+export function buildSiteborneMcpDefinitionAuthorityInputs(
+  options: CreateSiteborneMcpOptions = {}
+): SiteborneMcpDefinitionAuthorityInputs {
+  const serviceTools = Object.entries(MCP_SERVICE_TOOLS).map(
+    ([name, serviceId]): SiteborneMcpServiceDefinitionAuthorityInput => ({
+      name: name as keyof typeof MCP_SERVICE_TOOLS,
+      serviceId,
+      title: SERVICE_TOOL_TITLES[serviceId],
+      description: serviceToolDescription(serviceId, options),
+      inputSchema: describeInputSchema(serviceId) as JsonSchemaType,
+      outputSchema: MCP_SERVICE_OUTPUT_SCHEMAS[serviceId] as JsonSchemaType,
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+      _meta: {
+        'net.siteborne/serviceId': serviceId,
+        'net.siteborne/inputSchema': MCP_SERVICE_SCHEMA_METADATA[serviceId].input_uri,
+        'net.siteborne/outputSchema': MCP_SERVICE_SCHEMA_METADATA[serviceId].output_uri,
+        'net.siteborne/paymentRequired': true,
+      },
+      inputSchemaUri: MCP_SERVICE_SCHEMA_METADATA[serviceId].input_uri,
+      outputSchemaUri: MCP_SERVICE_SCHEMA_METADATA[serviceId].output_uri,
+    })
+  );
+  const utilityTools: readonly SiteborneMcpUtilityDefinitionAuthorityInput[] = [
+    {
+      name: 'siteborne_get_quote',
+      title: 'Get SITEBORNE quote',
+      description: QUOTE_TOOL_DESCRIPTION,
+      inputSchema: standardInputJsonSchema(quoteInputSchema),
+      outputSchema: standardOutputJsonSchema(quoteOutputSchema),
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
+    },
+    {
+      name: 'siteborne_get_service_health',
+      title: 'Get SITEBORNE service health',
+      description: HEALTH_TOOL_DESCRIPTION,
+      inputSchema: standardInputJsonSchema(healthInputSchema),
+      outputSchema: standardOutputJsonSchema(healthOutputSchema),
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
+    },
+  ];
+  return { toolOrder: MCP_TOOL_NAMES, serviceTools, utilityTools };
+}
+
+export function buildLegacySiteborneMcpToolDefinitions(
+  options: CreateSiteborneMcpOptions = {}
+): readonly SiteborneMcpToolDefinition[] {
+  const authority = buildSiteborneMcpDefinitionAuthorityInputs(options);
+  const serviceDefinitions = authority.serviceTools.map(
+    ({ serviceId: _serviceId, inputSchemaUri: _input, outputSchemaUri: _output, ...definition }) =>
+      definition
+  );
+  const byName = new Map<SiteborneMcpToolName, SiteborneMcpToolDefinition>([
+    ...serviceDefinitions.map((definition) => [definition.name, definition] as const),
+    ...authority.utilityTools.map((definition) => [definition.name, definition] as const),
+  ]);
+  return authority.toolOrder.map((name) => {
+    const definition = byName.get(name);
+    if (!definition) throw new Error(`missing canonical MCP tool definition: ${name}`);
+    return definition;
+  });
+}
+
+export function assertValidSiteborneMcpToolDefinitions(
+  definitions: readonly SiteborneMcpToolDefinition[]
+): void {
+  if (definitions.length !== MCP_TOOL_NAMES.length) {
+    throw new Error(`MCP definitions must contain exactly ${MCP_TOOL_NAMES.length} tools`);
+  }
+  const canonicalNames = new Set<string>(MCP_TOOL_NAMES);
+  const seen = new Set<string>();
+  for (const definition of definitions) {
+    if (!canonicalNames.has(definition.name)) {
+      throw new Error(`unknown MCP tool definition: ${definition.name}`);
+    }
+    if (seen.has(definition.name)) {
+      throw new Error(`duplicate MCP tool definition: ${definition.name}`);
+    }
+    seen.add(definition.name);
+    if (!definition.inputSchema || !definition.outputSchema) {
+      throw new Error(`MCP tool definition is missing a schema: ${definition.name}`);
+    }
+  }
+}
+
+type InternalMcpToolHandler = AnyToolHandler<StandardSchemaWithJSON>;
+
+function buildSiteborneMcpHandlers(
+  options: CreateSiteborneMcpOptions
+): Readonly<Record<SiteborneMcpToolName, InternalMcpToolHandler>> {
+  const boundary = options.serviceBoundary ?? defaultBoundary;
+  const handlers = {} as Record<SiteborneMcpToolName, InternalMcpToolHandler>;
+
+  for (const [toolName, serviceId] of Object.entries(MCP_SERVICE_TOOLS)) {
+    handlers[toolName as keyof typeof MCP_SERVICE_TOOLS] = async (input, context) => {
+      if (containsHostileObjectKey(input)) {
+        return errorResult('invalid_input', 'input contains a forbidden object key');
+      }
+      // SUN-1222C-MCP-PAYMENT-DESIGN-CORRECTION: the official carrier
+      // for the buyer's payment authorization on a retried tools/call.
+      const paymentPayload = extractPaymentPayload(
+        context.mcpReq._meta as McpRequestMeta | undefined
+      );
+      const outcome = await boundary.execute(
+        serviceId,
+        input,
+        invocationContext(context),
+        paymentPayload
+      );
+      if (outcome.outcome === 'payment_required' && outcome.paymentRequired) {
+        return buildPaymentRequiredResult(outcome.paymentRequired);
+      }
+      if (outcome.outcome !== 'fulfilled') {
+        return errorResult(outcome.code, outcome.message, outcome.details);
+      }
+      const fulfilled = {
+        content: [{ type: 'text' as const, text: JSON.stringify(outcome.result) }],
+        structuredContent: outcome.result,
+      };
+      return outcome.paymentResponse
+        ? attachPaymentResponseMeta(fulfilled, outcome.paymentResponse)
+        : fulfilled;
+    };
+  }
+
+  handlers.siteborne_get_quote = async (input) => {
+    if (!options.quote) {
+      return errorResult('quote_configuration_unavailable', 'quote configuration is unavailable');
+    }
+    const quote = await buildCanonicalQuote(
+      input as z.infer<typeof quoteInputSchema>,
+      options.quote
+    );
+    return {
+      content: [{ type: 'text', text: JSON.stringify(quote) }],
+      structuredContent: quote,
+    };
+  };
+
+  handlers.siteborne_get_service_health = async () => {
+    const health = {
+      status: 'ready_local' as const,
+      server_name: MCP_SERVER_NAME,
+      server_version: MCP_SERVER_VERSION,
+      protocol_version: MCP_PROTOCOL_VERSION,
+      tools: 6 as const,
+      production_ready: options.health?.production_ready ?? false,
+      production_enabled: options.health?.production_enabled ?? false,
+      external_publication: 'blocked_external' as const,
+      services: Object.fromEntries(
+        Object.values(MCP_SERVICE_TOOLS).map((serviceId) => {
+          const defaultStatus = {
+            implementation: 'local_fixture_verified' as const,
+            production: 'production_disabled' as const,
+            external: 'not_live' as const,
+          };
+          return [serviceId, options.health?.services?.[serviceId] ?? defaultStatus];
+        })
+      ),
+    };
+    return {
+      content: [{ type: 'text', text: JSON.stringify(health) }],
+      structuredContent: health,
+    };
+  };
+
+  return handlers;
+}
+
 export function createSiteborneMcpServer(options: CreateSiteborneMcpOptions = {}): McpServer {
   const serverInstanceId = crypto.randomUUID();
   options.onServerCreated?.(serverInstanceId);
+  const definitions = options.toolDefinitions ?? buildLegacySiteborneMcpToolDefinitions(options);
+  assertValidSiteborneMcpToolDefinitions(definitions);
+  const definitionByName = new Map(definitions.map((definition) => [definition.name, definition]));
+  const handlers = buildSiteborneMcpHandlers(options);
   const server = new McpServer(
     { name: MCP_SERVER_NAME, version: MCP_SERVER_VERSION },
     { capabilities: { tools: {} } }
   );
-  const boundary = options.serviceBoundary ?? defaultBoundary;
 
-  for (const [toolName, serviceId] of Object.entries(MCP_SERVICE_TOOLS)) {
+  for (const name of MCP_TOOL_NAMES) {
+    const definition = definitionByName.get(name);
+    if (!definition) throw new Error(`missing canonical MCP tool definition: ${name}`);
     server.registerTool(
-      toolName,
+      name,
       {
-        title: SERVICE_TOOL_TITLES[serviceId],
-        description: serviceToolDescription(serviceId, options),
-        inputSchema: fromJsonSchema(describeInputSchema(serviceId) as JsonSchemaType),
-        outputSchema: fromJsonSchema(MCP_SERVICE_OUTPUT_SCHEMAS[serviceId] as JsonSchemaType),
-        annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
-        _meta: {
-          'net.siteborne/serviceId': serviceId,
-          'net.siteborne/inputSchema': MCP_SERVICE_SCHEMA_METADATA[serviceId].input_uri,
-          'net.siteborne/outputSchema': MCP_SERVICE_SCHEMA_METADATA[serviceId].output_uri,
-          'net.siteborne/paymentRequired': true,
-        },
+        title: definition.title,
+        description: definition.description,
+        inputSchema: fromJsonSchema(definition.inputSchema),
+        outputSchema: fromJsonSchema(definition.outputSchema),
+        annotations: definition.annotations,
+        ...(definition._meta ? { _meta: definition._meta } : {}),
       },
-      async (input, context) => {
-        if (containsHostileObjectKey(input)) {
-          return errorResult('invalid_input', 'input contains a forbidden object key');
-        }
-        // SUN-1222C-MCP-PAYMENT-DESIGN-CORRECTION: the official carrier
-        // for the buyer's payment authorization on a retried tools/call.
-        // `context.mcpReq._meta` is the SDK's own per-call metadata
-        // accessor (reserved io.modelcontextprotocol/* envelope keys
-        // already lifted out) -- extraction and schema validation happen
-        // exactly once, here, so no boundary implementation re-parses
-        // `_meta` itself. containsHostileObjectKey already guarded
-        // `input`; the payload's own JSON.parse-reachable pollution
-        // surface is covered by @x402/core's own parsePaymentPayload
-        // (see x402-wire.ts's doc comment).
-        const paymentPayload = extractPaymentPayload(
-          context.mcpReq._meta as McpRequestMeta | undefined
-        );
-        const outcome = await boundary.execute(
-          serviceId,
-          input,
-          invocationContext(context),
-          paymentPayload
-        );
-        if (outcome.outcome === 'payment_required' && outcome.paymentRequired) {
-          // Official wire shape (verified against the real, published
-          // @x402/mcp package -- see the design-correction report) takes
-          // precedence over the ad-hoc SITEBORNE-only errorResult shape
-          // whenever the boundary supplies a genuine PaymentRequired
-          // object.
-          return buildPaymentRequiredResult(outcome.paymentRequired);
-        }
-        if (outcome.outcome !== 'fulfilled') {
-          return errorResult(outcome.code, outcome.message, outcome.details);
-        }
-        const fulfilled = {
-          content: [{ type: 'text' as const, text: JSON.stringify(outcome.result) }],
-          structuredContent: outcome.result,
-        };
-        return outcome.paymentResponse
-          ? attachPaymentResponseMeta(fulfilled, outcome.paymentResponse)
-          : fulfilled;
-      }
+      handlers[name]
     );
   }
-
-  server.registerTool(
-    'siteborne_get_quote',
-    {
-      title: 'Get SITEBORNE quote',
-      description:
-        'Build a canonical x402 payment quote for one SITEBORNE service and exact request input. Use when: an agent needs the governed price, payee, resource, expiry, and payment requirement before deciding whether to invoke a paid service. Do not use when: evidence work is required now (use the matching siteborne_company_evidence_graph, siteborne_web_context_verified, siteborne_document_evidence_json, or siteborne_verify_agent_output tool), or only availability is needed (use siteborne_get_service_health). Behavior: quote-only and read-only; it hashes the proposed input, selects exact or upto pricing, and does not execute the underlying paid service, verify payment, call a provider, create a Workflow, or settle. Returns: an expiring input-bound quote and x402 payment requirement whose amount is either fixed or an authorized maximum.',
-      inputSchema: quoteInputSchema,
-      outputSchema: quoteOutputSchema,
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
-    },
-    async (input) => {
-      if (!options.quote) {
-        return errorResult('quote_configuration_unavailable', 'quote configuration is unavailable');
-      }
-      const quote = await buildCanonicalQuote(input, options.quote);
-      return {
-        content: [{ type: 'text', text: JSON.stringify(quote) }],
-        structuredContent: quote,
-      };
-    }
-  );
-
-  server.registerTool(
-    'siteborne_get_service_health',
-    {
-      title: 'Get SITEBORNE service health',
-      description:
-        'Report MCP server readiness and production-enable status for each SITEBORNE service. Use when: an agent must check protocol availability, tool count, or whether a service is currently production-enabled before selecting a paid tool. Do not use when: a quote is needed (use siteborne_get_quote) or company, web, document, or agent-output evidence work is required (use the corresponding SITEBORNE service tool). Behavior: read-only and credential-independent; it does not perform paid evidence work, create quotes, verify payment, call providers, write service state, create Workflows, or settle. Returns: the server and protocol versions plus truthful local, production, and external-publication status for all four evidence services.',
-      inputSchema: z.object({}).strict(),
-      outputSchema: healthOutputSchema,
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
-    },
-    async () => {
-      const health = {
-        status: 'ready_local' as const,
-        server_name: MCP_SERVER_NAME,
-        server_version: MCP_SERVER_VERSION,
-        protocol_version: MCP_PROTOCOL_VERSION,
-        tools: 6 as const,
-        production_ready: options.health?.production_ready ?? false,
-        production_enabled: options.health?.production_enabled ?? false,
-        external_publication: 'blocked_external' as const,
-        services: Object.fromEntries(
-          Object.values(MCP_SERVICE_TOOLS).map((serviceId) => {
-            const defaultStatus = {
-              implementation: 'local_fixture_verified' as const,
-              production: 'production_disabled' as const,
-              external: 'not_live' as const,
-            };
-            return [serviceId, options.health?.services?.[serviceId] ?? defaultStatus];
-          })
-        ),
-      };
-      return {
-        content: [{ type: 'text', text: JSON.stringify(health) }],
-        structuredContent: health,
-      };
-    }
-  );
 
   return server;
 }

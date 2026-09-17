@@ -1,5 +1,7 @@
 import type { Network, SiteborneServiceId } from '@siteborne/protocol-x402';
+import type { JsonSchemaType, MetaObject, ToolAnnotations } from '@modelcontextprotocol/server';
 import type { PaymentPayload, PaymentRequired, SettleResponse } from '@x402/core/types';
+import type { MCP_SERVICE_TOOLS, SiteborneMcpToolName } from './constants';
 
 export interface McpInvocationContext {
   protocol_version: '2026-07-28';
@@ -66,10 +68,38 @@ export interface McpServiceHealthStatus {
 }
 
 export interface CreateSiteborneMcpOptions {
+  readonly toolDefinitions?: readonly SiteborneMcpToolDefinition[];
   serviceBoundary?: McpServiceExecutionBoundary;
   quote?: McpQuoteConfiguration;
   health?: McpHealthConfiguration;
   allowedHosts?: string[];
   allowedOrigins?: string[];
   onServerCreated?: (serverInstanceId: string) => void;
+}
+
+export interface SiteborneMcpToolDefinition {
+  readonly name: SiteborneMcpToolName;
+  readonly title: string;
+  readonly description: string;
+  readonly inputSchema: JsonSchemaType;
+  readonly outputSchema: JsonSchemaType;
+  readonly annotations: ToolAnnotations;
+  readonly _meta?: MetaObject;
+}
+
+export interface SiteborneMcpServiceDefinitionAuthorityInput extends SiteborneMcpToolDefinition {
+  readonly name: keyof typeof MCP_SERVICE_TOOLS;
+  readonly serviceId: SiteborneServiceId;
+  readonly inputSchemaUri: string;
+  readonly outputSchemaUri: string;
+}
+
+export interface SiteborneMcpUtilityDefinitionAuthorityInput extends SiteborneMcpToolDefinition {
+  readonly name: 'siteborne_get_quote' | 'siteborne_get_service_health';
+}
+
+export interface SiteborneMcpDefinitionAuthorityInputs {
+  readonly toolOrder: readonly SiteborneMcpToolName[];
+  readonly serviceTools: readonly SiteborneMcpServiceDefinitionAuthorityInput[];
+  readonly utilityTools: readonly SiteborneMcpUtilityDefinitionAuthorityInput[];
 }
