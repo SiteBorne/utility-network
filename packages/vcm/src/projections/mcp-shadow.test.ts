@@ -15,11 +15,14 @@
  */
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import {
+  buildLegacySiteborneMcpToolDefinitions,
+  buildSiteborneMcpDefinitionAuthorityInputs,
   createSiteborneMcpHonoApp,
   MCP_PROTOCOL_VERSION,
   MCP_SERVICE_SCHEMA_METADATA,
   MCP_SERVICE_TOOLS,
   MCP_TOOL_NAMES,
+  type SiteborneMcpDefinitionAuthorityInputs,
 } from '@siteborne/protocol-mcp';
 import type { SiteborneServiceId } from '@siteborne/protocol-x402';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -29,6 +32,7 @@ import { emptyOverlay } from '../runtime-overlay';
 import { makeFixtureModel, makeFixtureService } from '../test-fixtures';
 import type { CanonicalServiceIdValue } from '../service-id';
 import { projectMcpToolsFromVcm } from './mcp-shadow';
+import { buildCurrentMcpProjectionContext, buildRealMcpShadowContext } from './mcp-real-context';
 import type { McpProjectionContext, McpToolDefinition, McpUtilityToolContext } from './types';
 
 const GENERATED_AT = '2026-09-18T00:00:00.000Z' as never;
@@ -261,6 +265,83 @@ describe('projectMcpToolsFromVcm -- real-data parity against the real MCP server
       );
       expect(diffs).toEqual([]);
     }
+  });
+});
+
+describe('buildCurrentMcpProjectionContext -- typed current authority', () => {
+  it('builds current context from typed authority inputs without a served response', () => {
+    const authority = buildSiteborneMcpDefinitionAuthorityInputs({});
+    const context = buildCurrentMcpProjectionContext(authority);
+
+    expect(context.toolOrder).toEqual(MCP_TOOL_NAMES);
+    expect(context.utilityTools).toHaveLength(2);
+    expect(context.serviceTool('company_evidence_graph.v2').toolName).toBe(
+      'siteborne_company_evidence_graph'
+    );
+  });
+
+  it('preserves MCP_TOOL_NAMES canonical order', () => {
+    const context = buildCurrentMcpProjectionContext(
+      buildSiteborneMcpDefinitionAuthorityInputs({})
+    );
+    expect(context.toolOrder).toEqual(MCP_TOOL_NAMES);
+  });
+
+  it('maps exactly four v2 service-backed interactions', () => {
+    const authority = buildSiteborneMcpDefinitionAuthorityInputs({});
+    const context = buildCurrentMcpProjectionContext(authority);
+    expect(authority.serviceTools).toHaveLength(4);
+    expect(
+      authority.serviceTools.map((tool) => context.serviceTool(tool.serviceId).toolName)
+    ).toEqual(Object.keys(MCP_SERVICE_TOOLS));
+  });
+
+  it('does not create four v1 tools from canonical v1 service identities', () => {
+    const context = buildCurrentMcpProjectionContext(
+      buildSiteborneMcpDefinitionAuthorityInputs({})
+    );
+    expect(() => context.serviceTool('company_evidence_graph.v1')).toThrow('missing');
+    expect(context.toolOrder.some((name) => name.endsWith('_v1'))).toBe(false);
+  });
+
+  it('maps quote and health as utility interactions', () => {
+    const context = buildCurrentMcpProjectionContext(
+      buildSiteborneMcpDefinitionAuthorityInputs({})
+    );
+    expect(context.utilityTools.map((tool) => tool.toolName)).toEqual([
+      'siteborne_get_quote',
+      'siteborne_get_service_health',
+    ]);
+  });
+
+  it('projects six definitions equal to the independent legacy builder', async () => {
+    const effective = await realEightServiceEffectiveView();
+    const authority = buildSiteborneMcpDefinitionAuthorityInputs({});
+    const projected = projectMcpToolsFromVcm(
+      effective,
+      buildCurrentMcpProjectionContext(authority)
+    );
+    expect(projected).toEqual(buildLegacySiteborneMcpToolDefinitions({}));
+  });
+
+  it('does not accept or expose a handler-bearing authority value', () => {
+    const authority = buildSiteborneMcpDefinitionAuthorityInputs({});
+    const context = buildCurrentMcpProjectionContext(authority);
+    expect(authority.serviceTools.every((tool) => !('handler' in tool))).toBe(true);
+    expect(context.utilityTools.every((tool) => !('handler' in tool))).toBe(true);
+    // @ts-expect-error Typed current authority has no executable handler collection.
+    const invalid: SiteborneMcpDefinitionAuthorityInputs = { ...authority, handlers: {} };
+    void invalid;
+  });
+
+  it('keeps response-derived buildRealMcpShadowContext behavior unchanged', async () => {
+    const realTools = await listRealTools();
+    const context = buildRealMcpShadowContext(realTools);
+    expect(context.toolOrder).toEqual(MCP_TOOL_NAMES);
+    expect(context.utilityTools.map((tool) => tool.toolName)).toEqual([
+      'siteborne_get_quote',
+      'siteborne_get_service_health',
+    ]);
   });
 });
 

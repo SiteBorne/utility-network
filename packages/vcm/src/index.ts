@@ -28,7 +28,10 @@ export type * from './projections/types';
 export { projectA2aFromVcm } from './projections/a2a-shadow';
 export { projectMcpToolsFromVcm } from './projections/mcp-shadow';
 export { buildRealA2aShadowContext } from './projections/a2a-real-context';
-export { buildRealMcpShadowContext } from './projections/mcp-real-context';
+export {
+  buildCurrentMcpProjectionContext,
+  buildRealMcpShadowContext,
+} from './projections/mcp-real-context';
 export {
   getRuntimeEffectiveView,
   resetRuntimeEffectiveViewCacheForTests,
