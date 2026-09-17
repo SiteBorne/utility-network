@@ -86,14 +86,14 @@ packages/
   pricing/           # Decimal-safe pricing calculations
   policy/            # Hard gates, promotion, privacy enforcement
   test-fixtures/     # Foundation test fixtures
-  provider-adapters/ # (planned)
-  verification/      # (planned)
-  knowledge-graph/   # (planned)
-  protocol-x402/     # (planned)
-  protocol-mcp/      # (planned)
-  protocol-a2a/      # (planned)
-  protocol-nevermined/ # (planned)
-  telemetry/         # (planned)
+  provider-adapters/ # Provider integrations
+  verification/      # Verification pipeline
+  knowledge-graph/   # Evidence graph support
+  protocol-x402/     # x402 payment protocol
+  protocol-mcp/      # MCP protocol and definitions
+  protocol-a2a/      # A2A protocol and Agent Card
+  protocol-nevermined/ # Nevermined declarations
+  telemetry/         # Telemetry support
 governance/          # RUBRIC, HARD_GATES, PROMOTION_STATES, etc.
 schemas/             # JSON Schema outputs
 registry/            # Agent card, server.json, catalog
@@ -125,9 +125,12 @@ Forbidden:
 
 ## Status
 
-**Current**: Foundation (SUN-0001 complete, SUN-0002 in progress) **Target**:
-Production-ready monorepo with all 4 services, protocols, and marketplace
-registration
+**Current**: Pre-cutover qualified production runtime, with paid routes
+intentionally disabled by policy for the initial quiescent release. The final
+immutable replacement candidate and human-authorized cutover remain separate
+release steps.
 
-See [PROJECT_STATE.yaml](PROJECT_STATE.yaml) and [TASKS.yaml](TASKS.yaml) for
-detailed status.
+See the
+[pre-cutover release gate audit](docs/reports/PRODUCTION-PRECUTOVER-release-gate-inventory-and-critical-path.md)
+for current release status. `PROJECT_STATE.yaml` and `TASKS.yaml` are retained
+historical ledgers.

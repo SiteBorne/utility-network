@@ -269,9 +269,9 @@ openapiRoute.get('/openapi.json', async (c) => {
     openapi: '3.0.3',
     info: {
       title: 'SITEBORNE Utility Network API',
-      version: '0.0.0-preproduction',
+      version: '0.0.0',
       description:
-        'Preproduction API for SITEBORNE Utility Network - Machine-native utility network for autonomous agents',
+        'SITEBORNE production public runtime for autonomous agents. Paid service admission is disabled by policy for the initial quiescent release.',
       contact: {
         name: 'SITEBORNE',
         url: 'https://siteborne.net',

@@ -55,5 +55,9 @@
 
 ---
 
-**Status**: Preproduction Foundation — See
-[PROJECT_STATE.yaml](../PROJECT_STATE.yaml) and [TASKS.yaml](../TASKS.yaml)
+**Status**: The pre-cutover qualified production runtime is ready for its
+intentionally paid-disabled release scope. A replacement immutable candidate and
+human-authorized cutover remain. See the
+[pre-cutover release gate audit](../../docs/reports/PRODUCTION-PRECUTOVER-release-gate-inventory-and-critical-path.md)
+for current release status. The repository-root state and task files are
+historical ledgers.

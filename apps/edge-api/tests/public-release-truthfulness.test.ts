@@ -109,4 +109,20 @@ describe('truthful public release state', () => {
       'No payment endpoints, registry entries, or live services exist yet.'
     );
   });
+
+  it('does not present historical ledgers as the current public release state', async () => {
+    const rootReadme = await readFile(new URL('../../../README.md', import.meta.url), 'utf8');
+    const docsReadme = await readFile(new URL('../../docs/README.md', import.meta.url), 'utf8');
+    const rootText = rootReadme.replace(/\s+/g, ' ');
+    const docsText = docsReadme.replace(/\s+/g, ' ');
+
+    expect(rootReadme).not.toContain('**Current**: Foundation');
+    expect(rootReadme).not.toContain(
+      'See [PROJECT_STATE.yaml](PROJECT_STATE.yaml) and [TASKS.yaml]'
+    );
+    expect(rootText).toContain('paid routes intentionally disabled');
+    expect(docsReadme).not.toContain('**Status**: Preproduction Foundation');
+    expect(docsReadme).not.toContain('[TASKS.yaml](../TASKS.yaml)');
+    expect(docsText).toContain('pre-cutover qualified production runtime');
+  });
 });

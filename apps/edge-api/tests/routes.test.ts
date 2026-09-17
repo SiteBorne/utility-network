@@ -121,11 +121,13 @@ describe('Control Plane Routes', () => {
     expect(body.paths['/quotes']).toBeUndefined();
   });
 
-  it('OpenAPI document shows preproduction status', async () => {
+  it('OpenAPI document describes the production public runtime without activating paid routes', async () => {
     const res = await app.request('/openapi.json');
     const body = await res.json();
-    expect(body.info.version).toContain('preproduction');
-    expect(body.info.description).toContain('Preproduction');
+    expect(body.info.version).toBe('0.0.0');
+    expect(body.info.description).toContain('production public runtime');
+    expect(body.info.description).toContain('Paid service admission is disabled by policy');
+    expect(JSON.stringify(body.info).toLowerCase()).not.toContain('preproduction');
   });
 });
 
