@@ -120,7 +120,11 @@ describe('selectPrimaryProjection', () => {
   it('does not mix fields from the two producer objects', async () => {
     const legacy = { shared: 'legacy', legacyOnly: true };
     const primary = { shared: 'vcm', primaryOnly: true };
-    const result = await selectPrimaryProjection({
+    const result = await selectPrimaryProjection<{
+      shared: string;
+      legacyOnly?: boolean;
+      primaryOnly?: boolean;
+    }>({
       surface: 'mcp',
       buildLegacy: () => legacy,
       buildPrimary: () => primary,

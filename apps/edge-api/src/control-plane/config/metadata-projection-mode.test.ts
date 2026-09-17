@@ -51,14 +51,11 @@ describe('resolveAuthorizedMetadataProjectionMode', () => {
     expect(resolveAuthorizedMetadataProjectionMode('legacy', surface)).toBe('legacy');
   });
 
-  it.each(['a2a', 'mcp'] as const)(
-    'authorizes shadow_compare independently for %s',
-    (surface) => {
-      expect(resolveAuthorizedMetadataProjectionMode('shadow_compare', surface)).toBe(
-        'shadow_compare'
-      );
-    }
-  );
+  it.each(['a2a', 'mcp'] as const)('authorizes shadow_compare independently for %s', (surface) => {
+    expect(resolveAuthorizedMetadataProjectionMode('shadow_compare', surface)).toBe(
+      'shadow_compare'
+    );
+  });
 
   it.each(['a2a', 'mcp'] as const)(
     'authorizes vcm_primary_compare independently for %s',

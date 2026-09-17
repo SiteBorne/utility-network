@@ -266,7 +266,9 @@ function resolveA2aApp(
               mtlsProductionActive
             );
             const projected = projectA2aFromVcm(effective, context);
-            const candidate = AgentCard.fromJSON(AgentCard.toJSON(projected as AgentCard));
+            const candidate = AgentCard.fromJSON(
+              AgentCard.toJSON(projected as unknown as AgentCard)
+            );
             // The SDK decoder materializes an absent optional iconUrl as an
             // empty string. Preserve the projector's actual absence so the
             // strict semantic comparison observes the authored shape.
