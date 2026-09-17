@@ -3,6 +3,7 @@ import {
   createSiteborneA2aHonoApp,
   type CreateSiteborneA2aOptions,
 } from '@siteborne/protocol-a2a';
+import { AgentCard } from '@a2a-js/sdk';
 import {
   buildRealA2aShadowContext,
   getRuntimeEffectiveView,
@@ -22,6 +23,8 @@ import {
   resolveAuthorizedMetadataProjectionMode,
 } from '../control-plane/config/metadata-projection-mode';
 import { runShadowComparison } from '../control-plane/metadata/shadow-comparison-runner';
+import { selectPrimaryProjection } from '../control-plane/metadata/primary-comparison-selector';
+import { recordMetadataProjectionLifecycle } from '../control-plane/telemetry/metadata-projection-telemetry';
 
 /** Unreleased/dev builds have no real git SHA available; `getRuntimeEffectiveView`
  * only uses this as a cache/provenance key, never to gate behavior, so a
@@ -67,6 +70,36 @@ function scheduleA2aShadowComparison(
       },
     ],
   });
+}
+
+function validateVcmUnsignedAgentCard(candidate: AgentCard): void {
+  if (candidate.signatures.length > 0) {
+    throw new Error('VCM Agent Card projection must be unsigned');
+  }
+  if (
+    !candidate.name ||
+    candidate.supportedInterfaces.length === 0 ||
+    candidate.skills.length === 0
+  ) {
+    throw new Error('VCM Agent Card projection is missing required discovery content');
+  }
+  const skillIds = candidate.skills.map((skill) => skill.id);
+  if (new Set(skillIds).size !== skillIds.length || skillIds.some((id) => id.length === 0)) {
+    throw new Error('VCM Agent Card projection contains invalid skill identities');
+  }
+}
+
+function recordA2aSigningFailure(): void {
+  try {
+    recordMetadataProjectionLifecycle({
+      event: 'metadata_projection_signing_failure_total',
+      surface: 'a2a',
+      mode: 'vcm_primary_compare',
+      reason: 'signing',
+    });
+  } catch {
+    // Telemetry is observational and cannot change fail-closed signing.
+  }
 }
 
 const A2A_ALLOWED_HOSTS = [
@@ -204,18 +237,60 @@ function resolveA2aApp(
         effectiveProductionStatusByServiceId,
         mtlsProductionActive,
       };
-      // METADATA-VCM-06 §IX: scheduled at this exact cache-rebuild point,
-      // not per request. Runs on unsigned content only, entirely before
-      // (and independent of) the signing call `createSiteborneA2aHonoApp`
-      // performs internally -- VCM never sees `signingIdentity`.
-      scheduleBackground(
-        scheduleA2aShadowComparison(
-          authorizedMode,
-          effectiveProductionStatusByServiceId,
-          mtlsProductionActive
-        )
-      );
-      return createSiteborneA2aHonoApp(options);
+      if (authorizedMode === 'shadow_compare') {
+        // METADATA-VCM-06 §IX: scheduled at this exact cache-rebuild point,
+        // not per request. Runs on unsigned content only, entirely before
+        // (and independent of) the signing call `createSiteborneA2aHonoApp`
+        // performs internally -- VCM never sees `signingIdentity`.
+        scheduleBackground(
+          scheduleA2aShadowComparison(
+            authorizedMode,
+            effectiveProductionStatusByServiceId,
+            mtlsProductionActive
+          )
+        );
+      }
+
+      if (authorizedMode === 'vcm_primary_compare') {
+        const selection = await selectPrimaryProjection({
+          surface: 'a2a',
+          buildLegacy: () =>
+            buildUnsignedSiteborneAgentCard(
+              effectiveProductionStatusByServiceId,
+              mtlsProductionActive
+            ),
+          buildPrimary: async () => {
+            const effective = await getRuntimeEffectiveView(UNRELEASED_RUNTIME_SOURCE_COMMIT);
+            const context = buildRealA2aShadowContext(
+              effectiveProductionStatusByServiceId,
+              mtlsProductionActive
+            );
+            const projected = projectA2aFromVcm(effective, context);
+            const candidate = AgentCard.fromJSON(AgentCard.toJSON(projected as AgentCard));
+            // The SDK decoder materializes an absent optional iconUrl as an
+            // empty string. Preserve the projector's actual absence so the
+            // strict semantic comparison observes the authored shape.
+            if (!Object.hasOwn(projected, 'iconUrl')) delete candidate.iconUrl;
+            return candidate;
+          },
+          validatePrimary: validateVcmUnsignedAgentCard,
+          governedDifferences: [
+            {
+              pathPattern: /^signatures/,
+              classification: 'INTENTIONAL_GOVERNED_DIFFERENCE',
+              reason: 'Signing is a separate boundary; both sides are pre-signature.',
+            },
+          ],
+        });
+        options.unsignedAgentCard = selection.selected;
+      }
+
+      try {
+        return await createSiteborneA2aHonoApp(options);
+      } catch (error) {
+        if (authorizedMode === 'vcm_primary_compare') recordA2aSigningFailure();
+        throw error;
+      }
     })();
   }
   return cachedA2aAppPromise;

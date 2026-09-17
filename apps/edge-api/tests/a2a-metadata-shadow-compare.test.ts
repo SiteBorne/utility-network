@@ -98,6 +98,41 @@ describe('A2A metadata projection mode -- shadow_compare (first use in this modu
   });
 });
 
+describe('A2A metadata projection mode -- vcm_primary_compare', () => {
+  it('vcm_primary_compare passes the matched VCM unsigned card to the protocol transport', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const response = await fetchCard({ A2A_METADATA_PROJECTION_MODE: 'vcm_primary_compare' });
+    const card = AgentCard.fromJSON(await response.json());
+    const lines = collectStructuredLogLines({ log: logSpy, error: errorSpy });
+
+    expect(response.status).toBe(200);
+    expect(card.skills).toHaveLength(8);
+    expect(card.signatures).toHaveLength(1);
+    expect(
+      lines.some(
+        (line) =>
+          line.event === 'metadata_projection_primary_attempt_total' &&
+          line.surface === 'a2a' &&
+          line.mode === 'vcm_primary_compare'
+      )
+    ).toBe(true);
+    expect(
+      lines.some(
+        (line) =>
+          line.event === 'metadata_projection_primary_success_total' && line.surface === 'a2a'
+      )
+    ).toBe(true);
+    expect(
+      lines.some(
+        (line) => line.event === 'metadata_projection_match_total' && line.surface === 'a2a'
+      )
+    ).toBe(true);
+    logSpy.mockRestore();
+    errorSpy.mockRestore();
+  });
+});
+
 describe('A2A metadata projection mode -- unauthorized future modes refuse to serve VCM', () => {
   it('vcm_only behaves exactly like legacy: served card unchanged, zero comparison', async () => {
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
