@@ -2,13 +2,13 @@
 
 ## Supported Versions
 
-Only the latest main branch receives security updates. This is pre-production
-software.
+Only the latest production release and the current main branch receive security
+updates.
 
 ## Reporting a Vulnerability
 
-Report security issues to **security@siteborne.net** (once domain configured) or
-via GitHub Security Advisories.
+Report security issues to **security@siteborne.net** or via GitHub Security
+Advisories.
 
 Do not disclose vulnerabilities publicly until they have been addressed.
 

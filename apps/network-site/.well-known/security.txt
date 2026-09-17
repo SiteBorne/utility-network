@@ -1,0 +1,3 @@
+Contact: mailto:security@siteborne.net
+Expires: 2027-08-31T23:59:59Z
+Canonical: https://siteborne.net/.well-known/security.txt
