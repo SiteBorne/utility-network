@@ -38,6 +38,13 @@ const EMBEDDED_PRICING: Readonly<Record<string, number>> = {
 
 const EMBEDDED_VERSION = '1.0.0';
 
+/** Embedded mirror of the governed `operational_limits` values this package
+ * resolves (validated against governance/RISK_LIMITS.yaml by
+ * scripts/check-embedded-pricing-drift.mts, exactly like EMBEDDED_PRICING). */
+const EMBEDDED_OPERATIONAL_LIMITS: Readonly<Record<string, number>> = {
+  max_document_pages: 10,
+} as const;
+
 /** Repo-root-relative — this package lives at packages/pricing/src, so
  * governance/ is three levels up. */
 function getRiskLimitsPath(): string {
@@ -70,6 +77,7 @@ interface RiskLimitsDocument {
   financial_limits: {
     max_price_usd_per_service: Record<string, number>;
   };
+  operational_limits?: Record<string, number>;
 }
 
 let cachedLimits: RiskLimitsDocument | undefined;
@@ -78,6 +86,7 @@ function embeddedRiskLimits(): RiskLimitsDocument {
   return {
     version: EMBEDDED_VERSION,
     financial_limits: { max_price_usd_per_service: { ...EMBEDDED_PRICING } },
+    operational_limits: { ...EMBEDDED_OPERATIONAL_LIMITS },
   };
 }
 
@@ -137,6 +146,19 @@ export function resolveServiceMaxPriceUsd(key: PricingKey): string {
     throw new UnknownPricingKeyError(key);
   }
   return String(raw);
+}
+
+/** The one governed maximum page count per document job
+ * (`operational_limits.max_document_pages`). Every projection (VCM, MCP, A2A,
+ * OpenAPI, catalog, registry metadata) and every runtime validator must derive
+ * the document page limit from this resolver; fails closed rather than
+ * inventing a limit. */
+export function resolveMaxDocumentPages(): number {
+  const raw = loadRiskLimits().operational_limits?.max_document_pages;
+  if (typeof raw !== 'number' || !Number.isInteger(raw) || raw < 1) {
+    throw new UnknownPricingKeyError('operational_limits.max_document_pages');
+  }
+  return raw;
 }
 
 /** The governance pricing document's own `version` field

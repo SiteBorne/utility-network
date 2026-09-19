@@ -168,6 +168,7 @@ export function applyScarcityMultiplier(baseCostMicro: number, remainingQuotaPct
 
 export * from './service-prices';
 export * from './document-usage';
+export * from './economic-contract';
 
 export function applyFailureRiskMultiplier(costMicro: number, providerReliability: number): number {
   let multiplier: number;

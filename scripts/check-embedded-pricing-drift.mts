@@ -51,10 +51,27 @@ function extractEmbeddedPricing(source: string): {
   return { version: versionMatch[1], prices };
 }
 
+function extractEmbeddedOperationalLimits(source: string): Record<string, number> {
+  const blockMatch = source.match(
+    /const EMBEDDED_OPERATIONAL_LIMITS: Readonly<Record<string, number>> = \{([\s\S]*?)\} as const;/
+  );
+  if (!blockMatch) {
+    throw new Error('could not locate EMBEDDED_OPERATIONAL_LIMITS block in service-prices.ts');
+  }
+  const limits: Record<string, number> = {};
+  const entryPattern = /(\w+):\s*([\d.]+),?/g;
+  let m: RegExpExecArray | null;
+  while ((m = entryPattern.exec(blockMatch[1])) !== null) {
+    limits[m[1]] = Number(m[2]);
+  }
+  return limits;
+}
+
 function main() {
   const yamlDoc = parse(readFileSync(YAML_PATH, 'utf-8')) as {
     version: string;
     financial_limits: { max_price_usd_per_service: Record<string, number> };
+    operational_limits: Record<string, number>;
   };
   const source = readFileSync(EMBEDDED_SOURCE_PATH, 'utf-8');
   const embedded = extractEmbeddedPricing(source);
@@ -86,6 +103,16 @@ function main() {
   for (const key of embeddedKeys) {
     if (!yamlKeys.has(key)) {
       problems.push(`"${key}" is in EMBEDDED_PRICING but missing from governance/RISK_LIMITS.yaml`);
+    }
+  }
+
+  const embeddedLimits = extractEmbeddedOperationalLimits(source);
+  for (const [key, value] of Object.entries(embeddedLimits)) {
+    const yamlValue = yamlDoc.operational_limits?.[key];
+    if (yamlValue !== value) {
+      problems.push(
+        `operational limit "${key}" drift: governance/RISK_LIMITS.yaml=${yamlValue} EMBEDDED_OPERATIONAL_LIMITS=${value}`
+      );
     }
   }
 
