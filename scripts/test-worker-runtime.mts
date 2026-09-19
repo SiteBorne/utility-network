@@ -39,6 +39,15 @@ import {
   usdToAtomicUnits,
 } from '../packages/pricing/src/service-prices';
 
+/** Price assertions for v2 routes must follow the v2 pricing key used by
+ * the production compositions. Keeping these values derived prevents the
+ * real-workerd qualification harness from silently asserting the v1 price
+ * after an intentional v1/v2 price split. */
+const WEB_CONTEXT_V2_EXPECTED_ATOMIC = usdToAtomicUnits(
+  resolveServiceMaxPriceUsd('web_context_verified_direct_v2'),
+  6
+);
+
 /** Phase 6's real-production-composition price assertion (SUN-1222D-
  * RESUME §3) must track `governance/RISK_LIMITS.yaml`'s own
  * `verify_agent_output_standard_v2` key -- the same authoritative source
@@ -781,7 +790,7 @@ async function runPhase4() {
         name: 'web_context_verified.v2',
         path: '/v2/web/context',
         body: { target_url: 'https://acme.example/', retrieval_mode: 'direct' },
-        expectedAmount: '9000', // 0.009 USD * 1e6
+        expectedAmount: WEB_CONTEXT_V2_EXPECTED_ATOMIC,
       },
       {
         name: 'document_evidence_json.v2',
@@ -981,7 +990,7 @@ async function runPhase5() {
         name: 'web_context_verified.v2 (Nevermined)',
         path: '/v2/nevermined/web/context',
         body: { target_url: 'https://acme.example/', retrieval_mode: 'direct' },
-        expectedAmount: '9000',
+        expectedAmount: WEB_CONTEXT_V2_EXPECTED_ATOMIC,
       },
       {
         name: 'document_evidence_json.v2 (Nevermined)',
@@ -1007,7 +1016,7 @@ async function runPhase5() {
           required_schema: {},
           verification_mode: 'standard',
         },
-        expectedAmount: '19000',
+        expectedAmount: VERIFY_AGENT_OUTPUT_V2_EXPECTED_ATOMIC,
       },
     ];
 
