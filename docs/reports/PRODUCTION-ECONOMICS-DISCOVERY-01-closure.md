@@ -1,8 +1,11 @@
 # PRODUCTION-ECONOMICS-DISCOVERY-01 closure
 
-**Decision:** PASS_WITH_ACCEPTED_PRE_EXISTING_LIMITATION  
-**Scope:** local qualification and publication-artifact preparation only  
-**Date:** 2026-09-19  
+**Decision:** PASS_WITH_ACCEPTED_PRE_EXISTING_LIMITATION
+
+**Scope:** local qualification and publication-artifact preparation only
+
+**Date:** 2026-09-19
+
 **Production/economic mutations:** none
 
 This checkpoint establishes one governed economic model and proves deterministic
