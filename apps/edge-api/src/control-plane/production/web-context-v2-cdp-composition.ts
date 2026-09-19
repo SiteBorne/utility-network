@@ -53,6 +53,7 @@ import {
   resolveProductionCdpEvidenceProvider,
 } from '../config/production-payment';
 import type { ServiceExecutor, X402ServiceRouteConfig } from '../routes/x402-service';
+import { modeAvailabilityValidator } from '../routes/pre-economic-mode-gate';
 import { buildWebContextV2ProductionExecutor } from './web-context-v2-production-executor';
 
 export interface WebContextV2CdpProductionEnv {
@@ -260,6 +261,9 @@ export async function buildWebContextV2CdpProductionRouteConfig(
     paymentRequirementExtra: { name: asset.name, version: asset.version },
     payTo: env.SELLER_WALLET_ADDRESS,
     path: '/v2/web/context',
+    // PRODUCTION-ECONOMICS-DISCOVERY-01: `rendered` has a governed price but is
+    // not purchasable; reject before any quote/402 rather than after payment.
+    preEconomicBodyValidator: modeAvailabilityValidator('web_context_verified.v2'),
     inputSchema: BUNDLED_SERVICE_INPUT_SCHEMAS['web_context_verified.v2'] as Record<
       string,
       unknown

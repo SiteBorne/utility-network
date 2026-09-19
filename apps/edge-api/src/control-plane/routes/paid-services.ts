@@ -98,6 +98,7 @@ import SEC_EDGAR_FIXTURE from '../../../../../packages/provider-adapters/fixture
 // fields the service actually reads.
 import DOCUMENT_FIXTURE_WORKER_RESULT_JSON from '../../../../../packages/service-runtime/fixtures/document-worker-results/native-text-success.json' with { type: 'json' };
 import { createX402ServiceRoute } from './x402-service';
+import { composePreEconomicValidators, modeAvailabilityValidator } from './pre-economic-mode-gate';
 import type { ExecutorOutcome } from './x402-service';
 
 /** SUN-1200 checkpoint F, VALIDATION RUNTIME CLOSURE (§6): the
@@ -110,7 +111,7 @@ import type { ExecutorOutcome } from './x402-service';
  * passes to every `preEconomicBodyValidator`; `required_schema` is a
  * required field of the frozen `AgentVerificationInput` contract, so its
  * presence and object-ness is already guaranteed by the time this runs. */
-function verifyAgentOutputPreEconomicCheck(
+function verifyAgentOutputSchemaProfileCheck(
   body: unknown
 ): { ok: true } | { ok: false; code: string; message: string } {
   const requiredSchema = (body as { required_schema?: unknown } | null)?.required_schema;
@@ -118,6 +119,13 @@ function verifyAgentOutputPreEconomicCheck(
   if (check.supported) return { ok: true };
   return { ok: false, code: check.code, message: check.reason };
 }
+
+/** PRODUCTION-ECONOMICS-DISCOVERY-01: `independent_reproduction` (v1 and v2
+ * share one mode table) is rejected before any quote/402. */
+const verifyAgentOutputPreEconomicCheck = composePreEconomicValidators(
+  modeAvailabilityValidator('verify_agent_output.v2'),
+  verifyAgentOutputSchemaProfileCheck
+);
 
 function jsonHttpClient(body: unknown): InjectedHttpClient {
   return {
@@ -470,6 +478,8 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
     clock,
     evidenceMode: config.evidenceMode,
     evidenceProvider: config.evidenceProvider,
+    // PRODUCTION-ECONOMICS-DISCOVERY-01: `rendered` is priced but unavailable.
+    preEconomicBodyValidator: modeAvailabilityValidator('web_context_verified.v1'),
 
     cdpChainReceiptChecker: config.cdpChainReceiptChecker,
     executor: async (input): Promise<ExecutorOutcome> => {
@@ -722,6 +732,8 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
     clock,
     evidenceMode: config.evidenceMode,
     evidenceProvider: config.evidenceProvider,
+    // PRODUCTION-ECONOMICS-DISCOVERY-01: `rendered` is priced but unavailable.
+    preEconomicBodyValidator: modeAvailabilityValidator('web_context_verified.v2'),
 
     cdpChainReceiptChecker: config.cdpChainReceiptChecker,
     executor: async (input): Promise<ExecutorOutcome> => {
@@ -765,6 +777,8 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
       clock,
       evidenceMode: config.evidenceMode,
       evidenceProvider: config.evidenceProvider,
+      // PRODUCTION-ECONOMICS-DISCOVERY-01: `rendered` is priced but unavailable.
+      preEconomicBodyValidator: modeAvailabilityValidator('web_context_verified.v2'),
 
       cdpChainReceiptChecker: config.cdpChainReceiptChecker,
       executor: async (input): Promise<ExecutorOutcome> => {

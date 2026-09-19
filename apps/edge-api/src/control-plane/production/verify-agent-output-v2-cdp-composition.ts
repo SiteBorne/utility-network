@@ -53,6 +53,10 @@ import {
   resolveProductionCdpEvidenceProvider,
 } from '../config/production-payment';
 import type { ServiceExecutor, X402ServiceRouteConfig } from '../routes/x402-service';
+import {
+  composePreEconomicValidators,
+  modeAvailabilityValidator,
+} from '../routes/pre-economic-mode-gate';
 import { buildVerifyAgentOutputV2ProductionExecutor } from './verify-agent-output-v2-production-executor';
 
 export interface VerifyAgentOutputV2CdpProductionEnv {
@@ -100,7 +104,7 @@ export interface ExplicitTestEvidenceOverride {
  * modify that frozen file) -- both are thin argument-extraction glue
  * around the one real, shared, unmodified Profile 1 engine
  * (`checkSchemaProfile1`); neither duplicates verification logic. */
-function verifyAgentOutputPreEconomicCheck(
+function verifyAgentOutputSchemaProfileCheck(
   body: unknown
 ): { ok: true } | { ok: false; code: string; message: string } {
   const requiredSchema = (body as { required_schema?: unknown } | null)?.required_schema;
@@ -108,6 +112,14 @@ function verifyAgentOutputPreEconomicCheck(
   if (check.supported) return { ok: true };
   return { ok: false, code: check.code, message: check.reason };
 }
+
+/** PRODUCTION-ECONOMICS-DISCOVERY-01: an unavailable mode
+ * (`independent_reproduction`) is rejected before the schema profile check and
+ * before any quote/402 -- it must never be quoted at the standard price. */
+const verifyAgentOutputPreEconomicCheck = composePreEconomicValidators(
+  modeAvailabilityValidator('verify_agent_output.v2'),
+  verifyAgentOutputSchemaProfileCheck
+);
 
 export async function buildVerifyAgentOutputV2CdpProductionRouteConfig(
   env: VerifyAgentOutputV2CdpProductionEnv,

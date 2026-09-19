@@ -169,7 +169,10 @@ export function createMcpX402ServiceBoundary(
       }))) as RestErrorResultBody;
       return {
         outcome: 'rejected',
-        code: body.code ?? 'unexpected_status',
+        // The REST layer's `jsonError` carries its machine code in `error`,
+        // not `code`; both are honoured so a caller sees the real reason
+        // (e.g. `retrieval_mode_unavailable`) instead of a generic status.
+        code: body.code ?? body.error ?? 'unexpected_status',
         message: body.message ?? body.error ?? `service returned HTTP ${response.status}`,
         details: { http_status: response.status },
       };
