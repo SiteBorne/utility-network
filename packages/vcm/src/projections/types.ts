@@ -109,6 +109,7 @@ export interface McpToolAnnotations {
   readonly readOnlyHint: boolean;
   readonly destructiveHint: boolean;
   readonly idempotentHint: boolean;
+  readonly openWorldHint: boolean;
 }
 
 export interface McpServiceToolContext {

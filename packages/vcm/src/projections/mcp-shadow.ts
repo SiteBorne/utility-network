@@ -38,6 +38,9 @@ export function projectMcpToolsFromVcm(
         readOnlyHint: interaction.readOnly,
         destructiveHint: interaction.destructive,
         idempotentHint: interaction.idempotent,
+        // Whether execution reaches outside SITEBORNE is a canonical fact of the
+        // service's economic contract, not an MCP-authored one.
+        openWorldHint: service.economicOffer.openWorld,
       },
       _meta: {
         'net.siteborne/serviceId': service.id,

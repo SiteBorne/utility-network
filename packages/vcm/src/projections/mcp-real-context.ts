@@ -47,6 +47,7 @@ export function buildCurrentMcpProjectionContext(
         readOnlyHint: tool.annotations.readOnlyHint ?? false,
         destructiveHint: tool.annotations.destructiveHint ?? false,
         idempotentHint: tool.annotations.idempotentHint ?? false,
+        openWorldHint: tool.annotations.openWorldHint ?? false,
       },
     };
   });
@@ -67,6 +68,7 @@ export function buildCurrentMcpProjectionContext(
           readOnlyHint: tool.annotations.readOnlyHint ?? false,
           destructiveHint: tool.annotations.destructiveHint ?? false,
           idempotentHint: tool.annotations.idempotentHint ?? false,
+          openWorldHint: tool.annotations.openWorldHint ?? false,
         },
       };
     },

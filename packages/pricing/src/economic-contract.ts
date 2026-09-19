@@ -80,6 +80,11 @@ export interface EconomicModeDefinition {
 
 interface EconomicServiceDefinition {
   readonly family: EconomicFamily;
+  /** Whether execution reaches outside SITEBORNE (the public web, third-party
+   * data or document providers) -- the MCP `openWorldHint` and the honest
+   * description of what a paid call may touch. `verify_agent_output` evaluates
+   * only supplied material and performs no outbound retrieval. */
+  readonly openWorld: boolean;
   readonly generation: 'v1' | 'v2';
   readonly scheme: EconomicScheme;
   readonly pricingModel: EconomicPricingModel;
@@ -108,6 +113,7 @@ const DOCUMENT_MODE: EconomicModeDefinition = {
 const DEFINITIONS: Readonly<Record<EconomicServiceId, EconomicServiceDefinition>> = {
   'company_evidence_graph.v1': {
     family: 'company_evidence_graph',
+    openWorld: true,
     generation: 'v1',
     scheme: 'exact',
     pricingModel: 'fixed_per_request',
@@ -127,6 +133,7 @@ const DEFINITIONS: Readonly<Record<EconomicServiceId, EconomicServiceDefinition>
   },
   'company_evidence_graph.v2': {
     family: 'company_evidence_graph',
+    openWorld: true,
     generation: 'v2',
     scheme: 'exact',
     pricingModel: 'fixed_per_request',
@@ -146,6 +153,7 @@ const DEFINITIONS: Readonly<Record<EconomicServiceId, EconomicServiceDefinition>
   },
   'web_context_verified.v1': {
     family: 'web_context_verified',
+    openWorld: true,
     generation: 'v1',
     scheme: 'exact',
     pricingModel: 'fixed_per_request',
@@ -173,6 +181,7 @@ const DEFINITIONS: Readonly<Record<EconomicServiceId, EconomicServiceDefinition>
   },
   'web_context_verified.v2': {
     family: 'web_context_verified',
+    openWorld: true,
     generation: 'v2',
     scheme: 'exact',
     pricingModel: 'fixed_per_request',
@@ -200,6 +209,7 @@ const DEFINITIONS: Readonly<Record<EconomicServiceId, EconomicServiceDefinition>
   },
   'document_evidence_json.v1': {
     family: 'document_evidence_json',
+    openWorld: true,
     generation: 'v1',
     scheme: 'upto',
     pricingModel: 'metered_per_page_tiered',
@@ -215,6 +225,7 @@ const DEFINITIONS: Readonly<Record<EconomicServiceId, EconomicServiceDefinition>
   },
   'document_evidence_json.v2': {
     family: 'document_evidence_json',
+    openWorld: true,
     generation: 'v2',
     scheme: 'upto',
     pricingModel: 'metered_per_page_tiered',
@@ -230,6 +241,7 @@ const DEFINITIONS: Readonly<Record<EconomicServiceId, EconomicServiceDefinition>
   },
   'verify_agent_output.v1': {
     family: 'verify_agent_output',
+    openWorld: false,
     generation: 'v1',
     scheme: 'exact',
     pricingModel: 'fixed_per_request',
@@ -257,6 +269,7 @@ const DEFINITIONS: Readonly<Record<EconomicServiceId, EconomicServiceDefinition>
   },
   'verify_agent_output.v2': {
     family: 'verify_agent_output',
+    openWorld: false,
     generation: 'v2',
     scheme: 'exact',
     pricingModel: 'fixed_per_request',
@@ -308,6 +321,7 @@ export interface EconomicOffer {
   readonly capabilityId: EconomicFamily;
   readonly serviceVersion: 'v1' | 'v2';
   readonly contractRole: EconomicContractRole;
+  readonly openWorld: boolean;
   readonly scheme: EconomicScheme;
   readonly pricingModel: EconomicPricingModel;
   readonly priceUnit: EconomicPriceUnit;
@@ -358,6 +372,7 @@ export function buildEconomicOffer(serviceId: EconomicServiceId): EconomicOffer 
     capabilityId: definition.family,
     serviceVersion: definition.generation,
     contractRole: definition.generation === 'v2' ? 'current' : 'compatibility',
+    openWorld: definition.openWorld,
     scheme: definition.scheme,
     pricingModel: definition.pricingModel,
     priceUnit: definition.pricingModel === 'metered_per_page_tiered' ? 'page' : 'request',
@@ -654,6 +669,46 @@ export function compareEconomicProjections(
   const out: EconomicParityDifference[] = [];
   diff(comparable(left), comparable(right), '', out);
   return out;
+}
+
+// ---------------------------------------------------------------------------
+// Human/agent-readable economic behavior, derived from the offer
+// ---------------------------------------------------------------------------
+const TIER_LABEL: Readonly<Record<DocumentPageTier, string>> = {
+  native: 'native-text',
+  ocr: 'OCR',
+  table: 'table',
+};
+
+/** One sentence-set describing how a service is priced and settled, rendered
+ * from the canonical offer so a tool description can never carry a hand-copied
+ * price. Amounts are the governed USD strings; nothing is rounded. */
+export function describeEconomicBehavior(offer: EconomicOffer): string {
+  const defaultMode = offer.modes.find((mode) => mode.mode === offer.defaultMode);
+  if (!defaultMode) throw new Error(`economic offer ${offer.serviceId} has no default mode`);
+  const parts: string[] = [];
+  if (offer.scheme === 'exact') {
+    const modeNote = offer.modes.length > 1 ? ` in ${defaultMode.mode} mode` : '';
+    parts.push(
+      `exact price of $${defaultMode.amountUsd} USD per request${modeNote}; the payment challenge requires that amount and the charge settles at exactly that amount.`
+    );
+  } else {
+    const tiers = (offer.tierPrices ?? [])
+      .map((tier) => `${TIER_LABEL[tier.tier]} $${tier.amountUsd}`)
+      .join(', ');
+    parts.push(
+      `upto pricing: the payment challenge authorizes a maximum of $${defaultMode.amountUsd} USD per job; the actual charge is measured per processed page (${tiers} per page, the highest applicable tier per page) and never exceeds the authorization. The authorization is a ceiling, not the charge.`
+    );
+  }
+  for (const mode of offer.modes.filter((m) => !m.available)) {
+    parts.push(
+      `${mode.mode} mode has a governed price of $${mode.amountUsd} USD but is not available: it is rejected before any payment challenge and never substituted.`
+    );
+  }
+  if (offer.maxDocumentPages !== null) {
+    parts.push(`Documents are limited to ${offer.maxDocumentPages} pages per job.`);
+  }
+  return parts.join(' ');
 }
 
 // ---------------------------------------------------------------------------

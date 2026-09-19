@@ -189,7 +189,12 @@ describe('projectMcpToolsFromVcm -- unit shape', () => {
         outputSchema: {},
         inputSchemaUri: 'https://siteborne.net/schemas/in.json',
         outputSchemaUri: 'https://siteborne.net/schemas/out.json',
-        annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: false,
+        },
       }),
       utilityTools: [
         {
@@ -198,7 +203,12 @@ describe('projectMcpToolsFromVcm -- unit shape', () => {
           description: 'HD',
           inputSchema: {},
           outputSchema: {},
-          annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
+          annotations: {
+            readOnlyHint: true,
+            destructiveHint: false,
+            idempotentHint: true,
+            openWorldHint: false,
+          },
         },
         {
           toolName: 'siteborne_get_quote',
@@ -206,7 +216,12 @@ describe('projectMcpToolsFromVcm -- unit shape', () => {
           description: 'QD',
           inputSchema: {},
           outputSchema: {},
-          annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
+          annotations: {
+            readOnlyHint: true,
+            destructiveHint: false,
+            idempotentHint: true,
+            openWorldHint: false,
+          },
         },
       ],
     };

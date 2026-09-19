@@ -13,6 +13,7 @@ import {
   buildUptoPaymentRequirement,
   canonicalResourceUrl,
   hashPaymentObject,
+  purchasableInputExample,
   resolvePricingSourceVersion,
   resolveServiceMaxPriceUsd,
   usdToAtomicUnits,
@@ -22,6 +23,7 @@ import {
   buildEconomicOffer,
   challengePricingKey,
   checkModeAvailability,
+  describeEconomicBehavior,
   projectEconomicOffer,
 } from '@siteborne/pricing';
 import { z } from 'zod';
@@ -99,32 +101,78 @@ const quoteInputSchema = z
 
 const quoteOutputSchema = z
   .object({
-    quote_id: z.string(),
-    binding_hash: z.string(),
-    service_id: z.string(),
+    quote_id: z.string().describe('Deterministic identifier of this quote.'),
+    binding_hash: z
+      .string()
+      .describe(
+        'Hash binding the quote to the exact service, input hash, price, scheme, network, asset, and payee; a payment for a different binding is not accepted.'
+      ),
+    service_id: z.string().describe('Canonical service id and major version that was quoted.'),
     // SUN-1000 checkpoint 1M: widened from the literal 'v1'/'1.0.0' — a
     // v2 quote genuinely reports service_version 'v2' and
     // contract_release '2.0.0'.
-    service_version: z.enum(['v1', 'v2']),
-    contract_release: z.enum(['1.0.0', '2.0.0']),
-    input_hash: z.string(),
-    pricing_key: z.string(),
-    pricing_source_version: z.string(),
-    scheme: z.enum(['exact', 'upto']),
-    network: z.string(),
-    asset: z.string(),
-    amount: z.string(),
-    amount_kind: z.enum(['exact', 'authorized_maximum']),
-    actual_amount: z.null(),
-    resource_id: z.string(),
-    requirement_id: z.string(),
-    payment_requirements: z.record(z.string(), z.unknown()),
-    payee: z.string(),
-    issued_at: z.string(),
-    expires_at: z.string(),
-    production_enabled: z.literal(false),
-    payment_required: z.literal(true),
-    economics: z.record(z.string(), z.unknown()),
+    service_version: z.enum(['v1', 'v2']).describe('Service contract major version.'),
+    contract_release: z
+      .enum(['1.0.0', '2.0.0'])
+      .describe('Contract release the quoted service belongs to.'),
+    input_hash: z.string().describe('Canonical hash of the exact request input this quote binds.'),
+    pricing_key: z
+      .string()
+      .describe(
+        'Governed pricing key the amount was resolved from (governance pricing authority).'
+      ),
+    pricing_source_version: z
+      .string()
+      .describe(
+        'Version of the governed pricing document that produced the amount; a repricing changes this value.'
+      ),
+    scheme: z
+      .enum(['exact', 'upto'])
+      .describe('x402 scheme: exact requires the amount; upto authorizes it as a maximum.'),
+    network: z
+      .string()
+      .describe('CAIP-2 network the payment must be made on (for example eip155:8453).'),
+    asset: z
+      .string()
+      .describe('Token contract address on the network that the amount is denominated in.'),
+    amount: z
+      .string()
+      .describe(
+        'Amount in the asset atomic units (6 decimals for USDC): the exact price when amount_kind is exact, or the authorized maximum when it is authorized_maximum.'
+      ),
+    amount_kind: z
+      .enum(['exact', 'authorized_maximum'])
+      .describe(
+        'exact: the charge equals amount. authorized_maximum: the charge is measured at settlement and never exceeds amount.'
+      ),
+    actual_amount: z
+      .null()
+      .describe('Always null in a quote: the actual charge exists only after measured settlement.'),
+    resource_id: z.string().describe('Canonical URL of the paid resource this quote is bound to.'),
+    requirement_id: z
+      .string()
+      .describe('Identifier of the x402 payment requirement embedded in payment_requirements.'),
+    payment_requirements: z
+      .record(z.string(), z.unknown())
+      .describe(
+        'The x402 payment requirement to satisfy, including payTo, network, asset and amount.'
+      ),
+    payee: z.string().describe('Public payTo address that receives the payment.'),
+    issued_at: z.string().describe('UTC time the quote was issued.'),
+    expires_at: z.string().describe('UTC time after which the quote is no longer valid.'),
+    production_enabled: z
+      .literal(false)
+      .describe(
+        'Quote-level flag, always false: a quote never authorizes execution. The service runtime state is economics.production_enabled.'
+      ),
+    payment_required: z
+      .literal(true)
+      .describe('Always true: executing the quoted service requires payment.'),
+    economics: z
+      .record(z.string(), z.unknown())
+      .describe(
+        'The canonical economic contract for the quoted service (pricing model, tiers, authorization maximum, settlement model, modes and their availability, limits, production state, pricing_source_version, and network/asset/pay_to); identical on every SITEBORNE discovery surface.'
+      ),
   })
   .strict();
 
@@ -151,11 +199,29 @@ const healthOutputSchema = z
 
 const healthInputSchema = z.object({}).strict();
 
-const QUOTE_TOOL_DESCRIPTION =
-  'Build a canonical x402 payment quote for one SITEBORNE service and exact request input. Use when: an agent needs the governed price, payee, resource, expiry, and payment requirement before deciding whether to invoke a paid service. Do not use when: evidence work is required now (use the matching siteborne_company_evidence_graph, siteborne_web_context_verified, siteborne_document_evidence_json, or siteborne_verify_agent_output tool), or only availability is needed (use siteborne_get_service_health). Behavior: quote-only and read-only; it hashes the proposed input, selects exact or upto pricing, and does not execute the underlying paid service, verify payment, call a provider, create a Workflow, or settle. Returns: an expiring input-bound quote and x402 payment requirement whose amount is either fixed or an authorized maximum.';
+/** "web_context_verified.v2 exact, document_evidence_json.v2 upto, ..." derived
+ * from the canonical contract, never hand-listed. */
+function offeredSchemesSentence(): string {
+  return (Object.values(MCP_SERVICE_TOOLS) as SiteborneServiceId[])
+    .map((serviceId) => `${serviceId} ${buildEconomicOffer(serviceId).scheme}`)
+    .join(', ');
+}
+
+function quoteToolDescription(): string {
+  return (
+    'Build a canonical x402 payment quote for one SITEBORNE service and exact request input. ' +
+    'Use when: an agent needs the governed price, payee, network, asset, resource, expiry, and payment requirement before deciding whether to invoke a paid service. ' +
+    'Do not use when: evidence work is required now (use the matching siteborne_company_evidence_graph, siteborne_web_context_verified, siteborne_document_evidence_json, or siteborne_verify_agent_output tool), or only availability is needed (use siteborne_get_service_health). ' +
+    `Parameters: scheme must be the one scheme the service is offered under (${offeredSchemesSentence()}); any other scheme is rejected with scheme_not_offered. input is hashed, so the quote binds only that exact request. ` +
+    'Behavior: quote-only and read-only; it hashes the proposed input, and does not execute the underlying paid service, verify payment, call a provider, create a Workflow, or settle. ' +
+    'Economics: free of charge. The returned amount is the exact price, or for upto an authorized maximum whose actual_amount is null because the real charge is measured at settlement and never exceeds it. ' +
+    'Failure: a mode that has a governed price but is unavailable returns retrieval_mode_unavailable or verification_mode_unavailable and no quote; a quote expires at expires_at. ' +
+    'Returns: an expiring input-bound quote with its x402 payment requirement and the canonical economics block.'
+  );
+}
 
 const HEALTH_TOOL_DESCRIPTION =
-  'Report MCP server readiness and production-enable status for each SITEBORNE service. Use when: an agent must check protocol availability, tool count, or whether a service is currently production-enabled before selecting a paid tool. Do not use when: a quote is needed (use siteborne_get_quote) or company, web, document, or agent-output evidence work is required (use the corresponding SITEBORNE service tool). Behavior: read-only and credential-independent; it does not perform paid evidence work, create quotes, verify payment, call providers, write service state, create Workflows, or settle. Returns: the server and protocol versions plus truthful local, production, and external-publication status for all four evidence services.';
+  'Report MCP server readiness and production-enable status for each SITEBORNE service. Use when: an agent must check protocol availability, tool count, or whether a service is currently production-enabled before selecting a paid tool. Do not use when: a quote is needed (use siteborne_get_quote) or company, web, document, or agent-output evidence work is required (use the corresponding SITEBORNE service tool). Behavior: read-only and credential-independent; it does not perform paid evidence work, create quotes, verify payment, call providers, write service state, create Workflows, or settle. Economics: free of charge; it never issues a payment challenge. Failure: it depends on no provider, so it does not fail because a provider is unavailable. Returns: the server and protocol versions plus truthful local, production, and external-publication status for all four evidence services.';
 
 const SERVICE_INPUT_DESCRIPTION_OVERRIDES: Readonly<
   Record<SiteborneServiceId, Readonly<Record<string, string>>>
@@ -200,7 +266,7 @@ const SERVICE_INPUT_DESCRIPTION_OVERRIDES: Readonly<
     target_url:
       'Public HTTP or HTTPS URL to retrieve and verify; private, loopback, and otherwise unsafe network destinations are rejected.',
     retrieval_mode:
-      'direct fetches the origin response without browser rendering; rendered permits browser-backed retrieval for client-rendered pages and may cost more.',
+      'Retrieval mode. Only direct (plain HTTP retrieval, no JavaScript execution) is available. rendered has a governed price but is not available: it is rejected with retrieval_mode_unavailable before any payment challenge and is never substituted with direct retrieval.',
     output_mode:
       'Result representation: clean_text normalizes prose, markdown preserves document structure, and structured validates selected fields against buyer_schema.',
     buyer_schema:
@@ -310,7 +376,7 @@ const SERVICE_INPUT_DESCRIPTION_OVERRIDES: Readonly<
     minimum_score:
       'Minimum overall verification score from 0 through 1; raising it makes the final acceptance verdict stricter.',
     verification_mode:
-      'standard checks supplied material; independent_reproduction additionally attempts independently derived verification where implemented.',
+      'Verification mode. Only standard (deterministic checks of the supplied material, no outbound retrieval) is available. independent_reproduction has a governed price but is not available: it is rejected with verification_mode_unavailable before any payment challenge and is never downgraded to standard.',
     allowed_evidence_sources:
       'Up to ten permitted evidence source URIs; evidence outside this allowlist cannot satisfy source restrictions.',
     freshness_requirements:
@@ -352,7 +418,22 @@ function describeInputSchema(serviceId: SiteborneServiceId): unknown {
     );
     return described;
   };
-  return visit(MCP_SERVICE_INPUT_SCHEMAS[serviceId], '');
+  const described = visit(MCP_SERVICE_INPUT_SCHEMAS[serviceId], '');
+  // The frozen schema's `examples[0]` for web_context_verified selects the
+  // unavailable `rendered` mode; an advertised sample must be purchasable.
+  // Only `examples` (an annotation keyword, not validation) is replaced.
+  if (
+    buildEconomicOffer(serviceId).modeSelectorField &&
+    described !== null &&
+    typeof described === 'object' &&
+    Array.isArray((described as { examples?: unknown }).examples)
+  ) {
+    return {
+      ...(described as Record<string, unknown>),
+      examples: [purchasableInputExample(serviceId)],
+    };
+  }
+  return described;
 }
 
 function productionStatusSentence(
@@ -364,34 +445,98 @@ function productionStatusSentence(
     : 'This service is currently production-disabled and rejects execution.';
 }
 
+interface ServiceDescriptionParts {
+  readonly purpose: string;
+  readonly useWhen: string;
+  readonly doNotUse: string;
+  readonly parameters: string;
+  readonly behavior: string;
+  readonly failure: string;
+  readonly returns: string;
+}
+
+const REPLAY_SENTENCE =
+  'an unpaid request returns payment_required; a repeated identical request with the same payment is replay-protected and is not charged twice.';
+
+/** PRODUCTION-ECONOMICS-DISCOVERY-01 (TDQS): every service tool description
+ * covers what it does, when to use / not use it, parameter interactions,
+ * open-world behavior, economic behavior, failure semantics, and what it
+ * returns. Economic sentences are RENDERED from the canonical contract
+ * (`describeEconomicBehavior`) -- no price or limit is written in this file. */
+const SERVICE_DESCRIPTION_PARTS: Readonly<
+  Partial<Record<SiteborneServiceId, ServiceDescriptionParts>>
+> = {
+  'company_evidence_graph.v2': {
+    purpose:
+      'Build a proof-carrying graph of public company identity, SEC filings, website observations, regulatory mentions, and repository signals.',
+    useWhen: 'the request needs entity-level evidence synthesized across sources.',
+    doNotUse:
+      'one URL is the subject (use siteborne_web_context_verified), one document is the subject (use siteborne_document_evidence_json), or an existing agent output needs evaluation (use siteborne_verify_agent_output).',
+    parameters:
+      'authoritative identifiers (cik, lei, isin, cusip, figi) resolve entities more reliably than company_name, ticker or domain alone, and combining them reduces ambiguity; requested_field_groups narrows provider work; maximum_authorized_price only constrains payment and never widens scope.',
+    behavior: `open-world: a paid request queries public data providers over the network and persists governed payment, audit, job and Workflow state; ${REPLAY_SENTENCE}`,
+    failure:
+      'input that fails schema validation is rejected before any payment challenge; provider or service unavailability returns a structured MCP error.',
+    returns:
+      'a company evidence graph with provenance, completeness, verification, and PCC context—not a raw webpage or document extraction.',
+  },
+  'web_context_verified.v2': {
+    purpose: 'Retrieve and verify evidence from one public web URL using direct HTTP retrieval.',
+    useWhen: 'the request is specifically about the content and provenance of a URL.',
+    doNotUse:
+      'evidence must be synthesized for a company (use siteborne_company_evidence_graph), extracted from an authorized document (use siteborne_document_evidence_json), checked against an existing output contract (use siteborne_verify_agent_output), or the page requires JavaScript rendering (rendered retrieval is not available).',
+    parameters:
+      'retrieval_mode must be direct; rendered is defined but unavailable and is rejected before any payment challenge, never substituted with direct retrieval. output_mode structured needs buyer_schema and field_selectors to be meaningful; redirect_policy and max_redirects bound redirect following; max_content_size bounds returned bytes; maximum_authorized_price only constrains payment and never changes retrieval scope.',
+    behavior: `open-world: a paid request performs bounded outbound HTTP retrieval of the target URL through a safe-egress boundary (private and loopback destinations are refused) and persists governed payment, audit, job and Workflow state; ${REPLAY_SENTENCE} Retrieval admission follows the governed runtime rate policy; no fixed public per-origin rate is promised.`,
+    failure:
+      'schema-invalid input and unavailable modes are rejected before any payment challenge; target-site errors, timeouts and unavailable retrieval return a structured MCP error and are never answered with a substitute result.',
+    returns: 'normalized, source-attributed web context with verification and PCC evidence.',
+  },
+  'document_evidence_json.v2': {
+    purpose:
+      'Extract and verify structured evidence from exactly one authorized artifact, prior SITEBORNE upload, or public document URL.',
+    useWhen:
+      'the source of truth is a PDF or supported image and the desired result is evidence JSON.',
+    doNotUse:
+      'a webpage alone is sufficient (use siteborne_web_context_verified), company-wide public evidence is needed (use siteborne_company_evidence_graph), or an existing agent response needs evaluation (use siteborne_verify_agent_output).',
+    parameters:
+      'provide exactly one reference mode: artifact_reference (an authorized stored artifact), upload_reference (a prior SITEBORNE upload handle, not document bytes) or document_url (a public URL, no credentials). ocr_permission must be true before image-based content is read by OCR, and OCR pages bill at the OCR tier; extraction_request.extract_tables and table_extraction_request request table extraction, and pages with tables bill at the table tier; declared_page_count and page_range are bounded by the page limit below; maximum_authorized_price only constrains payment.',
+    behavior: `open-world: a paid request may read governed artifact storage or fetch a public document URL, calls the document provider, and persists payment, audit, job and Workflow state; ${REPLAY_SENTENCE}`,
+    failure:
+      'schema-invalid input is rejected before any payment challenge; a document over the page limit, an unreadable or encrypted document, or an unavailable provider returns a structured MCP error.',
+    returns:
+      'extracted document evidence, integrity/provenance findings, and PCC verification—not an uploaded file.',
+  },
+  'verify_agent_output.v2': {
+    purpose:
+      'Evaluate a supplied agent output against explicit claims, deterministic requirements, a required JSON Schema, and optional evidence.',
+    useWhen: 'the caller already has an output and needs a governed verification verdict.',
+    doNotUse:
+      'evidence must first be gathered from a company (use siteborne_company_evidence_graph), URL (use siteborne_web_context_verified), or document (use siteborne_document_evidence_json), or independent reproduction of the output is required (not available).',
+    parameters:
+      'verification_mode must be standard; independent_reproduction is defined but unavailable and is rejected before any payment challenge, never downgraded to standard. required_schema must fit SITEBORNE JSON Schema Profile 1 or the request is rejected before payment; minimum_score sets the acceptance threshold; maximum_authorized_price only constrains payment and never relaxes verification policy.',
+    behavior: `closed-world: standard mode evaluates only the supplied claims, requirements, output and evidence with no outbound retrieval, and persists governed payment, audit, job and Workflow state; ${REPLAY_SENTENCE} The verification policy and verdict rules do not depend on price or maximum_authorized_price.`,
+    failure:
+      'an unsupported or oversized required_schema, schema-invalid input and unavailable modes are rejected before any payment challenge; a failed verification is a normal fail or conditional verdict, not an error.',
+    returns:
+      'claim-level and deterministic-check results, an overall verification verdict, and PCC evidence—not newly gathered source content.',
+  },
+};
+
 function serviceToolDescription(
   serviceId: SiteborneServiceId,
   options: CreateSiteborneMcpOptions
 ): string {
-  const status = productionStatusSentence(serviceId, options);
-  const descriptions: Readonly<Record<SiteborneServiceId, string>> = {
-    'company_evidence_graph.v1': '',
-    'web_context_verified.v1': '',
-    'document_evidence_json.v1': '',
-    'verify_agent_output.v1': '',
-    'company_evidence_graph.v2':
-      'Build a proof-carrying graph of public company identity, SEC filings, website observations, regulatory mentions, and repository signals. Use when: the request needs entity-level evidence synthesized across sources. Do not use when: one URL is the subject (use siteborne_web_context_verified), one document is the subject (use siteborne_document_evidence_json), or an existing agent output needs evaluation (use siteborne_verify_agent_output). Behavior: may enter the governed paid service flow; an unpaid enabled request returns payment_required, while a paid request may query public providers and persist governed payment, audit, job, and Workflow state. ' +
-      status +
-      ' Returns: a company evidence graph with provenance, completeness, verification, and PCC context—not a raw webpage or document extraction.',
-    'web_context_verified.v2':
-      'Retrieve and verify evidence from one public web URL using direct or browser-rendered acquisition. Use when: the request is specifically about the content and provenance of a URL. Do not use when: evidence must be synthesized for a company (use siteborne_company_evidence_graph), extracted from an authorized document (use siteborne_document_evidence_json), or checked against an existing output contract (use siteborne_verify_agent_output). Behavior: may enter the governed paid service flow; an unpaid enabled request returns payment_required, while a paid request may perform bounded network/browser retrieval and persist governed payment, audit, job, and Workflow state. ' +
-      status +
-      ' Returns: normalized, source-attributed web context with verification and PCC evidence.',
-    'document_evidence_json.v2':
-      'Extract and verify structured evidence from exactly one authorized artifact, prior SITEBORNE upload, or public document URL. Use when: the source of truth is a PDF or supported image and the desired result is evidence JSON. Do not use when: a webpage alone is sufficient (use siteborne_web_context_verified), company-wide public evidence is needed (use siteborne_company_evidence_graph), or an existing agent response needs evaluation (use siteborne_verify_agent_output). Behavior: may enter the governed paid service flow; an unpaid enabled request returns payment_required, while a paid request may read governed artifact storage, call the document provider, and persist payment, audit, job, and Workflow state. ' +
-      status +
-      ' Returns: extracted document evidence, integrity/provenance findings, and PCC verification—not an uploaded file.',
-    'verify_agent_output.v2':
-      'Evaluate a supplied agent output against explicit claims, deterministic requirements, a required JSON Schema, and optional evidence. Use when: the caller already has an output and needs a governed verification verdict or independent-reproduction check. Do not use when: evidence must first be gathered from a company (use siteborne_company_evidence_graph), URL (use siteborne_web_context_verified), or document (use siteborne_document_evidence_json). Behavior: may enter the governed paid service flow; an unpaid enabled request returns payment_required, while a paid request evaluates the supplied material and may persist governed payment, audit, job, and Workflow state. ' +
-      status +
-      ' Returns: claim-level and deterministic-check results, an overall verification verdict, and PCC evidence—not newly gathered source content.',
-  };
-  return descriptions[serviceId];
+  const parts = SERVICE_DESCRIPTION_PARTS[serviceId];
+  // v1 identities have no MCP tool (every tool binds a v2 service).
+  if (!parts) return '';
+  return (
+    `${parts.purpose} Use when: ${parts.useWhen} Do not use when: ${parts.doNotUse} ` +
+    `Parameters: ${parts.parameters} Behavior: ${parts.behavior} ` +
+    `${productionStatusSentence(serviceId, options)} ` +
+    `Economics: ${describeEconomicBehavior(buildEconomicOffer(serviceId))} ` +
+    `Failure: ${parts.failure} Returns: ${parts.returns}`
+  );
 }
 
 const SERVICE_TOOL_TITLES: Readonly<Record<SiteborneServiceId, string>> = {
@@ -560,7 +705,12 @@ export function buildSiteborneMcpDefinitionAuthorityInputs(
       description: serviceToolDescription(serviceId, options),
       inputSchema: describeInputSchema(serviceId) as JsonSchemaType,
       outputSchema: MCP_SERVICE_OUTPUT_SCHEMAS[serviceId] as JsonSchemaType,
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: buildEconomicOffer(serviceId).openWorld,
+      },
       _meta: {
         'net.siteborne/serviceId': serviceId,
         'net.siteborne/inputSchema': MCP_SERVICE_SCHEMA_METADATA[serviceId].input_uri,
@@ -575,10 +725,15 @@ export function buildSiteborneMcpDefinitionAuthorityInputs(
     {
       name: 'siteborne_get_quote',
       title: 'Get SITEBORNE quote',
-      description: QUOTE_TOOL_DESCRIPTION,
+      description: quoteToolDescription(),
       inputSchema: standardInputJsonSchema(quoteInputSchema),
       outputSchema: standardOutputJsonSchema(quoteOutputSchema),
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
     {
       name: 'siteborne_get_service_health',
@@ -586,7 +741,12 @@ export function buildSiteborneMcpDefinitionAuthorityInputs(
       description: HEALTH_TOOL_DESCRIPTION,
       inputSchema: standardInputJsonSchema(healthInputSchema),
       outputSchema: standardOutputJsonSchema(healthOutputSchema),
-      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
     },
   ];
   return { toolOrder: MCP_TOOL_NAMES, serviceTools, utilityTools };
