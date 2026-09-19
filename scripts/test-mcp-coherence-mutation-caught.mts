@@ -113,7 +113,9 @@ const MUTATIONS: Mutation[] = [
   {
     name: '11. change the REST projection without MCP following it',
     target: CATALOG,
-    from: 'production_enabled: effectivelyActive,',
+    // Anchor follows the catalog overlay's canonical-economics rewrite
+    // (PRODUCTION-ECONOMICS-DISCOVERY-01): same projection line, new variable name.
+    from: 'production_enabled: productionEnabled,',
     to: 'production_enabled: false, // MUTATED: REST/MCP divergence',
   },
   {

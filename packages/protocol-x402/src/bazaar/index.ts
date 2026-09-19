@@ -7,6 +7,7 @@
  */
 export * from './schema-bundle';
 export * from './frozen-inputs';
+export * from './purchasable-example';
 export * from './registry-source';
 export * from './routes';
 export * from './capability';

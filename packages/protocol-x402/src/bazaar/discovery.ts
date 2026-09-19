@@ -44,11 +44,8 @@ import {
   type PaymentDestination,
 } from '../pricing/economic';
 import type { SiteborneServiceId } from '../types';
-import {
-  BUNDLED_SERVICE_INPUT_SCHEMAS,
-  frozenOutputExample,
-  purchasableInputExample,
-} from './frozen-inputs';
+import { BUNDLED_SERVICE_INPUT_SCHEMAS, frozenOutputExample } from './frozen-inputs';
+import { purchasableInputExample } from './purchasable-example';
 import { stripDocumentIdentity } from './schema-bundle';
 import { REGISTRY_SERVICES } from './registry-source';
 import { resolveServiceRoute } from './routes';

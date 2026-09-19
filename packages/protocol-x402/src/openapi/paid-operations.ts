@@ -23,7 +23,8 @@ import {
   resolveMaxDocumentPages,
   type PaymentDestination,
 } from '../pricing/economic';
-import { BUNDLED_SERVICE_INPUT_SCHEMAS, purchasableInputExample } from '../bazaar/frozen-inputs';
+import { BUNDLED_SERVICE_INPUT_SCHEMAS } from '../bazaar/frozen-inputs';
+import { purchasableInputExample } from '../bazaar/purchasable-example';
 import { REGISTRY_SERVICES } from '../bazaar/registry-source';
 import { canonicalResourceUrl, resolveServiceRoute } from '../bazaar/routes';
 import { stripDocumentIdentity } from '../bazaar/schema-bundle';

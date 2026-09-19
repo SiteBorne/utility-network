@@ -14,7 +14,8 @@ import {
 } from './discovery';
 import { ALL_BAZAAR_SERVICE_IDS } from './registry-source';
 import { SERVICE_CAPABILITY_STATUS } from './capability';
-import { purchasableInputExample, frozenInputExample } from './frozen-inputs';
+import { frozenInputExample } from './frozen-inputs';
+import { purchasableInputExample } from './purchasable-example';
 import { canonicalResourceUrl, CANONICAL_RESOURCE_ORIGIN } from './routes';
 import { usdToAtomicUnits } from '../pricing/mapping';
 import type { SiteborneServiceId } from '../types';

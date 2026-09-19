@@ -267,7 +267,7 @@ describe('TDQS economic and semantic metadata', () => {
 
   it('mode selector docs and advertised examples never present an unavailable mode as usable', async () => {
     const byName = Object.fromEntries((await listActualTools()).map((t) => [t.name, t]));
-    const web = byName.siteborne_web_context_verified.inputSchema as {
+    const web = byName.siteborne_web_context_verified.inputSchema as unknown as {
       properties: { retrieval_mode: { description: string } };
       examples?: { retrieval_mode?: string }[];
     };
@@ -275,7 +275,7 @@ describe('TDQS economic and semantic metadata', () => {
       'rendered has a governed price but is not available'
     );
     expect(web.examples?.every((e) => e.retrieval_mode !== 'rendered')).toBe(true);
-    const verify = byName.siteborne_verify_agent_output.inputSchema as {
+    const verify = byName.siteborne_verify_agent_output.inputSchema as unknown as {
       properties: { verification_mode: { description: string } };
     };
     expect(verify.properties.verification_mode.description).toContain(
