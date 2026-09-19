@@ -657,6 +657,33 @@ export function compareEconomicProjections(
 }
 
 // ---------------------------------------------------------------------------
+// Governed declared limitations
+// ---------------------------------------------------------------------------
+const STALE_PAGE_LIMIT = /\bMaximum\s+\d+\s+pages?\b/i;
+
+/** Corrects a document service's declared page-limit sentence to the one
+ * governed limit (`operational_limits.max_document_pages`).
+ *
+ * The frozen registry/contract-release JSON states "Maximum 100 pages per job";
+ * that file is release evidence and cannot be edited without a contract-major
+ * break, and the frozen input schema and runtime already enforce the governed
+ * limit. Every projection therefore passes its limitations through this one
+ * function, so no surface can publish a page limit the runtime does not
+ * enforce. Non-document services and non-page limitations are unchanged. */
+export function governDeclaredLimitations(
+  serviceId: string,
+  limitations: readonly string[]
+): string[] {
+  if (!serviceId.startsWith('document_evidence_json.')) return [...limitations];
+  const governed = resolveMaxDocumentPages();
+  return limitations.map((limitation) =>
+    STALE_PAGE_LIMIT.test(limitation)
+      ? limitation.replace(STALE_PAGE_LIMIT, `Maximum ${governed} pages`)
+      : limitation
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Pre-payment mode gate
 // ---------------------------------------------------------------------------
 export type ModeAvailabilityCheck =

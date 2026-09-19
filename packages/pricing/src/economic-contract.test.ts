@@ -7,6 +7,7 @@ import {
   challengePricingKey,
   checkModeAvailability,
   compareEconomicProjections,
+  governDeclaredLimitations,
   projectEconomicOffer,
   validateEconomicProjection,
   type EconomicOfferProjection,
@@ -303,5 +304,31 @@ describe('projection validation and contradiction detection', () => {
       Object.entries(a).reverse()
     ) as unknown as EconomicOfferProjection;
     expect(canonicalEconomicProjectionJson(reordered)).toBe(canonicalEconomicProjectionJson(a));
+  });
+});
+
+describe('governed declared limitations (one page limit)', () => {
+  const STALE = ['Maximum 100 pages per job', 'Maximum file size 10MB', 'OCR quality varies'];
+
+  it('replaces the stale frozen page claim with the governed limit for document services', () => {
+    for (const id of ['document_evidence_json.v1', 'document_evidence_json.v2']) {
+      const governed = governDeclaredLimitations(id, STALE);
+      expect(governed[0]).toBe(`Maximum ${resolveMaxDocumentPages()} pages per job`);
+      expect(governed.join(' ')).not.toContain('100');
+      expect(governed.slice(1)).toEqual(STALE.slice(1));
+    }
+  });
+
+  it('leaves other services and non-page limitations untouched, and is idempotent', () => {
+    expect(governDeclaredLimitations('web_context_verified.v2', STALE)).toEqual(STALE);
+    const once = governDeclaredLimitations('document_evidence_json.v2', STALE);
+    expect(governDeclaredLimitations('document_evidence_json.v2', once)).toEqual(once);
+    expect(governDeclaredLimitations('document_evidence_json.v2', [])).toEqual([]);
+  });
+
+  it('never mutates its input', () => {
+    const input = Object.freeze([...STALE]);
+    expect(() => governDeclaredLimitations('document_evidence_json.v2', input)).not.toThrow();
+    expect(input[0]).toBe('Maximum 100 pages per job');
   });
 });

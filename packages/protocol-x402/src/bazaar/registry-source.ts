@@ -21,6 +21,7 @@ import documentEvidenceJsonV2 from '../../../../registry/services/document_evide
 import verifyAgentOutputV2 from '../../../../registry/services/verify_agent_output.v2.json' with { type: 'json' };
 import { resolveServiceMaxPriceUsd } from '../pricing/mapping';
 import type { SiteborneServiceId } from '../types';
+import { governDeclaredLimitations } from '@siteborne/pricing';
 import { withGovernedRegistryPrice } from './registry-pricing';
 
 export interface RegistryServiceEntry {
@@ -46,12 +47,25 @@ export interface RegistryServiceEntry {
   declared_limitations: string[];
 }
 
+/** Projects the one governed document page limit onto a registry entry's
+ * declared limitations without mutating the frozen contract JSON. Kept here,
+ * not in `registry-pricing.ts`, which is deliberately dependency-free so the
+ * pricing drift script can import it directly. */
+function withGovernedRegistryLimitations(entry: RegistryServiceEntry): RegistryServiceEntry {
+  return {
+    ...entry,
+    declared_limitations: governDeclaredLimitations(entry.service_id, entry.declared_limitations),
+  };
+}
+
 /** Keyed by `SiteborneServiceId` — the exact four services SUN-0700A
  * generates Bazaar discovery declarations for. */
 export const REGISTRY_SERVICES: Readonly<Record<SiteborneServiceId, RegistryServiceEntry>> = {
   'company_evidence_graph.v1': companyEvidenceGraph as RegistryServiceEntry,
   'web_context_verified.v1': webContextVerified as RegistryServiceEntry,
-  'document_evidence_json.v1': documentEvidenceJson as RegistryServiceEntry,
+  'document_evidence_json.v1': withGovernedRegistryLimitations(
+    documentEvidenceJson as RegistryServiceEntry
+  ),
   'verify_agent_output.v1': verifyAgentOutput as RegistryServiceEntry,
   // SUN-1000 checkpoint 1M / SUN-1222C-R3: all four v2 services now project
   // their dedicated governed experiment price onto the frozen registry
@@ -65,9 +79,11 @@ export const REGISTRY_SERVICES: Readonly<Record<SiteborneServiceId, RegistryServ
     webContextVerifiedV2 as RegistryServiceEntry,
     resolveServiceMaxPriceUsd('web_context_verified_direct_v2')
   ),
-  'document_evidence_json.v2': withGovernedRegistryPrice(
-    documentEvidenceJsonV2 as RegistryServiceEntry,
-    resolveServiceMaxPriceUsd('document_evidence_json_native_v2')
+  'document_evidence_json.v2': withGovernedRegistryLimitations(
+    withGovernedRegistryPrice(
+      documentEvidenceJsonV2 as RegistryServiceEntry,
+      resolveServiceMaxPriceUsd('document_evidence_json_native_v2')
+    )
   ),
   'verify_agent_output.v2': withGovernedRegistryPrice(
     verifyAgentOutputV2 as RegistryServiceEntry,
