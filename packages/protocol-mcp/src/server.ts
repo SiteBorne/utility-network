@@ -11,12 +11,19 @@ import {
   buildQuote,
   buildExactPaymentRequirement,
   buildUptoPaymentRequirement,
+  canonicalResourceUrl,
   hashPaymentObject,
   resolvePricingSourceVersion,
   resolveServiceMaxPriceUsd,
   usdToAtomicUnits,
   type SiteborneServiceId,
 } from '@siteborne/protocol-x402';
+import {
+  buildEconomicOffer,
+  challengePricingKey,
+  checkModeAvailability,
+  projectEconomicOffer,
+} from '@siteborne/pricing';
 import { z } from 'zod';
 import {
   MCP_PROTOCOL_VERSION,
@@ -117,6 +124,7 @@ const quoteOutputSchema = z
     expires_at: z.string(),
     production_enabled: z.literal(false),
     payment_required: z.literal(true),
+    economics: z.record(z.string(), z.unknown()),
   })
   .strict();
 
@@ -397,54 +405,6 @@ const SERVICE_TOOL_TITLES: Readonly<Record<SiteborneServiceId, string>> = {
   'verify_agent_output.v2': 'Verify agent output',
 };
 
-// SUN-1222B-S3 / SUN-1222C-R3: all four v2 services now have dedicated,
-// isolated experiment pricing keys, split from the frozen v1 keys.
-const EXACT_PRICING_KEYS: Readonly<
-  Record<SiteborneServiceId, Parameters<typeof resolveServiceMaxPriceUsd>[0]>
-> = {
-  'company_evidence_graph.v1': 'company_evidence_graph',
-  'web_context_verified.v1': 'web_context_verified_direct',
-  'document_evidence_json.v1': 'document_evidence_json_native',
-  'verify_agent_output.v1': 'verify_agent_output_standard',
-  'company_evidence_graph.v2': 'company_evidence_graph_v2',
-  'web_context_verified.v2': 'web_context_verified_direct_v2',
-  'document_evidence_json.v2': 'document_evidence_json_native_v2',
-  'verify_agent_output.v2': 'verify_agent_output_standard_v2',
-};
-
-const UPTO_PRICING_KEYS: Readonly<
-  Record<SiteborneServiceId, Parameters<typeof resolveServiceMaxPriceUsd>[0]>
-> = {
-  'company_evidence_graph.v1': 'company_evidence_graph',
-  'web_context_verified.v1': 'web_context_verified_rendered',
-  'document_evidence_json.v1': 'document_evidence_json_max_job',
-  'verify_agent_output.v1': 'verify_agent_output_reproduction',
-  'company_evidence_graph.v2': 'company_evidence_graph_v2',
-  'web_context_verified.v2': 'web_context_verified_rendered',
-  'document_evidence_json.v2': 'document_evidence_json_max_job',
-  'verify_agent_output.v2': 'verify_agent_output_reproduction',
-};
-
-// SUN-1222C-MCP-PRE-CUTOVER-REMEDIATION: v1 paths are placeholders — no v1
-// route is mounted in `apps/edge-api/src/index.ts` today (only the four v2
-// CDP production routes are real), so there is no live v1 divergence to
-// correct. The four v2 entries previously used a synthetic
-// underscore-joined path (`/v2/company_evidence_graph`) that does not match
-// any route Hono actually serves; a client paying against that resource
-// would bind its x402 payment to a path returning 404. Corrected to the
-// exact real mounted paths (`index.ts`'s own `app.post('/v2/...', ...)`
-// registrations).
-const SERVICE_RESOURCES: Readonly<Record<SiteborneServiceId, string>> = {
-  'company_evidence_graph.v1': 'https://utility.siteborne.net/v1/company_evidence_graph',
-  'web_context_verified.v1': 'https://utility.siteborne.net/v1/web_context_verified',
-  'document_evidence_json.v1': 'https://utility.siteborne.net/v1/document_evidence_json',
-  'verify_agent_output.v1': 'https://utility.siteborne.net/v1/verify_agent_output',
-  'company_evidence_graph.v2': 'https://utility.siteborne.net/v2/company/evidence-graph',
-  'web_context_verified.v2': 'https://utility.siteborne.net/v2/web/context',
-  'document_evidence_json.v2': 'https://utility.siteborne.net/v2/document/evidence-json',
-  'verify_agent_output.v2': 'https://utility.siteborne.net/v2/verify/agent-output',
-};
-
 const HOSTILE_OBJECT_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
 function containsHostileObjectKey(value: unknown): boolean {
@@ -482,14 +442,39 @@ function errorResult(code: string, message: string, details?: Readonly<Record<st
   };
 }
 
+/** PRODUCTION-ECONOMICS-DISCOVERY-01: a quote is a projection of the
+ * canonical economic contract, never an independent price authority. The
+ * pricing key, scheme, resource, and `economics` block all derive from
+ * `buildEconomicOffer`; a (service, scheme) pair the contract does not offer,
+ * or a mode it defines but cannot fulfil, is rejected rather than quoted. */
+function checkQuoteOffered(
+  input: z.infer<typeof quoteInputSchema>
+): ReturnType<typeof errorResult> | null {
+  const offer = buildEconomicOffer(input.service_id);
+  if (input.scheme !== offer.scheme) {
+    return errorResult(
+      'scheme_not_offered',
+      `${input.service_id} is offered under the ${offer.scheme} scheme only; a ${input.scheme} quote would describe a payment requirement the service does not accept.`,
+      { service_id: input.service_id, offered_scheme: offer.scheme, requested_scheme: input.scheme }
+    );
+  }
+  const mode = checkModeAvailability(input.service_id, input.input);
+  if (!mode.ok) {
+    return errorResult(mode.code, mode.message, {
+      service_id: input.service_id,
+      mode: mode.mode,
+    });
+  }
+  return null;
+}
+
 async function buildCanonicalQuote(
   input: z.infer<typeof quoteInputSchema>,
-  config: McpQuoteConfiguration
+  config: McpQuoteConfiguration,
+  productionEnabled: boolean
 ) {
-  const pricingKey =
-    input.scheme === 'exact'
-      ? EXACT_PRICING_KEYS[input.service_id]
-      : UPTO_PRICING_KEYS[input.service_id];
+  const offer = buildEconomicOffer(input.service_id);
+  const pricingKey = challengePricingKey(input.service_id);
   const amount = usdToAtomicUnits(resolveServiceMaxPriceUsd(pricingKey), 6);
   const now = (config.now ?? (() => new Date()))();
   const issuedAt = now.toISOString();
@@ -512,7 +497,7 @@ async function buildCanonicalQuote(
     issued_at: issuedAt,
     expires_at: expiresAt,
   });
-  const resourceId = SERVICE_RESOURCES[input.service_id];
+  const resourceId = canonicalResourceUrl(input.service_id);
   const paymentRequirement =
     input.scheme === 'exact'
       ? await buildExactPaymentRequirement({
@@ -548,6 +533,11 @@ async function buildCanonicalQuote(
     expires_at: quote.expires_at,
     production_enabled: false as const,
     payment_required: true as const,
+    economics: projectEconomicOffer(offer, {
+      resource: resourceId,
+      productionEnabled,
+      destination: { network: config.network, asset: config.asset, payTo: config.payee },
+    }),
   };
 }
 
@@ -687,9 +677,13 @@ function buildSiteborneMcpHandlers(
     if (!options.quote) {
       return errorResult('quote_configuration_unavailable', 'quote configuration is unavailable');
     }
+    const quoteInput = input as z.infer<typeof quoteInputSchema>;
+    const notOffered = checkQuoteOffered(quoteInput);
+    if (notOffered) return notOffered;
     const quote = await buildCanonicalQuote(
-      input as z.infer<typeof quoteInputSchema>,
-      options.quote
+      quoteInput,
+      options.quote,
+      options.health?.services?.[quoteInput.service_id]?.production === 'production_enabled'
     );
     return {
       content: [{ type: 'text', text: JSON.stringify(quote) }],

@@ -91,3 +91,14 @@ export function resolveServiceRoute(serviceId: SiteborneServiceId): ServiceRoute
   }
   return route;
 }
+
+/** The one canonical public origin every discovery surface projects resource
+ * URLs from (A2A card, MCP quotes, Bazaar declarations, catalog, OpenAPI).
+ * Equality with `SITEBORNE_A2A_ORIGIN` is enforced by a parity test. */
+export const CANONICAL_RESOURCE_ORIGIN = 'https://utility.siteborne.net';
+
+/** Canonical resource URL for a service: canonical origin + the path the
+ * accepted OpenAPI contract declares. Never hand-written per surface. */
+export function canonicalResourceUrl(serviceId: SiteborneServiceId): string {
+  return `${CANONICAL_RESOURCE_ORIGIN}${resolveServiceRoute(serviceId).path}`;
+}

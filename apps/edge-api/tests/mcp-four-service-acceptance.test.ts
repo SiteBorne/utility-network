@@ -30,6 +30,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 import {
   REGISTRY_SERVICES,
   frozenInputExample,
+  purchasableInputExample,
   buildBuyerPaymentIdentifierExtensions,
   resolvePaymentEvidenceProvider,
 } from '@siteborne/protocol-x402';
@@ -158,9 +159,9 @@ afterEach(() => {
 // Workflow double that still runs the REAL paid-continuation-workflow.ts
 // step logic -- only the Cloudflare Workflow *invocation* transport is a
 // double, never the settlement/payment logic itself.
-async function withDurableContinuation<
-  T extends Parameters<typeof createX402ServiceRoute>[1],
->(routeConfig: T): Promise<T> {
+async function withDurableContinuation<T extends Parameters<typeof createX402ServiceRoute>[1]>(
+  routeConfig: T
+): Promise<T> {
   const continuationEnvelopeKey = await crypto.subtle.generateKey(
     { name: 'AES-GCM', length: 256 },
     true,
@@ -263,7 +264,7 @@ function acceptanceInputFor(serviceId: (typeof THREE_SERVICES)[number]): unknown
   if (serviceId === 'web_context_verified.v2') {
     return { target_url: 'https://example.com/', retrieval_mode: 'direct' };
   }
-  return frozenInputExample(serviceId);
+  return purchasableInputExample(serviceId);
 }
 
 const ORIGIN = 'https://utility.siteborne.net';
@@ -293,26 +294,48 @@ const THREE_SERVICES = [
 const FIXTURE_CONTEXT = { protocol_version: '2026-07-28' as const };
 
 describe('SUN-1222C-MCP-FOUR-SERVICE-ACCEPTANCE section 4: unpaid -> official PaymentRequired', () => {
-  it.each(THREE_SERVICES)('%s: unpaid call returns real PaymentRequired, zero execution', async (serviceId) => {
-    const boundary = await buildBoundaryFor(serviceId);
-    const input = frozenInputExample(serviceId);
-    const outcome = await boundary.execute(serviceId, input, FIXTURE_CONTEXT, undefined);
+  it.each(THREE_SERVICES)(
+    '%s: unpaid call returns real PaymentRequired, zero execution',
+    async (serviceId) => {
+      const boundary = await buildBoundaryFor(serviceId);
+      const input = purchasableInputExample(serviceId);
+      const outcome = await boundary.execute(serviceId, input, FIXTURE_CONTEXT, undefined);
 
-    expect(outcome.outcome).toBe('payment_required');
-    if (outcome.outcome !== 'payment_required') throw new Error('unreachable');
-    // The official carrier -- decoded from the REAL route's real
-    // PAYMENT-REQUIRED header, not fabricated by the adapter.
-    expect(outcome.paymentRequired).toBeDefined();
-    const pr = outcome.paymentRequired!;
-    expect(pr.x402Version).toBe(2);
-    expect(pr.accepts).toHaveLength(1);
-    const req = pr.accepts[0]!;
-    expect(req.scheme).toBe('exact');
-    expect(req.network).toMatch(/^eip155:/);
-    expect(typeof req.amount).toBe('string');
-    expect(req.payTo).toMatch(/^0x/);
-    expect(req.asset).toBeTruthy();
-    // Zero external side effects for an unpaid call.
+      expect(outcome.outcome).toBe('payment_required');
+      if (outcome.outcome !== 'payment_required') throw new Error('unreachable');
+      // The official carrier -- decoded from the REAL route's real
+      // PAYMENT-REQUIRED header, not fabricated by the adapter.
+      expect(outcome.paymentRequired).toBeDefined();
+      const pr = outcome.paymentRequired!;
+      expect(pr.x402Version).toBe(2);
+      expect(pr.accepts).toHaveLength(1);
+      const req = pr.accepts[0]!;
+      expect(req.scheme).toBe('exact');
+      expect(req.network).toMatch(/^eip155:/);
+      expect(typeof req.amount).toBe('string');
+      expect(req.payTo).toMatch(/^0x/);
+      expect(req.asset).toBeTruthy();
+      // Zero external side effects for an unpaid call.
+      expect(fetchSpy).not.toHaveBeenCalled();
+    }
+  );
+});
+
+// PRODUCTION-ECONOMICS-DISCOVERY-01: the frozen web example selects
+// `retrieval_mode: rendered` (priced, unavailable). Through the real MCP ->
+// REST boundary it must be rejected with zero payment challenge and zero
+// external effect, never quoted or silently served by direct retrieval.
+describe('unavailable mode through the MCP boundary', () => {
+  it('web_context_verified.v2 rendered is rejected before any PaymentRequired, zero execution', async () => {
+    const boundary = await buildBoundaryFor('web_context_verified.v2');
+    const outcome = await boundary.execute(
+      'web_context_verified.v2',
+      frozenInputExample('web_context_verified.v2'),
+      FIXTURE_CONTEXT,
+      undefined
+    );
+    expect(outcome.outcome).toBe('rejected');
+    expect(outcome.outcome === 'rejected' && outcome.code).toBe('retrieval_mode_unavailable');
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 });
@@ -321,38 +344,44 @@ describe('SUN-1222C-MCP-FOUR-SERVICE-ACCEPTANCE section 5: malformed payment pay
   const malformedCases: Array<[string, unknown]> = [
     ['missing metadata entirely', undefined],
     ['wrong type (string instead of object)', 'not-an-object'],
-    ['wrong x402 version', { x402Version: 1, scheme: 'exact', network: 'base-sepolia', payload: {} }],
+    [
+      'wrong x402 version',
+      { x402Version: 1, scheme: 'exact', network: 'base-sepolia', payload: {} },
+    ],
     ['missing accepted field', { x402Version: 2, payload: {} }],
     ['missing payload field', { x402Version: 2, accepted: { scheme: 'exact' } }],
   ];
 
-  it.each(THREE_SERVICES)('%s: every malformed class is rejected before execution', async (serviceId) => {
-    const boundary = await buildBoundaryFor(serviceId);
-    const input = frozenInputExample(serviceId);
-    for (const [, malformed] of malformedCases) {
-      // extractPaymentPayload's own wire-level rejection is already
-      // unit/mutation-tested in x402-wire.test.ts (a malformed _meta
-      // value never reaches this far as a real MCP call). This proves a
-      // SECOND, independent, real fail-closed gate: even a malformed
-      // value reaching the adapter directly is rejected by the real
-      // route's own decodePaymentSignatureHeaderSafe validation --
-      // genuine defense in depth, never a crash and never fulfilled.
-      let outcome;
-      try {
-        outcome = await boundary.execute(serviceId, input, FIXTURE_CONTEXT, malformed as never);
-      } catch (err) {
-        // A thrown error is an acceptable fail-closed outcome for a
-        // directly-malformed 4th argument (real MCP callers never reach
-        // this path -- server.ts only ever calls execute() with the
-        // wire layer's own already-validated PaymentPayload | undefined)
-        // as long as no useful result was produced.
-        expect(err).toBeInstanceOf(Error);
-        continue;
+  it.each(THREE_SERVICES)(
+    '%s: every malformed class is rejected before execution',
+    async (serviceId) => {
+      const boundary = await buildBoundaryFor(serviceId);
+      const input = purchasableInputExample(serviceId);
+      for (const [, malformed] of malformedCases) {
+        // extractPaymentPayload's own wire-level rejection is already
+        // unit/mutation-tested in x402-wire.test.ts (a malformed _meta
+        // value never reaches this far as a real MCP call). This proves a
+        // SECOND, independent, real fail-closed gate: even a malformed
+        // value reaching the adapter directly is rejected by the real
+        // route's own decodePaymentSignatureHeaderSafe validation --
+        // genuine defense in depth, never a crash and never fulfilled.
+        let outcome;
+        try {
+          outcome = await boundary.execute(serviceId, input, FIXTURE_CONTEXT, malformed as never);
+        } catch (err) {
+          // A thrown error is an acceptable fail-closed outcome for a
+          // directly-malformed 4th argument (real MCP callers never reach
+          // this path -- server.ts only ever calls execute() with the
+          // wire layer's own already-validated PaymentPayload | undefined)
+          // as long as no useful result was produced.
+          expect(err).toBeInstanceOf(Error);
+          continue;
+        }
+        expect(outcome.outcome).not.toBe('fulfilled');
       }
-      expect(outcome.outcome).not.toBe('fulfilled');
+      expect(fetchSpy).not.toHaveBeenCalled();
     }
-    expect(fetchSpy).not.toHaveBeenCalled();
-  });
+  );
 });
 
 async function realPaymentRequired(
@@ -511,18 +540,30 @@ describe('SUN-1222C-MCP-FOUR-SERVICE-ACCEPTANCE section 6: economic-binding mism
       // see that section's own doc comment for why. Either outcome is an
       // acceptable, equally meaningful baseline for THIS section: what
       // matters is that it is NOT itself a payment/binding rejection.
-      const baseline = await boundary.execute(serviceId, input, FIXTURE_CONTEXT, basePayload as never);
+      const baseline = await boundary.execute(
+        serviceId,
+        input,
+        FIXTURE_CONTEXT,
+        basePayload as never
+      );
       const baselineReachedExecutor =
         baseline.outcome === 'fulfilled' ||
-        (baseline.outcome === 'rejected' && REACHED_EXECUTOR_OUTCOME_CODES.includes(baseline.message));
+        (baseline.outcome === 'rejected' &&
+          REACHED_EXECUTOR_OUTCOME_CODES.includes(baseline.message));
       expect(baselineReachedExecutor).toBe(true);
       const executorCallsAfterBaseline = fetchSpy.mock.calls.length;
 
       const mutations: Array<[string, (p: typeof basePayload) => unknown]> = [
         ['wrong network', (p) => ({ ...p, accepted: { ...p.accepted, network: 'eip155:1' } })],
         ['wrong amount', (p) => ({ ...p, accepted: { ...p.accepted, amount: '1' } })],
-        ['wrong asset', (p) => ({ ...p, accepted: { ...p.accepted, asset: '0x' + '9'.repeat(40) } })],
-        ['wrong payTo', (p) => ({ ...p, accepted: { ...p.accepted, payTo: '0x' + '8'.repeat(40) } })],
+        [
+          'wrong asset',
+          (p) => ({ ...p, accepted: { ...p.accepted, asset: '0x' + '9'.repeat(40) } }),
+        ],
+        [
+          'wrong payTo',
+          (p) => ({ ...p, accepted: { ...p.accepted, payTo: '0x' + '8'.repeat(40) } }),
+        ],
         ['wrong scheme', (p) => ({ ...p, accepted: { ...p.accepted, scheme: 'upto' } })],
         ['wrong x402Version', (p) => ({ ...p, x402Version: 1 })],
       ];

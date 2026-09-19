@@ -37,8 +37,8 @@ import { SUPPORTED_X402_VERSION } from '../version';
 import type { SiteborneServiceId } from '../types';
 import {
   BUNDLED_SERVICE_INPUT_SCHEMAS,
-  frozenInputExample,
   frozenOutputExample,
+  purchasableInputExample,
 } from './frozen-inputs';
 import { stripDocumentIdentity } from './schema-bundle';
 import { REGISTRY_SERVICES } from './registry-source';
@@ -177,7 +177,7 @@ export async function buildSiteborneDiscoveryDeclaration(
   const amount = usdToAtomicUnits(priceUsd, 6);
   const pricingSourceVersion = resolvePricingSourceVersion();
 
-  const inputExample = frozenInputExample(serviceId);
+  const inputExample = purchasableInputExample(serviceId);
   const outputExample = frozenOutputExample(serviceId);
   const inputHash = await hashPaymentObject(inputExample as Record<string, unknown>);
 

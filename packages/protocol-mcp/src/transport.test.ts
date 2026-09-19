@@ -1,7 +1,9 @@
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
+import { buildEconomicOffer } from '@siteborne/pricing';
 import {
   frozenInputExample,
   frozenOutputExample,
+  purchasableInputExample,
   type SiteborneServiceId,
 } from '@siteborne/protocol-x402';
 import type { PaymentPayload, PaymentRequired, SettleResponse } from '@x402/core/types';
@@ -446,33 +448,21 @@ describe('SITEBORNE MCP 2026-07-28 Hono transport', () => {
     });
   });
 
-  it('builds canonical exact and upto quotes, preserving maximum-not-actual semantics', async () => {
+  it('builds each service quote under its one canonical scheme, preserving maximum-not-actual semantics', async () => {
     const { app } = createFixtureApp();
     const client = await connectClient(app);
     clients.push(client);
     const input = frozenInputExample('document_evidence_json.v2');
 
-    const exact = await client.callTool({
-      name: 'siteborne_get_quote',
-      arguments: { service_id: 'document_evidence_json.v2', scheme: 'exact', input },
-    });
     const upto = await client.callTool({
       name: 'siteborne_get_quote',
       arguments: { service_id: 'document_evidence_json.v2', scheme: 'upto', input },
     });
-
-    expect(exact.isError).not.toBe(true);
     expect(upto.isError).not.toBe(true);
-    expect(exact.structuredContent).toEqual(
-      expect.objectContaining({
-        scheme: 'exact',
-        amount_kind: 'exact',
-        payment_requirements: expect.objectContaining({ scheme: 'exact' }),
-      })
-    );
     expect(upto.structuredContent).toEqual(
       expect.objectContaining({
         scheme: 'upto',
+        amount: '190000',
         amount_kind: 'authorized_maximum',
         payment_requirements: expect.objectContaining({ scheme: 'upto' }),
       })
@@ -480,6 +470,84 @@ describe('SITEBORNE MCP 2026-07-28 Hono transport', () => {
     const uptoQuote = upto.structuredContent as { amount: string; actual_amount: unknown };
     expect(BigInt(uptoQuote.amount)).toBeGreaterThan(0n);
     expect(uptoQuote.actual_amount).toBeNull();
+
+    const exact = await client.callTool({
+      name: 'siteborne_get_quote',
+      arguments: {
+        service_id: 'web_context_verified.v2',
+        scheme: 'exact',
+        input: purchasableInputExample('web_context_verified.v2'),
+      },
+    });
+    expect(exact.structuredContent).toEqual(
+      expect.objectContaining({
+        scheme: 'exact',
+        amount: '8000',
+        amount_kind: 'exact',
+        payment_requirements: expect.objectContaining({ scheme: 'exact' }),
+      })
+    );
+  });
+
+  // PRODUCTION-ECONOMICS-DISCOVERY-01: this suite previously pinned quoting
+  // any service under either scheme (a document job as an exact quote at the
+  // per-page native price; web/verify as an upto quote at the rendered /
+  // reproduction price). Those were quotes for products the real routes never
+  // sell, so a client paying against them would fail at the route. A quote now
+  // exists only for the scheme the canonical economic contract offers.
+  it.each([
+    ['document_evidence_json.v2', 'exact', 'upto'],
+    ['web_context_verified.v2', 'upto', 'exact'],
+    ['verify_agent_output.v2', 'upto', 'exact'],
+    ['company_evidence_graph.v2', 'upto', 'exact'],
+  ] as const)(
+    'rejects a %s %s quote: the offered scheme is %s',
+    async (serviceId, requested, offered) => {
+      const { app } = createFixtureApp();
+      const client = await connectClient(app);
+      clients.push(client);
+      const result = await client.callTool({
+        name: 'siteborne_get_quote',
+        arguments: {
+          service_id: serviceId,
+          scheme: requested,
+          input: purchasableInputExample(serviceId),
+        },
+      });
+      expect(result.isError).toBe(true);
+      const text = (result.content as { text: string }[])[0].text;
+      expect(JSON.parse(text)).toMatchObject({
+        code: 'scheme_not_offered',
+        details: { offered_scheme: offered, requested_scheme: requested },
+      });
+    }
+  );
+
+  it.each([
+    [
+      'web_context_verified.v2',
+      { target_url: 'https://acme.example/', retrieval_mode: 'rendered' },
+      'retrieval_mode_unavailable',
+    ],
+    [
+      'verify_agent_output.v2',
+      {
+        ...(frozenInputExample('verify_agent_output.v2') as object),
+        verification_mode: 'independent_reproduction',
+      },
+      'verification_mode_unavailable',
+    ],
+  ] as const)('does not quote an unavailable mode for %s', async (serviceId, input, code) => {
+    const { app } = createFixtureApp();
+    const client = await connectClient(app);
+    clients.push(client);
+    const result = await client.callTool({
+      name: 'siteborne_get_quote',
+      arguments: { service_id: serviceId, scheme: 'exact', input },
+    });
+    expect(result.isError).toBe(true);
+    const text = (result.content as { text: string }[])[0].text;
+    expect(JSON.parse(text).code).toBe(code);
   });
 
   it('quotes company v2 at 31200 atomic without repricing company v1', async () => {
@@ -527,7 +595,11 @@ describe('SITEBORNE MCP 2026-07-28 Hono transport', () => {
 
     const quote = await client.callTool({
       name: 'siteborne_get_quote',
-      arguments: { service_id: serviceId, scheme: 'exact', input: frozenInputExample(serviceId) },
+      arguments: {
+        service_id: serviceId,
+        scheme: buildEconomicOffer(serviceId).scheme,
+        input: purchasableInputExample(serviceId),
+      },
     });
 
     expect(quote.isError).not.toBe(true);

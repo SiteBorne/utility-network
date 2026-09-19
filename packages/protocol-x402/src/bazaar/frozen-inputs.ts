@@ -24,6 +24,7 @@ import documentEvidenceOutputSchema from '../../../../contracts/releases/1.0.0/s
 import agentVerificationOutputSchema from '../../../../contracts/releases/1.0.0/schemas/services/agent-verification-output.schema.json' with { type: 'json' };
 import moneySchema from '../../../../contracts/releases/1.0.0/schemas/common/money.schema.json' with { type: 'json' };
 import authorizedArtifactReferenceSchema from '../../../../contracts/releases/1.0.0/schemas/common/authorized-artifact-reference.schema.json' with { type: 'json' };
+import { buildEconomicOffer } from '@siteborne/pricing';
 import type { SiteborneServiceId } from '../types';
 import { bundleLocalRefs } from './schema-bundle';
 
@@ -93,6 +94,27 @@ const FROZEN_SERVICE_OUTPUT_SCHEMAS: Readonly<Record<SiteborneServiceId, unknown
  * service's schema has no example, rather than silently omitting one. */
 export function frozenInputExample(serviceId: SiteborneServiceId): unknown {
   return firstExample(FROZEN_SERVICE_INPUT_SCHEMAS[serviceId], serviceId, 'input');
+}
+
+/** The advertised example a buyer may actually purchase. The frozen schema's
+ * `examples[0]` for `web_context_verified` selects `retrieval_mode: rendered`,
+ * a mode that has a governed price but no production implementation; a
+ * discovery surface must never show an unavailable mode as the sample call.
+ * Where the frozen example selects an unavailable mode, only that selector is
+ * replaced by the canonical offer's default (available) mode -- the frozen
+ * example is otherwise returned unchanged, and the frozen schema itself is
+ * never modified. */
+export function purchasableInputExample(serviceId: SiteborneServiceId): unknown {
+  const example = frozenInputExample(serviceId);
+  const offer = buildEconomicOffer(serviceId);
+  const field = offer.modeSelectorField;
+  if (!field || example === null || typeof example !== 'object' || Array.isArray(example)) {
+    return example;
+  }
+  const record = example as Record<string, unknown>;
+  const selected = offer.modes.find((mode) => mode.mode === record[field]);
+  if (selected && !selected.available) return { ...record, [field]: offer.defaultMode };
+  return example;
 }
 
 /** Each frozen output schema's own first `examples[]` entry — see the
