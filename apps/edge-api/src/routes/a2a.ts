@@ -14,9 +14,10 @@ import type { Env } from '../control-plane/config/env';
 import { resolveAgentCardSigningIdentity } from '../control-plane/config/agent-card-signing';
 import {
   resolveEffectiveProductionStatusByServiceId,
+  resolvePublicPaymentDestination,
   type EffectiveDiscoveryEnv,
 } from '../control-plane/config/production-payment';
-import type { SiteborneServiceId } from '@siteborne/protocol-x402';
+import type { PaymentDestination, SiteborneServiceId } from '@siteborne/protocol-x402';
 import { resolveMtlsProductionActive } from '../control-plane/config/mtls-production-capability';
 import {
   parseMetadataProjectionMode,
@@ -45,20 +46,23 @@ const UNRELEASED_RUNTIME_SOURCE_COMMIT = '0'.repeat(40);
 function scheduleA2aShadowComparison(
   mode: 'legacy' | 'shadow_compare',
   effectiveProductionStatusByServiceId: Partial<Record<SiteborneServiceId, boolean>>,
-  mtlsProductionActive: boolean
+  mtlsProductionActive: boolean,
+  paymentDestination: PaymentDestination | null
 ): Promise<void> {
   if (mode !== 'shadow_compare') return Promise.resolve();
   return runShadowComparison({
     surface: 'a2a',
     existing: buildUnsignedSiteborneAgentCard(
       effectiveProductionStatusByServiceId,
-      mtlsProductionActive
+      mtlsProductionActive,
+      paymentDestination
     ),
     buildShadow: async () => {
       const effective = await getRuntimeEffectiveView(UNRELEASED_RUNTIME_SOURCE_COMMIT);
       const context = buildRealA2aShadowContext(
         effectiveProductionStatusByServiceId,
-        mtlsProductionActive
+        mtlsProductionActive,
+        paymentDestination
       );
       return projectA2aFromVcm(effective, context);
     },
@@ -121,6 +125,10 @@ type A2aAppEnv = Pick<
   | 'DB'
   | 'MTLS_PRODUCTION_ACTIVE'
   | 'A2A_METADATA_PROJECTION_MODE'
+  | 'PAYMENT_ENVIRONMENT'
+  | 'PRODUCTION_ENABLED'
+  | 'HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP'
+  | 'PRODUCTION_CDP_CREDENTIALS_APPROVED'
 > &
   EffectiveDiscoveryEnv;
 
@@ -200,6 +208,10 @@ function resolveA2aApp(
     hasDb
   );
   const mtlsProductionActive = resolveMtlsProductionActive(env);
+  // PRODUCTION-ECONOMICS-DISCOVERY-01: public projection of the governed
+  // payment destination (`null` = not configured); same real gates the paid
+  // routes use, no secret read.
+  const paymentDestination = resolvePublicPaymentDestination(env);
   // METADATA-VCM-IMPL-04A: included in the cache key alongside every other
   // computed input, for the same reason `mtlsProductionActive` is (see the
   // SUN-1220P2/SUN-1222C doc comment above) -- a real deployment never
@@ -217,6 +229,7 @@ function resolveA2aApp(
     effectiveProductionStatusByServiceId,
     mtlsProductionActive,
     authorizedMode,
+    paymentDestination,
   ]);
   if (!cachedA2aAppPromise || cachedA2aAppCacheKey !== cacheKey) {
     cachedA2aAppCacheKey = cacheKey;
@@ -236,6 +249,7 @@ function resolveA2aApp(
         ...(signingIdentity ? { signingIdentity } : {}),
         effectiveProductionStatusByServiceId,
         mtlsProductionActive,
+        paymentDestination,
       };
       if (authorizedMode === 'shadow_compare') {
         // METADATA-VCM-06 §IX: scheduled at this exact cache-rebuild point,
@@ -246,7 +260,8 @@ function resolveA2aApp(
           scheduleA2aShadowComparison(
             authorizedMode,
             effectiveProductionStatusByServiceId,
-            mtlsProductionActive
+            mtlsProductionActive,
+            paymentDestination
           )
         );
       }
@@ -257,13 +272,15 @@ function resolveA2aApp(
           buildLegacy: () =>
             buildUnsignedSiteborneAgentCard(
               effectiveProductionStatusByServiceId,
-              mtlsProductionActive
+              mtlsProductionActive,
+              paymentDestination
             ),
           buildPrimary: async () => {
             const effective = await getRuntimeEffectiveView(UNRELEASED_RUNTIME_SOURCE_COMMIT);
             const context = buildRealA2aShadowContext(
               effectiveProductionStatusByServiceId,
-              mtlsProductionActive
+              mtlsProductionActive,
+              paymentDestination
             );
             const projected = projectA2aFromVcm(effective, context);
             const candidate = AgentCard.fromJSON(

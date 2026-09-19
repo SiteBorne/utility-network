@@ -77,6 +77,7 @@ function a2aContext(): A2aProjectionContext {
     scheme: (serviceId) => BAZAAR_PAYMENT_POLICY[serviceId as SiteborneServiceId].scheme,
     effectiveProductionStatusByServiceId: {},
     mtlsSecurityScheme: null,
+    paymentDestination: null,
   };
 }
 

@@ -17,7 +17,7 @@ import {
   SITEBORNE_SERVICE_IDS,
   SITEBORNE_X402_EXTENSION_URI,
 } from '@siteborne/protocol-a2a';
-import type { SiteborneServiceId } from '@siteborne/protocol-x402';
+import type { PaymentDestination, SiteborneServiceId } from '@siteborne/protocol-x402';
 import { describe, expect, it } from 'vitest';
 import { compareProjections, summarizeDifferences, unexplainedDifferences } from '../comparator';
 import { project } from '../effective-view';
@@ -46,7 +46,8 @@ const AGENT_CARD_LITERALS = {
 
 function realContext(
   effectiveProductionStatusByServiceId: Partial<Record<SiteborneServiceId, boolean>> = {},
-  mtlsProductionActive = false
+  mtlsProductionActive = false,
+  paymentDestination: PaymentDestination | null = null
 ): A2aProjectionContext {
   return {
     ...AGENT_CARD_LITERALS,
@@ -67,6 +68,7 @@ function realContext(
           description: SITEBORNE_MTLS_SECURITY_SCHEME_DESCRIPTION,
         }
       : null,
+    paymentDestination,
   };
 }
 
@@ -232,5 +234,90 @@ describe('projectA2aFromVcm -- adversarial mutation detection', () => {
     const mutated = { ...shadow, securitySchemes: { mtls: { fabricated: true } } };
     const diff = unexplainedDifferences(compareProjections(existing, mutated));
     expect(diff.length).toBeGreaterThan(0);
+  });
+});
+
+// PRODUCTION-ECONOMICS-DISCOVERY-01: the economics block is part of the
+// compared card content. The VCM projection (effective view -> canonical offer)
+// and the legacy builder (canonical contract directly) must agree leaf for
+// leaf, with operational facts injected identically to both.
+describe('projectA2aFromVcm -- economics parity and mutation detection', () => {
+  const DESTINATION: PaymentDestination = {
+    network: 'eip155:8453',
+    asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+    payTo: '0x1111111111111111111111111111111111111111',
+  };
+  const STATUS = { 'web_context_verified.v2': true, 'verify_agent_output.v2': true } as const;
+
+  async function both(destination: PaymentDestination | null, status = STATUS) {
+    const effective = await realEightServiceEffectiveView();
+    const existing = buildUnsignedSiteborneAgentCard(status, false, destination);
+    const shadow = projectA2aFromVcm(effective, realContext(status, false, destination));
+    return { existing, shadow };
+  }
+
+  it.each([
+    ['no destination, all disabled', null, {}],
+    ['destination, all disabled', DESTINATION, {}],
+    ['destination, first-release services enabled', DESTINATION, STATUS],
+  ] as const)('zero unexplained differences: %s', async (_label, destination, status) => {
+    const { existing, shadow } = await both(destination, status as typeof STATUS);
+    expect(unexplainedDifferences(compareProjections(existing, shadow))).toEqual([]);
+  });
+
+  const mutate = async (edit: (economics: Record<string, unknown>) => void) => {
+    const { existing, shadow } = await both(DESTINATION);
+    const clone = JSON.parse(JSON.stringify(shadow));
+    const services = clone.capabilities.extensions[0].params.services as {
+      serviceId: string;
+      economics: Record<string, unknown>;
+    }[];
+    const target = services.find((s) => s.serviceId === 'document_evidence_json.v2')!;
+    edit(target.economics);
+    return unexplainedDifferences(compareProjections(existing, clone)).map((d) => d.path);
+  };
+
+  it('detects a changed authorization maximum', async () => {
+    const paths = await mutate((e) => (e.authorization_maximum = '0.20'));
+    expect(paths.some((p) => p.endsWith('economics.authorization_maximum'))).toBe(true);
+  });
+  it('detects a changed tier price', async () => {
+    const paths = await mutate((e) => ((e.tier_prices as { amount: string }[])[1].amount = '0.02'));
+    expect(paths.some((p) => p.includes('economics.tier_prices[1].amount'))).toBe(true);
+  });
+  it('detects a changed document page limit', async () => {
+    const paths = await mutate((e) => (e.limits = { max_document_pages: 100 }));
+    expect(paths.some((p) => p.endsWith('economics.limits.max_document_pages'))).toBe(true);
+  });
+  it('detects a different payTo, network, or asset', async () => {
+    for (const [field, value] of [
+      ['pay_to', '0x2222222222222222222222222222222222222222'],
+      ['network', 'eip155:84532'],
+      ['asset', '0xabc'],
+    ] as const) {
+      const paths = await mutate((e) => ((e.payment as Record<string, string>)[field] = value));
+      expect(
+        paths.some((p) => p.endsWith(`economics.payment.${field}`)),
+        field
+      ).toBe(true);
+    }
+  });
+  it('detects exact vs upto and a changed settlement model', async () => {
+    const paths = await mutate((e) => {
+      e.scheme = 'exact';
+      e.actual_settlement_model = 'equals_exact_amount';
+    });
+    expect(paths.some((p) => p.endsWith('economics.scheme'))).toBe(true);
+    expect(paths.some((p) => p.endsWith('economics.actual_settlement_model'))).toBe(true);
+  });
+  it('detects an unavailable mode advertised as available', async () => {
+    const { existing, shadow } = await both(DESTINATION);
+    const clone = JSON.parse(JSON.stringify(shadow));
+    const web = clone.capabilities.extensions[0].params.services.find(
+      (s: { serviceId: string }) => s.serviceId === 'web_context_verified.v2'
+    );
+    web.economics.available_modes = ['direct', 'rendered'];
+    const paths = unexplainedDifferences(compareProjections(existing, clone)).map((d) => d.path);
+    expect(paths.some((p) => p.includes('economics.available_modes'))).toBe(true);
   });
 });

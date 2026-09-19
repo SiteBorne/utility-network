@@ -5,6 +5,7 @@
  * inputs, no protocol-specific output -- this package only validates and
  * resolves; protocol adapters (METADATA-VCM-04+) consume the result.
  */
+import type { EconomicOffer } from '@siteborne/pricing';
 import { canonicalize, hashCanonical } from './canonical';
 import type { IsoTimestamp, Sha256Digest } from './primitives';
 import type { CanonicalServiceIdValue } from './service-id';
@@ -67,6 +68,9 @@ export interface EffectiveServiceView {
   readonly security: readonly EffectiveSecurityView[];
   readonly listPrice: Price;
   readonly governedMaxPrice: Price;
+  /** Canonical economic contract (static/normative part only); operational
+   * facts are injected by each projector from its own context. */
+  readonly economicOffer: EconomicOffer;
 }
 
 export interface EffectiveMetadataView {
@@ -171,6 +175,7 @@ export async function project(
         security,
         listPrice: service.economics.listPrice,
         governedMaxPrice: service.economics.governedMaxPrice,
+        economicOffer: service.economics.offer,
       };
     });
 

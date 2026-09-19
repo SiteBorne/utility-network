@@ -1,4 +1,4 @@
-import type { SiteborneServiceId } from '@siteborne/protocol-x402';
+import type { PaymentDestination, SiteborneServiceId } from '@siteborne/protocol-x402';
 import type { AgentCard } from '@a2a-js/sdk';
 import type { SiteborneA2aSigningIdentity } from './signing';
 
@@ -80,4 +80,9 @@ export interface CreateSiteborneA2aOptions {
    * dependency direction as `signingIdentity` and
    * `effectiveProductionStatusByServiceId` above. */
   mtlsProductionActive?: boolean;
+  /** PRODUCTION-ECONOMICS-DISCOVERY-01: the public projection of the governed
+   * payment destination (network, asset, payTo), resolved by the caller from
+   * real configuration. Absent/`null` means "not configured": the card then
+   * declares no destination rather than a placeholder. */
+  paymentDestination?: PaymentDestination | null;
 }

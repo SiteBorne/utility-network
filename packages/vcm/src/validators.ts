@@ -161,6 +161,66 @@ export function validateCanonicalModel(model: CanonicalStaticModel): ValidationR
   return errors.length === 0 ? ok() : fail(errors);
 }
 
+// The canonical offer must describe the same service and the same commercial
+// facts the scalar economics fields already carry: identity, scheme support,
+// list price, and (for tiered upto offers) the authorization ceiling.
+function validateEconomicOffer(service: CanonicalService, idValue: string): ValidationError[] {
+  const errors: ValidationError[] = [];
+  const path = `services[${idValue}].economics.offer`;
+  const { offer, supportedSchemes, listPrice } = service.economics;
+  if (offer.serviceId !== idValue) {
+    errors.push({
+      code: 'ECONOMIC_OFFER_IDENTITY_MISMATCH',
+      path,
+      message: `offer.serviceId "${offer.serviceId}" !== service id "${idValue}"`,
+    });
+  }
+  if (!supportedSchemes.some((entry) => entry.scheme === offer.scheme)) {
+    errors.push({
+      code: 'ECONOMIC_OFFER_SCHEME_UNSUPPORTED',
+      path,
+      message: `offer scheme "${offer.scheme}" is not among the service's supported schemes`,
+    });
+  }
+  const defaultMode = offer.modes.find((mode) => mode.mode === offer.defaultMode);
+  if (!defaultMode || !defaultMode.available) {
+    errors.push({
+      code: 'ECONOMIC_OFFER_DEFAULT_MODE_UNAVAILABLE',
+      path,
+      message: `offer default mode "${offer.defaultMode}" is missing or unavailable`,
+    });
+  }
+  // The scalar listPrice is the offer's primary unit price: the exact request
+  // price, or the lowest per-page tier for a metered offer.
+  const primaryUnitAmount =
+    offer.tierPrices && offer.tierPrices.length > 0
+      ? offer.tierPrices[0].amountUsd
+      : defaultMode?.amountUsd;
+  if (
+    primaryUnitAmount !== undefined &&
+    usdToMicro(primaryUnitAmount) !== usdToMicro(listPrice.amount)
+  ) {
+    errors.push({
+      code: 'ECONOMIC_OFFER_PRICE_MISMATCH',
+      path,
+      message: `offer primary unit price ${primaryUnitAmount} USD !== listPrice ${listPrice.amount} USD`,
+    });
+  }
+  if (offer.tierPrices && defaultMode) {
+    const ceiling = usdToMicro(defaultMode.amountUsd);
+    for (const tier of offer.tierPrices) {
+      if (usdToMicro(tier.amountUsd) > ceiling) {
+        errors.push({
+          code: 'ECONOMIC_OFFER_TIER_EXCEEDS_CEILING',
+          path,
+          message: `tier ${tier.tier} ${tier.amountUsd} USD exceeds the authorization maximum ${defaultMode.amountUsd} USD`,
+        });
+      }
+    }
+  }
+  return errors;
+}
+
 // ---------------------------------------------------------------------------
 // validateEconomicConstraints -- listPrice <= governedMaxPrice per service,
 // decimal-safe (BigInt micro-USD via @siteborne/pricing, never
@@ -188,6 +248,7 @@ export function validateEconomicConstraints(model: CanonicalStaticModel): Valida
         message: `listPrice ${listPrice.amount} USD exceeds governedMaxPrice ${governedMaxPrice.amount} USD`,
       });
     }
+    errors.push(...validateEconomicOffer(service, idValue));
   }
   return errors.length === 0 ? ok() : fail(errors);
 }

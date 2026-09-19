@@ -3,6 +3,7 @@
  * CanonicalStaticModel / CanonicalService without going through the real
  * legacy importer. Not exported from index.ts -- test-only.
  */
+import { buildEconomicOffer } from '@siteborne/pricing';
 import { parseSemVer, parseSha256Digest, parseUriString, parseUsdAmount } from './primitives';
 import type { CanonicalService, CanonicalStaticModel } from './types';
 
@@ -35,6 +36,7 @@ export function makeFixtureService(overrides: Partial<CanonicalService> = {}): C
         { scheme: 'exact', networks: ['eip155', 'solana'] },
         { scheme: 'upto', networks: ['eip155'] },
       ],
+      offer: buildEconomicOffer('company_evidence_graph.v1'),
     },
     interactions: [
       {

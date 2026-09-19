@@ -5,6 +5,7 @@
  * runtime. Signing remains `packages/protocol-a2a/src/signing.ts`'s
  * concern, entirely downstream of this adapter.
  */
+import { projectEconomicOffer } from '@siteborne/pricing';
 import type { EffectiveMetadataView, EffectiveServiceView } from '../effective-view';
 import type { A2aProjectionContext, UnsignedAgentCard, UnsignedAgentSkill } from './types';
 
@@ -43,16 +44,25 @@ export function projectA2aFromVcm(
       a.id.localeCompare(b.id)
   );
 
-  const x402Services = services.map((service) => ({
-    serviceId: service.id,
-    serviceVersion: service.id.slice(service.id.lastIndexOf('.') + 1),
-    scheme: context.scheme(service.id),
-    resource: `${context.resourceOrigin}${context.resourcePath(service.id)}`,
-    inputSchemaUri: service.contract.inputSchema.uri,
-    outputSchemaUri: service.contract.outputSchema.uri,
-    declaredLimitations: service.declaredLimitations,
-    productionEnabled: context.effectiveProductionStatusByServiceId[service.id] ?? false,
-  }));
+  const x402Services = services.map((service) => {
+    const resource = `${context.resourceOrigin}${context.resourcePath(service.id)}`;
+    const productionEnabled = context.effectiveProductionStatusByServiceId[service.id] ?? false;
+    return {
+      serviceId: service.id,
+      serviceVersion: service.id.slice(service.id.lastIndexOf('.') + 1),
+      scheme: context.scheme(service.id),
+      resource,
+      inputSchemaUri: service.contract.inputSchema.uri,
+      outputSchemaUri: service.contract.outputSchema.uri,
+      declaredLimitations: service.declaredLimitations,
+      productionEnabled,
+      economics: projectEconomicOffer(service.economicOffer, {
+        resource,
+        productionEnabled,
+        destination: context.paymentDestination,
+      }),
+    };
+  });
 
   return {
     name: context.agentName,

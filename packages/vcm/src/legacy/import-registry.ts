@@ -17,7 +17,12 @@
  * representation; validation is a separate concern that may legitimately
  * fail on real data without blocking representation).
  */
-import { resolvePricingSourceVersion, resolveServiceMaxPriceUsd } from '@siteborne/pricing';
+import {
+  buildEconomicOffer,
+  isEconomicServiceId,
+  resolvePricingSourceVersion,
+  resolveServiceMaxPriceUsd,
+} from '@siteborne/pricing';
 import { SITEBORNE_SUPPORTED_X402_SCHEMES } from '@siteborne/protocol-x402';
 import { deriveCurrentProtocolAuthorityInputs } from '../current-authority-inputs';
 import { deriveCurrentCodeExposure } from '../current-exposure';
@@ -187,6 +192,14 @@ export function importOneService(legacy: LegacyRegistryServiceFile): CanonicalSe
   );
 
   const contractMap = contractMapFor(id.generation);
+  const serviceIdValue = `${id.family}.${id.generation}`;
+  if (!isEconomicServiceId(serviceIdValue)) {
+    throw new LegacyImportError(
+      legacy.service_id,
+      'service_id',
+      `no canonical economic definition exists for "${serviceIdValue}"`
+    );
+  }
   const pricingKey = primaryPricingKey(id.family, id.generation);
   const governedMaxAmount = resolveServiceMaxPriceUsd(pricingKey);
 
@@ -243,6 +256,7 @@ export function importOneService(legacy: LegacyRegistryServiceFile): CanonicalSe
         currency: 'USD',
       },
       supportedSchemes,
+      offer: buildEconomicOffer(serviceIdValue),
     },
     interactions: [
       {

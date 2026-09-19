@@ -2,7 +2,9 @@ import type { AgentCard, AgentSkill } from '@a2a-js/sdk';
 import {
   BAZAAR_PAYMENT_POLICY,
   REGISTRY_SERVICES,
+  projectServiceEconomics,
   resolveServiceRoute,
+  type PaymentDestination,
   type SiteborneServiceId,
 } from '@siteborne/protocol-x402';
 import {
@@ -79,11 +81,13 @@ function buildSkill(serviceId: (typeof SITEBORNE_SERVICE_IDS)[number]): AgentSki
  * there is only one source of truth (`effectiveProductionStatusByServiceId`)
  * and the top-level field is computed from it, not set independently. */
 function buildX402ExtensionParams(
-  effectiveProductionStatusByServiceId?: Partial<Record<SiteborneServiceId, boolean>>
+  effectiveProductionStatusByServiceId?: Partial<Record<SiteborneServiceId, boolean>>,
+  paymentDestination: PaymentDestination | null = null
 ): Record<string, unknown> {
   const services = SITEBORNE_SERVICE_IDS.map((serviceId) => {
     const service = REGISTRY_SERVICES[serviceId];
     const route = resolveServiceRoute(serviceId);
+    const productionEnabled = effectiveProductionStatusByServiceId?.[serviceId] ?? false;
     return {
       serviceId,
       serviceVersion: service.service_version,
@@ -92,7 +96,13 @@ function buildX402ExtensionParams(
       inputSchemaUri: service.input_schema_uri,
       outputSchemaUri: service.output_schema_uri,
       declaredLimitations: [...service.declared_limitations],
-      productionEnabled: effectiveProductionStatusByServiceId?.[serviceId] ?? false,
+      productionEnabled,
+      // PRODUCTION-ECONOMICS-DISCOVERY-01: the canonical economic contract for
+      // this service, embedded verbatim -- never authored in this file.
+      economics: projectServiceEconomics(serviceId, {
+        productionEnabled,
+        destination: paymentDestination,
+      }),
     };
   });
   return {
@@ -125,7 +135,11 @@ export function buildUnsignedSiteborneAgentCard(
    * deployment configuration and injects it via
    * `CreateSiteborneA2aOptions.mtlsProductionActive`, the same
    * dependency direction as `signingIdentity`. */
-  mtlsProductionActive = false
+  mtlsProductionActive = false,
+  /** PRODUCTION-ECONOMICS-DISCOVERY-01: OPERATIONAL public payment
+   * destination, resolved by the caller (edge-api) from real configuration;
+   * `null` means not configured. This package never reads env or secrets. */
+  paymentDestination: PaymentDestination | null = null
 ): AgentCard {
   return {
     name: 'SITEBORNE Utility Network',
@@ -155,7 +169,10 @@ export function buildUnsignedSiteborneAgentCard(
           description:
             'SITEBORNE binding from A2A skill selection to existing x402 paid-service resources.',
           required: false,
-          params: buildX402ExtensionParams(effectiveProductionStatusByServiceId),
+          params: buildX402ExtensionParams(
+            effectiveProductionStatusByServiceId,
+            paymentDestination
+          ),
         },
       ],
     },

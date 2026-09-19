@@ -7,6 +7,7 @@
  * `@siteborne/protocol-x402`) -- the adapters themselves hold no
  * SITEBORNE-specific identifiers and cannot independently author one.
  */
+import type { EconomicOfferProjection, PaymentDestination } from '@siteborne/pricing';
 import type { CanonicalServiceIdValue } from '../service-id';
 
 // ---------------------------------------------------------------------------
@@ -38,6 +39,8 @@ export interface A2aProjectionContext {
     Partial<Record<CanonicalServiceIdValue, boolean>>
   >;
   readonly mtlsSecurityScheme: A2aMtlsSecurityScheme | null;
+  /** OPERATIONAL public payment destination; `null` = not configured. */
+  readonly paymentDestination: PaymentDestination | null;
 }
 
 export interface UnsignedAgentSkill {
@@ -60,6 +63,7 @@ export interface UnsignedAgentCardX402ServiceEntry {
   readonly outputSchemaUri: string;
   readonly declaredLimitations: readonly string[];
   readonly productionEnabled: boolean;
+  readonly economics: EconomicOfferProjection;
 }
 
 export interface UnsignedAgentCard {

@@ -34,6 +34,15 @@ import {
 } from '../pricing/mapping';
 import { hashPaymentObject } from '../canonical';
 import { SUPPORTED_X402_VERSION } from '../version';
+import {
+  ECONOMIC_SERVICE_IDS,
+  buildEconomicOffer,
+  challengePricingKey,
+  projectServiceEconomics,
+  validateEconomicProjection,
+  type EconomicOfferProjection,
+  type PaymentDestination,
+} from '../pricing/economic';
 import type { SiteborneServiceId } from '../types';
 import {
   BUNDLED_SERVICE_INPUT_SCHEMAS,
@@ -46,74 +55,33 @@ import { resolveServiceRoute } from './routes';
 import { SERVICE_CAPABILITY_STATUS } from './capability';
 import type { ServiceCapabilityStatus } from './capability';
 
-/** SITEBORNE's own payment-policy binding per service (directive §11-13):
- * which scheme, which governance pricing key, and which network/asset a
- * Bazaar declaration is quoted against. This is a SITEBORNE product
- * decision, not derived from any external source — recorded in ADR 0048.
- * `document_evidence_json.v1`'s `upto` is bound at the *maximum* price
- * (`document_evidence_json_max_job`), matching checkpoint 3's
- * authorization-phase convention (`src/tests/upto-lifecycle.test.ts`) —
- * never a fixed price presented as if it were `exact` (directive §13). */
-const BAZAAR_PAYMENT_POLICY: Readonly<
+/** SITEBORNE's payment-policy binding per service: which scheme, which
+ * governance pricing key, and which network/asset a Bazaar declaration is
+ * quoted against (ADR 0048).
+ *
+ * PRODUCTION-ECONOMICS-DISCOVERY-01: `scheme` and `pricing_key` are no longer
+ * hand-maintained here -- they are derived from the canonical economic
+ * contract (`@siteborne/pricing`), the same definition every other surface
+ * projects. The `upto` document offer is bound at its authorization ceiling
+ * (`document_evidence_json_max_job`), never a fixed price presented as
+ * `exact`. Only the local-fixture `network`/`asset` remain declared here; a
+ * real destination is injected through `BuildDiscoveryDeclarationInput`. */
+const BAZAAR_PAYMENT_POLICY = Object.fromEntries(
+  ECONOMIC_SERVICE_IDS.map((serviceId) => [
+    serviceId,
+    {
+      scheme: buildEconomicOffer(serviceId).scheme,
+      pricing_key: challengePricingKey(serviceId),
+      network: PREPRODUCTION_NETWORK,
+      asset: '0xUSDC',
+    },
+  ])
+) as Readonly<
   Record<
     SiteborneServiceId,
     { scheme: 'exact' | 'upto'; pricing_key: PricingKey; network: Network; asset: string }
   >
-> = {
-  'company_evidence_graph.v1': {
-    scheme: 'exact',
-    pricing_key: 'company_evidence_graph',
-    network: PREPRODUCTION_NETWORK,
-    asset: '0xUSDC',
-  },
-  'web_context_verified.v1': {
-    scheme: 'exact',
-    pricing_key: 'web_context_verified_direct',
-    network: PREPRODUCTION_NETWORK,
-    asset: '0xUSDC',
-  },
-  'document_evidence_json.v1': {
-    scheme: 'upto',
-    pricing_key: 'document_evidence_json_max_job',
-    network: PREPRODUCTION_NETWORK,
-    asset: '0xUSDC',
-  },
-  'verify_agent_output.v1': {
-    scheme: 'exact',
-    pricing_key: 'verify_agent_output_standard',
-    network: PREPRODUCTION_NETWORK,
-    asset: '0xUSDC',
-  },
-  // SUN-1222B-S3 / SUN-1222C-R3: all four v2 services now carry dedicated,
-  // isolated experiment pricing keys, split from the frozen v1 keys.
-  // document_evidence_json.v2's `upto` ceiling stays on the unchanged
-  // max_job safety cap (not itself a competitive list price) — only the
-  // per-tier *settlement* prices moved (see packages/pricing/src/document-usage.ts).
-  'company_evidence_graph.v2': {
-    scheme: 'exact',
-    pricing_key: 'company_evidence_graph_v2',
-    network: PREPRODUCTION_NETWORK,
-    asset: '0xUSDC',
-  },
-  'web_context_verified.v2': {
-    scheme: 'exact',
-    pricing_key: 'web_context_verified_direct_v2',
-    network: PREPRODUCTION_NETWORK,
-    asset: '0xUSDC',
-  },
-  'document_evidence_json.v2': {
-    scheme: 'upto',
-    pricing_key: 'document_evidence_json_max_job',
-    network: PREPRODUCTION_NETWORK,
-    asset: '0xUSDC',
-  },
-  'verify_agent_output.v2': {
-    scheme: 'exact',
-    pricing_key: 'verify_agent_output_standard_v2',
-    network: PREPRODUCTION_NETWORK,
-    asset: '0xUSDC',
-  },
-};
+>;
 
 /** SUN-0700A has no production wallet (directive §12) — this sentinel is
  * deliberately not address-shaped, so it can never be mistaken for a real
@@ -138,6 +106,10 @@ export interface SiteborneDiscoveryResource {
   status: 'not_live';
   production_enabled: false;
   payto_configured: boolean;
+  /** The canonical economic contract for this service -- the same projection
+   * object every other surface embeds. `payment` is `null` until a real
+   * destination is injected. */
+  economics: EconomicOfferProjection;
   /** SITEBORNE's own capability-truthfulness bookkeeping (directive §10)
    * — deliberately outside `extensions.bazaar`, which only carries fields
    * the official extension itself defines (directive §16's "respect
@@ -152,8 +124,13 @@ export interface BuildDiscoveryDeclarationInput {
   maxTimeoutSeconds: number;
   /** Overridable only for tests — production callers never have a real
    * payTo to supply yet (directive §12), so the default sentinel is used
-   * everywhere else. */
+   * everywhere else. Superseded by `destination` when both are given. */
   payTo?: string;
+  /** PRODUCTION-ECONOMICS-DISCOVERY-01: the public projection of the
+   * governed payment destination (network, asset, payTo), injected from real
+   * runtime configuration by the caller. Never defaulted or invented here;
+   * absent means "not configured" and the local fixture defaults apply. */
+  destination?: PaymentDestination;
 }
 
 /**
@@ -183,6 +160,10 @@ export async function buildSiteborneDiscoveryDeclaration(
 
   const expiresAt = new Date(new Date(nowIso).getTime() + expiresInSeconds * 1000).toISOString();
 
+  const network = input.destination?.network ?? policy.network;
+  const asset = input.destination?.asset ?? policy.asset;
+  const payee = input.destination?.payTo ?? input.payTo ?? PAYTO_NOT_CONFIGURED;
+
   const quote = await buildQuote({
     x402_version: SUPPORTED_X402_VERSION,
     service_id: serviceId,
@@ -194,10 +175,10 @@ export async function buildSiteborneDiscoveryDeclaration(
     pricing_key: policy.pricing_key,
     pricing_source_version: pricingSourceVersion,
     scheme: policy.scheme,
-    network: policy.network,
-    asset: policy.asset,
+    network: network as Network,
+    asset,
     amount,
-    payee: input.payTo ?? PAYTO_NOT_CONFIGURED,
+    payee,
     issued_at: nowIso,
     expires_at: expiresAt,
   });
@@ -248,9 +229,49 @@ export async function buildSiteborneDiscoveryDeclaration(
     extensions: extension as Record<string, unknown>,
     status: 'not_live',
     production_enabled: false,
-    payto_configured: (input.payTo ?? PAYTO_NOT_CONFIGURED) !== PAYTO_NOT_CONFIGURED,
+    payto_configured: payee !== PAYTO_NOT_CONFIGURED,
+    economics: projectServiceEconomics(serviceId, {
+      productionEnabled: false,
+      destination: input.destination ?? null,
+    }),
     capability_status: capability,
   };
+}
+
+/** Deterministic self-consistency findings for one Bazaar declaration: the
+ * `accepts` requirement must be exactly what the embedded canonical economics
+ * says. An empty list means the declaration cannot contradict itself. */
+export function validateBazaarDeclarationEconomics(resource: SiteborneDiscoveryResource): string[] {
+  const problems = validateEconomicProjection(resource.economics).map((p) => `economics: ${p}`);
+  const requirement = resource.accepts[0];
+  const economics = resource.economics;
+  if (!requirement) return [...problems, 'declaration has no payment requirement'];
+  if (requirement.scheme !== economics.scheme) {
+    problems.push(`accepts scheme ${requirement.scheme} !== economics scheme ${economics.scheme}`);
+  }
+  const usd =
+    economics.scheme === 'exact' ? economics.list_amount : economics.authorization_maximum;
+  if (usd !== null && requirement.amount !== usdToAtomicUnits(usd, 6)) {
+    problems.push(
+      `accepts amount ${requirement.amount} does not equal the canonical amount ${usd}`
+    );
+  }
+  if (economics.payment === null) {
+    if (requirement.payTo !== PAYTO_NOT_CONFIGURED) {
+      problems.push('accepts carries a payTo but economics declares no payment destination');
+    }
+  } else {
+    if (requirement.network !== economics.payment.network) problems.push('accepts network differs');
+    if (requirement.asset !== economics.payment.asset) problems.push('accepts asset differs');
+    if (requirement.payTo !== economics.payment.pay_to) problems.push('accepts payTo differs');
+  }
+  if (resource.payto_configured !== (economics.payment !== null)) {
+    problems.push('payto_configured disagrees with the economics payment destination');
+  }
+  if (resource.resourceUrl !== economics.resource) {
+    problems.push('resourceUrl differs from the economics resource');
+  }
+  return problems;
 }
 
 /** `BAZAAR.key` — re-exported so callers never hardcode the extension

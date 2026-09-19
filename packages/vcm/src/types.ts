@@ -6,6 +6,7 @@
  * one deliberate, governed, non-normative escape hatch (Part II §"Extension
  * mechanism").
  */
+import type { EconomicOffer } from '@siteborne/pricing';
 import type { GitSha, Sha256Digest, UriString, UsdAmount } from './primitives';
 import type { CanonicalServiceId, CanonicalServiceIdValue } from './service-id';
 import type {
@@ -111,6 +112,16 @@ export interface ServiceEconomics {
    * whether) it belongs in the canonical model. */
   readonly releaseMaximumPriceDeclared: Price;
   readonly supportedSchemes: readonly SchemeNetworkSupport[];
+  /** PRODUCTION-ECONOMICS-DISCOVERY-01: the canonical economic contract for
+   * this service -- exact vs upto, per-page tiers, authorization ceiling,
+   * measured settlement, mode catalogue with `PRICE_DEFINED` separate from
+   * `CAPABILITY_AVAILABLE`, and the governed document page limit. The scalar
+   * `listPrice`/`governedMaxPrice` above cannot express a tiered `upto`
+   * offer; this can. Derived from `@siteborne/pricing`'s single governed
+   * definition (never authored per surface); operational facts
+   * (`production_enabled`, network/asset/payTo) are deliberately NOT here --
+   * they are injected at projection time. */
+  readonly offer: EconomicOffer;
 }
 
 // `effectiveRuntimePrice` lives in runtime-overlay.ts (operational, not

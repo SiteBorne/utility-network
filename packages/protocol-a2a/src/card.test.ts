@@ -50,7 +50,9 @@ describe('SITEBORNE A2A v1 Agent Card contract', () => {
     expect(card.signatures).toEqual([]);
     expect(wire).not.toHaveProperty('protocolVersion');
     expect(wire).not.toHaveProperty('url');
-    expect(JSON.stringify(wire)).not.toContain('kind');
+    // Guards the legacy A2A `kind` discriminator key. The exact quoted key is
+    // checked: the canonical economics block legitimately carries `amount_kind`.
+    expect(JSON.stringify(wire)).not.toContain('"kind"');
   });
 
   // SUN-1222B: guards against the top-level/per-service productionEnabled

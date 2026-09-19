@@ -21,7 +21,11 @@ import {
   SITEBORNE_SERVICE_IDS,
   SITEBORNE_X402_EXTENSION_URI,
 } from '@siteborne/protocol-a2a';
-import { BAZAAR_PAYMENT_POLICY, resolveServiceRoute } from '@siteborne/protocol-x402';
+import {
+  BAZAAR_PAYMENT_POLICY,
+  resolveServiceRoute,
+  type PaymentDestination,
+} from '@siteborne/protocol-x402';
 import type { SiteborneServiceId } from '@siteborne/protocol-x402';
 import type { CanonicalServiceIdValue } from '../service-id';
 import type { A2aProjectionContext } from './types';
@@ -37,7 +41,8 @@ const AGENT_CARD_LITERALS = {
 
 export function buildRealA2aShadowContext(
   effectiveProductionStatusByServiceId: Partial<Record<SiteborneServiceId, boolean>>,
-  mtlsProductionActive: boolean
+  mtlsProductionActive: boolean,
+  paymentDestination: PaymentDestination | null = null
 ): A2aProjectionContext {
   return {
     ...AGENT_CARD_LITERALS,
@@ -58,5 +63,6 @@ export function buildRealA2aShadowContext(
           description: SITEBORNE_MTLS_SECURITY_SCHEME_DESCRIPTION,
         }
       : null,
+    paymentDestination,
   };
 }

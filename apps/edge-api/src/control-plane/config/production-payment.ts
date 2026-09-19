@@ -18,7 +18,10 @@ import type { Network } from '@x402/core/types';
 import type { HTTPFacilitatorClient } from '@x402/core/server';
 import { isAddress } from 'viem';
 import {
+  assertPreproductionNetwork,
   isProductionPaymentAuthorized,
+  resolvePaymentNetwork,
+  type PaymentDestination,
   type PaymentEvidenceMode,
   type PaymentEvidenceProvider,
   type ProductionAuthorizationInput,
@@ -94,6 +97,39 @@ export function assertNetworkAssetConsistency(network: Network, assetAddress: st
       `network_asset_mismatch: asset "${assetAddress}" does not belong to network "${network}" ` +
         `(expected "${expected}")`
     );
+  }
+}
+
+/** PRODUCTION-ECONOMICS-DISCOVERY-01 -- the PUBLIC projection of the governed
+ * payment destination (network, asset, payTo), for discovery surfaces.
+ *
+ * Reads the same real inputs the paid routes already use (the committed public
+ * `SELLER_WALLET_ADDRESS` var and the four ADR-0055 gates via
+ * `resolvePaymentNetwork`), through the same chain, so a discovery surface can
+ * never show a destination the real 402 will not require. It reads no secret,
+ * performs no I/O, and never invents a value: a missing or malformed address,
+ * or any inconsistency the network guard rejects, yields `null` ("not
+ * configured") rather than a placeholder or a partial destination. */
+export function resolvePublicPaymentDestination(
+  env: Pick<
+    Env,
+    | 'SELLER_WALLET_ADDRESS'
+    | 'PAYMENT_ENVIRONMENT'
+    | 'PRODUCTION_ENABLED'
+    | 'HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP'
+    | 'PRODUCTION_CDP_CREDENTIALS_APPROVED'
+  >
+): PaymentDestination | null {
+  const configured = env.SELLER_WALLET_ADDRESS;
+  if (!configured) return null;
+  try {
+    const payTo = resolveGovernedSellerAddress(configured);
+    const authorization = resolveProductionAuthorizationInput(env);
+    const network = resolvePaymentNetwork(authorization);
+    assertPreproductionNetwork(network, isProductionPaymentAuthorized(authorization));
+    return { network, asset: resolvePaymentAsset(network).address, payTo };
+  } catch {
+    return null;
   }
 }
 
