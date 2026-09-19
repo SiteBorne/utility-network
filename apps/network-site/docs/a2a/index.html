@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SITEBORNE A2A documentation</title>
+    <style>
+      body {
+        font-family:
+          system-ui,
+          -apple-system,
+          sans-serif;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 2rem;
+        line-height: 1.6;
+      }
+      code {
+        background: #f3f4f6;
+        padding: 0.125rem 0.25rem;
+        border-radius: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>SITEBORNE A2A documentation</h1>
+    <p>
+      SITEBORNE Utility Network publishes a signed A2A Agent Card at
+      <code>https://utility.siteborne.net/.well-known/agent-card.json</code> and its public key set
+      at <code>https://utility.siteborne.net/.well-known/jwks.json</code>. The JSON-RPC interface is
+      <code>https://utility.siteborne.net/a2a</code>.
+    </p>
+    <h2>Skills</h2>
+    <p>
+      The card lists one skill per service identity: <code>company_evidence_graph</code>,
+      <code>web_context_verified</code>, <code>document_evidence_json</code> and
+      <code>verify_agent_output</code>. The <code>.v2</code> identities are the current commercial
+      contracts; the <code>.v1</code> identities are compatibility identities that are not served.
+    </p>
+    <h2>Economics</h2>
+    <p>
+      Each skill's entry in the card's x402 extension (<a href="/extensions/a2a/x402/v1/"
+        >extension specification</a
+      >) carries an <code>economics</code> object: pricing scheme (<code>exact</code> or
+      <code>upto</code>), price or per-page tier schedule, authorization maximum, settlement model,
+      available and unavailable modes, document page limit, network, asset, and payee. The card is
+      the same contract that the MCP <code>siteborne_get_quote</code> tool, the OpenAPI document and
+      the service catalog project.
+    </p>
+    <p>
+      A mode with a defined price but no production implementation (browser-rendered web retrieval,
+      independent reproduction) is listed as unavailable and is rejected before any payment
+      challenge.
+    </p>
+    <h2>Availability</h2>
+    <p>
+      Paid execution is disabled by policy at present. <code>production_enabled</code> in each
+      <code>economics</code> object states the live availability of that service.
+    </p>
+  </body>
+</html>

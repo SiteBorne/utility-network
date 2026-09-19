@@ -97,6 +97,11 @@ export function resolveServiceRoute(serviceId: SiteborneServiceId): ServiceRoute
  * Equality with `SITEBORNE_A2A_ORIGIN` is enforced by a parity test. */
 export const CANONICAL_RESOURCE_ORIGIN = 'https://utility.siteborne.net';
 
+/** The canonical origin of every published schema (`$id` host). The schema
+ * files themselves are published from `apps/network-site/schemas`, derived from
+ * the active contract release by scripts/generate-network-site-publication.mts. */
+export const CANONICAL_SCHEMA_ORIGIN = 'https://siteborne.net';
+
 /** Canonical resource URL for a service: canonical origin + the path the
  * accepted OpenAPI contract declares. Never hand-written per surface. */
 export function canonicalResourceUrl(serviceId: SiteborneServiceId): string {

@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://siteborne.net/schemas/common/pagination.schema.json",
+  "title": "Pagination",
+  "description": "Standard pagination controls for list-based service outputs.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "page": {
+      "type": "integer",
+      "description": "Page number (1-indexed).",
+      "minimum": 1,
+      "maximum": 10000,
+      "default": 1
+    },
+    "page_size": {
+      "type": "integer",
+      "description": "Number of items per page.",
+      "minimum": 1,
+      "maximum": 100,
+      "default": 20
+    },
+    "total_items": {
+      "type": "integer",
+      "description": "Total number of items across all pages.",
+      "minimum": 0
+    },
+    "total_pages": {
+      "type": "integer",
+      "description": "Total number of pages.",
+      "minimum": 0
+    },
+    "has_next": {
+      "type": "boolean",
+      "description": "Whether a next page exists."
+    },
+    "has_previous": {
+      "type": "boolean",
+      "description": "Whether a previous page exists."
+    },
+    "cursor": {
+      "type": "string",
+      "description": "Opaque cursor for cursor-based pagination.",
+      "maxLength": 256
+    }
+  },
+  "examples": [
+    {
+      "page": 1,
+      "page_size": 20,
+      "total_items": 45,
+      "total_pages": 3,
+      "has_next": true,
+      "has_previous": false
+    }
+  ]
+}

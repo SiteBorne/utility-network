@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SITEBORNE A2A x402 extension v1</title>
+    <style>
+      body {
+        font-family:
+          system-ui,
+          -apple-system,
+          sans-serif;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 2rem;
+        line-height: 1.6;
+      }
+      code {
+        background: #f3f4f6;
+        padding: 0.125rem 0.25rem;
+        border-radius: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>SITEBORNE A2A x402 extension v1</h1>
+    <p>
+      Extension URI: <code>https://siteborne.net/extensions/a2a/x402/v1</code>. It binds A2A skill
+      selection to SITEBORNE's x402 paid-service resources. It is declared with
+      <code>required: false</code>.
+    </p>
+    <h2>Parameters</h2>
+    <ul>
+      <li><code>x402Version</code> &mdash; the x402 protocol version.</li>
+      <li>
+        <code>paymentRequiredForUsefulExecution</code> &mdash; true: useful execution requires
+        payment.
+      </li>
+      <li>
+        <code>productionEnabled</code> &mdash; true when at least one listed service is
+        production-callable.
+      </li>
+      <li>
+        <code>services[]</code> &mdash; per skill: <code>serviceId</code>,
+        <code>serviceVersion</code>, <code>scheme</code>, <code>resource</code>,
+        <code>inputSchemaUri</code>, <code>outputSchemaUri</code>, <code>declaredLimitations</code>,
+        <code>productionEnabled</code>, and <code>economics</code>.
+      </li>
+    </ul>
+    <h2>economics</h2>
+    <p>
+      The canonical economic contract for the service: <code>scheme</code>,
+      <code>pricing_model</code>, <code>price_unit</code>, <code>list_amount</code> (exact) or
+      <code>authorization_maximum</code> and <code>tier_prices</code> (upto),
+      <code>actual_settlement_model</code>, <code>limits</code>, <code>modes</code> (each with
+      <code>price_defined</code> and <code>capability_available</code>),
+      <code>available_modes</code>, <code>release_posture</code>, <code>production_enabled</code>,
+      <code>payment</code> (<code>network</code>, <code>asset</code>, <code>pay_to</code>; null when
+      not configured) and <code>pricing_source_version</code>. Amounts are decimal USD strings.
+    </p>
+    <p>
+      For an <code>upto</code> service the payment challenge authorizes
+      <code>authorization_maximum</code>; the charge is measured usage and never exceeds it.
+    </p>
+  </body>
+</html>

@@ -9,6 +9,8 @@ import {
   type EffectiveDiscoveryEnv,
 } from '../config/production-payment';
 import {
+  CANONICAL_SCHEMA_ORIGIN,
+  REGISTRY_SERVICES,
   ECONOMIC_SERVICE_IDS,
   V2_PAID_SERVICE_IDS,
   buildEconomicOffer,
@@ -224,8 +226,15 @@ catalogRoute.get('/', async (c) => {
         production_enabled: s.production_enabled,
         production_ready: s.production_ready,
         protocol_status: s.protocol_status,
-        input_schema_ref: `/schemas/${s.service_id}/input`,
-        output_schema_ref: `/schemas/${s.service_id}/output`,
+        // Canonical schema URIs (the schemas' own $id, published from
+        // apps/network-site). The former `/schemas/<id>/input` paths are not
+        // served by any route.
+        input_schema_ref:
+          REGISTRY_SERVICES[s.service_id as SiteborneServiceId]?.input_schema_uri ??
+          `/schemas/${s.service_id}/input`,
+        output_schema_ref:
+          REGISTRY_SERVICES[s.service_id as SiteborneServiceId]?.output_schema_uri ??
+          `/schemas/${s.service_id}/output`,
       },
       c.env,
       hasDb
@@ -330,7 +339,9 @@ const SchemaResponseSchema = z.object({
 });
 
 schemasRoute.get('/', async (c) => {
-  const baseUrl = new URL(c.req.url).origin;
+  // Canonical publication origin, not the request origin: this Worker does not
+  // serve the schema files, so request-origin URLs would be dead links.
+  const baseUrl = CANONICAL_SCHEMA_ORIGIN;
   const response = {
     schemas: {
       'proof-carrying-context': `${baseUrl}/schemas/proof-carrying-context.schema.json`,
