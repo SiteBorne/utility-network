@@ -5,9 +5,19 @@ import type { ServicesRepository } from '../../control-plane/repositories/interf
 import type { Env } from '../config/env';
 import {
   resolveEffectiveServiceRuntimeStatus,
+  resolvePublicPaymentDestination,
   type EffectiveDiscoveryEnv,
 } from '../config/production-payment';
-import { REGISTRY_SERVICES, type SiteborneServiceId } from '@siteborne/protocol-x402';
+import {
+  ECONOMIC_SERVICE_IDS,
+  V2_PAID_SERVICE_IDS,
+  buildEconomicOffer,
+  buildV2PaidOpenApiOperations,
+  isEconomicServiceId,
+  projectServiceEconomics,
+  type EconomicOfferProjection,
+  type SiteborneServiceId,
+} from '@siteborne/protocol-x402';
 
 interface DiscoveryServiceLike {
   service_id: string;
@@ -15,6 +25,17 @@ interface DiscoveryServiceLike {
   production_enabled: boolean;
   production_ready: boolean;
   protocol_status: 'preproduction' | 'production';
+}
+
+/** PRODUCTION-ECONOMICS-DISCOVERY-01: the economic fields the overlay adds to
+ * every served service. `price_usd` stays for compatibility but is now a
+ * projection of the canonical offer's unit price (see `price_unit`); the full
+ * pricing function -- tiers, authorization ceiling, settlement model, modes,
+ * limits, destination -- is in `economics`. */
+interface DiscoveryEconomicFields {
+  price_unit: 'request' | 'page';
+  pricing_model: 'fixed_per_request' | 'metered_per_page_tiered';
+  economics: EconomicOfferProjection;
 }
 
 /** Applies the version-local runtime-gate overlay to every service that
@@ -59,30 +80,99 @@ function overlayEffectiveDiscoveryStatus<T extends DiscoveryServiceLike>(
   service: T,
   env: EffectiveDiscoveryEnv | undefined,
   hasDb: boolean
-): T {
-  const registryEntry = REGISTRY_SERVICES[service.service_id as SiteborneServiceId] as
-    | (typeof REGISTRY_SERVICES)[SiteborneServiceId]
-    | undefined;
-  const governedPriceUsd = registryEntry?.maximum_price.amount;
-  const withGovernedPrice: T =
-    governedPriceUsd !== undefined ? { ...service, price_usd: governedPriceUsd } : service;
-
+): T & Partial<DiscoveryEconomicFields> {
   const effectiveStatus = resolveEffectiveServiceRuntimeStatus(
     service.service_id as SiteborneServiceId,
     env,
     hasDb
   );
-  if (!effectiveStatus.hasProductionExecutor) return withGovernedPrice;
-  const effectivelyActive = effectiveStatus.productionEnabled;
+  const productionEnabled = effectiveStatus.hasProductionExecutor
+    ? effectiveStatus.productionEnabled
+    : service.production_enabled;
+
+  // A service_id outside the canonical contract is returned exactly as D1 has
+  // it: no invented economics.
+  const economicFields: Partial<DiscoveryEconomicFields> & { price_usd?: string } = {};
+  if (isEconomicServiceId(service.service_id)) {
+    const offer = buildEconomicOffer(service.service_id);
+    const economics = projectServiceEconomics(service.service_id, {
+      productionEnabled,
+      destination: env ? resolvePublicPaymentDestination(env) : null,
+    });
+    economicFields.price_usd = economics.list_amount ?? economics.tier_prices?.[0]?.amount;
+    economicFields.price_unit = economics.price_unit;
+    economicFields.pricing_model = offer.pricingModel;
+    economicFields.economics = economics;
+  }
+  const withEconomics = {
+    ...service,
+    ...economicFields,
+    price_usd: economicFields.price_usd ?? service.price_usd,
+  } as T & Partial<DiscoveryEconomicFields>;
+
+  if (!effectiveStatus.hasProductionExecutor) return withEconomics;
   return {
-    ...withGovernedPrice,
-    production_enabled: effectivelyActive,
-    production_ready: effectivelyActive,
-    protocol_status: effectivelyActive ? 'production' : 'preproduction',
+    ...withEconomics,
+    production_enabled: productionEnabled,
+    production_ready: productionEnabled,
+    protocol_status: productionEnabled ? 'production' : 'preproduction',
   };
 }
 
 export const catalogRoute = new Hono<{ Bindings: Env }>();
+
+const EconomicsProjectionSchema = z
+  .object({
+    service_id: z.string(),
+    capability_id: z.string(),
+    service_version: z.enum(['v1', 'v2']),
+    contract_role: z.enum(['current', 'compatibility']),
+    resource: z.string(),
+    scheme: z.enum(['exact', 'upto']),
+    pricing_model: z.enum(['fixed_per_request', 'metered_per_page_tiered']),
+    currency: z.literal('USD'),
+    price_unit: z.enum(['request', 'page']),
+    amount_kind: z.enum(['exact', 'authorized_maximum']),
+    list_amount: z.string().nullable(),
+    authorization_maximum: z.string().nullable(),
+    actual_settlement_model: z.enum([
+      'equals_exact_amount',
+      'measured_usage_not_exceeding_authorization',
+    ]),
+    tier_prices: z
+      .array(
+        z.object({
+          tier: z.enum(['native', 'ocr', 'table']),
+          unit: z.literal('page'),
+          amount: z.string(),
+        })
+      )
+      .nullable(),
+    measured_usage_semantics: z.record(z.unknown()).nullable(),
+    limits: z.object({ max_document_pages: z.number().int() }).nullable(),
+    default_mode: z.string(),
+    available_modes: z.array(z.string()),
+    modes: z.array(
+      z.object({
+        mode: z.string(),
+        amount: z.string(),
+        amount_kind: z.enum(['exact', 'authorized_maximum']),
+        unit: z.enum(['request', 'job']),
+        price_defined: z.literal(true),
+        capability_available: z.boolean(),
+        unavailable_reason: z.string().optional(),
+      })
+    ),
+    release_posture: z.enum([
+      'first_release_candidate',
+      'defined_not_production_admitted',
+      'compatibility_not_admitted',
+    ]),
+    production_enabled: z.boolean(),
+    payment: z.object({ network: z.string(), asset: z.string(), pay_to: z.string() }).nullable(),
+    pricing_source_version: z.string(),
+  })
+  .strict();
 
 const ServiceCatalogEntrySchema = z.object({
   service_id: z.string(),
@@ -90,6 +180,9 @@ const ServiceCatalogEntrySchema = z.object({
   title: z.string(),
   description: z.string(),
   price_usd: z.string(),
+  price_unit: z.enum(['request', 'page']).optional(),
+  pricing_model: z.enum(['fixed_per_request', 'metered_per_page_tiered']).optional(),
+  economics: EconomicsProjectionSchema.optional(),
   production_enabled: z.boolean(),
   production_ready: z.boolean(),
   protocol_status: z.enum(['preproduction', 'production']),
@@ -157,6 +250,9 @@ const ServiceMetadataResponseSchema = z.object({
   title: z.string(),
   description: z.string(),
   price_usd: z.string(),
+  price_unit: z.enum(['request', 'page']).optional(),
+  pricing_model: z.enum(['fixed_per_request', 'metered_per_page_tiered']).optional(),
+  economics: EconomicsProjectionSchema.optional(),
   production_enabled: z.boolean(),
   production_ready: z.boolean(),
   protocol_status: z.enum(['preproduction', 'production']),
@@ -206,6 +302,9 @@ serviceMetadataRoute.get('/:service_id', async (c) => {
     title: service.title,
     description: service.description,
     price_usd: service.price_usd,
+    price_unit: service.price_unit,
+    pricing_model: service.pricing_model,
+    economics: service.economics,
     production_enabled: service.production_enabled,
     production_ready: service.production_ready,
     protocol_status: service.protocol_status,
@@ -265,8 +364,27 @@ export const openapiRoute = new Hono();
 
 openapiRoute.get('/openapi.json', async (c) => {
   const baseUrl = new URL(c.req.url).origin;
+  // PRODUCTION-ECONOMICS-DISCOVERY-01: the four v2 paid operations, their
+  // narrowed request schemas and canonical economics come from the one
+  // generator in @siteborne/protocol-x402; OPERATIONAL facts (effective
+  // production status, public payment destination) are read from real runtime
+  // configuration, never authored here.
+  const env = c.env as
+    | (EffectiveDiscoveryEnv & Parameters<typeof resolvePublicPaymentDestination>[0])
+    | undefined;
+  const hasDb = Boolean((c.env as { DB?: unknown } | undefined)?.DB);
+  const paid = buildV2PaidOpenApiOperations({
+    destination: env ? resolvePublicPaymentDestination(env) : null,
+    productionEnabled: Object.fromEntries(
+      V2_PAID_SERVICE_IDS.map((id) => [
+        id,
+        resolveEffectiveServiceRuntimeStatus(id, env, hasDb).productionEnabled,
+      ])
+    ),
+  });
   const openapi = {
-    openapi: '3.0.3',
+    // 3.1.0: the frozen service input schemas are JSON Schema 2020-12.
+    openapi: '3.1.0',
     info: {
       title: 'SITEBORNE Utility Network API',
       version: '0.0.0',
@@ -277,13 +395,15 @@ openapiRoute.get('/openapi.json', async (c) => {
         url: 'https://siteborne.net',
         email: 'ops@siteborne.net',
       },
+      // No `url`: no license page is published at any canonical location, and a
+      // dead canonical URL must not be projected.
       license: {
         name: 'Proprietary',
-        url: 'https://siteborne.net/license',
       },
     },
     servers: [{ url: `${baseUrl}`, description: 'Current environment' }],
     paths: {
+      ...paid.paths,
       '/health': {
         get: {
           summary: 'Health check',
@@ -375,12 +495,7 @@ openapiRoute.get('/openapi.json', async (c) => {
               required: true,
               schema: {
                 type: 'string',
-                enum: [
-                  'company_evidence_graph.v1',
-                  'web_context_verified.v1',
-                  'document_evidence_json.v1',
-                  'verify_agent_output.v1',
-                ],
+                enum: [...ECONOMIC_SERVICE_IDS],
               },
             },
           ],
@@ -407,6 +522,7 @@ openapiRoute.get('/openapi.json', async (c) => {
     },
     components: {
       schemas: {
+        ...paid.schemas,
         HealthResponse: {
           type: 'object',
           properties: {
@@ -446,7 +562,17 @@ openapiRoute.get('/openapi.json', async (c) => {
                   version: { type: 'string' },
                   title: { type: 'string' },
                   description: { type: 'string' },
-                  price_usd: { type: 'string' },
+                  price_usd: {
+                    type: 'string',
+                    description:
+                      'Unit price of the default mode in USD: per request for fixed offers, per page (lowest tier) for metered offers -- never a job total. See price_unit and economics for the full pricing function.',
+                  },
+                  price_unit: { type: 'string', enum: ['request', 'page'] },
+                  pricing_model: {
+                    type: 'string',
+                    enum: ['fixed_per_request', 'metered_per_page_tiered'],
+                  },
+                  economics: { $ref: '#/components/schemas/EconomicOfferProjection' },
                   production_enabled: { type: 'boolean' },
                   production_ready: { type: 'boolean' },
                   protocol_status: { type: 'string', enum: ['preproduction', 'production'] },
@@ -490,7 +616,17 @@ openapiRoute.get('/openapi.json', async (c) => {
             version: { type: 'string' },
             title: { type: 'string' },
             description: { type: 'string' },
-            price_usd: { type: 'string' },
+            price_usd: {
+              type: 'string',
+              description:
+                'Unit price of the default mode in USD: per request for fixed offers, per page (lowest tier) for metered offers -- never a job total. See price_unit and economics for the full pricing function.',
+            },
+            price_unit: { type: 'string', enum: ['request', 'page'] },
+            pricing_model: {
+              type: 'string',
+              enum: ['fixed_per_request', 'metered_per_page_tiered'],
+            },
+            economics: { $ref: '#/components/schemas/EconomicOfferProjection' },
             production_enabled: { type: 'boolean' },
             production_ready: { type: 'boolean' },
             protocol_status: { type: 'string', enum: ['preproduction', 'production'] },

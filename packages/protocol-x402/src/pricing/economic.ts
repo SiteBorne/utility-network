@@ -23,6 +23,8 @@ export {
   challengePricingKey,
   checkModeAvailability,
   compareEconomicProjections,
+  governDeclaredLimitations,
+  isEconomicServiceId,
   projectEconomicOffer,
   validateEconomicProjection,
   resolveMaxDocumentPages,

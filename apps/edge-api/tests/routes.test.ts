@@ -109,7 +109,8 @@ describe('Control Plane Routes', () => {
     const res = await app.request('/openapi.json');
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.openapi).toBe('3.0.3');
+    // 3.1.0: the served document embeds the frozen JSON Schema 2020-12 input schemas.
+    expect(body.openapi).toBe('3.1.0');
     expect(body.info.title).toBe('SITEBORNE Utility Network API');
     expect(body.paths['/health']).toBeDefined();
     expect(body.paths['/ready']).toBeDefined();

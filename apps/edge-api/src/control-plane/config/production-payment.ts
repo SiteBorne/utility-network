@@ -111,13 +111,15 @@ export function assertNetworkAssetConsistency(network: Network, assetAddress: st
  * or any inconsistency the network guard rejects, yields `null` ("not
  * configured") rather than a placeholder or a partial destination. */
 export function resolvePublicPaymentDestination(
-  env: Pick<
-    Env,
-    | 'SELLER_WALLET_ADDRESS'
-    | 'PAYMENT_ENVIRONMENT'
-    | 'PRODUCTION_ENABLED'
-    | 'HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP'
-    | 'PRODUCTION_CDP_CREDENTIALS_APPROVED'
+  env: Partial<
+    Pick<
+      Env,
+      | 'SELLER_WALLET_ADDRESS'
+      | 'PAYMENT_ENVIRONMENT'
+      | 'PRODUCTION_ENABLED'
+      | 'HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP'
+      | 'PRODUCTION_CDP_CREDENTIALS_APPROVED'
+    >
   >
 ): PaymentDestination | null {
   const configured = env.SELLER_WALLET_ADDRESS;
