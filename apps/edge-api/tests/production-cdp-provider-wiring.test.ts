@@ -211,7 +211,10 @@ describe('production CDP provider wiring (SUN-1200 checkpoint B)', () => {
       async settle(context) {
         settleCount += 1;
         const network = (context as { network?: string })?.network ?? 'eip155:8453';
-        return { success: true, transaction: SETTLED_TX, network, payer: PAYER, amount: '9000' };
+        // 8000 = the governed web_context_verified.v2 direct price (0.008 USD). This
+        // previously read 9000 (the v1 price) because the fixture v2 route quoted the
+        // v1 pricing key; the fixture now derives it from the canonical contract.
+        return { success: true, transaction: SETTLED_TX, network, payer: PAYER, amount: '8000' };
       },
     });
     const app = await buildPaidServicesApp({

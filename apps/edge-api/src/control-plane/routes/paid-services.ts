@@ -718,7 +718,7 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
   createX402ServiceRouteWithContinuation(app, {
     serviceId: 'web_context_verified.v2',
     scheme: 'exact',
-    pricingKey: 'web_context_verified_direct',
+    pricingKey: 'web_context_verified_direct_v2',
     ...v2CdpRoute('/v2/web/context'),
     inputSchema: BUNDLED_SERVICE_INPUT_SCHEMAS['web_context_verified.v2'] as Record<
       string,
@@ -763,7 +763,7 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
     createX402ServiceRouteWithContinuation(app, {
       serviceId: 'web_context_verified.v2',
       scheme: 'exact',
-      pricingKey: 'web_context_verified_direct',
+      pricingKey: 'web_context_verified_direct_v2',
       ...v2NeverminedRoute('web_context_verified.v2'),
       inputSchema: BUNDLED_SERVICE_INPUT_SCHEMAS['web_context_verified.v2'] as Record<
         string,
@@ -971,7 +971,7 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
   createX402ServiceRouteWithContinuation(app, {
     serviceId: 'verify_agent_output.v2',
     scheme: 'exact',
-    pricingKey: 'verify_agent_output_standard',
+    pricingKey: 'verify_agent_output_standard_v2',
     ...v2CdpRoute('/v2/verify/agent-output'),
     inputSchema: BUNDLED_SERVICE_INPUT_SCHEMAS['verify_agent_output.v2'] as Record<string, unknown>,
     contractRelease: '2.0.0',
@@ -1004,7 +1004,7 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
     createX402ServiceRouteWithContinuation(app, {
       serviceId: 'verify_agent_output.v2',
       scheme: 'exact',
-      pricingKey: 'verify_agent_output_standard',
+      pricingKey: 'verify_agent_output_standard_v2',
       ...v2NeverminedRoute('verify_agent_output.v2'),
       inputSchema: BUNDLED_SERVICE_INPUT_SCHEMAS['verify_agent_output.v2'] as Record<
         string,
