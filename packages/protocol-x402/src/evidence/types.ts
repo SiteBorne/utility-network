@@ -55,6 +55,12 @@ export interface ExternalVerificationEvidence {
    * never the raw payload itself, to avoid persisting more than needed. */
   raw_evidence_hash: string;
   trust_class: EvidenceTrustClass;
+  /** Internal, classification-only diagnostics for a failed verification.
+   * Closed-vocabulary code / integer status only — never free-form text.
+   * Absent on success and never part of `raw_evidence_hash`. */
+  subreason?: string;
+  transport_status?: number;
+  retryability?: string;
 }
 
 export interface ExternalSettlementEvidence {

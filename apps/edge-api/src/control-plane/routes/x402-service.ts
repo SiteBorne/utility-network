@@ -127,14 +127,25 @@ function verificationFailureObservability(evidence: {
   reason?: string;
   trust_class?: string;
   verifier_identity?: string;
-}): Record<string, string> {
-  const out: Record<string, string> = {};
+  subreason?: string;
+  transport_status?: number;
+  retryability?: string;
+}): Record<string, string | number> {
+  const out: Record<string, string | number> = {};
   const reason = safeAuditCode(evidence.reason);
   const trustClass = safeAuditCode(evidence.trust_class);
   const provider = safeAuditCode(evidence.verifier_identity);
+  const subreason = safeAuditCode(evidence.subreason);
+  const retryability = safeAuditCode(evidence.retryability);
+  const status = evidence.transport_status;
   if (reason) out.verification_reason = reason;
+  if (subreason) out.verification_subreason = subreason;
   if (trustClass) out.trust_class = trustClass;
   if (provider) out.verification_provider = provider;
+  if (typeof status === 'number' && Number.isInteger(status) && status >= 100 && status <= 599) {
+    out.transport_status = status;
+  }
+  if (retryability) out.verification_retryability = retryability;
   return out;
 }
 
