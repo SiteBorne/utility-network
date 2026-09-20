@@ -62,6 +62,17 @@
  * unfixed — do not point this file back at it) to the new, fixed candidate
  * under a fresh, explicit, standalone human authorization for exactly one
  * real paid transaction. No other constant in this file was changed.
+ *
+ * UPDATE (PRODUCTION-ECONOMICS-NARROW-PAID-CANARY-AUTHORIZATION-01): re-pointed
+ * at the paid-canary version `2b44db89-fd95-4b6e-8449-8b7a1b4c51de` and the
+ * governed verify-standard price (17000 atomic = 0.017 USDC). Added two
+ * fail-closed bindings: (1) the request itself must be the verify_agent_output.v2
+ * route in `standard` mode (the 402 does not convey capability/mode), and
+ * (2) the challenge must carry `quote_id` in both the decoded header and the
+ * 402 JSON body, they must agree, and the payload that gets signed/submitted
+ * must carry that same fresh `quote_id`. `requirement_id` is exposed only in
+ * the 402 JSON body (never in the decoded header), so no equality check is
+ * made on it.
  */
 import { describe, expect, it, vi } from 'vitest';
 import { CdpClient } from '@coinbase/cdp-sdk';
@@ -90,8 +101,13 @@ import { hasAllRequiredCredentials } from '../../../../scripts/first-paid-e2e';
 const WORKER_SCRIPT_NAME = 'siteborne-utility-edge';
 const WORKER_ORIGIN = `https://${WORKER_SCRIPT_NAME}.siteborneutilitynetwork.workers.dev`;
 const TARGET_PATH = '/v2/verify/agent-output';
+// The 402 challenge does not convey capability/mode, so the request itself is
+// bound: this path is the verify_agent_output.v2 route, and the body must be
+// standard mode. Checked before any network call.
+const EXPECTED_CAPABILITY_ROUTE = '/v2/verify/agent-output';
+const EXPECTED_VERIFICATION_MODE = 'standard';
 const TARGET_URL = `${WORKER_ORIGIN}${TARGET_PATH}`;
-const CANDIDATE_VERSION_ID = 'a0055146-d358-40d4-b0af-52eccc56c8ef';
+const CANDIDATE_VERSION_ID = '2b44db89-fd95-4b6e-8449-8b7a1b4c51de';
 const VERSION_OVERRIDE_HEADER = 'Cloudflare-Workers-Version-Overrides';
 // SUN-1220O1: value MUST be the quoted RFC-8941 structured-field-value shape
 // `<script-name>="<version-id>"` — independently confirmed as the only
@@ -103,7 +119,7 @@ const VERSION_OVERRIDE_HEADER_VALUE = `${WORKER_SCRIPT_NAME}="${CANDIDATE_VERSIO
 
 const EXPECTED_NETWORK = 'eip155:8453';
 const EXPECTED_ASSET = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
-const EXPECTED_AMOUNT_ATOMIC = '19000';
+const EXPECTED_AMOUNT_ATOMIC = '17000';
 const EXPECTED_PAYTO = '0x7f44a2dd237938F18632d4CcA40f4c690295E6E1';
 const EXPECTED_BUYER = '0x516F57e1fB800ccEB2E70C42607Fb93E2abEcB99';
 // Canonical Base-mainnet USDC EIP-712 domain (public, well-known — Circle's
@@ -112,7 +128,7 @@ const EXPECTED_BUYER = '0x516F57e1fB800ccEB2E70C42607Fb93E2abEcB99';
 const EXPECTED_EIP712_NAME = 'USD Coin';
 const EXPECTED_EIP712_VERSION = '2';
 
-const SERVICE_PAYMENT_USD = 0.019;
+const SERVICE_PAYMENT_USD = 0.017;
 const EXPECTED_PAYER_BORNE_NETWORK_FEE_USD = 0;
 const MAX_TOTAL_PAYER_EXPOSURE_USD = 0.25;
 
@@ -316,6 +332,47 @@ export function validateChallengeAgainstExpectations(
   return { ok: true };
 }
 
+/** Fail-closed request binding: capability (route) and mode are properties of
+ * the request this tool sends, not of the 402, so they are asserted here from
+ * the frozen constants before any network call. */
+export function validateRequestBinding(): { ok: true } | { ok: false; reason: string } {
+  if (TARGET_PATH !== EXPECTED_CAPABILITY_ROUTE) {
+    return {
+      ok: false,
+      reason: `request route mismatch: expected ${EXPECTED_CAPABILITY_ROUTE} (verify_agent_output.v2), got ${TARGET_PATH}`,
+    };
+  }
+  if (CANONICAL_REQUEST_BODY.verification_mode !== EXPECTED_VERIFICATION_MODE) {
+    return {
+      ok: false,
+      reason: `request mode mismatch: expected ${EXPECTED_VERIFICATION_MODE}, got ${String(CANONICAL_REQUEST_BODY.verification_mode)}`,
+    };
+  }
+  return { ok: true };
+}
+
+/** Fail-closed quote binding: the fresh challenge must carry a quote_id in the
+ * decoded header's requirement, and the 402 JSON body must carry the same one.
+ * Returns the quote_id the payment will be bound to. requirement_id is NOT
+ * checked here: it appears only in the body, never in the decoded header. */
+export function validateChallengeQuoteBinding(
+  requirement: PaymentRequirements,
+  body: Record<string, unknown> | undefined
+): { ok: true; quoteId: string } | { ok: false; reason: string } {
+  const headerQuoteId = (requirement.extra as Record<string, unknown> | undefined)?.quote_id;
+  if (typeof headerQuoteId !== 'string' || headerQuoteId.length === 0) {
+    return { ok: false, reason: 'fresh challenge has no quote_id in accepts[0].extra' };
+  }
+  const bodyQuoteId = body?.quote_id;
+  if (typeof bodyQuoteId !== 'string' || bodyQuoteId.length === 0) {
+    return { ok: false, reason: 'fresh 402 body has no quote_id' };
+  }
+  if (bodyQuoteId !== headerQuoteId) {
+    return { ok: false, reason: 'quote_id mismatch between PAYMENT-REQUIRED header and 402 body' };
+  }
+  return { ok: true, quoteId: headerQuoteId };
+}
+
 /** §5 — hard USD exposure cap, computed from fixed constants only (never
  * from anything the server/challenge supplies), checked before signing. */
 export function checkExposureWithinCap(): { ok: true } | { ok: false; reason: string } {
@@ -337,6 +394,12 @@ export async function runFirstPaidE2E(
 ): Promise<{ result: FirstPaidE2ESanitizedResult; counters: CallBudgetCounters }> {
   const counters = freshCounters();
   let stage: FirstPaidE2EStage = 'PRE_CHALLENGE';
+
+  // ---- 0. request binding (capability route + mode) — before any network call. ----
+  const requestBinding = validateRequestBinding();
+  if (!requestBinding.ok) {
+    return fail(counters, stage, requestBinding.reason);
+  }
 
   // ---- 1. fresh unpaid 402 (§6: obtained fresh, never a saved/replayed
   //         challenge; §9: fixed endpoint/body only). ----
@@ -379,6 +442,19 @@ export async function runFirstPaidE2E(
   if (!validation.ok) {
     return fail(counters, stage, validation.reason);
   }
+
+  // ---- 3b. quote binding — the quote we sign for is the one in THIS fresh challenge. ----
+  let challengeBody: Record<string, unknown> | undefined;
+  try {
+    challengeBody = (await challengeRes.clone().json()) as Record<string, unknown>;
+  } catch {
+    challengeBody = undefined;
+  }
+  const quoteBinding = validateChallengeQuoteBinding(requirement, challengeBody);
+  if (!quoteBinding.ok) {
+    return fail(counters, stage, quoteBinding.reason);
+  }
+  const challengeQuoteId = quoteBinding.quoteId;
 
   // ---- 4. hard USD exposure cap (§5) — fail closed before signing. ----
   const exposureCheck = checkExposureWithinCap();
@@ -441,6 +517,14 @@ export async function runFirstPaidE2E(
     payload: payloadResult.payload,
     extensions: identifierExtensions,
   };
+
+  // The payload about to be submitted must still carry the fresh challenge's
+  // quote_id — never a previously fetched quote.
+  const acceptedQuoteId = (fullPayload.accepted.extra as Record<string, unknown> | undefined)
+    ?.quote_id;
+  if (acceptedQuoteId !== challengeQuoteId) {
+    return fail(counters, stage, 'payload accepted.extra.quote_id does not match fresh challenge');
+  }
 
   // ---- 8. official header encoder (§2 step 7). ----
   counters.paymentSignatureHeadersCreated += 1;
@@ -650,6 +734,15 @@ function baseDeps(overrides: Partial<FirstPaidE2EDeps> = {}): FirstPaidE2EDeps {
 /** A `fetchImpl` mock that returns the 402 challenge on the first call and
  * a fixed paid response on the second — the shape virtually every test
  * below needs, parameterized by what the paid response looks like. */
+function challengeResponse(challenge: PaymentRequired): Response {
+  const quoteId = (challenge.accepts[0]?.extra as Record<string, unknown> | undefined)?.quote_id;
+  return jsonResponse(
+    402,
+    { error: 'payment_required', quote_id: quoteId, requirement_id: 'req_test_1' },
+    { 'PAYMENT-REQUIRED': encodeChallenge(challenge) }
+  );
+}
+
 function twoStepFetch(
   challenge: PaymentRequired,
   paidResponse: Response
@@ -658,11 +751,7 @@ function twoStepFetch(
   return vi.fn(async () => {
     call += 1;
     if (call === 1) {
-      return jsonResponse(
-        402,
-        { error: 'payment_required' },
-        { 'PAYMENT-REQUIRED': encodeChallenge(challenge) }
-      );
+      return challengeResponse(challenge);
     }
     return paidResponse;
   });
@@ -766,14 +855,14 @@ describe('SUN-1220J first-paid-e2e local client (unit, always run)', () => {
   });
 
   it('H. wrong amount is rejected before signing (no ≤ tolerance)', async () => {
-    const challenge = validChallenge(validRequirement({ amount: '19001' }));
+    const challenge = validChallenge(validRequirement({ amount: '17001' }));
     const fetchImpl = twoStepFetch(challenge, jsonResponse(200, {}));
     const { result, counters } = await runFirstPaidE2E(baseDeps({ fetchImpl }));
     expect(result.ok).toBe(false);
     expect(result.failure_reason).toMatch(/amount mismatch/);
     expect(counters.paymentSignTypedDataCalls).toBe(0);
     // Also prove a smaller amount is rejected too — no tolerance either way.
-    const smaller = validChallenge(validRequirement({ amount: '18999' }));
+    const smaller = validChallenge(validRequirement({ amount: '16999' }));
     const fetchImpl2 = twoStepFetch(smaller, jsonResponse(200, {}));
     const { result: result2 } = await runFirstPaidE2E(baseDeps({ fetchImpl: fetchImpl2 }));
     expect(result2.ok).toBe(false);
@@ -814,7 +903,7 @@ describe('SUN-1220J first-paid-e2e local client (unit, always run)', () => {
     const result = checkExposureWithinCap();
     expect(result.ok).toBe(true); // sanity: today's fixed constants pass.
     // Direct unit proof the comparison itself is a real "> cap" check.
-    expect(0.019 + 0 > 0.25).toBe(false);
+    expect(0.017 + 0 > 0.25).toBe(false);
     expect(0.3 > 0.25).toBe(true);
   });
 
@@ -976,7 +1065,7 @@ describe('SUN-1220J first-paid-e2e local client (unit, always run)', () => {
     const fetchImpl = vi.fn(async () => {
       call += 1;
       if (call === 1) {
-        return jsonResponse(402, {}, { 'PAYMENT-REQUIRED': encodeChallenge(validChallenge()) });
+        return challengeResponse(validChallenge());
       }
       throw new Error('simulated timeout');
     });
@@ -1080,7 +1169,8 @@ describe('SUN-1220J first-paid-e2e local client (unit, always run)', () => {
       required_schema: {},
       verification_mode: 'standard',
     });
-    expect(EXPECTED_AMOUNT_ATOMIC).toBe('19000');
+    expect(EXPECTED_AMOUNT_ATOMIC).toBe('17000');
+    expect(SERVICE_PAYMENT_USD).toBe(0.017);
     expect(EXPECTED_PAYTO).toBe('0x7f44a2dd237938F18632d4CcA40f4c690295E6E1');
     expect(EXPECTED_NETWORK).toBe('eip155:8453');
     expect(EXPECTED_BUYER).toBe('0x516F57e1fB800ccEB2E70C42607Fb93E2abEcB99');
@@ -1106,7 +1196,7 @@ describe('SUN-1220J first-paid-e2e local client (unit, always run)', () => {
     expect(calls).toHaveLength(2);
     const expectedHeaderValue = `${WORKER_SCRIPT_NAME}="${CANDIDATE_VERSION_ID}"`;
     expect(expectedHeaderValue).toBe(
-      'siteborne-utility-edge="a0055146-d358-40d4-b0af-52eccc56c8ef"'
+      'siteborne-utility-edge="2b44db89-fd95-4b6e-8449-8b7a1b4c51de"'
     );
     for (const call of calls) {
       const headers = (call[1] as RequestInit).headers as Record<string, string>;
@@ -1115,6 +1205,96 @@ describe('SUN-1220J first-paid-e2e local client (unit, always run)', () => {
     // F: the override value can never coincidentally equal the known-good
     // production version — the frozen candidate id is a distinct constant.
     expect(CANDIDATE_VERSION_ID).not.toBe('f4f20676-bbd0-4717-8e90-9cc2c3c9b2ce');
+    // Nor the ordinary 100%-traffic production version, nor the stale SUN-1220O candidate.
+    expect(CANDIDATE_VERSION_ID).not.toBe('369b4bf5-c2f7-4e05-8454-7f5514a3bd45');
+    expect(CANDIDATE_VERSION_ID).not.toBe('a0055146-d358-40d4-b0af-52eccc56c8ef');
+  });
+
+  it('request binding: route is verify_agent_output.v2 and mode is standard, checked before any network call', async () => {
+    expect(validateRequestBinding()).toEqual({ ok: true });
+    expect(EXPECTED_CAPABILITY_ROUTE).toBe('/v2/verify/agent-output');
+    expect(TARGET_PATH).toBe('/v2/verify/agent-output');
+    expect(CANONICAL_REQUEST_BODY.verification_mode).toBe('standard');
+    expect(EXPECTED_VERIFICATION_MODE).toBe('standard');
+    // The paid/unpaid requests actually sent carry exactly that route and mode.
+    const fetchImpl = twoStepFetch(
+      validChallenge(),
+      jsonResponse(200, { result_class: 'success' })
+    );
+    await runFirstPaidE2E(baseDeps({ fetchImpl }));
+    for (const call of (fetchImpl as ReturnType<typeof vi.fn>).mock.calls) {
+      expect(new URL(call[0] as string).pathname).toBe('/v2/verify/agent-output');
+      expect(JSON.parse((call[1] as RequestInit).body as string).verification_mode).toBe(
+        'standard'
+      );
+    }
+  });
+
+  it('quote binding: a challenge with no quote_id in accepts[0].extra never signs', async () => {
+    const challenge = validChallenge(
+      validRequirement({ extra: { name: EXPECTED_EIP712_NAME, version: EXPECTED_EIP712_VERSION } })
+    );
+    const fetchImpl = twoStepFetch(challenge, jsonResponse(200, {}));
+    const deps = baseDeps({ fetchImpl });
+    const { result, counters } = await runFirstPaidE2E(deps);
+    expect(result.ok).toBe(false);
+    expect(result.failure_reason).toMatch(/no quote_id in accepts\[0\]\.extra/);
+    expect(counters.paymentSignTypedDataCalls).toBe(0);
+    expect(deps.cdpClient.evm.getAccount).not.toHaveBeenCalled();
+  });
+
+  it('quote binding: a 402 body without quote_id, or with a different quote_id, never signs', async () => {
+    for (const body of [
+      { error: 'payment_required' },
+      { error: 'payment_required', quote_id: 'quote_other' },
+    ]) {
+      const fetchImpl = vi.fn(async () =>
+        jsonResponse(402, body, { 'PAYMENT-REQUIRED': encodeChallenge(validChallenge()) })
+      );
+      const deps = baseDeps({ fetchImpl });
+      const { result, counters } = await runFirstPaidE2E(deps);
+      expect(result.ok).toBe(false);
+      expect(result.failure_reason).toMatch(/quote_id/);
+      expect(counters.paymentSignTypedDataCalls).toBe(0);
+      expect(counters.paidRequestSubmissions).toBe(0);
+      expect(deps.cdpClient.evm.getAccount).not.toHaveBeenCalled();
+    }
+  });
+
+  it('quote binding: the submitted payment carries the fresh challenge quote_id, and a new run uses a new quote (nothing is reused)', async () => {
+    const runOnce = async (quoteId: string) => {
+      const challenge = validChallenge(
+        validRequirement({
+          extra: {
+            quote_id: quoteId,
+            name: EXPECTED_EIP712_NAME,
+            version: EXPECTED_EIP712_VERSION,
+          },
+        })
+      );
+      const fetchImpl = twoStepFetch(challenge, jsonResponse(200, { result_class: 'success' }));
+      const deps = baseDeps({ fetchImpl });
+      const { result } = await runFirstPaidE2E(deps);
+      expect(result.ok).toBe(true);
+      const submitted = (deps.encodePaymentSignatureHeaderSafeImpl as ReturnType<typeof vi.fn>).mock
+        .calls[0][0] as PaymentPayload;
+      return (submitted.accepted.extra as Record<string, unknown>).quote_id;
+    };
+    expect(await runOnce('qte_fresh_a')).toBe('qte_fresh_a');
+    expect(await runOnce('qte_fresh_b')).toBe('qte_fresh_b');
+  });
+
+  it('quote binding: the previously qualified quote id is not embedded anywhere in this client', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { fileURLToPath } = await import('node:url');
+    const src = readFileSync(fileURLToPath(import.meta.url), 'utf-8');
+    const scriptSrc = readFileSync(
+      fileURLToPath(new URL('../../../../scripts/first-paid-e2e.ts', import.meta.url)),
+      'utf-8'
+    );
+    const stale = ['qte_867d52f2', '81afbe18fa831475'].join('');
+    expect(src.includes(stale)).toBe(false);
+    expect(scriptSrc.includes(stale)).toBe(false);
   });
 
   it('the current live candidate is expected to fail closed at CHALLENGE_VALIDATED (CRITICAL FINDING regression proof)', async () => {
