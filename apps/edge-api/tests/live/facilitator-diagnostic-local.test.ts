@@ -37,7 +37,7 @@ import {
 import { resolveProductionCdpEvidenceProvider } from '../../src/control-plane/config/production-payment';
 import { buildPaidServicesApp } from '../../src/control-plane/routes/paid-services';
 
-const DIAGNOSTIC_VERSION_ID = 'a6acfc75-58ab-4de3-8bff-4445a20376cc';
+const DIAGNOSTIC_VERSION_ID = '0546d6b7-98e3-49c3-9f72-b552a0582cb8';
 const VERSION_OVERRIDE_HEADER = 'Cloudflare-Workers-Version-Overrides';
 const TARGET_BASE = 'https://siteborne-utility-edge.siteborneutilitynetwork.workers.dev';
 const TARGET_PATH = '/v2/verify/agent-output';
