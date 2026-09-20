@@ -28,6 +28,7 @@ import {
   type PaymentVerificationContext,
 } from '@siteborne/protocol-x402';
 
+import { withCdpAuthModuleInitialized } from './cdp-auth-init';
 import {
   classifyFacilitatorVerifyFailure,
   FACILITATOR_ANSWERED_INVALID,
@@ -81,10 +82,12 @@ function tagAuthStage(facilitator: HTTPFacilitatorClient): HTTPFacilitatorClient
 
 export class CdpPaymentEvidenceProvider implements PaymentEvidenceProvider {
   readonly providerKind = 'external' as const;
+  private readonly facilitator: HTTPFacilitatorClient;
   private readonly verifyFacilitator: HTTPFacilitatorClient;
 
-  constructor(private readonly facilitator: HTTPFacilitatorClient) {
-    this.verifyFacilitator = tagAuthStage(facilitator);
+  constructor(facilitator: HTTPFacilitatorClient) {
+    this.facilitator = withCdpAuthModuleInitialized(facilitator);
+    this.verifyFacilitator = tagAuthStage(this.facilitator);
   }
 
   /**
@@ -321,7 +324,8 @@ export async function checkCdpSupportsNetwork(
   network: Network,
   requiredSchemes: string[]
 ): Promise<CdpSupportedCheckResult> {
-  const supported: SupportedResponse = await facilitator.getSupported();
+  const supported: SupportedResponse =
+    await withCdpAuthModuleInitialized(facilitator).getSupported();
   const kinds = supported.kinds.map((k) => ({ scheme: k.scheme, network: k.network }));
   const missing = requiredSchemes.filter(
     (scheme) => !kinds.some((k) => k.network === network && k.scheme === scheme)
