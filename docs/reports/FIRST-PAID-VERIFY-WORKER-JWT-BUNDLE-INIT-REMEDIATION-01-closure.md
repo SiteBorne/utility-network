@@ -115,10 +115,11 @@ baseline (not hidden or relabelled). Service-binding config 4/4 pass.
 Source `3fc166415e62a31f1a65f847bc61b09af0cd0251`, harness pin `f5f39ff`.
 Version `0456f44c-1c28-4919-9fdb-ab4673bac8f6` (tag
 `first-paid-verify-worker-jwt-bundle-init-remediation-01`), one upload. All 19
-non-`wrangler.toml` plain-text vars were passed explicitly from `bece9f41`
-(including `JWT_RUNTIME_DIAGNOSTIC_ENABLED=true`), so the single upload did not
-depend on var inheritance. `BINDING_PARITY=PASS`: 42/42 bindings, zero type or
-value differences, runtime identical; secrets inherited (names only inspected).
+plain-text vars (13 version-scoped plus 6 that also appear in `wrangler.toml`,
+values identical) were passed explicitly from `bece9f41` (including
+`JWT_RUNTIME_DIAGNOSTIC_ENABLED=true`), so the single upload did not depend on
+var inheritance. `BINDING_PARITY=PASS`: 42/42 bindings, zero type or value
+differences, runtime identical; secrets inherited (names only inspected).
 Rollback deployment `90cd995c-81a2-430f-862d-ea1316982829` (`369b4bf5`@100 +
 `bece9f41`@0). New deployment `b479cf40-f457-4f41-b1ae-4bac2216aa55`:
 `369b4bf5`@100 + `0456f44c`@0.
