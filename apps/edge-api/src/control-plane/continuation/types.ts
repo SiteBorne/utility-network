@@ -68,6 +68,13 @@ export interface WorkflowContinuationResult {
    * dropped). Bounded length; never raw upstream response bodies, headers,
    * or credentials — see `deriveErrorDetail`'s own doc comment. */
   readonly error_detail?: string;
+  /** FIRST-PAID-VERIFY-SETTLEMENT-OBSERVABILITY-01 — normalized, closed-vocabulary
+   * settlement failure cause (`settle_*`), internal only: never mapped into the
+   * public HTTP body. Present only on `settlement_rejected`. */
+  readonly settlement_subreason?: string;
+  readonly settlement_jwt_subreason?: string;
+  readonly settlement_transport_status?: number;
+  readonly settlement_retryability?: string;
 }
 
 export interface SettlementReconciliationResult {

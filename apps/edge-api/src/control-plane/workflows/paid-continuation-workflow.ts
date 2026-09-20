@@ -405,7 +405,14 @@ function terminal(
   extra?: Partial<
     Pick<
       WorkflowContinuationResult,
-      'receipt_id' | 'settlement_transaction_reference' | 'error_code' | 'error_detail'
+      | 'receipt_id'
+      | 'settlement_transaction_reference'
+      | 'error_code'
+      | 'error_detail'
+      | 'settlement_subreason'
+      | 'settlement_jwt_subreason'
+      | 'settlement_transport_status'
+      | 'settlement_retryability'
     >
   >
 ): WorkflowContinuationResult {
@@ -567,9 +574,71 @@ type SettleStepOutcome =
       readonly settlementEvidence: unknown;
       readonly settlementEvidenceHash: string;
     }
-  | { readonly kind: 'rejected'; readonly reason: string }
+  | {
+      readonly kind: 'rejected';
+      readonly reason: string;
+      /** FIRST-PAID-VERIFY-SETTLEMENT-OBSERVABILITY-01 — normalized, closed-vocabulary
+       * provider cause. Absent when the provider supplied none. */
+      readonly diagnostics?: SettlementRejectionDiagnostics;
+    }
   | { readonly kind: 'authorization_expired' }
   | { readonly kind: 'ambiguous_unresolved' };
+
+/** Closed-vocabulary settlement failure cause. Every field is re-validated
+ * here against a strict token pattern, so nothing free-form (message, header,
+ * JWT, body, stack) can enter durable Workflow state or the audit trail even
+ * if a provider misbehaves. */
+export interface SettlementRejectionDiagnostics {
+  readonly subreason?: string;
+  readonly jwt_subreason?: string;
+  readonly transport_status?: number;
+  readonly retryability?: string;
+}
+
+const SAFE_DIAGNOSTIC_TOKEN = /^[a-z0-9_]{1,64}$/;
+
+export function normalizeSettlementDiagnostics(evidence: {
+  subreason?: unknown;
+  jwt_subreason?: unknown;
+  transport_status?: unknown;
+  retryability?: unknown;
+}): SettlementRejectionDiagnostics | undefined {
+  const token = (value: unknown): string | undefined =>
+    typeof value === 'string' && SAFE_DIAGNOSTIC_TOKEN.test(value) ? value : undefined;
+  const status =
+    typeof evidence.transport_status === 'number' &&
+    Number.isInteger(evidence.transport_status) &&
+    evidence.transport_status >= 100 &&
+    evidence.transport_status <= 599
+      ? evidence.transport_status
+      : undefined;
+  const subreason = token(evidence.subreason);
+  const jwt_subreason = token(evidence.jwt_subreason);
+  const retryability = token(evidence.retryability);
+  if (!subreason && !jwt_subreason && status === undefined && !retryability) return undefined;
+  return {
+    ...(subreason ? { subreason } : {}),
+    ...(jwt_subreason ? { jwt_subreason } : {}),
+    ...(status !== undefined ? { transport_status: status } : {}),
+    ...(retryability ? { retryability } : {}),
+  };
+}
+
+/** Durable audit detail: the gate reason first (unchanged prefix), then the
+ * same normalized fields the Workflow result carries. */
+export function formatSettlementAuditDetail(
+  reason: string,
+  diagnostics: SettlementRejectionDiagnostics | undefined
+): string {
+  if (!diagnostics) return reason;
+  const parts = [
+    diagnostics.subreason ? `subreason=${diagnostics.subreason}` : undefined,
+    diagnostics.jwt_subreason ? `jwt=${diagnostics.jwt_subreason}` : undefined,
+    diagnostics.transport_status !== undefined ? `http=${diagnostics.transport_status}` : undefined,
+    diagnostics.retryability ? `retry=${diagnostics.retryability}` : undefined,
+  ].filter((part): part is string => part !== undefined);
+  return parts.length > 0 ? `${reason};${parts.join(';')}` : reason;
+}
 
 const UNRESOLVED_LIFECYCLE_STAGES: readonly PaymentLifecycleStage[] = ['settlement_pending'];
 
@@ -757,9 +826,11 @@ async function runSettlementStep(
   const gateReason = settlementGate.allowed
     ? undefined
     : `${settlementGate.reason}${settlementGate.detail ? `:${settlementGate.detail}` : ''}`;
+  const diagnostics = normalizeSettlementDiagnostics(settlementEvidence);
   return {
     kind: 'rejected',
     reason: gateReason ?? settlementEvidence.reason ?? 'settlement_rejected',
+    ...(diagnostics ? { diagnostics } : {}),
   };
 }
 
@@ -985,9 +1056,25 @@ export async function runPaidContinuationWorkflow(
       'REFUND_REQUIRED',
       'PAYMENT_FAILED',
       deps.persistence.job,
-      boundedDetail(settleOutcome.reason)
+      boundedDetail(formatSettlementAuditDetail(settleOutcome.reason, settleOutcome.diagnostics))
     );
-    return terminal('settlement_rejected', jobId, { error_code: settleOutcome.reason });
+    // `error_code` is the public 402 body's detail and stays byte-identical;
+    // the normalized cause travels only in the internal `settlement_*` fields.
+    return terminal('settlement_rejected', jobId, {
+      error_code: settleOutcome.reason,
+      ...(settleOutcome.diagnostics?.subreason
+        ? { settlement_subreason: settleOutcome.diagnostics.subreason }
+        : {}),
+      ...(settleOutcome.diagnostics?.jwt_subreason
+        ? { settlement_jwt_subreason: settleOutcome.diagnostics.jwt_subreason }
+        : {}),
+      ...(settleOutcome.diagnostics?.transport_status !== undefined
+        ? { settlement_transport_status: settleOutcome.diagnostics.transport_status }
+        : {}),
+      ...(settleOutcome.diagnostics?.retryability
+        ? { settlement_retryability: settleOutcome.diagnostics.retryability }
+        : {}),
+    });
   }
 
   if (!settleOutcome.transactionReference) {

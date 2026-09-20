@@ -30,6 +30,8 @@ import {
 
 import { withCdpAuthModuleInitialized } from './cdp-auth-init';
 import {
+  classifyAnsweredSettleFailure,
+  classifyFacilitatorSettleFailure,
   classifyFacilitatorVerifyFailure,
   FACILITATOR_ANSWERED_INVALID,
   FacilitatorAuthStageError,
@@ -84,10 +86,12 @@ export class CdpPaymentEvidenceProvider implements PaymentEvidenceProvider {
   readonly providerKind = 'external' as const;
   private readonly facilitator: HTTPFacilitatorClient;
   private readonly verifyFacilitator: HTTPFacilitatorClient;
+  private readonly settleFacilitator: HTTPFacilitatorClient;
 
   constructor(facilitator: HTTPFacilitatorClient) {
     this.facilitator = withCdpAuthModuleInitialized(facilitator);
     this.verifyFacilitator = tagAuthStage(this.facilitator);
+    this.settleFacilitator = tagAuthStage(this.facilitator);
   }
 
   /**
@@ -205,8 +209,12 @@ export class CdpPaymentEvidenceProvider implements PaymentEvidenceProvider {
         : context.paymentRequirements;
     let response: SettleResponse;
     try {
-      response = await this.facilitator.settle(context.paymentPayload, facilitatorRequirements);
+      response = await this.settleFacilitator.settle(
+        context.paymentPayload,
+        facilitatorRequirements
+      );
     } catch (error) {
+      const classification = classifyFacilitatorSettleFailure(error);
       const record = errorRecord(error);
       const errorReason = safeReasonCode(record?.errorReason);
       const payer = safePayer(record?.payer);
@@ -242,6 +250,14 @@ export class CdpPaymentEvidenceProvider implements PaymentEvidenceProvider {
         raw_evidence_hash,
         verification_evidence_hash,
         trust_class: facilitatorAnswered ? 'external_verified' : 'external_unverified',
+        subreason: classification.subreason,
+        ...(classification.transport_status !== undefined
+          ? { transport_status: classification.transport_status }
+          : {}),
+        retryability: classification.retryability,
+        ...(classification.jwt_subreason !== undefined
+          ? { jwt_subreason: classification.jwt_subreason }
+          : {}),
         ...(context.usageResult
           ? {
               authorized_maximum: context.paymentRequirements.amount,
@@ -271,6 +287,10 @@ export class CdpPaymentEvidenceProvider implements PaymentEvidenceProvider {
       payer: response.payer ?? null,
       errorReason: response.errorReason ?? null,
     });
+    const settled = response.success && settlementFailure === undefined;
+    const answeredClassification = settled
+      ? undefined
+      : classifyAnsweredSettleFailure(safeReasonCode(settlementFailure));
     return {
       x402_version: 2,
       scheme: context.scheme,
@@ -283,8 +303,14 @@ export class CdpPaymentEvidenceProvider implements PaymentEvidenceProvider {
       requirement_id: context.requirement_id,
       payment_identifier: context.payment_identifier,
       transaction_reference: response.transaction,
-      success: response.success && settlementFailure === undefined,
+      success: settled,
       reason: settlementFailure,
+      ...(answeredClassification
+        ? {
+            subreason: answeredClassification.subreason,
+            retryability: answeredClassification.retryability,
+          }
+        : {}),
       settled_at: context.nowIso,
       facilitator_identity: CDP_VERIFIER_IDENTITY,
       raw_evidence_hash,
