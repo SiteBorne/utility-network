@@ -174,3 +174,134 @@ export const FACILITATOR_ANSWERED_INVALID: FacilitatorFailureClassification = {
   subreason: 'facilitator_verify_invalid',
   retryability: 'non_retryable',
 };
+
+// ---------------------------------------------------------------------
+// FIRST-PAID-VERIFY-SETTLEMENT-OBSERVABILITY-01 — settle-side equivalent.
+// Same rules as the verify classifier above: closed vocabulary plus an
+// integer HTTP status only; never a message, header, JWT, body or stack.
+// ---------------------------------------------------------------------
+
+export type FacilitatorSettleSubreason =
+  | 'settle_jwt_generation_failed'
+  | 'settle_authentication_rejected'
+  | 'settle_authorization_rejected'
+  | 'settle_payment_invalid'
+  | 'settle_nonce_replay'
+  | 'settle_expired'
+  | 'settle_rate_limited'
+  | 'settle_http_4xx'
+  | 'settle_http_5xx'
+  | 'settle_timeout'
+  | 'settle_network_unavailable'
+  | 'settle_response_invalid'
+  | 'settle_facilitator_rejected'
+  | 'settle_requirement_mismatch'
+  | 'settle_unknown_failure';
+
+export interface FacilitatorSettleClassification {
+  subreason: FacilitatorSettleSubreason;
+  transport_status?: number;
+  retryability: FacilitatorRetryability;
+  jwt_subreason?: CdpJwtSubreason;
+}
+
+/** The exact-EVM `errorReason` codes that name the payment itself. Matched
+ * against fixed patterns only; the code is never persisted. */
+function settleSubreasonFromErrorReason(errorReason: string): FacilitatorSettleSubreason {
+  if (/nonce|already_used|authorization_used|replay/i.test(errorReason)) {
+    return 'settle_nonce_replay';
+  }
+  if (/expired|valid_before|valid_after/i.test(errorReason)) return 'settle_expired';
+  if (/signature|insufficient|balance|invalid_exact|payload/i.test(errorReason)) {
+    return 'settle_payment_invalid';
+  }
+  if (/recipient|network|asset|amount|requirement|mismatch/i.test(errorReason)) {
+    return 'settle_requirement_mismatch';
+  }
+  return 'settle_facilitator_rejected';
+}
+
+function settleFromStatus(status: number): FacilitatorSettleClassification {
+  if (status === 401) {
+    return {
+      subreason: 'settle_authentication_rejected',
+      transport_status: status,
+      retryability: 'operator_action_required',
+    };
+  }
+  if (status === 403) {
+    return {
+      subreason: 'settle_authorization_rejected',
+      transport_status: status,
+      retryability: 'operator_action_required',
+    };
+  }
+  if (status === 429) {
+    return {
+      subreason: 'settle_rate_limited',
+      transport_status: status,
+      retryability: 'transient',
+    };
+  }
+  if (status >= 500) {
+    return { subreason: 'settle_http_5xx', transport_status: status, retryability: 'transient' };
+  }
+  return { subreason: 'settle_http_4xx', transport_status: status, retryability: 'non_retryable' };
+}
+
+/** Classify an error thrown by `HTTPFacilitatorClient.settle`. Pure; never
+ * throws; never returns any part of the error's message or cause. */
+export function classifyFacilitatorSettleFailure(error: unknown): FacilitatorSettleClassification {
+  if (error instanceof FacilitatorAuthStageError) {
+    return {
+      subreason: 'settle_jwt_generation_failed',
+      retryability: 'operator_action_required',
+      jwt_subreason: classifyCdpJwtFailure(error.cause),
+    };
+  }
+  const rec = record(error);
+  // The facilitator replied with a structured settle body (`SettleError`).
+  if (rec && rec.name === 'SettleError' && isHttpStatus(rec.statusCode)) {
+    const reason = typeof rec.errorReason === 'string' ? rec.errorReason : '';
+    const subreason = settleSubreasonFromErrorReason(reason);
+    if (rec.statusCode === 401 || rec.statusCode === 403 || rec.statusCode === 429) {
+      return settleFromStatus(rec.statusCode);
+    }
+    if (rec.statusCode >= 500) return settleFromStatus(rec.statusCode);
+    return {
+      subreason,
+      transport_status: rec.statusCode,
+      retryability: 'non_retryable',
+    };
+  }
+  if (isTimeoutLike(error)) return { subreason: 'settle_timeout', retryability: 'unknown' };
+  if (rec?.name === 'FacilitatorResponseError') {
+    return { subreason: 'settle_response_invalid', retryability: 'unknown' };
+  }
+  const message = rec?.message;
+  if (typeof message === 'string') {
+    const match = /^Facilitator settle failed \((\d{3})\)/.exec(message);
+    if (match && isHttpStatus(Number(match[1]))) return settleFromStatus(Number(match[1]));
+  }
+  if (isNetworkLike(error)) {
+    return { subreason: 'settle_network_unavailable', retryability: 'unknown' };
+  }
+  return { subreason: 'settle_unknown_failure', retryability: 'unknown' };
+}
+
+/** Facilitator answered 2xx with `success:false` (or a binding mismatch). */
+export function classifyAnsweredSettleFailure(
+  errorReason: string | undefined
+): FacilitatorSettleClassification {
+  return {
+    subreason:
+      errorReason === 'settlement_network_mismatch' ||
+      errorReason === 'settlement_amount_mismatch' ||
+      errorReason === 'settlement_transaction_missing'
+        ? 'settle_requirement_mismatch'
+        : errorReason
+          ? settleSubreasonFromErrorReason(errorReason)
+          : 'settle_facilitator_rejected',
+    retryability: 'non_retryable',
+  };
+}

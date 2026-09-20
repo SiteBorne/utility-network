@@ -73,6 +73,13 @@
  * must carry that same fresh `quote_id`. `requirement_id` is exposed only in
  * the 402 JSON body (never in the decoded header), so no equality check is
  * made on it.
+ *
+ * UPDATE (FIRST-PAID-VERIFY-SECOND-REAL-PAYMENT-AUTHORIZATION-01): re-pointed
+ * at the JWT-bundle-init-repaired 0%-traffic canary
+ * `0456f44c-1c28-4919-9fdb-ab4673bac8f6` (the prior canary `2b44db89` carries
+ * the tree-shaken `getRandomValues` defect and must not be targeted). Only
+ * `CANDIDATE_VERSION_ID` and its pinned assertions changed; signing logic,
+ * retry behaviour and payment-envelope semantics are untouched.
  */
 import { describe, expect, it, vi } from 'vitest';
 import { CdpClient } from '@coinbase/cdp-sdk';
@@ -107,7 +114,7 @@ const TARGET_PATH = '/v2/verify/agent-output';
 const EXPECTED_CAPABILITY_ROUTE = '/v2/verify/agent-output';
 const EXPECTED_VERIFICATION_MODE = 'standard';
 const TARGET_URL = `${WORKER_ORIGIN}${TARGET_PATH}`;
-const CANDIDATE_VERSION_ID = '2b44db89-fd95-4b6e-8449-8b7a1b4c51de';
+const CANDIDATE_VERSION_ID = '0456f44c-1c28-4919-9fdb-ab4673bac8f6';
 const VERSION_OVERRIDE_HEADER = 'Cloudflare-Workers-Version-Overrides';
 // SUN-1220O1: value MUST be the quoted RFC-8941 structured-field-value shape
 // `<script-name>="<version-id>"` — independently confirmed as the only
@@ -1196,7 +1203,7 @@ describe('SUN-1220J first-paid-e2e local client (unit, always run)', () => {
     expect(calls).toHaveLength(2);
     const expectedHeaderValue = `${WORKER_SCRIPT_NAME}="${CANDIDATE_VERSION_ID}"`;
     expect(expectedHeaderValue).toBe(
-      'siteborne-utility-edge="2b44db89-fd95-4b6e-8449-8b7a1b4c51de"'
+      'siteborne-utility-edge="0456f44c-1c28-4919-9fdb-ab4673bac8f6"'
     );
     for (const call of calls) {
       const headers = (call[1] as RequestInit).headers as Record<string, string>;
@@ -1208,6 +1215,8 @@ describe('SUN-1220J first-paid-e2e local client (unit, always run)', () => {
     // Nor the ordinary 100%-traffic production version, nor the stale SUN-1220O candidate.
     expect(CANDIDATE_VERSION_ID).not.toBe('369b4bf5-c2f7-4e05-8454-7f5514a3bd45');
     expect(CANDIDATE_VERSION_ID).not.toBe('a0055146-d358-40d4-b0af-52eccc56c8ef');
+    // Nor the earlier paid canary (2b44db89) whose bundle cannot mint a CDP JWT.
+    expect(CANDIDATE_VERSION_ID).not.toBe('2b44db89-fd95-4b6e-8449-8b7a1b4c51de');
   });
 
   it('request binding: route is verify_agent_output.v2 and mode is standard, checked before any network call', async () => {
@@ -1336,6 +1345,9 @@ describe.skipIf(!process.env[RUN_LOCAL_FIRST_PAID_E2E_ENV_VAR])(
       // eslint-disable-next-line no-console -- the one authorized, sanitized output surface.
       console.log(JSON.stringify(result));
       expect(result.stage).toBeDefined();
-    });
+      // Explicit budget: vitest's 5000 ms default aborted the first real attempt
+      // while the server was still settling (payment window is 60 s). Does not
+      // add a retry -- still exactly one signed submission per invocation.
+    }, 90_000);
   }
 );

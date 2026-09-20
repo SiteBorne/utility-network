@@ -97,6 +97,13 @@ export interface ExternalSettlementEvidence {
   /** `upto` only. */
   authorized_maximum?: string;
   usage_result_hash?: string;
+  /** Internal, classification-only diagnostics for a failed settlement.
+   * Closed-vocabulary code / integer status only — never free-form text.
+   * Absent on success and never part of `raw_evidence_hash`. */
+  subreason?: string;
+  transport_status?: number;
+  retryability?: string;
+  jwt_subreason?: string;
 }
 
 export interface PaymentEvidenceContext {
