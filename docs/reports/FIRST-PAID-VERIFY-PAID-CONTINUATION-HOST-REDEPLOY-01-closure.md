@@ -1,11 +1,12 @@
 # FIRST-PAID-VERIFY-PAID-CONTINUATION-HOST-REDEPLOY-01 — closure
 
-Status: **BLOCKED before any Cloudflare mutation.** All local qualification
-passed. The single production step that mutates Cloudflare (immutable host
-version upload) was denied by the permission classifier and was NOT retried or
-worked around. No upload, no deployment, no traffic change, no secret change, no
-real payment, no web-direct, no refund, no job mutation, no push. No secret, JWT
-or signature appears in this report.
+Status: **HOST REMEDIATED (human-executed); real-payment retry NOT authorized.**
+All local qualification passed. The Cloudflare mutations (immutable upload,
+promotion, deliberate rollback rehearsal, re-promotion) were executed by the
+operator; see section 10. The Cloudflare mutations listed there were not run by
+the agent. No real payment, no web-direct, no refund, no job mutation, no push.
+No secret, JWT or signature appears in this report. Sections 1-9 were written
+before the upload and describe the pre-deployment state.
 
 ## 1. Starting provenance — PASS
 
@@ -169,26 +170,45 @@ flowed public canary → deployed `9502db3` host through execution to settle at
 - Host exception baseline not obtained (no read-only historical log API
   available here).
 
-## 10. Blocked step and accounting
+## 10. Execution record (supersedes the earlier "blocked step" text)
 
-Attempted:
-`wrangler versions upload --config wrangler.paid-continuation-runtime.toml` from
-the minimal worktree. Denied by the permission classifier. No retry, no
-alternate route.
+Human-executed, from `/tmp/host-min-wt` (minimal lineage `3ed1b1e3`):
 
-`WORKER_UPLOADS=0`, `HOST_DEPLOYMENT_MUTATIONS=0`,
-`PUBLIC_WORKER_TRAFFIC_MUTATIONS=0`, `CLOUD_SECRET_MUTATIONS=0`,
-`HOST_ROLLBACK_EXECUTED=NO`, `REAL_PAYMENT_RETRY_COUNT=0`,
-`WEB_DIRECT_CANARY_ATTEMPTS=0`. Historical failed job `af5f7e55` untouched
-(`REFUND_REQUIRED`, `REFUND_ACTUALLY_OWED=NO`).
+| UTC | Operation | Result |
+|---|---|---|
+| 2026-09-20T19:10:04Z | `wrangler versions upload` (tag `host-jwt-init-settle-observability-01`) | version `9b1e9b10-beed-4ff3-914c-2221aada9b45` created, not deployed |
+| 2026-09-20T19:11:33Z | `versions deploy 9b1e9b10@100` | live at 100% |
+| 2026-09-20T19:12:35Z | `versions deploy 2833ed03@100` (rollback) | live at 100% |
+| 2026-09-20T19:13:40Z | `versions deploy 9b1e9b10@100` (re-promotion) | live at 100% |
 
-Not exercised, honestly: post-deploy synthetic verify/settle/supported JWT on
-the deployed host, zero-economic settle probe, host runtime telemetry (nothing
-deployed). The deployed host exposes only an inert 404 and cannot reach settle
-without a real signed authorization, which is not authorized here.
+- `HOST_ROLLBACK_TEST=PASS`
+- `ROLLBACK_TRIGGER=DELIBERATE_REHEARSAL` (no failure was observed on
+  `9b1e9b10`; recorded on the operator's statement)
+- `POST_REPROMOTION_VERSION=9b1e9b10-beed-4ff3-914c-2221aada9b45`
+- `HOST_ROLLBACK_EXECUTED=YES` (rehearsal only)
+- `WORKER_UPLOADS=1`, `HOST_DEPLOYMENT_MUTATIONS=3`,
+  `PUBLIC_WORKER_TRAFFIC_MUTATIONS=0`, `CLOUD_SECRET_MUTATIONS=0`
+- `REAL_PAYMENT_RETRY_COUNT=0`, `WEB_DIRECT_CANARY_ATTEMPTS=0`
+- Historical job `af5f7e55` untouched (`REFUND_REQUIRED`,
+  `REFUND_ACTUALLY_OWED=NO`).
 
-## 11. Remaining blockers
+Read-only confirmation after re-promotion (`wrangler deployments list`,
+`wrangler versions view`): `9b1e9b10` is the sole version at 100%; compat date
+`2026-08-05`, flag `nodejs_compat`, same 11 secret names, D1/R2/Workflow
+bindings unchanged.
 
-1. Human authorization for the host upload and promotion (this report's plan).
-2. Then post-deploy host telemetry check, then
-   `FIRST-PAID-VERIFY-THIRD-REAL-PAYMENT-AUTHORIZATION-01`.
+## 11. Post-deploy checks and remaining blockers
+
+- Host telemetry: a 30 s `wrangler tail` returned no output. That is
+  INCONCLUSIVE, not a pass: the host is only invoked by Workflow instances,
+  none ran in the window, and no historical log query was available.
+  `POST_DEPLOY_HOST_TELEMETRY=NOT_OBSERVABLE`.
+- Zero-economic deployed-host probe: NOT POSSIBLE without a real signed
+  authorization. The host exposes only an inert 404 `fetch` (`workers_dev=false`,
+  no routes) and Workflow instances are created by the public Worker only after a
+  facilitator-verified authorization; an invalid-signature request is rejected at
+  `/verify` and never reaches the host's settle path. `HOST_ZERO_ECONOMIC_PROBE=NOT_RUN`.
+  The JWT init/settle behaviour is proven only by the local workerd emitted-bundle
+  probe (synthetic key, stubbed facilitator) in section 5, not on the deployed host.
+- Remaining: `FIRST-PAID-VERIFY-THIRD-REAL-PAYMENT-AUTHORIZATION-01` requires
+  separate human authorization.
