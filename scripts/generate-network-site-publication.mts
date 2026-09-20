@@ -119,7 +119,7 @@ for (const rel of actualFiles.keys()) {
     problems.push(`schemas/${rel}: not present in contract release ${release}`);
 }
 
-for (const required of ['docs/a2a/index.html', 'extensions/a2a/x402/v1/index.html', 'index.html']) {
+for (const required of ['docs/a2a', 'extensions/a2a/x402/v1', 'index.html']) {
   if (!existsSync(join(SITE, required)))
     problems.push(`${required}: required publication page is missing`);
 }

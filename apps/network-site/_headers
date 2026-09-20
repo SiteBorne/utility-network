@@ -1,6 +1,12 @@
 /.well-known/security.txt
   Content-Type: text/plain; charset=utf-8
 
+/docs/a2a
+  Content-Type: text/html; charset=utf-8
+
+/extensions/a2a/x402/v1
+  Content-Type: text/html; charset=utf-8
+
 /schemas/*
   Content-Type: application/schema+json; charset=utf-8
   Access-Control-Allow-Origin: *
