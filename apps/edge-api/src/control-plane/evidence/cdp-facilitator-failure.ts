@@ -10,6 +10,8 @@
  * and only a closed vocabulary plus an integer HTTP status leaves this module.
  */
 
+import { classifyCdpJwtFailure, type CdpJwtSubreason } from './cdp-jwt-failure';
+
 export type FacilitatorVerifySubreason =
   | 'facilitator_jwt_generation_failed'
   | 'facilitator_authentication_rejected'
@@ -34,6 +36,8 @@ export interface FacilitatorFailureClassification {
   /** HTTP status only when the facilitator actually replied. */
   transport_status?: number;
   retryability: FacilitatorRetryability;
+  /** Only for `facilitator_jwt_generation_failed`: which JWT-mint stage broke. */
+  jwt_subreason?: CdpJwtSubreason;
 }
 
 /** Thrown by the provider's auth-header wrapper so that a failure while
@@ -139,6 +143,7 @@ export function classifyFacilitatorVerifyFailure(error: unknown): FacilitatorFai
     return {
       subreason: 'facilitator_jwt_generation_failed',
       retryability: 'operator_action_required',
+      jwt_subreason: classifyCdpJwtFailure(error.cause),
     };
   }
   const rec = record(error);

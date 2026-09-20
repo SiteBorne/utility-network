@@ -142,6 +142,9 @@ export class CdpPaymentEvidenceProvider implements PaymentEvidenceProvider {
           ? { transport_status: classification.transport_status }
           : {}),
         retryability: classification.retryability,
+        ...(classification.jwt_subreason !== undefined
+          ? { jwt_subreason: classification.jwt_subreason }
+          : {}),
       };
     }
     const raw_evidence_hash = await hashPaymentObject({

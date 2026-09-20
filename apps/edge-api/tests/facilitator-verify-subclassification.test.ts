@@ -217,8 +217,33 @@ describe('facilitator verify failure subclassification', () => {
       ...UNAVAILABLE,
       verification_subreason: 'facilitator_jwt_generation_failed',
       verification_retryability: 'operator_action_required',
+      verification_jwt_subreason: 'cdp_key_format_invalid',
     });
     expect(d).not.toHaveProperty('transport_status');
+    expect(JSON.stringify(d)).not.toContain(FAKE_KEY_SECRET);
+    expect(JSON.stringify(d)).not.toContain(FAKE_KEY_ID);
+  });
+
+  it('A2: a well-shaped 64-byte base64 value that is not a key -> jwt subreason cdp_key_parse_failed', async () => {
+    const client = createCdpFacilitatorClient({
+      apiKeyId: FAKE_KEY_ID,
+      apiKeySecret: Buffer.alloc(64, 7).toString('base64'),
+    });
+    const { res, paymentId, calls } = await run(client, async () => jsonResponse(200, {}));
+    expect(res.status).toBe(402);
+    expect(calls).toHaveLength(0);
+    const d = await failedDetails(paymentId);
+    expect(d).toMatchObject({
+      verification_subreason: 'facilitator_jwt_generation_failed',
+      verification_jwt_subreason: 'cdp_key_parse_failed',
+    });
+  });
+
+  it('non-JWT failures never carry a jwt subreason in the audit', async () => {
+    const { paymentId } = await run(realClient(), async () =>
+      jsonResponse(401, { message: BODY_LEAK })
+    );
+    expect(await failedDetails(paymentId)).not.toHaveProperty('verification_jwt_subreason');
   });
 
   it('B: HTTP 401 -> authentication_rejected + status', async () => {

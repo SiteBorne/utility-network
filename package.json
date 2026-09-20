@@ -38,6 +38,7 @@
     "nevermined:recover": "tsx scripts/nevermined-recover.ts",
     "cdp:signer-capability-check": "tsx scripts/cdp-buyer-signer-capability-check.ts",
     "first-paid-e2e": "tsx scripts/first-paid-e2e.ts",
+    "cdp:validate-credentials": "pnpm --filter @siteborne/edge-api exec tsx scripts/validate-cdp-credentials.mts",
     "document-paid-e2e": "tsx scripts/document-paid-e2e.ts",
     "web-context-first-paid-e2e": "tsx scripts/web-context-first-paid-e2e.ts",
     "company-evidence-first-paid-e2e": "tsx scripts/company-evidence-first-paid-e2e.ts",
