@@ -113,6 +113,31 @@ import type {
 } from '../continuation/types';
 import type { DecryptedContinuationPayload } from '../workflows/paid-continuation-workflow';
 
+/** Compact machine-readable codes only (same shape the CDP provider
+ * accepts). Anything else is dropped so free-form facilitator text can
+ * never reach the durable audit trail. */
+function safeAuditCode(value: unknown): string | undefined {
+  return typeof value === 'string' && /^[A-Za-z0-9_.:-]{1,160}$/.test(value) ? value : undefined;
+}
+
+/** Safe, classification-only view of a failed verification's existing
+ * evidence (reason / trust_class / verifier_identity). Deliberately excludes
+ * the payment payload, signature, payer and raw facilitator response. */
+function verificationFailureObservability(evidence: {
+  reason?: string;
+  trust_class?: string;
+  verifier_identity?: string;
+}): Record<string, string> {
+  const out: Record<string, string> = {};
+  const reason = safeAuditCode(evidence.reason);
+  const trustClass = safeAuditCode(evidence.trust_class);
+  const provider = safeAuditCode(evidence.verifier_identity);
+  if (reason) out.verification_reason = reason;
+  if (trustClass) out.trust_class = trustClass;
+  if (provider) out.verification_provider = provider;
+  return out;
+}
+
 export interface ExecutorOutcome {
   /** The exact closed result @siteborne/service-runtime's
    * `executeLocalService` returned — never bypassed, never re-shaped. */
@@ -1156,6 +1181,7 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
       await audit('payment_verification_failed', {
         payment_identifier: paymentIdentifier,
         reason: verifyGate.reason,
+        ...verificationFailureObservability(verificationEvidence),
       });
       return jsonError(c, 402, 'payment_verification_rejected', verifyGate.reason);
     }
