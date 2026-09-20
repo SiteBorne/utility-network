@@ -39,10 +39,67 @@ export type ErrorShape =
   | 'MODULE_RESOLUTION'
   | 'OTHER';
 
+/** Closed allow-list of runtime symbols on the traced JWT path. A "X is not a
+ * function" message is mapped to one of these or to `OTHER`; the message text
+ * itself is never kept. */
+export const JWT_PATH_SYMBOLS = [
+  'getRandomValues',
+  'Buffer',
+  'importPKCS8',
+  'importJWK',
+  'SignJWT',
+  'digest',
+  'OTHER',
+  'NONE',
+] as const;
+export type JwtPathSymbol = (typeof JWT_PATH_SYMBOLS)[number];
+
+/** Stage of the traced `generateJwt` path a failing symbol belongs to. */
+export type JwtPathStage =
+  | 'NONCE_GENERATION'
+  | 'KEY_TYPE_DETECTION'
+  | 'KEY_IMPORT'
+  | 'JWT_SIGNING'
+  | 'UNKNOWN'
+  | 'NONE';
+
+const SYMBOL_STAGE: Record<JwtPathSymbol, JwtPathStage> = {
+  getRandomValues: 'NONCE_GENERATION',
+  Buffer: 'KEY_TYPE_DETECTION',
+  importPKCS8: 'KEY_IMPORT',
+  importJWK: 'KEY_IMPORT',
+  SignJWT: 'JWT_SIGNING',
+  digest: 'JWT_SIGNING',
+  OTHER: 'UNKNOWN',
+  NONE: 'NONE',
+};
+
+/** Maps "<symbol> is not a function" onto the allow-list. Bundler-renamed
+ * identifiers (`getRandomValues2`, `(0 , x.importJWK)`) collapse to the base. */
+export function classifyFailingSymbol(message: string): JwtPathSymbol {
+  const m = /^\s*(?:\(0\s*,\s*)?([A-Za-z_$][\w$.]*)\)?\s+is not a function/i.exec(message);
+  if (!m) return 'OTHER';
+  const full = m[1] ?? '';
+  // Try the identifier as written first (importPKCS8 ends in a digit), then
+  // with a bundler-added numeric suffix removed (getRandomValues2).
+  for (const name of [full, full.replace(/\d+$/, '')]) {
+    const parts = name.split('.');
+    const last = parts[parts.length - 1] ?? '';
+    const head = parts[0] ?? '';
+    for (const sym of JWT_PATH_SYMBOLS) {
+      if (sym === 'OTHER' || sym === 'NONE') continue;
+      if (last === sym || head === sym) return sym;
+    }
+  }
+  return 'OTHER';
+}
+
 export interface ThrownDescription {
   thrown_value_class: ThrownValueClass;
   failure_class: CdpJwtSubreason;
   error_shape: ErrorShape;
+  failing_symbol: JwtPathSymbol;
+  failing_stage: JwtPathStage;
 }
 
 export type Tri = 'PASS' | 'FAIL';
@@ -65,15 +122,22 @@ export interface JwtDiagnostic {
   synthetic_failure_class: CdpJwtSubreason | 'NONE';
   synthetic_thrown_value_class: ThrownValueClass | 'NONE';
   synthetic_error_shape: ErrorShape;
+  synthetic_failing_symbol: JwtPathSymbol;
+  synthetic_failing_stage: JwtPathStage;
   bound_direct_jwt_mint: Tri | 'NOT_AVAILABLE';
   bound_direct_failure_class: CdpJwtSubreason | 'NONE' | 'NOT_AVAILABLE';
   bound_direct_thrown_value_class: ThrownValueClass | 'NONE';
   bound_direct_error_shape: ErrorShape;
+  bound_direct_failing_symbol: JwtPathSymbol;
+  bound_direct_failing_stage: JwtPathStage;
   bound_direct_failing_target: MintTarget | 'NONE';
   create_auth_headers: Tri;
   create_auth_headers_failure_class: CdpJwtSubreason | 'NONE';
   thrown_value_class: ThrownValueClass | 'NONE';
   create_auth_headers_error_shape: ErrorShape;
+  create_auth_headers_failing_symbol: JwtPathSymbol;
+  create_auth_headers_failing_stage: JwtPathStage;
+  failure_stage_parity: 'PASS' | 'FAIL' | 'NOT_APPLICABLE';
   facilitator_contact_attempted: Yn;
 }
 
@@ -133,6 +197,8 @@ export function describeThrown(thrown: unknown): ThrownDescription {
       thrown_value_class: 'NON_ERROR_THROW',
       failure_class: 'cdp_jwt_unknown_failure',
       error_shape: 'NONE',
+      failing_symbol: 'NONE',
+      failing_stage: 'NONE',
     };
   }
   const name = safeString(() => (thrown as { name?: unknown }).name);
@@ -169,10 +235,14 @@ export function describeThrown(thrown: unknown): ThrownDescription {
   } else if (name === 'OperationError' || /operation failed|crypto/i.test(message)) {
     error_shape = 'CRYPTO_OPERATION_FAILED';
   }
+  const failing_symbol: JwtPathSymbol =
+    error_shape === 'NOT_A_FUNCTION' ? classifyFailingSymbol(message) : 'NONE';
   return {
     thrown_value_class: value_class,
     failure_class: classifyCdpJwtFailure(thrown),
     error_shape,
+    failing_symbol,
+    failing_stage: SYMBOL_STAGE[failing_symbol],
   };
 }
 
@@ -209,15 +279,22 @@ export async function runJwtDiagnostic(
     synthetic_failure_class: 'NONE',
     synthetic_thrown_value_class: 'NONE',
     synthetic_error_shape: 'NONE',
+    synthetic_failing_symbol: 'NONE',
+    synthetic_failing_stage: 'NONE',
     bound_direct_jwt_mint: 'NOT_AVAILABLE',
     bound_direct_failure_class: 'NOT_AVAILABLE',
     bound_direct_thrown_value_class: 'NONE',
     bound_direct_error_shape: 'NONE',
+    bound_direct_failing_symbol: 'NONE',
+    bound_direct_failing_stage: 'NONE',
     bound_direct_failing_target: 'NONE',
     create_auth_headers: input.authStageFailure ? 'FAIL' : 'PASS',
     create_auth_headers_failure_class: 'NONE',
     thrown_value_class: 'NONE',
     create_auth_headers_error_shape: 'NONE',
+    create_auth_headers_failing_symbol: 'NONE',
+    create_auth_headers_failing_stage: 'NONE',
+    failure_stage_parity: 'NOT_APPLICABLE',
     facilitator_contact_attempted: input.authStageFailure ? 'NO' : 'YES',
   };
 
@@ -227,6 +304,8 @@ export async function runJwtDiagnostic(
     out.create_auth_headers_failure_class = d.failure_class;
     out.thrown_value_class = d.thrown_value_class;
     out.create_auth_headers_error_shape = d.error_shape;
+    out.create_auth_headers_failing_symbol = d.failing_symbol;
+    out.create_auth_headers_failing_stage = d.failing_stage;
   }
 
   // (2) outer shape, enums only.
@@ -255,6 +334,8 @@ export async function runJwtDiagnostic(
     out.synthetic_failure_class = d.failure_class;
     out.synthetic_thrown_value_class = d.thrown_value_class;
     out.synthetic_error_shape = d.error_shape;
+    out.synthetic_failing_symbol = d.failing_symbol;
+    out.synthetic_failing_stage = d.failing_stage;
   }
 
   // (5) BOUND_CREDENTIAL_DIRECT_JWT_MINT — public SDK helper only.
@@ -277,10 +358,21 @@ export async function runJwtDiagnostic(
         out.bound_direct_failure_class = d.failure_class;
         out.bound_direct_thrown_value_class = d.thrown_value_class;
         out.bound_direct_error_shape = d.error_shape;
+        out.bound_direct_failing_symbol = d.failing_symbol;
+        out.bound_direct_failing_stage = d.failing_stage;
         out.bound_direct_failing_target = target.name;
         break;
       }
     }
+  }
+  // Synthetic (public key) and bound (real credential) fail at the same stage
+  // and symbol => the fault precedes any key-content handling.
+  if (out.synthetic_jwt_control === 'FAIL' && out.bound_direct_jwt_mint === 'FAIL') {
+    out.failure_stage_parity =
+      out.synthetic_failing_stage === out.bound_direct_failing_stage &&
+      out.synthetic_failing_symbol === out.bound_direct_failing_symbol
+        ? 'PASS'
+        : 'FAIL';
   }
   return out;
 }

@@ -39,6 +39,11 @@ import {
 import * as composition from '../src/control-plane/production/verify-agent-output-v2-cdp-composition';
 import { verifyAgentOutputV2CdpProductionRoute } from '../src/control-plane/routes/production-verify-v2-cdp-route';
 import { Hono } from 'hono';
+import {
+  classifyFailingSymbol,
+  describeThrown,
+  JWT_PATH_SYMBOLS,
+} from '../src/control-plane/evidence/cdp-jwt-diagnostic';
 import type { Env } from '../src/control-plane/config/env';
 
 const MIGRATIONS_DIR = fileURLToPath(new URL('../../../migrations', import.meta.url));
@@ -68,7 +73,6 @@ function runMigrations(db: D1Database): Promise<void> {
 }
 
 const SELLER = '0x7f44a2dd237938F18632d4CcA40f4c690295E6E1';
-const PAYER = '0x516F57e1fB800ccEB2E70C42607Fb93E2abEcB99';
 const WEB_INPUT = { target_url: 'https://acme.example/', retrieval_mode: 'direct' };
 const SIGNATURE_MARKER = 'synthetic:jwt-diagnostic-test-signature-marker';
 const FAKE_KEY_ID = 'subclass-test-key-id';
@@ -95,20 +99,6 @@ function jsonResponse(status: number, body: unknown): Response {
   return new Response(typeof body === 'string' ? body : JSON.stringify(body), {
     status,
     headers: { 'content-type': 'application/json' },
-  });
-}
-
-/** A real `HTTPFacilitatorClient` with a stub auth-header factory that never
- * touches a real key. */
-function realClient(timeoutMs?: number): HTTPFacilitatorClient {
-  return new HTTPFacilitatorClient({
-    url: 'https://facilitator.invalid/platform/v2/x402',
-    ...(timeoutMs ? { timeoutMs } : {}),
-    createAuthHeaders: async () => ({
-      verify: { Authorization: `Bearer ${FAKE_JWT}` },
-      settle: { Authorization: `Bearer ${FAKE_JWT}` },
-      supported: { Authorization: `Bearer ${FAKE_JWT}` },
-    }),
   });
 }
 
@@ -290,6 +280,8 @@ describe('same-invocation JWT runtime-vs-bound diagnostic (pure)', () => {
       thrown_value_class: 'ERROR',
       failure_class: 'cdp_jwt_unknown_failure',
       error_shape: 'OTHER',
+      failing_symbol: 'NONE',
+      failing_stage: 'NONE',
     });
     expect(describeThrown(new ReferenceError('Buffer is not defined'))).toMatchObject({
       thrown_value_class: 'REFERENCE_ERROR',
@@ -315,6 +307,87 @@ describe('same-invocation JWT runtime-vs-bound diagnostic (pure)', () => {
   it('the synthetic control key is the published RFC 8032 public test vector, not a SITEBORNE key', () => {
     expect(SYNTHETIC_CONTROL_KEY_ID).toContain('synthetic');
     expect(Buffer.from(syntheticControlSecret(), 'base64')).toHaveLength(64);
+  });
+});
+
+describe('failing-symbol / stage classification (allow-listed enums only)', () => {
+  it('A: an allow-listed symbol that is not a function maps to its stage', () => {
+    for (const [msg, sym, stage] of [
+      ['getRandomValues is not a function', 'getRandomValues', 'NONCE_GENERATION'],
+      ['getRandomValues2 is not a function', 'getRandomValues', 'NONCE_GENERATION'],
+      ['importJWK is not a function', 'importJWK', 'KEY_IMPORT'],
+      ['(0 , jose.importPKCS8) is not a function', 'importPKCS8', 'KEY_IMPORT'],
+      ['SignJWT is not a function', 'SignJWT', 'JWT_SIGNING'],
+      ['Buffer.from is not a function', 'Buffer', 'KEY_TYPE_DETECTION'],
+    ] as const) {
+      const d = describeThrown(new TypeError(msg));
+      expect(d).toMatchObject({
+        failing_symbol: sym,
+        failing_stage: stage,
+        error_shape: 'NOT_A_FUNCTION',
+      });
+    }
+  });
+
+  it('B/C/D: unknown symbols, non-callable phrasing and other errors never echo text', () => {
+    expect(classifyFailingSymbol('somethingSecret123 is not a function')).toBe('OTHER');
+    expect(describeThrown(new TypeError('x is not iterable'))).toMatchObject({
+      failing_symbol: 'NONE',
+    });
+    expect(describeThrown(new RangeError('bad'))).toMatchObject({ failing_symbol: 'NONE' });
+    const d = describeThrown(new TypeError(`${BOUND_SENTINEL_SECRET} is not a function`));
+    expect(JSON.stringify(d)).not.toContain(BOUND_SENTINEL_SECRET);
+    expect(JWT_PATH_SYMBOLS).toContain(d.failing_symbol);
+  });
+
+  it('G/H: synthetic and bound failing at the same symbol => parity PASS; different => FAIL', async () => {
+    const same = new TypeError('getRandomValues is not a function');
+    const r1 = await runJwtDiagnostic(
+      {
+        apiKeyId: BOUND_ID,
+        apiKeySecret: throwawayEd25519Secret(),
+        authStageFailure: { thrown: same },
+      },
+      diagDeps({
+        createSyntheticAuthHeaders: async () => {
+          throw same;
+        },
+        mintJwt: async () => {
+          throw same;
+        },
+      })
+    );
+    expect(r1).toMatchObject({
+      synthetic_failing_symbol: 'getRandomValues',
+      bound_direct_failing_symbol: 'getRandomValues',
+      create_auth_headers_failing_symbol: 'getRandomValues',
+      failure_stage_parity: 'PASS',
+    });
+    const r2 = await runJwtDiagnostic(
+      { apiKeyId: BOUND_ID, apiKeySecret: throwawayEd25519Secret() },
+      diagDeps({
+        createSyntheticAuthHeaders: async () => {
+          throw same;
+        },
+        mintJwt: async () => {
+          throw new TypeError('importJWK is not a function');
+        },
+      })
+    );
+    expect(r2.failure_stage_parity).toBe('FAIL');
+  });
+
+  it('N: a fully successful path reports NONE and NOT_APPLICABLE parity', async () => {
+    const r = await runJwtDiagnostic(
+      { apiKeyId: BOUND_ID, apiKeySecret: throwawayEd25519Secret() },
+      diagDeps()
+    );
+    expect(r).toMatchObject({
+      synthetic_jwt_control: 'PASS',
+      synthetic_failing_symbol: 'NONE',
+      bound_direct_failing_stage: 'NONE',
+      failure_stage_parity: 'NOT_APPLICABLE',
+    });
   });
 });
 
@@ -454,7 +527,6 @@ describe('diagnostic through the real CDP provider and audit trail (full stack)'
 
   it('I: a non-Error thrown by the auth-header code is distinguished safely', async () => {
     const client = clientWith(async () => {
-      // eslint-disable-next-line @typescript-eslint/only-throw-error
       throw BOUND_SENTINEL_SECRET;
     });
     const { paymentId } = await run(client, async () => jsonResponse(200, {}), {
@@ -468,6 +540,34 @@ describe('diagnostic through the real CDP provider and audit trail (full stack)'
       jwt_diag_create_auth_headers: 'FAIL',
     });
     expect(JSON.stringify(d)).not.toContain(BOUND_SENTINEL_SECRET);
+  });
+
+  it('symbol and stage enums survive the redactor into the durable audit row', async () => {
+    const boom = new TypeError('getRandomValues is not a function');
+    const client = clientWith(async () => {
+      throw boom;
+    });
+    const { paymentId } = await run(client, async () => jsonResponse(200, {}), {
+      apiKeyId: BOUND_ID,
+      apiKeySecret: boundEd,
+      deps: diagDeps({
+        createSyntheticAuthHeaders: async () => {
+          throw boom;
+        },
+        mintJwt: async () => {
+          throw boom;
+        },
+      }),
+    });
+    const d = await failedDetails(paymentId);
+    expect(d).toMatchObject({
+      jwt_diag_synthetic_failing_symbol: 'getRandomValues',
+      jwt_diag_synthetic_failing_stage: 'NONCE_GENERATION',
+      jwt_diag_bound_direct_failing_symbol: 'getRandomValues',
+      jwt_diag_create_auth_headers_failing_symbol: 'getRandomValues',
+      jwt_diag_failure_stage_parity: 'PASS',
+    });
+    expect(JSON.stringify(d)).not.toContain('[REDACTED]');
   });
 
   it('B(full): synthetic control FAIL inside the same invocation is persisted', async () => {
