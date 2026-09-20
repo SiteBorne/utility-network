@@ -23,6 +23,9 @@ export * from './digests';
 export * from './validators';
 export { canonicalize, hashCanonical } from './canonical';
 
+// PRODUCTION-SECURITY-DECLARATIONS-01: canonical Release-1 security declaration.
+export * from './security';
+
 export * from './comparator';
 export type * from './projections/types';
 export { projectA2aFromVcm } from './projections/a2a-shadow';
