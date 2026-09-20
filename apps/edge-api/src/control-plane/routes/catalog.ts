@@ -1,3 +1,9 @@
+import {
+  getCatalogSecurity,
+  getOpenApiSecurityDeclaration,
+  getOpenApiSecurityOperationExtensions,
+  getSecurityPublication,
+} from '../security-publication';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { validateServiceError } from '@siteborne/contracts';
@@ -176,6 +182,13 @@ const EconomicsProjectionSchema = z
   })
   .strict();
 
+// PRODUCTION-SECURITY-DECLARATIONS-PUBLICATION-01: additive, optional security
+// block derived from the canonical declaration (never authored here).
+const CatalogSecurityBlockSchema = z.object({
+  declaration: z.record(z.unknown()),
+  modes: z.array(z.record(z.unknown())),
+});
+
 const ServiceCatalogEntrySchema = z.object({
   service_id: z.string(),
   version: z.string(),
@@ -190,10 +203,12 @@ const ServiceCatalogEntrySchema = z.object({
   protocol_status: z.enum(['preproduction', 'production']),
   input_schema_ref: z.string(),
   output_schema_ref: z.string(),
+  security: CatalogSecurityBlockSchema.optional(),
 });
 
 const CatalogResponseSchema = z.object({
   services: z.array(ServiceCatalogEntrySchema),
+  security_declaration: z.record(z.unknown()).optional(),
   contract_release: z.string(),
   pcc_version: z.string(),
   generated_at: z.string().datetime({ offset: true }),
@@ -242,7 +257,11 @@ catalogRoute.get('/', async (c) => {
   );
 
   const response = {
-    services,
+    services: services.map((service) => {
+      const security = getCatalogSecurity(service.service_id);
+      return security ? { ...service, security } : service;
+    }),
+    security_declaration: { ...getSecurityPublication().ref },
     contract_release: '1.0.0',
     pcc_version: '1.0.0',
     generated_at: new Date().toISOString(),
@@ -267,6 +286,7 @@ const ServiceMetadataResponseSchema = z.object({
   protocol_status: z.enum(['preproduction', 'production']),
   input_schema: z.string(),
   output_schema: z.string(),
+  security: CatalogSecurityBlockSchema.optional(),
   bounds: z
     .object({
       max_input_bytes: z.number(),
@@ -319,6 +339,9 @@ serviceMetadataRoute.get('/:service_id', async (c) => {
     protocol_status: service.protocol_status,
     input_schema: service.input_schema,
     output_schema: service.output_schema,
+    ...(getCatalogSecurity(service.service_id)
+      ? { security: getCatalogSecurity(service.service_id) }
+      : {}),
     bounds: {
       max_input_bytes: 10 * 1024 * 1024,
       max_output_bytes: 50 * 1024 * 1024,
@@ -392,10 +415,12 @@ openapiRoute.get('/openapi.json', async (c) => {
         resolveEffectiveServiceRuntimeStatus(id, env, hasDb).productionEnabled,
       ])
     ),
+    securityOperationExtensions: getOpenApiSecurityOperationExtensions(V2_PAID_SERVICE_IDS),
   });
   const openapi = {
     // 3.1.0: the frozen service input schemas are JSON Schema 2020-12.
     openapi: '3.1.0',
+    ...getOpenApiSecurityDeclaration(),
     info: {
       title: 'SITEBORNE Utility Network API',
       version: '0.0.0',

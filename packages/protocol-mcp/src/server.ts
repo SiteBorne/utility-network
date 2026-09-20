@@ -694,6 +694,32 @@ function standardOutputJsonSchema(schema: StandardSchemaWithJSON): JsonSchemaTyp
   return schema['~standard'].jsonSchema.output({ target: 'draft-2020-12' }) as JsonSchemaType;
 }
 
+/**
+ * Additive, non-overriding security `_meta` for one tool. Only keys in the
+ * `net.siteborne/security` namespace are accepted; anything else is dropped so
+ * an injected map can never rewrite an existing metadata key.
+ */
+function additiveSecurityMeta(
+  options: CreateSiteborneMcpOptions,
+  toolName: string
+): Record<string, unknown> {
+  const injected = options.securityMetaByToolName?.[toolName];
+  if (!injected) return {};
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(injected)) {
+    if (key.startsWith('net.siteborne/security')) out[key] = value;
+  }
+  return out;
+}
+
+function utilitySecurityMeta(
+  options: CreateSiteborneMcpOptions,
+  toolName: string
+): { readonly _meta?: Record<string, unknown> } {
+  const meta = additiveSecurityMeta(options, toolName);
+  return Object.keys(meta).length > 0 ? { _meta: meta } : {};
+}
+
 export function buildSiteborneMcpDefinitionAuthorityInputs(
   options: CreateSiteborneMcpOptions = {}
 ): SiteborneMcpDefinitionAuthorityInputs {
@@ -716,6 +742,7 @@ export function buildSiteborneMcpDefinitionAuthorityInputs(
         'net.siteborne/inputSchema': MCP_SERVICE_SCHEMA_METADATA[serviceId].input_uri,
         'net.siteborne/outputSchema': MCP_SERVICE_SCHEMA_METADATA[serviceId].output_uri,
         'net.siteborne/paymentRequired': true,
+        ...additiveSecurityMeta(options, name),
       },
       inputSchemaUri: MCP_SERVICE_SCHEMA_METADATA[serviceId].input_uri,
       outputSchemaUri: MCP_SERVICE_SCHEMA_METADATA[serviceId].output_uri,
@@ -734,6 +761,7 @@ export function buildSiteborneMcpDefinitionAuthorityInputs(
         idempotentHint: true,
         openWorldHint: false,
       },
+      ...utilitySecurityMeta(options, 'siteborne_get_quote'),
     },
     {
       name: 'siteborne_get_service_health',
@@ -747,6 +775,7 @@ export function buildSiteborneMcpDefinitionAuthorityInputs(
         idempotentHint: true,
         openWorldHint: false,
       },
+      ...utilitySecurityMeta(options, 'siteborne_get_service_health'),
     },
   ];
   return { toolOrder: MCP_TOOL_NAMES, serviceTools, utilityTools };

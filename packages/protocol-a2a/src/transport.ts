@@ -128,7 +128,8 @@ export async function createSiteborneA2aHonoApp(options: CreateSiteborneA2aOptio
     buildUnsignedSiteborneAgentCard(
       options.effectiveProductionStatusByServiceId,
       options.mtlsProductionActive,
-      options.paymentDestination ?? null
+      options.paymentDestination ?? null,
+      options.securityDeclarationExtension ?? null
     );
   if (unsignedCard.signatures.length > 0) {
     throw new Error('supplied Agent Card must be unsigned');

@@ -1,3 +1,4 @@
+import { getMcpSecurityMetaByToolName } from '../control-plane/security-publication';
 import {
   assertValidSiteborneMcpToolDefinitions,
   buildLegacySiteborneMcpToolDefinitions,
@@ -273,6 +274,9 @@ export async function mcpRoute(context: Context<{ Bindings: Env }>): Promise<Res
     health: { production_ready: false, production_enabled: productionEnabled, services },
     allowedHosts: [...MCP_ALLOWED_HOSTS],
     allowedOrigins: [...MCP_ALLOWED_HOSTS],
+    // PRODUCTION-SECURITY-DECLARATIONS-PUBLICATION-01: additive per-tool
+    // security `_meta`, derived from the canonical declaration.
+    securityMetaByToolName: getMcpSecurityMetaByToolName(),
     // SUN-1222C-MCP-PAYMENT-DESIGN-CORRECTION: the real REST route
     // functions decide for themselves (via their own PAID_ROUTES_ENABLED
     // / *_CDP_ROUTE_ENABLED / production-authorization gates) whether to

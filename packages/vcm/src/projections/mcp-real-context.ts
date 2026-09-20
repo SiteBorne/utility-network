@@ -29,6 +29,18 @@ const UTILITY_TOOL_NAMES = ['siteborne_get_quote', 'siteborne_get_service_health
  * authority. It never accepts a served tools/list response or executable
  * handlers; the returned context contains metadata leaf values only.
  */
+/** Extracts only the additive `net.siteborne/security*` keys from tool `_meta`. */
+function pickSecurityMeta(
+  meta: unknown
+): { securityMeta: Record<string, unknown> } | Record<string, never> {
+  if (!meta || typeof meta !== 'object') return {};
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(meta as Record<string, unknown>)) {
+    if (key.startsWith('net.siteborne/security')) out[key] = value;
+  }
+  return Object.keys(out).length > 0 ? { securityMeta: out } : {};
+}
+
 export function buildCurrentMcpProjectionContext(
   authority: SiteborneMcpDefinitionAuthorityInputs
 ): McpProjectionContext {
@@ -49,6 +61,7 @@ export function buildCurrentMcpProjectionContext(
         idempotentHint: tool.annotations.idempotentHint ?? false,
         openWorldHint: tool.annotations.openWorldHint ?? false,
       },
+      ...pickSecurityMeta(tool._meta),
     };
   });
   return {
@@ -70,6 +83,7 @@ export function buildCurrentMcpProjectionContext(
           idempotentHint: tool.annotations.idempotentHint ?? false,
           openWorldHint: tool.annotations.openWorldHint ?? false,
         },
+        ...pickSecurityMeta(tool._meta),
       };
     },
     utilityTools,
@@ -91,6 +105,7 @@ export function buildRealMcpShadowContext(
       inputSchema: tool.inputSchema,
       outputSchema: tool.outputSchema,
       annotations: tool.annotations,
+      ...pickSecurityMeta(tool._meta),
     };
   });
   return {
@@ -110,6 +125,7 @@ export function buildRealMcpShadowContext(
         inputSchemaUri: schemaMeta.input_uri,
         outputSchemaUri: schemaMeta.output_uri,
         annotations: tool.annotations,
+        ...pickSecurityMeta(tool._meta),
       };
     },
     utilityTools,

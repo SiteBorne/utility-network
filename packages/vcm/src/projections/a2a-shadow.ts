@@ -95,6 +95,7 @@ export function projectA2aFromVcm(
             services: x402Services,
           },
         },
+        ...(context.securityDeclarationExtension ? [context.securityDeclarationExtension] : []),
       ],
     },
     securitySchemes: context.mtlsSecurityScheme

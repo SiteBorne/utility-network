@@ -41,6 +41,13 @@ export interface A2aProjectionContext {
   readonly mtlsSecurityScheme: A2aMtlsSecurityScheme | null;
   /** OPERATIONAL public payment destination; `null` = not configured. */
   readonly paymentDestination: PaymentDestination | null;
+  /** Additive security-declaration extension (publication); absent = none. */
+  readonly securityDeclarationExtension?: {
+    readonly uri: string;
+    readonly description: string;
+    readonly required: false;
+    readonly params: Readonly<Record<string, unknown>>;
+  } | null;
 }
 
 export interface UnsignedAgentSkill {
@@ -86,12 +93,15 @@ export interface UnsignedAgentCard {
       readonly uri: string;
       readonly description: string;
       readonly required: boolean;
-      readonly params: {
-        readonly x402Version: number;
-        readonly paymentRequiredForUsefulExecution: boolean;
-        readonly productionEnabled: boolean;
-        readonly services: readonly UnsignedAgentCardX402ServiceEntry[];
-      };
+      readonly params:
+        | {
+            readonly x402Version: number;
+            readonly paymentRequiredForUsefulExecution: boolean;
+            readonly productionEnabled: boolean;
+            readonly services: readonly UnsignedAgentCardX402ServiceEntry[];
+          }
+        // Additive security-declaration extension (publication).
+        | Readonly<Record<string, unknown>>;
     }[];
   };
   readonly securitySchemes: Readonly<Record<string, unknown>>;
@@ -121,6 +131,8 @@ export interface McpServiceToolContext {
   readonly inputSchemaUri: string;
   readonly outputSchemaUri: string;
   readonly annotations: McpToolAnnotations;
+  /** Additive `net.siteborne/security*` metadata only (publication). */
+  readonly securityMeta?: Readonly<Record<string, unknown>>;
 }
 
 export interface McpUtilityToolContext {
@@ -130,6 +142,7 @@ export interface McpUtilityToolContext {
   readonly inputSchema: unknown;
   readonly outputSchema: unknown;
   readonly annotations: McpToolAnnotations;
+  readonly securityMeta?: Readonly<Record<string, unknown>>;
 }
 
 export interface McpProjectionContext {

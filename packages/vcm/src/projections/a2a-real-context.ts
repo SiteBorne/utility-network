@@ -42,7 +42,8 @@ const AGENT_CARD_LITERALS = {
 export function buildRealA2aShadowContext(
   effectiveProductionStatusByServiceId: Partial<Record<SiteborneServiceId, boolean>>,
   mtlsProductionActive: boolean,
-  paymentDestination: PaymentDestination | null = null
+  paymentDestination: PaymentDestination | null = null,
+  securityDeclarationExtension: A2aProjectionContext['securityDeclarationExtension'] = null
 ): A2aProjectionContext {
   return {
     ...AGENT_CARD_LITERALS,
@@ -64,5 +65,6 @@ export function buildRealA2aShadowContext(
         }
       : null,
     paymentDestination,
+    ...(securityDeclarationExtension ? { securityDeclarationExtension } : {}),
   };
 }

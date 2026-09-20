@@ -75,6 +75,15 @@ export interface CreateSiteborneMcpOptions {
   allowedHosts?: string[];
   allowedOrigins?: string[];
   onServerCreated?: (serverInstanceId: string) => void;
+  /**
+   * PRODUCTION-SECURITY-DECLARATIONS-PUBLICATION-01: additive per-tool `_meta`
+   * entries (keyed by MCP tool name) derived from the canonical security
+   * declaration by the caller. Plain data only; this package never imports the
+   * declaration. Absent = no security metadata, exactly as before. Entries may
+   * only add `net.siteborne/security*` keys; they cannot override an existing
+   * `_meta` key, the tool name, schemas, annotations or the tool count.
+   */
+  readonly securityMetaByToolName?: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
 }
 
 export interface SiteborneMcpToolDefinition {

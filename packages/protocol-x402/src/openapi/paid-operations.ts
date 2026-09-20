@@ -51,6 +51,13 @@ export interface PaidOperationsRuntime {
   readonly destination: PaymentDestination | null;
   /** OPERATIONAL effective production status per service. */
   readonly productionEnabled: Readonly<Partial<Record<SiteborneServiceId, boolean>>>;
+  /** PRODUCTION-SECURITY-DECLARATIONS-PUBLICATION-01: additive per-service
+   * operation extension properties (already derived from the canonical
+   * security declaration by the caller). Only `x-siteborne-security` is
+   * accepted; nothing else can be added or overridden. */
+  readonly securityOperationExtensions?: Readonly<
+    Partial<Record<string, Readonly<Record<string, unknown>>>>
+  >;
 }
 
 /** Deep copy of the frozen input schema with mode selectors narrowed to
@@ -123,6 +130,12 @@ function operationFor(serviceId: SiteborneServiceId, runtime: PaidOperationsRunt
       tags: ['paid-services'],
       'x-service-id': serviceId,
       'x-siteborne-economics': economics,
+      ...(runtime.securityOperationExtensions?.[serviceId]?.['x-siteborne-security']
+        ? {
+            'x-siteborne-security':
+              runtime.securityOperationExtensions[serviceId]['x-siteborne-security'],
+          }
+        : {}),
       'x-x402': {
         scheme: economics.scheme,
         resource: canonicalResourceUrl(serviceId),

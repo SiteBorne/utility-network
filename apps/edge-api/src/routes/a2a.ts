@@ -1,3 +1,4 @@
+import { getA2aSecurityExtension } from '../control-plane/security-publication';
 import {
   buildUnsignedSiteborneAgentCard,
   createSiteborneA2aHonoApp,
@@ -55,14 +56,16 @@ function scheduleA2aShadowComparison(
     existing: buildUnsignedSiteborneAgentCard(
       effectiveProductionStatusByServiceId,
       mtlsProductionActive,
-      paymentDestination
+      paymentDestination,
+      getA2aSecurityExtension()
     ),
     buildShadow: async () => {
       const effective = await getRuntimeEffectiveView(UNRELEASED_RUNTIME_SOURCE_COMMIT);
       const context = buildRealA2aShadowContext(
         effectiveProductionStatusByServiceId,
         mtlsProductionActive,
-        paymentDestination
+        paymentDestination,
+        getA2aSecurityExtension()
       );
       return projectA2aFromVcm(effective, context);
     },
@@ -250,6 +253,9 @@ function resolveA2aApp(
         effectiveProductionStatusByServiceId,
         mtlsProductionActive,
         paymentDestination,
+        // PRODUCTION-SECURITY-DECLARATIONS-PUBLICATION-01: additive card
+        // extension (no securitySchemes / securityRequirements).
+        securityDeclarationExtension: getA2aSecurityExtension(),
       };
       if (authorizedMode === 'shadow_compare') {
         // METADATA-VCM-06 §IX: scheduled at this exact cache-rebuild point,
@@ -273,14 +279,16 @@ function resolveA2aApp(
             buildUnsignedSiteborneAgentCard(
               effectiveProductionStatusByServiceId,
               mtlsProductionActive,
-              paymentDestination
+              paymentDestination,
+              getA2aSecurityExtension()
             ),
           buildPrimary: async () => {
             const effective = await getRuntimeEffectiveView(UNRELEASED_RUNTIME_SOURCE_COMMIT);
             const context = buildRealA2aShadowContext(
               effectiveProductionStatusByServiceId,
               mtlsProductionActive,
-              paymentDestination
+              paymentDestination,
+              getA2aSecurityExtension()
             );
             const projected = projectA2aFromVcm(effective, context);
             const candidate = AgentCard.fromJSON(

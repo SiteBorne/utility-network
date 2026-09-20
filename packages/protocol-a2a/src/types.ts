@@ -1,5 +1,6 @@
 import type { PaymentDestination, SiteborneServiceId } from '@siteborne/protocol-x402';
 import type { AgentCard } from '@a2a-js/sdk';
+import type { A2aSecurityDeclarationExtension } from './card';
 import type { SiteborneA2aSigningIdentity } from './signing';
 
 export interface SiteborneA2aInvocation {
@@ -85,4 +86,7 @@ export interface CreateSiteborneA2aOptions {
    * real configuration. Absent/`null` means "not configured": the card then
    * declares no destination rather than a placeholder. */
   paymentDestination?: PaymentDestination | null;
+  /** PRODUCTION-SECURITY-DECLARATIONS-PUBLICATION-01: additive card extension
+   * derived from the canonical security declaration by the caller. */
+  securityDeclarationExtension?: A2aSecurityDeclarationExtension | null;
 }

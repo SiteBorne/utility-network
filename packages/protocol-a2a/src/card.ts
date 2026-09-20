@@ -113,6 +113,13 @@ function buildX402ExtensionParams(
   };
 }
 
+export interface A2aSecurityDeclarationExtension {
+  readonly uri: string;
+  readonly description: string;
+  readonly required: false;
+  readonly params: Readonly<Record<string, unknown>>;
+}
+
 /**
  * Builds the unsigned, immutable public Agent Card from SITEBORNE's accepted
  * registry and x402 payment-policy sources. Signing is a separate boundary so
@@ -139,7 +146,13 @@ export function buildUnsignedSiteborneAgentCard(
   /** PRODUCTION-ECONOMICS-DISCOVERY-01: OPERATIONAL public payment
    * destination, resolved by the caller (edge-api) from real configuration;
    * `null` means not configured. This package never reads env or secrets. */
-  paymentDestination: PaymentDestination | null = null
+  paymentDestination: PaymentDestination | null = null,
+  /** PRODUCTION-SECURITY-DECLARATIONS-PUBLICATION-01: optional additive
+   * extension entry (already derived from the canonical security declaration
+   * by the caller). `null`/absent leaves the card byte-for-byte as before.
+   * It adds an `extensions[]` entry only: no `securitySchemes`, no
+   * `securityRequirements`. */
+  securityDeclarationExtension: A2aSecurityDeclarationExtension | null = null
 ): AgentCard {
   return {
     name: 'SITEBORNE Utility Network',
@@ -174,6 +187,7 @@ export function buildUnsignedSiteborneAgentCard(
             paymentDestination
           ),
         },
+        ...(securityDeclarationExtension ? [securityDeclarationExtension] : []),
       ],
     },
     // SUN-1222C-AGENT-TRUST-100-IMPLEMENTATION-A: declares native A2A

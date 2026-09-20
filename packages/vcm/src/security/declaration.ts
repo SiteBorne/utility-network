@@ -171,7 +171,7 @@ export interface SecurityDeclarationBundle {
   readonly reservedFutureObjects: readonly string[];
   readonly implementationStatus: { readonly vocabulary: readonly ImplementationStatus[] };
   readonly provenance: {
-    readonly publicationState: 'not_published';
+    readonly publicationState: 'additive_metadata_projection';
     readonly qualification: 'source_qualified';
   };
 }
@@ -990,6 +990,9 @@ export function buildSecurityDeclarationV1(): SecurityDeclarationBundle {
         'UNSUPPORTED',
       ],
     },
-    provenance: { publicationState: 'not_published', qualification: 'source_qualified' },
+    provenance: {
+      publicationState: 'additive_metadata_projection',
+      qualification: 'source_qualified',
+    },
   };
 }

@@ -47,6 +47,7 @@ export function projectMcpToolsFromVcm(
         'net.siteborne/inputSchema': toolCtx.inputSchemaUri,
         'net.siteborne/outputSchema': toolCtx.outputSchemaUri,
         'net.siteborne/paymentRequired': true,
+        ...(toolCtx.securityMeta ?? {}),
       },
     });
   }
@@ -58,6 +59,7 @@ export function projectMcpToolsFromVcm(
     inputSchema: tool.inputSchema,
     outputSchema: tool.outputSchema,
     annotations: tool.annotations,
+    ...(tool.securityMeta ? { _meta: { ...tool.securityMeta } } : {}),
   }));
 
   return [...serviceTools, ...utilityTools].sort(
