@@ -28,6 +28,12 @@ import {
   type PaymentVerificationContext,
 } from '@siteborne/protocol-x402';
 
+import {
+  classifyFacilitatorVerifyFailure,
+  FACILITATOR_ANSWERED_INVALID,
+  FacilitatorAuthStageError,
+} from './cdp-facilitator-failure';
+
 const CDP_VERIFIER_IDENTITY = 'cdp:facilitator';
 
 function errorRecord(error: unknown): Record<string, unknown> | undefined {
@@ -56,10 +62,30 @@ function isFacilitatorHttpFailure(record: Record<string, unknown> | undefined): 
   );
 }
 
+/** Behaviour-neutral view of the facilitator client whose only difference is
+ * that a failure while building auth headers (JWT minting) is rethrown as a
+ * `FacilitatorAuthStageError`, so it can be told apart from a later `fetch`
+ * failure. Same headers, same request, same throw; verify-only. */
+function tagAuthStage(facilitator: HTTPFacilitatorClient): HTTPFacilitatorClient {
+  if (typeof facilitator.createAuthHeaders !== 'function') return facilitator;
+  const tagged = Object.create(facilitator) as HTTPFacilitatorClient;
+  tagged.createAuthHeaders = async (path: string) => {
+    try {
+      return await facilitator.createAuthHeaders(path);
+    } catch (error) {
+      throw new FacilitatorAuthStageError(error);
+    }
+  };
+  return tagged;
+}
+
 export class CdpPaymentEvidenceProvider implements PaymentEvidenceProvider {
   readonly providerKind = 'external' as const;
+  private readonly verifyFacilitator: HTTPFacilitatorClient;
 
-  constructor(private readonly facilitator: HTTPFacilitatorClient) {}
+  constructor(private readonly facilitator: HTTPFacilitatorClient) {
+    this.verifyFacilitator = tagAuthStage(facilitator);
+  }
 
   /**
    * Calls the real facilitator's `/verify` with the exact
@@ -77,8 +103,12 @@ export class CdpPaymentEvidenceProvider implements PaymentEvidenceProvider {
     }
     let response: VerifyResponse;
     try {
-      response = await this.facilitator.verify(context.paymentPayload, context.paymentRequirements);
+      response = await this.verifyFacilitator.verify(
+        context.paymentPayload,
+        context.paymentRequirements
+      );
     } catch (error) {
+      const classification = classifyFacilitatorVerifyFailure(error);
       const record = errorRecord(error);
       const invalidReason = safeReasonCode(record?.invalidReason);
       const payer = safePayer(record?.payer);
@@ -107,6 +137,11 @@ export class CdpPaymentEvidenceProvider implements PaymentEvidenceProvider {
         evidence_timestamp: context.nowIso,
         raw_evidence_hash,
         trust_class: facilitatorAnswered ? 'external_verified' : 'external_unverified',
+        subreason: classification.subreason,
+        ...(classification.transport_status !== undefined
+          ? { transport_status: classification.transport_status }
+          : {}),
+        retryability: classification.retryability,
       };
     }
     const raw_evidence_hash = await hashPaymentObject({
@@ -132,6 +167,12 @@ export class CdpPaymentEvidenceProvider implements PaymentEvidenceProvider {
       evidence_timestamp: context.nowIso,
       raw_evidence_hash,
       trust_class: 'external_verified',
+      ...(response.isValid
+        ? {}
+        : {
+            subreason: FACILITATOR_ANSWERED_INVALID.subreason,
+            retryability: FACILITATOR_ANSWERED_INVALID.retryability,
+          }),
     };
   }
 
