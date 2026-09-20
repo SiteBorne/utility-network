@@ -80,6 +80,20 @@
  * the tree-shaken `getRandomValues` defect and must not be targeted). Only
  * `CANDIDATE_VERSION_ID` and its pinned assertions changed; signing logic,
  * retry behaviour and payment-envelope semantics are untouched.
+ *
+ * UPDATE (FIRST-PAID-WEB-DIRECT-REAL-PAYMENT-AUTHORIZATION-01): the
+ * verify-standard capability is proven (real payment settled, third attempt), so
+ * this harness is re-targeted at `web_context_verified.v2` / `direct`
+ * (`POST /v2/web/context`, 8000 atomic = 0.008 USDC) and can no longer
+ * re-run verify-standard. Three harness-only changes, no Worker/payment/result
+ * semantics touched: (1) request binding now pins the web-direct route and
+ * `retrieval_mode: 'direct'`; (2) `service_execution_observed` no longer keys
+ * off the legacy `result_class` field -- the governed 200 body is the signed
+ * verification receipt (`receipt_id`, `decision`, `service_id`, ...), so
+ * `observeServiceExecution` recognizes that shape and requires the expected
+ * `service_id`; (3) the sanitized result now carries `cf_ray_challenge` /
+ * `cf_ray_paid` (format-validated, non-sensitive) so the exact signed request
+ * can be attributed to a Worker script version from tail evidence.
  */
 import { describe, expect, it, vi } from 'vitest';
 import { CdpClient } from '@coinbase/cdp-sdk';
@@ -107,12 +121,13 @@ import { hasAllRequiredCredentials } from '../../../../scripts/first-paid-e2e';
 
 const WORKER_SCRIPT_NAME = 'siteborne-utility-edge';
 const WORKER_ORIGIN = `https://${WORKER_SCRIPT_NAME}.siteborneutilitynetwork.workers.dev`;
-const TARGET_PATH = '/v2/verify/agent-output';
+const TARGET_PATH = '/v2/web/context';
 // The 402 challenge does not convey capability/mode, so the request itself is
-// bound: this path is the verify_agent_output.v2 route, and the body must be
-// standard mode. Checked before any network call.
-const EXPECTED_CAPABILITY_ROUTE = '/v2/verify/agent-output';
-const EXPECTED_VERIFICATION_MODE = 'standard';
+// bound: this path is the web_context_verified.v2 route, and the body must
+// request `direct` retrieval. Checked before any network call.
+const EXPECTED_CAPABILITY_ROUTE = '/v2/web/context';
+const EXPECTED_SERVICE_ID = 'web_context_verified.v2';
+const EXPECTED_RETRIEVAL_MODE = 'direct';
 const TARGET_URL = `${WORKER_ORIGIN}${TARGET_PATH}`;
 const CANDIDATE_VERSION_ID = '0456f44c-1c28-4919-9fdb-ab4673bac8f6';
 const VERSION_OVERRIDE_HEADER = 'Cloudflare-Workers-Version-Overrides';
@@ -126,7 +141,7 @@ const VERSION_OVERRIDE_HEADER_VALUE = `${WORKER_SCRIPT_NAME}="${CANDIDATE_VERSIO
 
 const EXPECTED_NETWORK = 'eip155:8453';
 const EXPECTED_ASSET = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
-const EXPECTED_AMOUNT_ATOMIC = '17000';
+const EXPECTED_AMOUNT_ATOMIC = '8000';
 const EXPECTED_PAYTO = '0x7f44a2dd237938F18632d4CcA40f4c690295E6E1';
 const EXPECTED_BUYER = '0x516F57e1fB800ccEB2E70C42607Fb93E2abEcB99';
 // Canonical Base-mainnet USDC EIP-712 domain (public, well-known — Circle's
@@ -135,21 +150,20 @@ const EXPECTED_BUYER = '0x516F57e1fB800ccEB2E70C42607Fb93E2abEcB99';
 const EXPECTED_EIP712_NAME = 'USD Coin';
 const EXPECTED_EIP712_VERSION = '2';
 
-const SERVICE_PAYMENT_USD = 0.017;
+const SERVICE_PAYMENT_USD = 0.008;
 const EXPECTED_PAYER_BORNE_NETWORK_FEE_USD = 0;
 const MAX_TOTAL_PAYER_EXPOSURE_USD = 0.25;
 
-/** §9 — the same schema-valid body proven fresh in SUN-1220I
- * (apps/edge-api/tests/load-v2.test.ts's `V2_ROUTES.verify.input`), frozen
- * here as a literal constant. Not CLI-overridable. */
+/** Deterministic, benign, minimal web-direct input: `https://example.com/` is
+ * the IANA-reserved, unauthenticated, static, public documentation page (tiny
+ * response, no private data, no mutation, not a private-network/SSRF target).
+ * The body has exactly the two schema-required fields of
+ * `contracts/releases/2.0.0/schemas/services/web-context-input.schema.json`
+ * (`target_url`, `retrieval_mode`); every optional field is left to its
+ * schema default so there is no ambiguous mode fallback. Not CLI-overridable. */
 const CANONICAL_REQUEST_BODY = Object.freeze({
-  verification_contract: {
-    claims: [{ claim_id: 'total', predicate: 'equals', expected_value: 42 }],
-    deterministic_requirements: [],
-  },
-  candidate_output: { total: 42 },
-  required_schema: {},
-  verification_mode: 'standard',
+  target_url: 'https://example.com/',
+  retrieval_mode: 'direct',
 });
 
 const RUN_LOCAL_FIRST_PAID_E2E_ENV_VAR = 'RUN_LOCAL_FIRST_PAID_E2E';
@@ -184,6 +198,12 @@ export interface FirstPaidE2ESanitizedResult {
   settlement_observed?: boolean;
   transaction_hash?: string;
   receipt_id?: string;
+  /** CF-Ray of the fresh unpaid 402 / the signed paid response. Non-sensitive
+   * edge request identifiers, surfaced only when they match the canonical
+   * `<16 hex>-<3 letter colo>` shape, so the exact signed request can be
+   * mapped to a Worker script version from tail evidence. */
+  cf_ray_challenge?: string;
+  cf_ray_paid?: string;
 }
 
 /** §8 — enforced call budget. Every counter starts at 0 and this module
@@ -332,8 +352,7 @@ export function validateChallengeAgainstExpectations(
       reason:
         `EIP-712 domain mismatch in requirement.extra: expected name="${EXPECTED_EIP712_NAME}" ` +
         `version="${EXPECTED_EIP712_VERSION}", got name=${JSON.stringify(name)} version=${JSON.stringify(version)} ` +
-        '(the live verify_agent_output.v2 route does not currently set paymentRequirementExtra — ' +
-        "see this file's top-of-file CRITICAL FINDING comment)",
+        "(see this file's top-of-file CRITICAL FINDING comment)",
     };
   }
   return { ok: true };
@@ -346,16 +365,63 @@ export function validateRequestBinding(): { ok: true } | { ok: false; reason: st
   if (TARGET_PATH !== EXPECTED_CAPABILITY_ROUTE) {
     return {
       ok: false,
-      reason: `request route mismatch: expected ${EXPECTED_CAPABILITY_ROUTE} (verify_agent_output.v2), got ${TARGET_PATH}`,
+      reason: `request route mismatch: expected ${EXPECTED_CAPABILITY_ROUTE} (${EXPECTED_SERVICE_ID}), got ${TARGET_PATH}`,
     };
   }
-  if (CANONICAL_REQUEST_BODY.verification_mode !== EXPECTED_VERIFICATION_MODE) {
+  if (CANONICAL_REQUEST_BODY.retrieval_mode !== EXPECTED_RETRIEVAL_MODE) {
     return {
       ok: false,
-      reason: `request mode mismatch: expected ${EXPECTED_VERIFICATION_MODE}, got ${String(CANONICAL_REQUEST_BODY.verification_mode)}`,
+      reason: `request mode mismatch: expected retrieval_mode ${EXPECTED_RETRIEVAL_MODE}, got ${String(CANONICAL_REQUEST_BODY.retrieval_mode)}`,
     };
   }
   return { ok: true };
+}
+
+/** Returns the CF-Ray only when it has the canonical edge-request-id shape, so
+ * an arbitrary/attacker-controlled header value can never reach the output. */
+export function safeCfRay(res: Pick<Response, 'headers'>): string | undefined {
+  const value = res.headers.get('cf-ray');
+  return typeof value === 'string' && /^[0-9a-f]{16}-[A-Za-z]{3}$/.test(value) ? value : undefined;
+}
+
+/** Identity banner printed by the live test BEFORE any network call, so the
+ * operator can see exactly what this invocation is configured to pay for.
+ * Contains only frozen public constants -- no credentials, no payment material. */
+export function describeConfiguredTarget(): Record<string, string> {
+  return {
+    harness: 'first-paid-e2e',
+    service: EXPECTED_SERVICE_ID,
+    mode: EXPECTED_RETRIEVAL_MODE,
+    route: TARGET_PATH,
+    amount_atomic: EXPECTED_AMOUNT_ATOMIC,
+    price_usd: String(SERVICE_PAYMENT_USD),
+    candidate_version: CANDIDATE_VERSION_ID,
+  };
+}
+
+/** Truthful execution observation for the governed 200 response.
+ *
+ * The 200 body is the signed verification receipt (SUN-1222C), which has no
+ * `result_class`: it carries `receipt_id`, `decision`, `service_id`, etc.
+ * (`verification_mode` there is the verifier's mode, not the retrieval mode).
+ * Execution is observed only when the body is an object that is a governed
+ * receipt for THIS route's service. The legacy `result_class` envelope (the
+ * request-local recovery path) is still recognized. Anything else -- failure
+ * bodies, malformed/non-object bodies, another service's receipt -- is
+ * `false`. The decision VALUE is deliberately not inspected: a `fail`
+ * decision still means execution ran. */
+export function observeServiceExecution(body: unknown): boolean {
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) return false;
+  const b = body as Record<string, unknown>;
+  if (b.service_id !== undefined && b.service_id !== EXPECTED_SERVICE_ID) return false;
+  if (typeof b.result_class === 'string' && b.result_class.length > 0) return true;
+  return (
+    b.service_id === EXPECTED_SERVICE_ID &&
+    typeof b.receipt_id === 'string' &&
+    b.receipt_id.length > 0 &&
+    typeof b.decision === 'string' &&
+    b.decision.length > 0
+  );
 }
 
 /** Fail-closed quote binding: the fresh challenge must carry a quote_id in the
@@ -429,6 +495,8 @@ export async function runFirstPaidE2E(
       http_status: challengeRes.status,
     });
   }
+
+  const cfRayChallenge = safeCfRay(challengeRes);
 
   // ---- 2. decode PAYMENT-REQUIRED via the canonical codec only. ----
   const headerValue = challengeRes.headers.get('PAYMENT-REQUIRED') ?? '';
@@ -561,13 +629,14 @@ export async function runFirstPaidE2E(
       `network error after submission: ${String(err)}`,
       {
         submission_result: 'ambiguous',
+        ...(cfRayChallenge ? { cf_ray_challenge: cfRayChallenge } : {}),
       }
     );
   }
   stage = 'PAID_REQUEST_SUBMITTED';
 
   const submissionResult = classifySubmissionOutcome(paidRes.status);
-  let serviceExecutionObserved: boolean | undefined;
+  const cfRayPaid = safeCfRay(paidRes);
   let settlementObserved: boolean | undefined;
   let transactionHash: string | undefined;
   let receiptId: string | undefined;
@@ -579,8 +648,12 @@ export async function runFirstPaidE2E(
     responseBody = undefined;
   }
 
+  // Client-side observation only: "not observed" for any non-success response,
+  // which is not a claim about what the server did (see observeServiceExecution).
+  const serviceExecutionObserved =
+    submissionResult === 'success' && observeServiceExecution(responseBody);
+
   if (submissionResult === 'success') {
-    serviceExecutionObserved = responseBody?.result_class !== undefined;
     receiptId = typeof responseBody?.receipt_id === 'string' ? responseBody.receipt_id : undefined;
     const settleHeader = paidRes.headers.get('PAYMENT-RESPONSE');
     if (settleHeader) {
@@ -608,12 +681,12 @@ export async function runFirstPaidE2E(
       paid_request_submitted: true,
       submission_result: submissionResult,
       http_status: paidRes.status,
-      ...(serviceExecutionObserved !== undefined
-        ? { service_execution_observed: serviceExecutionObserved }
-        : {}),
+      service_execution_observed: serviceExecutionObserved,
       ...(settlementObserved !== undefined ? { settlement_observed: settlementObserved } : {}),
       ...(transactionHash ? { transaction_hash: transactionHash } : {}),
       ...(receiptId ? { receipt_id: receiptId } : {}),
+      ...(cfRayChallenge ? { cf_ray_challenge: cfRayChallenge } : {}),
+      ...(cfRayPaid ? { cf_ray_paid: cfRayPaid } : {}),
     },
   };
 }
@@ -862,14 +935,14 @@ describe('SUN-1220J first-paid-e2e local client (unit, always run)', () => {
   });
 
   it('H. wrong amount is rejected before signing (no ≤ tolerance)', async () => {
-    const challenge = validChallenge(validRequirement({ amount: '17001' }));
+    const challenge = validChallenge(validRequirement({ amount: '8001' }));
     const fetchImpl = twoStepFetch(challenge, jsonResponse(200, {}));
     const { result, counters } = await runFirstPaidE2E(baseDeps({ fetchImpl }));
     expect(result.ok).toBe(false);
     expect(result.failure_reason).toMatch(/amount mismatch/);
     expect(counters.paymentSignTypedDataCalls).toBe(0);
     // Also prove a smaller amount is rejected too — no tolerance either way.
-    const smaller = validChallenge(validRequirement({ amount: '16999' }));
+    const smaller = validChallenge(validRequirement({ amount: '7999' }));
     const fetchImpl2 = twoStepFetch(smaller, jsonResponse(200, {}));
     const { result: result2 } = await runFirstPaidE2E(baseDeps({ fetchImpl: fetchImpl2 }));
     expect(result2.ok).toBe(false);
@@ -910,7 +983,7 @@ describe('SUN-1220J first-paid-e2e local client (unit, always run)', () => {
     const result = checkExposureWithinCap();
     expect(result.ok).toBe(true); // sanity: today's fixed constants pass.
     // Direct unit proof the comparison itself is a real "> cap" check.
-    expect(0.017 + 0 > 0.25).toBe(false);
+    expect(0.008 + 0 > 0.25).toBe(false);
     expect(0.3 > 0.25).toBe(true);
   });
 
@@ -1110,7 +1183,11 @@ describe('SUN-1220J first-paid-e2e local client (unit, always run)', () => {
     );
     const paidRes = jsonResponse(
       200,
-      { result_class: 'success', receipt_id: 'receipt_xyz' },
+      {
+        service_id: EXPECTED_SERVICE_ID,
+        decision: 'pass',
+        receipt_id: 'receipt_xyz',
+      },
       { 'PAYMENT-RESPONSE': settleHeaderValue }
     );
     const fetchImpl = twoStepFetch(validChallenge(), paidRes);
@@ -1168,16 +1245,11 @@ describe('SUN-1220J first-paid-e2e local client (unit, always run)', () => {
   it('AC/AD. the target URL, body, amount, payTo, network, and buyer are fixed module constants, not parameters', () => {
     expect(TARGET_URL).toBe(`${WORKER_ORIGIN}${TARGET_PATH}`);
     expect(CANONICAL_REQUEST_BODY).toEqual({
-      verification_contract: {
-        claims: [{ claim_id: 'total', predicate: 'equals', expected_value: 42 }],
-        deterministic_requirements: [],
-      },
-      candidate_output: { total: 42 },
-      required_schema: {},
-      verification_mode: 'standard',
+      target_url: 'https://example.com/',
+      retrieval_mode: 'direct',
     });
-    expect(EXPECTED_AMOUNT_ATOMIC).toBe('17000');
-    expect(SERVICE_PAYMENT_USD).toBe(0.017);
+    expect(EXPECTED_AMOUNT_ATOMIC).toBe('8000');
+    expect(SERVICE_PAYMENT_USD).toBe(0.008);
     expect(EXPECTED_PAYTO).toBe('0x7f44a2dd237938F18632d4CcA40f4c690295E6E1');
     expect(EXPECTED_NETWORK).toBe('eip155:8453');
     expect(EXPECTED_BUYER).toBe('0x516F57e1fB800ccEB2E70C42607Fb93E2abEcB99');
@@ -1219,24 +1291,128 @@ describe('SUN-1220J first-paid-e2e local client (unit, always run)', () => {
     expect(CANDIDATE_VERSION_ID).not.toBe('2b44db89-fd95-4b6e-8449-8b7a1b4c51de');
   });
 
-  it('request binding: route is verify_agent_output.v2 and mode is standard, checked before any network call', async () => {
+  it('request binding: route is web_context_verified.v2 and retrieval mode is direct, checked before any network call', async () => {
     expect(validateRequestBinding()).toEqual({ ok: true });
-    expect(EXPECTED_CAPABILITY_ROUTE).toBe('/v2/verify/agent-output');
-    expect(TARGET_PATH).toBe('/v2/verify/agent-output');
-    expect(CANONICAL_REQUEST_BODY.verification_mode).toBe('standard');
-    expect(EXPECTED_VERIFICATION_MODE).toBe('standard');
-    // The paid/unpaid requests actually sent carry exactly that route and mode.
+    expect(EXPECTED_CAPABILITY_ROUTE).toBe('/v2/web/context');
+    expect(TARGET_PATH).toBe('/v2/web/context');
+    expect(EXPECTED_SERVICE_ID).toBe('web_context_verified.v2');
+    expect(CANONICAL_REQUEST_BODY.retrieval_mode).toBe('direct');
+    expect(EXPECTED_RETRIEVAL_MODE).toBe('direct');
+    // The paid/unpaid requests actually sent carry exactly that route and mode
+    // -- never the verify route, never a rendered/other retrieval mode.
     const fetchImpl = twoStepFetch(
       validChallenge(),
       jsonResponse(200, { result_class: 'success' })
     );
     await runFirstPaidE2E(baseDeps({ fetchImpl }));
     for (const call of (fetchImpl as ReturnType<typeof vi.fn>).mock.calls) {
-      expect(new URL(call[0] as string).pathname).toBe('/v2/verify/agent-output');
-      expect(JSON.parse((call[1] as RequestInit).body as string).verification_mode).toBe(
-        'standard'
-      );
+      expect(new URL(call[0] as string).pathname).toBe('/v2/web/context');
+      const sent = JSON.parse((call[1] as RequestInit).body as string);
+      expect(sent.retrieval_mode).toBe('direct');
+      expect(sent.verification_mode).toBeUndefined();
     }
+  });
+
+  it('this harness can no longer target verify-standard (route, price and body are web-direct only)', () => {
+    expect(TARGET_URL.includes('/v2/verify/')).toBe(false);
+    expect(EXPECTED_AMOUNT_ATOMIC).not.toBe('17000');
+    expect(Object.keys(CANONICAL_REQUEST_BODY).sort()).toEqual(['retrieval_mode', 'target_url']);
+  });
+
+  it('the configured-target banner identifies web-direct and contains no secret material', () => {
+    expect(describeConfiguredTarget()).toEqual({
+      harness: 'first-paid-e2e',
+      service: 'web_context_verified.v2',
+      mode: 'direct',
+      route: '/v2/web/context',
+      amount_atomic: '8000',
+      price_usd: '0.008',
+      candidate_version: '0456f44c-1c28-4919-9fdb-ab4673bac8f6',
+    });
+    expect(JSON.stringify(describeConfiguredTarget())).not.toMatch(/secret|signature|key|0x/i);
+  });
+
+  it('service_execution_observed: the governed successful receipt body is observed as true (formerly a false negative)', async () => {
+    // Exact key set of the persisted governed 200 receipt (values benign).
+    const receipt = {
+      receipt_version: '1',
+      job_id: 'job_test',
+      request_id: 'req_test',
+      service_id: EXPECTED_SERVICE_ID,
+      service_version: 'v2',
+      contract_release: '2.0.0',
+      pcc_schema_release: '2.0.0',
+      pcc_schema_hash: 'sha256:x',
+      input_hash: 'sha256:x',
+      output_hash: 'sha256:x',
+      evidence_hash: 'sha256:x',
+      policy_hash: 'sha256:x',
+      verifier_set_hash: 'sha256:x',
+      decision: 'pass',
+      completeness: 1,
+      verification_mode: 'standard',
+      limitations: [],
+      signing_key_id: 'kid_test',
+      canonicalization_algorithm: 'RFC8785-JCS',
+      signature_algorithm: 'Ed25519',
+      issued_at: '2026-09-20T00:00:00.000Z',
+      receipt_id: 'rcpt_test',
+      signature: 'sig',
+    };
+    expect((receipt as Record<string, unknown>).result_class).toBeUndefined();
+    expect(observeServiceExecution(receipt)).toBe(true);
+    const fetchImpl = twoStepFetch(validChallenge(), jsonResponse(200, receipt));
+    const { result } = await runFirstPaidE2E(baseDeps({ fetchImpl }));
+    expect(result.ok).toBe(true);
+    expect(result.service_execution_observed).toBe(true);
+    expect(result.receipt_id).toBe('rcpt_test');
+  });
+
+  it('service_execution_observed: failure, malformed and wrong-service responses are observed as false', async () => {
+    expect(observeServiceExecution({ error: 'settlement_rejected' })).toBe(false);
+    expect(observeServiceExecution({ receipt_id: 'r', decision: 'pass' })).toBe(false); // no service_id
+    expect(observeServiceExecution({ service_id: EXPECTED_SERVICE_ID })).toBe(false); // no receipt/decision
+    expect(
+      observeServiceExecution({
+        service_id: 'verify_agent_output.v2', // another capability's receipt
+        receipt_id: 'r',
+        decision: 'pass',
+      })
+    ).toBe(false);
+    for (const malformed of [null, undefined, 'text', 42, true, [], [{ receipt_id: 'r' }]]) {
+      expect(observeServiceExecution(malformed)).toBe(false);
+    }
+    // Orchestration: a 402 rejection, a 5xx and an unparseable 200 never report observed.
+    for (const paid of [
+      jsonResponse(402, { error: 'settlement_rejected' }),
+      jsonResponse(503, { error: 'unavailable' }),
+      new Response('not json', { status: 200 }),
+    ]) {
+      const fetchImpl = twoStepFetch(validChallenge(), paid);
+      const { result } = await runFirstPaidE2E(baseDeps({ fetchImpl }));
+      expect(result.service_execution_observed).toBe(false);
+    }
+  });
+
+  it('cf-ray: challenge and paid CF-Rays are surfaced only when well-formed, never other header text', async () => {
+    let call = 0;
+    const fetchImpl = vi.fn(async () => {
+      call += 1;
+      if (call === 1) {
+        const r = challengeResponse(validChallenge());
+        r.headers.set('cf-ray', '9a1b2c3d4e5f6071-ATL');
+        return r;
+      }
+      return jsonResponse(200, { result_class: 'success' }, { 'cf-ray': '0123456789abcdef-IAD' });
+    });
+    const { result } = await runFirstPaidE2E(baseDeps({ fetchImpl }));
+    expect(result.cf_ray_challenge).toBe('9a1b2c3d4e5f6071-ATL');
+    expect(result.cf_ray_paid).toBe('0123456789abcdef-IAD');
+    expect(safeCfRay(new Response(null, { headers: { 'cf-ray': 'not a ray; drop table' } }))).toBe(
+      undefined
+    );
+    expect(safeCfRay(new Response(null))).toBeUndefined();
+    expect(JSON.stringify(result)).not.toMatch(/signature|authorization/i);
   });
 
   it('quote binding: a challenge with no quote_id in accepts[0].extra never signs', async () => {
@@ -1340,6 +1516,8 @@ describe.skipIf(!process.env[RUN_LOCAL_FIRST_PAID_E2E_ENV_VAR])(
       if (!apiKeyId || !apiKeySecret || !walletSecret) {
         throw new Error('CDP_API_KEY_ID / CDP_API_KEY_SECRET / CDP_WALLET_SECRET must all be set');
       }
+      // eslint-disable-next-line no-console -- configured-target banner (public constants only), printed before any network call.
+      console.log(JSON.stringify(describeConfiguredTarget()));
       const deps = buildRealDeps({ apiKeyId, apiKeySecret, walletSecret });
       const { result } = await runFirstPaidE2E(deps);
       // eslint-disable-next-line no-console -- the one authorized, sanitized output surface.
