@@ -26,6 +26,13 @@
 import { generateJwt } from '@coinbase/cdp-sdk/auth';
 
 import {
+  classifyIdShape,
+  classifySecretShape,
+  isQuoted,
+  type IdShape,
+  type SecretShape,
+} from '../src/control-plane/evidence/cdp-credential-shape';
+import {
   CDP_JWT_SUBREASONS,
   classifyCdpJwtFailure,
 } from '../src/control-plane/evidence/cdp-jwt-failure';
@@ -52,15 +59,7 @@ export interface ValidatorDeps {
   mintJwt: MintJwt;
 }
 
-export type IdShape = 'EMPTY' | 'UUID' | 'ORG_PATH' | 'OTHER';
-export type SecretShape =
-  | 'EMPTY'
-  | 'PEM_MULTILINE'
-  | 'PEM_ESCAPED_NEWLINES'
-  | 'PEM_SINGLE_LINE'
-  | 'BASE64_64_BYTES'
-  | 'BASE64_OTHER_LENGTH'
-  | 'OTHER';
+export type { IdShape, SecretShape };
 export type KeyType = 'EC_PEM' | 'ED25519' | 'UNKNOWN';
 export type FailureClass =
   | 'NONE'
@@ -80,36 +79,6 @@ export interface ValidationResult {
   keyType: KeyType;
   jwtMint: 'PASS' | 'FAIL';
   failureClass: FailureClass;
-}
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const ORG_PATH = /^organizations\/[^/\s]+\/apiKeys\/[^/\s]+$/;
-const BASE64 = /^[A-Za-z0-9+/]+={0,2}$/;
-
-function isQuoted(value: string): boolean {
-  const t = value.trim();
-  return t.length >= 2 && (t[0] === '"' || t[0] === "'") && t[t.length - 1] === t[0];
-}
-
-export function classifyIdShape(id: string): IdShape {
-  if (id.length === 0) return 'EMPTY';
-  if (UUID.test(id)) return 'UUID';
-  if (ORG_PATH.test(id)) return 'ORG_PATH';
-  return 'OTHER';
-}
-
-/** Shape of the bytes the SDK will actually receive. Reads the value only to
- * derive an enum; the value itself never leaves this function. */
-export function classifySecretShape(secret: string): SecretShape {
-  if (secret.length === 0) return 'EMPTY';
-  if (secret.includes('-----BEGIN')) {
-    if (/[\r\n]/.test(secret)) return 'PEM_MULTILINE';
-    return secret.includes('\\n') ? 'PEM_ESCAPED_NEWLINES' : 'PEM_SINGLE_LINE';
-  }
-  if (BASE64.test(secret)) {
-    return Buffer.from(secret, 'base64').length === 64 ? 'BASE64_64_BYTES' : 'BASE64_OTHER_LENGTH';
-  }
-  return 'OTHER';
 }
 
 function keyTypeFromJwt(jwt: string): KeyType {
@@ -194,6 +163,8 @@ export function formatReport(result: ValidationResult): string[] {
   // Belt and braces: only enum-shaped lines can ever reach a stream.
   return lines.filter((line) => LINE.test(line));
 }
+
+export { classifyIdShape, classifySecretShape };
 
 export const INTERNAL_ERROR_REPORT = [
   'CDP_CREDENTIAL_FORMAT=INVALID',

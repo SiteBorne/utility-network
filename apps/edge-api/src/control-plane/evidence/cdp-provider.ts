@@ -34,7 +34,21 @@ import {
   FacilitatorAuthStageError,
 } from './cdp-facilitator-failure';
 
+import {
+  runJwtDiagnostic,
+  sanitizeJwtDiagnostic,
+  type JwtDiagnosticDeps,
+} from './cdp-jwt-diagnostic';
+
 const CDP_VERIFIER_IDENTITY = 'cdp:facilitator';
+
+/** Diagnostic-canary-only hook. When supplied, the local JWT controls run on a
+ * failed verification; when absent (every ordinary deployment) nothing runs. */
+export interface CdpJwtDiagnosticOptions {
+  apiKeyId: unknown;
+  apiKeySecret: unknown;
+  deps: JwtDiagnosticDeps;
+}
 
 function errorRecord(error: unknown): Record<string, unknown> | undefined {
   return typeof error === 'object' && error !== null
@@ -83,8 +97,32 @@ export class CdpPaymentEvidenceProvider implements PaymentEvidenceProvider {
   readonly providerKind = 'external' as const;
   private readonly verifyFacilitator: HTTPFacilitatorClient;
 
-  constructor(private readonly facilitator: HTTPFacilitatorClient) {
+  constructor(
+    private readonly facilitator: HTTPFacilitatorClient,
+    private readonly jwtDiagnostic?: CdpJwtDiagnosticOptions
+  ) {
     this.verifyFacilitator = tagAuthStage(facilitator);
+  }
+
+  /** Never throws; returns `undefined` unless the diagnostic flag wired it in. */
+  private async diagnose(
+    authStageFailure: { thrown: unknown } | undefined
+  ): Promise<Record<string, string> | undefined> {
+    if (!this.jwtDiagnostic) return undefined;
+    try {
+      return sanitizeJwtDiagnostic(
+        await runJwtDiagnostic(
+          {
+            apiKeyId: this.jwtDiagnostic.apiKeyId,
+            apiKeySecret: this.jwtDiagnostic.apiKeySecret,
+            authStageFailure,
+          },
+          this.jwtDiagnostic.deps
+        )
+      );
+    } catch {
+      return undefined;
+    }
   }
 
   /**
@@ -109,6 +147,9 @@ export class CdpPaymentEvidenceProvider implements PaymentEvidenceProvider {
       );
     } catch (error) {
       const classification = classifyFacilitatorVerifyFailure(error);
+      const jwtDiagnostic = await this.diagnose(
+        error instanceof FacilitatorAuthStageError ? { thrown: error.cause } : undefined
+      );
       const record = errorRecord(error);
       const invalidReason = safeReasonCode(record?.invalidReason);
       const payer = safePayer(record?.payer);
@@ -145,6 +186,7 @@ export class CdpPaymentEvidenceProvider implements PaymentEvidenceProvider {
         ...(classification.jwt_subreason !== undefined
           ? { jwt_subreason: classification.jwt_subreason }
           : {}),
+        ...(jwtDiagnostic ? { jwt_diagnostic: jwtDiagnostic } : {}),
       };
     }
     const raw_evidence_hash = await hashPaymentObject({
@@ -156,6 +198,7 @@ export class CdpPaymentEvidenceProvider implements PaymentEvidenceProvider {
       invalidReason: response.invalidReason ?? null,
       payer: response.payer ?? null,
     });
+    const answeredDiagnostic = response.isValid ? undefined : await this.diagnose(undefined);
     return {
       x402_version: 2,
       scheme: context.scheme,
@@ -175,6 +218,7 @@ export class CdpPaymentEvidenceProvider implements PaymentEvidenceProvider {
         : {
             subreason: FACILITATOR_ANSWERED_INVALID.subreason,
             retryability: FACILITATOR_ANSWERED_INVALID.retryability,
+            ...(answeredDiagnostic ? { jwt_diagnostic: answeredDiagnostic } : {}),
           }),
     };
   }

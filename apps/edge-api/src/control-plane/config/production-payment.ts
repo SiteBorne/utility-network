@@ -27,7 +27,7 @@ import {
   type ProductionAuthorizationInput,
   type SiteborneServiceId,
 } from '@siteborne/protocol-x402';
-import { CdpPaymentEvidenceProvider } from '../evidence/cdp-provider';
+import { CdpPaymentEvidenceProvider, type CdpJwtDiagnosticOptions } from '../evidence/cdp-provider';
 import type { Env } from './env';
 
 /** Fails closed: any value other than the exact literal `'production'`
@@ -538,6 +538,8 @@ export interface ProductionCdpProviderDependencies {
    * `beforeAll`, before any credential validation step) — only
    * `.verify()`/`.settle()` do. */
   createFacilitatorClient: () => HTTPFacilitatorClient;
+  /** Diagnostic-canary-only; absent everywhere else. */
+  jwtDiagnostic?: CdpJwtDiagnosticOptions;
 }
 
 export interface ResolvedCdpEvidence {
@@ -583,6 +585,6 @@ export async function resolveProductionCdpEvidenceProvider(
   const facilitator = deps.createFacilitatorClient();
   return {
     evidenceMode: 'production',
-    evidenceProvider: new CdpPaymentEvidenceProvider(facilitator),
+    evidenceProvider: new CdpPaymentEvidenceProvider(facilitator, deps.jwtDiagnostic),
   };
 }

@@ -62,6 +62,8 @@ export interface ExternalVerificationEvidence {
   transport_status?: number;
   retryability?: string;
   jwt_subreason?: string;
+  /** Closed-vocabulary same-invocation JWT control results (diagnostic canary only). */
+  jwt_diagnostic?: Record<string, string>;
 }
 
 export interface ExternalSettlementEvidence {

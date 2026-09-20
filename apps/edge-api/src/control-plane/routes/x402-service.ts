@@ -131,6 +131,7 @@ function verificationFailureObservability(evidence: {
   transport_status?: number;
   retryability?: string;
   jwt_subreason?: string;
+  jwt_diagnostic?: Record<string, string>;
 }): Record<string, string | number> {
   const out: Record<string, string | number> = {};
   const reason = safeAuditCode(evidence.reason);
@@ -149,6 +150,13 @@ function verificationFailureObservability(evidence: {
   }
   if (retryability) out.verification_retryability = retryability;
   if (jwtSubreason) out.verification_jwt_subreason = jwtSubreason;
+  const diag = evidence.jwt_diagnostic;
+  if (diag && typeof diag === 'object') {
+    for (const [key, value] of Object.entries(diag)) {
+      const code = safeAuditCode(value);
+      if (/^[a-z0-9_]{1,64}$/.test(key) && code) out[`jwt_diag_${key}`] = code;
+    }
+  }
   return out;
 }
 

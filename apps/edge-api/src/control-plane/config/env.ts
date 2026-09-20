@@ -121,6 +121,11 @@ export interface Env {
    * today) means the route is not reachable, matching every other
    * paid-route gate's fail-closed convention. */
   VERIFY_V2_CDP_ROUTE_ENABLED?: string;
+  /** FIRST-PAID-VERIFY-JWT-RUNTIME-VS-BOUND-SECRET-DIAGNOSTIC-01 — non-secret,
+   * diagnostic-canary-only. Exact literal `'true'` enables same-invocation local
+   * JWT controls on a FAILED verify_agent_output.v2 verification. Unset in every
+   * ordinary deployment. */
+  JWT_RUNTIME_DIAGNOSTIC_ENABLED?: string;
   /** SUN-1221C — the route-specific activation gate for
    * `web_context_verified.v2` / CDP, mirroring
    * `VERIFY_V2_CDP_ROUTE_ENABLED` exactly: required IN ADDITION TO

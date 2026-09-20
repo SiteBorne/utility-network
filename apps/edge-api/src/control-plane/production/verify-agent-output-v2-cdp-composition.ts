@@ -35,6 +35,7 @@
  */
 import type { D1Database } from '@cloudflare/workers-types';
 import { createCdpFacilitatorClient } from '@coinbase/cdp-sdk/x402';
+import { buildRealJwtDiagnosticDeps } from '../evidence/cdp-jwt-diagnostic-sdk';
 import {
   BUNDLED_SERVICE_INPUT_SCHEMAS,
   assertPreproductionNetwork,
@@ -69,6 +70,8 @@ export interface VerifyAgentOutputV2CdpProductionEnv {
   PRODUCTION_ENABLED?: string;
   HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP?: string;
   PRODUCTION_CDP_CREDENTIALS_APPROVED?: string;
+  /** Diagnostic-canary-only, non-secret; exact literal 'true' enables the local JWT controls. */
+  JWT_RUNTIME_DIAGNOSTIC_ENABLED?: string;
 }
 
 export interface ProductionCompositionUnavailable {
@@ -178,6 +181,15 @@ export async function buildVerifyAgentOutputV2CdpProductionRouteConfig(
             apiKeyId: env.CDP_API_KEY_ID,
             apiKeySecret: env.CDP_API_KEY_SECRET,
           }),
+        ...(env.JWT_RUNTIME_DIAGNOSTIC_ENABLED === 'true'
+          ? {
+              jwtDiagnostic: {
+                apiKeyId: env.CDP_API_KEY_ID,
+                apiKeySecret: env.CDP_API_KEY_SECRET,
+                deps: buildRealJwtDiagnosticDeps(),
+              },
+            }
+          : {}),
       }
     );
     // SUN-1218's central invariant, enforced structurally, not by an
