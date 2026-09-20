@@ -130,6 +130,7 @@ function verificationFailureObservability(evidence: {
   subreason?: string;
   transport_status?: number;
   retryability?: string;
+  jwt_subreason?: string;
 }): Record<string, string | number> {
   const out: Record<string, string | number> = {};
   const reason = safeAuditCode(evidence.reason);
@@ -137,6 +138,7 @@ function verificationFailureObservability(evidence: {
   const provider = safeAuditCode(evidence.verifier_identity);
   const subreason = safeAuditCode(evidence.subreason);
   const retryability = safeAuditCode(evidence.retryability);
+  const jwtSubreason = safeAuditCode(evidence.jwt_subreason);
   const status = evidence.transport_status;
   if (reason) out.verification_reason = reason;
   if (subreason) out.verification_subreason = subreason;
@@ -146,6 +148,7 @@ function verificationFailureObservability(evidence: {
     out.transport_status = status;
   }
   if (retryability) out.verification_retryability = retryability;
+  if (jwtSubreason) out.verification_jwt_subreason = jwtSubreason;
   return out;
 }
 

@@ -61,6 +61,7 @@ export interface ExternalVerificationEvidence {
   subreason?: string;
   transport_status?: number;
   retryability?: string;
+  jwt_subreason?: string;
 }
 
 export interface ExternalSettlementEvidence {
