@@ -10,7 +10,7 @@
  * key, NO wallet secret, NO CDP credential, and cannot be settled:
  *
  *   - `signature` is 65 zero bytes (ecrecover cannot yield an address),
- *   - `from` is the dead address (no key, no code, no USDC balance),
+ *   - `from` is a random unowned address (no key, no code, zero USDC),
  *   - the EIP-3009 transfer therefore reverts on-chain even if a facilitator
  *     mistakenly accepted it.
  *
@@ -48,7 +48,11 @@ const EXPECTED_AMOUNT = '17000';
 const EXPECTED_PAYTO = '0x7f44a2dd237938F18632d4CcA40f4c690295E6E1';
 const CONTROLLED_BUYER = '0x516F57e1fB800ccEB2E70C42607Fb93E2abEcB99';
 
-const DEAD_FROM = '0x000000000000000000000000000000000000dEaD';
+// Randomly generated 20 bytes; no key exists for it. Verified on Base
+// mainnet at authoring time: 0 USDC, 0 transactions, no code. (The
+// conventional 0x...dEaD burn address was deliberately NOT used: it holds
+// USDC, so a zero balance would not add a second layer of safety.)
+const UNOWNED_FROM = '0xb4e4d6800c1c445035d067e39b9d76dfef06f9a4';
 const SENTINEL_SIGNATURE = `0x${'00'.repeat(65)}`;
 
 const REQUEST_BODY = Object.freeze({
@@ -81,7 +85,7 @@ export function buildDiagnosticPayload(challenge: PaymentRequired): PaymentPaylo
   const inner: DiagnosticAuthorization = {
     signature: SENTINEL_SIGNATURE,
     authorization: {
-      from: DEAD_FROM,
+      from: UNOWNED_FROM,
       to: accepted.payTo,
       value: accepted.amount,
       validAfter: String(nowSeconds - 600),
@@ -104,8 +108,8 @@ export function assertDiagnosticPayloadUnspendable(payload: PaymentPayload): voi
   const inner = payload.payload as unknown as DiagnosticAuthorization;
   if (inner.signature !== SENTINEL_SIGNATURE)
     throw new Error('diagnostic signature is not the sentinel');
-  if (inner.authorization.from !== DEAD_FROM)
-    throw new Error('diagnostic from is not the dead address');
+  if (inner.authorization.from !== UNOWNED_FROM)
+    throw new Error('diagnostic from is not the unowned zero-balance address');
   const serialized = JSON.stringify(payload).toLowerCase();
   if (serialized.includes(CONTROLLED_BUYER.toLowerCase())) {
     throw new Error('diagnostic payload references the controlled buyer');
@@ -344,7 +348,7 @@ describe('facilitator diagnostic payload (mocked, zero-economic)', () => {
     ];
     const inner = paymentPayload.payload as unknown as DiagnosticAuthorization;
     expect(inner.signature).toBe(SENTINEL_SIGNATURE);
-    expect(inner.authorization.from).toBe(DEAD_FROM);
+    expect(inner.authorization.from).toBe(UNOWNED_FROM);
     expect(inner.authorization.to).toBe(MOCK_EXPECTATIONS.payTo);
     expect(inner.authorization.value).toBe(EXPECTED_AMOUNT);
     expect(paymentRequirements.amount).toBe(EXPECTED_AMOUNT);
@@ -385,7 +389,7 @@ describe('facilitator diagnostic payload (mocked, zero-economic)', () => {
   });
 
   it('an (impossible) facilitator acceptance is flagged as a critical unexpected acceptance', async () => {
-    const { fetchImpl } = await harness(async () => ({ isValid: true, payer: DEAD_FROM }));
+    const { fetchImpl } = await harness(async () => ({ isValid: true, payer: UNOWNED_FROM }));
     const outcome = await runDiagnostic(fetchImpl, 'https://diag.test', MOCK_EXPECTATIONS);
     // Whatever the downstream mock settlement does, the runner must never
     // report a facilitator-accepted diagnostic as an ordinary rejection.
