@@ -83,6 +83,20 @@ export function getAjv(): InstanceType<typeof Ajv2020> {
   }
   files.push(join(SCHEMAS_DIR, 'proof-carrying-context.schema.json'));
 
+  // RESULT-PCC-WIRE-CUTOVER-01: Release 3 is a parallel, non-default
+  // candidate. Its schemas use release-qualified $ids, so they can coexist
+  // with the active Release-2 validators without changing v1/v2 resolution.
+  const candidateSchemasDir = join(SCHEMAS_DIR, '..', 'contracts', 'releases', '3.0.0', 'schemas');
+  files.push(join(candidateSchemasDir, 'proof-carrying-context.schema.json'));
+  for (const file of [
+    'company-evidence-output.schema.json',
+    'web-context-output.schema.json',
+    'document-evidence-output.schema.json',
+    'agent-verification-output.schema.json',
+  ]) {
+    files.push(join(candidateSchemasDir, 'services', file));
+  }
+
   for (const file of files) {
     const schema = JSON.parse(readFileSync(file, 'utf-8'));
     ajv.addSchema(schema);
@@ -94,17 +108,24 @@ export function getAjv(): InstanceType<typeof Ajv2020> {
 
 /** service_id -> output schema $id, derived from schemas/MANIFEST.json's
  * naming convention (services/<name>-output.schema.json). */
-const SERVICE_ID_TO_SCHEMA_FILE: Record<string, string> = {
-  'company_evidence_graph.v1': 'company-evidence-output.schema.json',
-  'web_context_verified.v1': 'web-context-output.schema.json',
-  'document_evidence_json.v1': 'document-evidence-output.schema.json',
-  'verify_agent_output.v1': 'agent-verification-output.schema.json',
+const ACTIVE_SCHEMA_BASE = 'https://siteborne.net/schemas/services';
+const CANDIDATE_SCHEMA_BASE = 'https://utility.siteborne.net/contracts/3.0.0/schemas/services';
+
+const SERVICE_ID_TO_SCHEMA_ID: Record<string, string> = {
+  'company_evidence_graph.v1': `${ACTIVE_SCHEMA_BASE}/company-evidence-output.schema.json`,
+  'web_context_verified.v1': `${ACTIVE_SCHEMA_BASE}/web-context-output.schema.json`,
+  'document_evidence_json.v1': `${ACTIVE_SCHEMA_BASE}/document-evidence-output.schema.json`,
+  'verify_agent_output.v1': `${ACTIVE_SCHEMA_BASE}/agent-verification-output.schema.json`,
   // SUN-1000 checkpoint 1M: v2 shares the identical output schema file —
   // output semantics are unchanged (checkpoint 1L section 7).
-  'company_evidence_graph.v2': 'company-evidence-output.schema.json',
-  'web_context_verified.v2': 'web-context-output.schema.json',
-  'document_evidence_json.v2': 'document-evidence-output.schema.json',
-  'verify_agent_output.v2': 'agent-verification-output.schema.json',
+  'company_evidence_graph.v2': `${ACTIVE_SCHEMA_BASE}/company-evidence-output.schema.json`,
+  'web_context_verified.v2': `${ACTIVE_SCHEMA_BASE}/web-context-output.schema.json`,
+  'document_evidence_json.v2': `${ACTIVE_SCHEMA_BASE}/document-evidence-output.schema.json`,
+  'verify_agent_output.v2': `${ACTIVE_SCHEMA_BASE}/agent-verification-output.schema.json`,
+  'company_evidence_graph.v3': `${CANDIDATE_SCHEMA_BASE}/company-evidence-output.schema.json`,
+  'web_context_verified.v3': `${CANDIDATE_SCHEMA_BASE}/web-context-output.schema.json`,
+  'document_evidence_json.v3': `${CANDIDATE_SCHEMA_BASE}/document-evidence-output.schema.json`,
+  'verify_agent_output.v3': `${CANDIDATE_SCHEMA_BASE}/agent-verification-output.schema.json`,
 };
 
 /** SUN-1200 checkpoint F (P0-A): every one of this repository's schema
@@ -117,11 +138,9 @@ const SERVICE_ID_TO_SCHEMA_FILE: Record<string, string> = {
  * future schema that broke the convention would fail that test rather
  * than silently drift. */
 export function getOutputSchemaId(serviceId: string): string | null {
-  const file = SERVICE_ID_TO_SCHEMA_FILE[serviceId];
-  if (!file) return null;
-  return `https://siteborne.net/schemas/services/${file}`;
+  return SERVICE_ID_TO_SCHEMA_ID[serviceId] ?? null;
 }
 
 export function knownServiceIds(): string[] {
-  return Object.keys(SERVICE_ID_TO_SCHEMA_FILE);
+  return Object.keys(SERVICE_ID_TO_SCHEMA_ID);
 }

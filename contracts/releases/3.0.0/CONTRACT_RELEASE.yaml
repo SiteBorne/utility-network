@@ -1,0 +1,68 @@
+release:
+  name: SITEBORNE Service Contracts
+  version: 3.0.0
+  status: normative
+  frozen_at: 2026-09-21T19:00:00Z
+  source_commit: pending
+  parent_release: 2.0.0
+  classification: major
+  reason: "RESULT-PCC-WIRE-CUTOVER-01 parallel candidate: PCC 2.0.0 requires a governed self-verifying
+    proof and changes signature, document-hash, and successful-result semantics. Service Contract
+    3.0.0 introduces four non-default .v3 identities while preserving Release 2."
+pcc_dependency:
+  schema_release: 2.0.0
+  document_version: 2.0.0
+  schema_sha256: 71f3d09dd6ed0071a2f16c0e219e308de634a3ec3e63b02a4e9ce49302fa3a29
+services:
+  - service_id: company_evidence_graph.v3
+    contract_version: 3.0.0
+    input_schema: schemas/services/company-evidence-input.schema.json
+    input_schema_sha256: 8d9a6c432b019e24a2df4d48dd93424a8782febb49c0c88f7cf9208cf0204dd7
+    output_schema: schemas/services/company-evidence-output.schema.json
+    output_schema_sha256: 988abf9957a2a4cba6ce1227120c9601936b4d2a5078f730ad81d419249ed90a
+  - service_id: web_context_verified.v3
+    contract_version: 3.0.0
+    input_schema: schemas/services/web-context-input.schema.json
+    input_schema_sha256: d3b0762020d4cc1d1e846960ed978cf1237b1741f90213adabe8ed931c2845ea
+    output_schema: schemas/services/web-context-output.schema.json
+    output_schema_sha256: 768455f58511cc7df7ec5d5e5f9767b6ce6ad991a84a0f39f8a4faa7f6189280
+  - service_id: document_evidence_json.v3
+    contract_version: 3.0.0
+    input_schema: schemas/services/document-evidence-input.schema.json
+    input_schema_sha256: 19e64c92f088ed8b7a45eef561c5426bb59ce5cc3576b85482aded4f620e57ba
+    output_schema: schemas/services/document-evidence-output.schema.json
+    output_schema_sha256: e47d7d85b92441feff3c9c98ae058eaeb68b1cc6c7ff852be7e5af16c787da49
+  - service_id: verify_agent_output.v3
+    contract_version: 3.0.0
+    input_schema: schemas/services/agent-verification-input.schema.json
+    input_schema_sha256: 66d459905cd1a18b57ccb3fc40043a4e4c1a77bc7dba40676fcaf674cacb0f34
+    output_schema: schemas/services/agent-verification-output.schema.json
+    output_schema_sha256: 0aa731ce6c6761e33fd77d5adaf55debf385fad7fe6110225878a1d6e02144c9
+common_schemas:
+  - path: schemas/common/money.schema.json
+    sha256: 4567307ae24362cb33c1078072cd4d409eb14c0a2783e9941c1d0ec0e7d4b90f
+  - path: schemas/common/request-envelope.schema.json
+    sha256: c3c50ca6e7bea34236e2ed92004f61d69acf52b208ba6d38e072a46900d817a9
+  - path: schemas/common/quote-request.schema.json
+    sha256: 6db5dcb73b5a40ff31bed8c0ce2acd045a785dd64a3bacaec05ede9d26a426bc
+  - path: schemas/common/quote-response.schema.json
+    sha256: 0fcc1ef9a79fa4548a47af3ba677c3cc260d68dffe4a6c2e53f9cc60d3601b11
+  - path: schemas/common/structured-error.schema.json
+    sha256: aa968374d206ff5e8264dad3eca25be6b27e8bd849065843fa8488732c593d98
+  - path: schemas/common/service-metadata.schema.json
+    sha256: 97f514fab559fd067673dad2b3aa546d47beb393160b40d4d1a34956158b03bb
+  - path: schemas/common/async-job.schema.json
+    sha256: 2979350890d8b2376cf72fabbddbdbfe35182e693eb043d9ca20aa6fe86af994
+  - path: schemas/common/pagination.schema.json
+    sha256: a966b1d885ecb10d03d35f843bce625e60ca2ab6798040e178baa45ab5db3e31
+  - path: schemas/common/authorized-artifact-reference.schema.json
+    sha256: 772db35bb1d19bcee3cfbbfde41da88f77bb10b9afeabe505a15e6a0b25655ac
+artifacts:
+  typescript_models_manifest: packages/contracts/generated/typescript
+  python_models_manifest: packages/contracts/generated/python
+  openapi_manifest: packages/contracts/generated/openapi
+  service_metadata_manifest: registry/services
+compatibility:
+  policy_version: contract-compatibility-v1
+  baseline_path: contracts/releases/2.0.0
+  strict_mode: true

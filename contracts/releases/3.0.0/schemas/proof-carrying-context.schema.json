@@ -1,0 +1,1094 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://utility.siteborne.net/contracts/3.0.0/schemas/proof-carrying-context.schema.json",
+  "title": "Proof-Carrying Context (PCC) v2.0.0",
+  "description": "Normative PCC 2.0.0 candidate. Requires a governed, reconstructible self-verifying receipt proof at extensions[\"net.siteborne.verification-proof.v1\"]. The full PCC is the successful result root.",
+  "pcc_version": "2.0.0",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "pcc_version",
+    "job_id",
+    "contract",
+    "subject",
+    "claims",
+    "evidence",
+    "completeness",
+    "provenance",
+    "verification",
+    "receipt"
+  ],
+  "definitions": {
+    "pcc_version": {
+      "type": "string",
+      "const": "2.0.0",
+      "description": "PCC specification version"
+    },
+    "job_id": {
+      "type": "string",
+      "pattern": "^job_[a-z0-9]{24}$",
+      "description": "Unique job identifier"
+    },
+    "hash": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "description": "SHA-256 hash with algorithm tag"
+    },
+    "timestamp_rfc3339": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,6})?Z$",
+      "description": "RFC 3339 UTC timestamp with Z suffix, normalized fractional seconds"
+    },
+    "decimal_string": {
+      "type": "string",
+      "pattern": "^(0|[1-9]\\d*)(\\.\\d+)?$",
+      "description": "Non-negative decimal string, no scientific notation, no leading zeros except single zero"
+    },
+    "currency": {
+      "type": "string",
+      "enum": ["USD", "USDC"],
+      "description": "Permitted currencies"
+    },
+    "service_id": {
+      "type": "string",
+      "enum": [
+        "company_evidence_graph.v1",
+        "web_context_verified.v1",
+        "document_evidence_json.v1",
+        "verify_agent_output.v1",
+        "company_evidence_graph.v2",
+        "web_context_verified.v2",
+        "document_evidence_json.v2",
+        "verify_agent_output.v2",
+        "company_evidence_graph.v3",
+        "web_context_verified.v3",
+        "document_evidence_json.v3",
+        "verify_agent_output.v3"
+      ],
+      "description": "Service identifier"
+    },
+    "service_version": {
+      "type": "string",
+      "pattern": "^v\\d+(\\.\\d+)*$",
+      "description": "Service version"
+    },
+    "quote_id": {
+      "type": "string",
+      "pattern": "^qte_[a-z0-9]{24}$",
+      "description": "Quote identifier"
+    },
+    "claim_id": {
+      "type": "string",
+      "pattern": "^clm_[a-z0-9]{24}$",
+      "description": "Claim identifier"
+    },
+    "evidence_id": {
+      "type": "string",
+      "pattern": "^evd_[a-z0-9]{24}$",
+      "description": "Evidence identifier"
+    },
+    "policy_id": {
+      "type": "string",
+      "pattern": "^pol_[a-z0-9]{24}$",
+      "description": "Policy identifier"
+    },
+    "key_id": {
+      "type": "string",
+      "pattern": "^kid_[a-z0-9]{24}$",
+      "description": "Key identifier"
+    },
+    "idempotency_key": {
+      "type": "string",
+      "pattern": "^idk_[a-z0-9]{24}$",
+      "description": "Idempotency key"
+    },
+    "contract_mode": {
+      "type": "string",
+      "enum": ["paid", "benchmark", "offline_verification"],
+      "description": "Contract mode determines required fields"
+    },
+    "subject_type": {
+      "type": "string",
+      "enum": ["organization", "person", "document", "webpage", "other"],
+      "description": "Subject type"
+    },
+    "materiality": {
+      "type": "string",
+      "enum": ["material", "supporting", "contextual"],
+      "description": "Claim materiality classification"
+    },
+    "verification_status": {
+      "type": "string",
+      "enum": ["verified", "unsupported", "disputed", "pending"],
+      "description": "Claim verification status"
+    },
+    "locator_type": {
+      "type": "string",
+      "enum": [
+        "json_pointer",
+        "xpath",
+        "css_selector",
+        "text_quote",
+        "page_region",
+        "byte_range",
+        "database_record",
+        "artifact_pointer"
+      ],
+      "description": "Evidence locator type"
+    },
+    "accessibility_status": {
+      "type": "string",
+      "enum": ["accessible", "unavailable", "restricted", "requires_authorization"],
+      "description": "Evidence accessibility status"
+    },
+    "authorization_classification": {
+      "type": "string",
+      "enum": ["public", "buyer_authorized", "restricted", "confidential"],
+      "description": "Evidence authorization classification"
+    },
+    "freshness_status": {
+      "type": "string",
+      "enum": ["fresh", "stale", "unknown"],
+      "description": "Evidence freshness status"
+    },
+    "verification_decision": {
+      "type": "string",
+      "enum": ["pass", "conditional", "fail", "quarantined"],
+      "description": "Verification decision"
+    },
+    "signature_algorithm": {
+      "type": "string",
+      "const": "Ed25519",
+      "description": "Signature algorithm"
+    },
+    "canonicalization_algorithm": {
+      "type": "string",
+      "const": "RFC8785-JCS",
+      "description": "Canonicalization algorithm"
+    },
+    "transformation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "timestamp", "tool_version"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "timestamp": {
+          "$ref": "#/definitions/timestamp_rfc3339"
+        },
+        "tool_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "parameters": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "locator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "value"],
+      "properties": {
+        "type": {
+          "$ref": "#/definitions/locator_type"
+        },
+        "value": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "evidence_item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "evidence_id",
+        "source_uri",
+        "retrieved_at",
+        "content_hash",
+        "media_type",
+        "locator",
+        "accessibility_status",
+        "transformation_history",
+        "authorization_classification",
+        "freshness_status"
+      ],
+      "properties": {
+        "evidence_id": {
+          "$ref": "#/definitions/evidence_id"
+        },
+        "source_uri": {
+          "type": "string",
+          "format": "uri",
+          "minLength": 1
+        },
+        "source_timestamp": {
+          "$ref": "#/definitions/timestamp_rfc3339"
+        },
+        "retrieved_at": {
+          "$ref": "#/definitions/timestamp_rfc3339"
+        },
+        "content_hash": {
+          "$ref": "#/definitions/hash"
+        },
+        "media_type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "locator": {
+          "$ref": "#/definitions/locator"
+        },
+        "accessibility_status": {
+          "$ref": "#/definitions/accessibility_status"
+        },
+        "transformation_history": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/transformation"
+          }
+        },
+        "authorization_classification": {
+          "$ref": "#/definitions/authorization_classification"
+        },
+        "freshness_status": {
+          "$ref": "#/definitions/freshness_status"
+        }
+      }
+    },
+    "claim": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "claim_id",
+        "predicate",
+        "value",
+        "confidence",
+        "evidence_ids",
+        "materiality",
+        "verification_status"
+      ],
+      "properties": {
+        "claim_id": {
+          "$ref": "#/definitions/claim_id"
+        },
+        "predicate": {
+          "type": "string",
+          "minLength": 1
+        },
+        "value": {
+          "type": ["string", "number", "boolean", "object", "array", "null"]
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "evidence_ids": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/evidence_id"
+          }
+        },
+        "materiality": {
+          "$ref": "#/definitions/materiality"
+        },
+        "verification_status": {
+          "$ref": "#/definitions/verification_status"
+        }
+      }
+    },
+    "completeness_vector_entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dimension", "requested", "populated", "supported", "score"],
+      "properties": {
+        "dimension": {
+          "type": "string",
+          "minLength": 1
+        },
+        "requested": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "populated": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "supported": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    },
+    "completeness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requested_fields",
+        "populated_fields",
+        "supported_fields",
+        "score",
+        "missing_fields",
+        "unsupported_fields",
+        "stale_fields",
+        "vector"
+      ],
+      "properties": {
+        "requested_fields": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "populated_fields": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "supported_fields": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "missing_fields": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "unsupported_fields": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "stale_fields": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "vector": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/completeness_vector_entry"
+          }
+        }
+      }
+    },
+    "provenance_route": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "provider", "version"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["cache", "direct", "deterministic", "model", "hybrid"]
+        },
+        "provider": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "model_name": {
+          "type": "string"
+        },
+        "model_version": {
+          "type": "string"
+        },
+        "parameters": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "routes",
+        "providers",
+        "tools",
+        "models",
+        "software_versions",
+        "policy_versions",
+        "transformations",
+        "cache_provenance",
+        "execution_environment",
+        "verification_routes"
+      ],
+      "properties": {
+        "routes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/provenance_route"
+          }
+        },
+        "providers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "version", "capabilities"],
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "version": {
+                "type": "string",
+                "minLength": 1
+              },
+              "capabilities": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "tools": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Tool name to version mapping"
+        },
+        "models": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "version", "provider"],
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "version": {
+                "type": "string",
+                "minLength": 1
+              },
+              "provider": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "software_versions": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Component name to version mapping"
+        },
+        "policy_versions": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Policy name to version mapping"
+        },
+        "transformations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/transformation"
+          }
+        },
+        "cache_provenance": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "hit"],
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "hit": {
+              "type": "boolean"
+            },
+            "cache_key": {
+              "type": "string"
+            },
+            "stored_at": {
+              "$ref": "#/definitions/timestamp_rfc3339"
+            }
+          }
+        },
+        "execution_environment": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["runtime", "version", "platform"],
+          "properties": {
+            "runtime": {
+              "type": "string",
+              "minLength": 1
+            },
+            "version": {
+              "type": "string",
+              "minLength": 1
+            },
+            "platform": {
+              "type": "string",
+              "minLength": 1
+            },
+            "container_image": {
+              "type": "string"
+            }
+          }
+        },
+        "verification_routes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/provenance_route"
+          }
+        }
+      }
+    },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_valid",
+        "material_claims_supported",
+        "evidence_accessibility",
+        "freshness",
+        "completeness",
+        "cross_source_agreement",
+        "provenance_valid",
+        "prompt_injection_result",
+        "deterministic_failures",
+        "verifier_versions",
+        "policy",
+        "decision",
+        "score",
+        "failed_requirements"
+      ],
+      "properties": {
+        "schema_valid": {
+          "type": "boolean"
+        },
+        "material_claims_supported": {
+          "type": "boolean"
+        },
+        "evidence_accessibility": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "freshness": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "completeness": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "cross_source_agreement": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "provenance_valid": {
+          "type": "boolean"
+        },
+        "prompt_injection_result": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["checked", "result"],
+          "properties": {
+            "checked": {
+              "type": "boolean"
+            },
+            "result": {
+              "type": "string",
+              "enum": ["clean", "suspected", "confirmed"]
+            },
+            "details": {
+              "type": "string"
+            }
+          }
+        },
+        "deterministic_failures": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "verifier_versions": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "policy": {
+          "$ref": "#/definitions/policy_id"
+        },
+        "decision": {
+          "$ref": "#/definitions/verification_decision"
+        },
+        "score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "failed_requirements": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "output_hash",
+        "canonicalization_algorithm",
+        "policy_hash",
+        "schema_hash",
+        "signature_algorithm",
+        "signing_key_id",
+        "signature",
+        "signed_at"
+      ],
+      "properties": {
+        "output_hash": {
+          "$ref": "#/definitions/hash"
+        },
+        "canonicalization_algorithm": {
+          "$ref": "#/definitions/canonicalization_algorithm"
+        },
+        "policy_hash": {
+          "$ref": "#/definitions/hash"
+        },
+        "schema_hash": {
+          "$ref": "#/definitions/hash"
+        },
+        "signature_algorithm": {
+          "$ref": "#/definitions/signature_algorithm"
+        },
+        "signing_key_id": {
+          "$ref": "#/definitions/key_id"
+        },
+        "signature": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{86,88}$"
+        },
+        "signed_at": {
+          "$ref": "#/definitions/timestamp_rfc3339"
+        }
+      }
+    },
+    "contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "service_id",
+        "service_version",
+        "input_hash",
+        "input_schema_hash",
+        "output_schema_hash",
+        "quote_id",
+        "mode",
+        "currency",
+        "minimum_quality",
+        "freshness_seconds",
+        "issued_at",
+        "expires_at",
+        "idempotency_key"
+      ],
+      "properties": {
+        "service_id": {
+          "$ref": "#/definitions/service_id"
+        },
+        "service_version": {
+          "$ref": "#/definitions/service_version"
+        },
+        "input_hash": {
+          "$ref": "#/definitions/hash"
+        },
+        "input_schema_hash": {
+          "$ref": "#/definitions/hash"
+        },
+        "output_schema_hash": {
+          "$ref": "#/definitions/hash"
+        },
+        "quote_id": {
+          "$ref": "#/definitions/quote_id"
+        },
+        "price": {
+          "$ref": "#/definitions/decimal_string"
+        },
+        "maximum_authorized_price": {
+          "$ref": "#/definitions/decimal_string"
+        },
+        "mode": {
+          "$ref": "#/definitions/contract_mode"
+        },
+        "currency": {
+          "$ref": "#/definitions/currency"
+        },
+        "network": {
+          "type": "string",
+          "enum": ["base", "base-testnet"]
+        },
+        "minimum_quality": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "freshness_seconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "issued_at": {
+          "$ref": "#/definitions/timestamp_rfc3339"
+        },
+        "expires_at": {
+          "$ref": "#/definitions/timestamp_rfc3339"
+        },
+        "idempotency_key": {
+          "$ref": "#/definitions/idempotency_key"
+        }
+      }
+    },
+    "subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "canonical_name"],
+      "properties": {
+        "type": {
+          "$ref": "#/definitions/subject_type"
+        },
+        "canonical_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "identifiers": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "extension_container": {
+      "type": "object",
+      "additionalProperties": false,
+      "maxProperties": 10,
+      "propertyNames": {
+        "type": "string",
+        "minLength": 5,
+        "maxLength": 253,
+        "pattern": "^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?){2,}$"
+      },
+      "patternProperties": {
+        "^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?){2,}$": {
+          "$ref": "#/definitions/extension_value"
+        }
+      },
+      "description": "Controlled extension container. Keys must use reverse-domain qualified namespaces with at least three DNS-safe labels (e.g., net.siteborne.verification.v1, com.example.custom-metrics.v1). Underscores, leading/trailing hyphens, empty labels, and uppercase are forbidden. Maximum 10 extensions. Maximum total namespace key length: 253 characters. Each value must conform to extension_value (bounded JSON data)."
+    },
+    "extension_value": {
+      "type": "object",
+      "additionalProperties": true,
+      "maxProperties": 200,
+      "description": "Bounded JSON data payload for a single namespaced extension (PCC 1.0.1). Must be a JSON object; unbounded, executable, or policy-changing structures are out of scope for structural validation. Individual services may further narrow this shape for their own namespace via allOf composition."
+    },
+    "verification_proof_v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["proof_version", "receipt", "verification_material"],
+      "properties": {
+        "proof_version": {
+          "type": "string",
+          "const": "1.0.0"
+        },
+        "receipt": {
+          "$ref": "#/definitions/vnext_receipt"
+        },
+        "verification_material": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["verifier_results"],
+          "properties": {
+            "verifier_results": {
+              "type": "array",
+              "maxItems": 100,
+              "items": {
+                "$ref": "#/definitions/public_verifier_result"
+              }
+            }
+          }
+        }
+      }
+    },
+    "public_verifier_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["verifier_id", "status", "findings", "failure_codes"],
+      "properties": {
+        "verifier_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "type": "string",
+          "minLength": 1
+        },
+        "findings": {
+          "type": "array",
+          "maxItems": 200,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["code", "severity"],
+            "properties": {
+              "code": {
+                "type": "string",
+                "minLength": 1
+              },
+              "severity": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "failure_codes": {
+          "type": "array",
+          "maxItems": 200,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "vnext_receipt_preimage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "domain",
+        "proof_version",
+        "receipt_version",
+        "job_id",
+        "request_id",
+        "service_id",
+        "service_version",
+        "contract_release",
+        "pcc_schema_release",
+        "pcc_schema_hash",
+        "input_hash",
+        "output_schema_hash",
+        "output_hash",
+        "pcc_document_hash",
+        "evidence_hash",
+        "policy_hash",
+        "verifier_set_hash",
+        "decision",
+        "completeness",
+        "verification_mode",
+        "limitations",
+        "signing_key_id",
+        "canonicalization_algorithm",
+        "signature_algorithm",
+        "issued_at"
+      ],
+      "properties": {
+        "domain": {
+          "type": "string",
+          "const": "SITEBORNE-PCC-VERIFICATION-PROOF-V1"
+        },
+        "proof_version": {
+          "type": "string",
+          "const": "1.0.0"
+        },
+        "receipt_version": {
+          "type": "string",
+          "const": "2.0.0"
+        },
+        "job_id": {
+          "$ref": "#/definitions/job_id"
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "service_id": {
+          "$ref": "#/definitions/service_id"
+        },
+        "service_version": {
+          "$ref": "#/definitions/service_version"
+        },
+        "contract_release": {
+          "type": "string",
+          "const": "3.0.0"
+        },
+        "pcc_schema_release": {
+          "type": "string",
+          "const": "2.0.0"
+        },
+        "pcc_schema_hash": {
+          "$ref": "#/definitions/hash"
+        },
+        "input_hash": {
+          "$ref": "#/definitions/hash"
+        },
+        "output_schema_hash": {
+          "$ref": "#/definitions/hash"
+        },
+        "output_hash": {
+          "$ref": "#/definitions/hash"
+        },
+        "pcc_document_hash": {
+          "$ref": "#/definitions/hash"
+        },
+        "evidence_hash": {
+          "$ref": "#/definitions/hash"
+        },
+        "policy_hash": {
+          "$ref": "#/definitions/hash"
+        },
+        "verifier_set_hash": {
+          "$ref": "#/definitions/hash"
+        },
+        "decision": {
+          "$ref": "#/definitions/verification_decision"
+        },
+        "completeness": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "verification_mode": {
+          "type": "string",
+          "enum": ["standard", "independent_reproduction"]
+        },
+        "limitations": {
+          "type": "array",
+          "maxItems": 200,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "signing_key_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "canonicalization_algorithm": {
+          "type": "string",
+          "const": "RFC8785-JCS"
+        },
+        "signature_algorithm": {
+          "type": "string",
+          "const": "Ed25519"
+        },
+        "issued_at": {
+          "$ref": "#/definitions/timestamp_rfc3339"
+        }
+      }
+    },
+    "vnext_receipt": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/vnext_receipt_preimage"
+        },
+        {
+          "type": "object",
+          "required": ["receipt_id", "signature"],
+          "properties": {
+            "receipt_id": {
+              "type": "string",
+              "pattern": "^rcpt_[a-f0-9]{24}$"
+            },
+            "signature": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{86}$"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "properties": {
+    "pcc_version": {
+      "$ref": "#/definitions/pcc_version"
+    },
+    "job_id": {
+      "$ref": "#/definitions/job_id"
+    },
+    "contract": {
+      "$ref": "#/definitions/contract"
+    },
+    "subject": {
+      "$ref": "#/definitions/subject"
+    },
+    "claims": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/claim"
+      },
+      "uniqueItems": true
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/evidence_item"
+      },
+      "uniqueItems": true
+    },
+    "completeness": {
+      "$ref": "#/definitions/completeness"
+    },
+    "provenance": {
+      "$ref": "#/definitions/provenance"
+    },
+    "verification": {
+      "$ref": "#/definitions/verification"
+    },
+    "receipt": {
+      "$ref": "#/definitions/receipt"
+    },
+    "extensions": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/extension_container"
+        },
+        {
+          "type": "object",
+          "required": ["net.siteborne.verification-proof.v1"],
+          "properties": {
+            "net.siteborne.verification-proof.v1": {
+              "$ref": "#/definitions/verification_proof_v1"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

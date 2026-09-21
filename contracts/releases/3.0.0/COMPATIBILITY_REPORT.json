@@ -1,0 +1,15 @@
+{
+  "baseline_version": "2.0.0",
+  "candidate_version": "3.0.0",
+  "compatible": false,
+  "required_version_bump": "major",
+  "decision": "MAJOR_CONTRACT_RELEASE",
+  "parallel_major_required": true,
+  "reasons": [
+    "signature_binding_changed",
+    "pcc_dependency_changed",
+    "successful_result_schema_changed",
+    "service_identity_changed"
+  ],
+  "legacy_release_mutated": false
+}

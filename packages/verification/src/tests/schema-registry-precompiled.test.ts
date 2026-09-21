@@ -19,6 +19,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
+  getAjv,
   getOutputSchemaId,
   getPrecompiledOutputValidator,
   knownServiceIds,
@@ -27,6 +28,17 @@ import {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SCHEMAS_DIR = join(__dirname, '..', '..', '..', '..', 'schemas');
+const CANDIDATE_SCHEMAS_DIR = join(
+  __dirname,
+  '..',
+  '..',
+  '..',
+  '..',
+  'contracts',
+  'releases',
+  '3.0.0',
+  'schemas'
+);
 
 describe('getOutputSchemaId derivation matches real committed schema $id (SUN-1200 checkpoint F)', () => {
   for (const serviceId of knownServiceIds()) {
@@ -37,8 +49,25 @@ describe('getOutputSchemaId derivation matches real committed schema $id (SUN-12
       // read, purely to prove equivalence -- this test file itself runs
       // under real Node.js, where fs genuinely works.
       const file = derivedId!.split('/').pop()!;
-      const real = JSON.parse(readFileSync(join(SCHEMAS_DIR, 'services', file), 'utf-8'));
+      const schemaRoot = serviceId.endsWith('.v3') ? CANDIDATE_SCHEMAS_DIR : SCHEMAS_DIR;
+      const real = JSON.parse(readFileSync(join(schemaRoot, 'services', file), 'utf-8'));
       expect(derivedId).toBe(real.$id);
+      expect(getAjv().getSchema(derivedId!)).toBeTypeOf('function');
+    });
+  }
+});
+
+describe('candidate Release-3 validators', () => {
+  for (const serviceId of [
+    'company_evidence_graph.v3',
+    'web_context_verified.v3',
+    'document_evidence_json.v3',
+    'verify_agent_output.v3',
+  ]) {
+    it(`${serviceId}: resolves the release-qualified precompiled schema`, () => {
+      const derivedId = getOutputSchemaId(serviceId);
+      expect(derivedId).toMatch('/contracts/3.0.0/schemas/services/');
+      expect(getAjv().getSchema(derivedId!)).toBeTypeOf('function');
     });
   }
 });
