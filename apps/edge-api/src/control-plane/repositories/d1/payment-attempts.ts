@@ -137,6 +137,37 @@ function isUniqueConstraintViolation(e: unknown): boolean {
   return describeError(e).includes('UNIQUE constraint');
 }
 
+/**
+ * How `listUnresolvedSettlements` arrived at `jobId`, so a null is never
+ * ambiguous between "no job exists" and "the linkage disagreed":
+ *  - `derived_from_jobs_idempotency_key`: canonical `jobs.id` found via
+ *    `jobs.idempotency_key = payment_identifier` (the normal case today).
+ *  - `binding_recorded`: no derived job, but the attempt's own
+ *    `job_id` is populated — kept as-is (prior behavior).
+ *  - `conflict`: derived job and the attempt's own `job_id` disagree.
+ *    Neither is trusted; `jobId` is null.
+ *  - `not_found`: neither source yields a job; `jobId` is null.
+ */
+export type UnresolvedSettlementJobLinkage =
+  | 'derived_from_jobs_idempotency_key'
+  | 'binding_recorded'
+  | 'conflict'
+  | 'not_found';
+
+function resolveUnresolvedSettlementJob(
+  bindingJobId: string | null,
+  derivedJobId: string | null
+): { readonly jobId: string | null; readonly jobLinkage: UnresolvedSettlementJobLinkage } {
+  if (derivedJobId !== null) {
+    if (bindingJobId !== null && bindingJobId !== derivedJobId) {
+      return { jobId: null, jobLinkage: 'conflict' };
+    }
+    return { jobId: derivedJobId, jobLinkage: 'derived_from_jobs_idempotency_key' };
+  }
+  if (bindingJobId !== null) return { jobId: bindingJobId, jobLinkage: 'binding_recorded' };
+  return { jobId: null, jobLinkage: 'not_found' };
+}
+
 export class D1PaymentAttemptRepository implements PaymentAttemptRepository {
   constructor(private readonly db: D1Database) {}
 
@@ -577,6 +608,7 @@ export class D1PaymentAttemptRepository implements PaymentAttemptRepository {
     ReadonlyArray<{
       readonly paymentIdentifier: string;
       readonly jobId: string | null;
+      readonly jobLinkage: UnresolvedSettlementJobLinkage;
       readonly serviceId: string;
       readonly serviceVersion: string;
       readonly resourceId: string;
@@ -590,24 +622,39 @@ export class D1PaymentAttemptRepository implements PaymentAttemptRepository {
     }>
   > {
     const limit = options?.limit ?? 100;
-    const conditions = [`lifecycle_stage = 'settlement_pending'`];
+    const conditions = [`pa.lifecycle_stage = 'settlement_pending'`];
     const params: unknown[] = [];
     if (options?.olderThanMs !== undefined) {
       const threshold = new Date(
         (options.nowUnixMs ?? Date.now()) - options.olderThanMs
       ).toISOString();
-      conditions.push(`settlement_pending_at IS NOT NULL AND settlement_pending_at < ?`);
+      conditions.push(`pa.settlement_pending_at IS NOT NULL AND pa.settlement_pending_at < ?`);
       params.push(threshold);
     }
+    // Read-side job derivation. `payment_attempts.job_id` is null by design
+    // (the attempt is acquired before the job exists, and the column is part
+    // of the immutable binding digest, so it is never backfilled). The
+    // canonical link is `jobs.idempotency_key = payment_identifier`
+    // (x402-service.ts creates the job with exactly that key), backed by
+    // the UNIQUE `idx_jobs_idempotency_key` — so this LEFT JOIN yields at
+    // most one job per attempt and can never fan out. `service_id` and
+    // `input_hash` are corroborating guards: a same-key job that disagrees
+    // on either is treated as no linkage, never as a match.
+    // Columns are table-qualified because both tables carry `service_id`.
     const result = await this.db
       .prepare(
-        `SELECT payment_identifier, job_id, service_id, service_version, resource_id,
-                network, amount, payee, settlement_pending_at,
-                settlement_transaction_reference, settlement_outcome_kind,
-                cdp_facilitator_settle_attempt_count
-           FROM payment_attempts
+        `SELECT pa.payment_identifier, pa.job_id AS binding_job_id, j.id AS derived_job_id,
+                pa.service_id, pa.service_version, pa.resource_id,
+                pa.network, pa.amount, pa.payee, pa.settlement_pending_at,
+                pa.settlement_transaction_reference, pa.settlement_outcome_kind,
+                pa.cdp_facilitator_settle_attempt_count
+           FROM payment_attempts pa
+           LEFT JOIN jobs j
+             ON j.idempotency_key = pa.payment_identifier
+            AND j.service_id = pa.service_id
+            AND j.input_hash = pa.request_input_hash
           WHERE ${conditions.join(' AND ')}
-          ORDER BY settlement_pending_at ASC
+          ORDER BY pa.settlement_pending_at ASC
           LIMIT ?`
       )
       .bind(...params, limit)
@@ -615,7 +662,10 @@ export class D1PaymentAttemptRepository implements PaymentAttemptRepository {
     if (!result.success) return [];
     return result.results.map((row) => ({
       paymentIdentifier: row.payment_identifier as string,
-      jobId: (row.job_id as string | null) ?? null,
+      ...resolveUnresolvedSettlementJob(
+        (row.binding_job_id as string | null) ?? null,
+        (row.derived_job_id as string | null) ?? null
+      ),
       serviceId: row.service_id as string,
       serviceVersion: row.service_version as string,
       resourceId: row.resource_id as string,

@@ -37,6 +37,13 @@
 export interface UnresolvedSettlementRecord {
   readonly paymentIdentifier: string;
   readonly jobId: string | null;
+  /** Internal only — how `jobId` was resolved. Deliberately NOT copied into
+   * `SettlementAlertPayload`: the operator payload shape is unchanged. */
+  readonly jobLinkage?:
+    | 'derived_from_jobs_idempotency_key'
+    | 'binding_recorded'
+    | 'conflict'
+    | 'not_found';
   readonly settlementPendingAt: string | null;
   readonly settlementTransactionReference: string | null;
   readonly settlementOutcomeKind: 'explicit_rejection' | 'ambiguous' | null;
@@ -137,6 +144,14 @@ function toPayload(
     recovery_stage: record.settlementOutcomeKind ?? 'unknown',
     first_observed_at: record.settlementPendingAt,
     last_observed_at: nowIso,
+    // KNOWN LIMITATION (SETTLEMENT-ALERT-PROJECTION-READ-FIX-01): this is
+    // `cdp_facilitator_settle_attempt_count`, which is only incremented by
+    // `recordCdpSettlementOutcome` — a CAS that moves the row OUT of
+    // `settlement_pending`. Rows returned by the unresolved query are still
+    // `settlement_pending`, so this reads 0 by construction. There is no
+    // authoritative persisted count of reconciliation executions to derive
+    // a better value from (the retry loop is in-memory), so the field is
+    // left unchanged rather than invented.
     reconciliation_attempts: record.cdpFacilitatorSettleAttemptCount,
     transaction_reference_present: record.settlementTransactionReference !== null,
   };
