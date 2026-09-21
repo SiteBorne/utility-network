@@ -13,6 +13,7 @@ import fc from 'fast-check';
 import { Miniflare } from 'miniflare';
 import type { D1Database } from '@cloudflare/workers-types';
 import type {
+  Network,
   PaymentRequired,
   PaymentPayload,
   PaymentEvidenceProvider,
@@ -50,7 +51,7 @@ async function buildTestContinuationFields(
     input: unknown,
     ctx: { job_id: string; request_id: string }
   ) => Promise<ExecutorOutcome>,
-  network: import('@siteborne/protocol-x402').Network = 'eip155:84532'
+  network: Network = 'eip155:84532'
 ) {
   const continuationEnvelopeKey = await crypto.subtle.generateKey(
     { name: 'AES-GCM', length: 256 },
@@ -400,6 +401,108 @@ describe('x402 HTTP vertical slice (SUN-0700A checkpoint 5)', () => {
 
       expect(secondBody.link_id).toBe(firstBody.link_id);
       expect(secondBody.receipt_id).toBe(firstBody.receipt_id);
+    });
+
+    it('REPLAY-CALLER-BINDING-SHADOW-AUDIT-01: complete replay-tuple possession releases the cached result to a different caller, payload signature, and headers without payment re-verification', async () => {
+      let verifyCalls = 0;
+      const fixtureProvider = new FixturePaymentEvidenceProvider();
+      const countingProvider: PaymentEvidenceProvider = {
+        providerKind: 'fixture',
+        async verify(context) {
+          verifyCalls += 1;
+          return fixtureProvider.verify(context);
+        },
+        async settle(context, evidence, amount) {
+          return fixtureProvider.settle(context, evidence, amount);
+        },
+      };
+      const callerAuditApp = new Hono();
+      const executor = async (): Promise<ExecutorOutcome> => ({
+        result: {
+          result_class: 'success',
+          output: { current_behavior: 'tuple_possession' },
+          output_hash: 'sha256:' + '7'.repeat(64),
+          receipt: { synthetic: true },
+          receipt_id: 'rcpt_replay_caller_binding_shadow',
+          verification: {
+            schema_valid: true,
+            material_claims_supported: true,
+            evidence_accessibility: 1,
+            freshness: 1,
+            completeness: 1,
+            cross_source_agreement: 1,
+            provenance_valid: true,
+            decision: 'pass',
+            score: 1,
+          },
+        },
+      });
+      createX402ServiceRoute(callerAuditApp, {
+        serviceId: 'verify_agent_output.v2',
+        scheme: 'exact',
+        pricingKey: 'verify_agent_output_standard_v2',
+        network: 'eip155:84532',
+        asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+        path: '/v2/verify/caller-binding-shadow',
+        inputSchema: { type: 'object' },
+        inputValidator: compileTestInputValidator({ type: 'object' }),
+        contractRelease: '2.0.0',
+        inputSchemaHash: 'sha256:' + '1'.repeat(64),
+        outputSchemaHash: 'sha256:' + '2'.repeat(64),
+        pccDependency: '1.0.0',
+        db,
+        clock: () => clockValue,
+        evidenceMode: 'fixture',
+        evidenceProvider: countingProvider,
+        executor,
+        ...(await buildTestContinuationFields(db, () => clockValue, executor)),
+      });
+
+      const requestBody = { current_behavior: 'tuple_possession' };
+      const challenge = await get402(
+        callerAuditApp,
+        '/v2/verify/caller-binding-shadow',
+        requestBody
+      );
+      const payload = buildBuyerPayload(challenge, 'predictable_id_03');
+      const paymentHeader = encodePaymentSignatureHeaderSafe(payload);
+      const callAs = (caller: string, signatureHeader: string = paymentHeader) =>
+        callerAuditApp.request('/v2/verify/caller-binding-shadow', {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            'PAYMENT-SIGNATURE': signatureHeader,
+            authorization: `Bearer ${caller}`,
+            'x-simulated-caller': caller,
+          },
+          body: JSON.stringify(requestBody),
+        });
+      // Same complete replay tuple, different payload signature bytes: the
+      // signature is excluded from the replay binding and not re-verified.
+      const differentSignatureHeader = encodePaymentSignatureHeaderSafe({
+        ...payload,
+        payload: { synthetic_signature: 'synthetic:different-signer' },
+      });
+
+      const first = await callAs('caller-a');
+      expect(first.status).toBe(200);
+      const firstBody = await first.json();
+      expect(verifyCalls).toBe(1);
+
+      const sameCallerReplay = await callAs('caller-a');
+      expect(sameCallerReplay.status).toBe(200);
+      expect(await sameCallerReplay.json()).toEqual(firstBody);
+      expect(verifyCalls).toBe(1);
+
+      const differentCallerReplay = await callAs('caller-b');
+      expect(differentCallerReplay.status).toBe(200);
+      expect(await differentCallerReplay.json()).toEqual(firstBody);
+      expect(verifyCalls).toBe(1);
+
+      const differentSignatureReplay = await callAs('caller-c', differentSignatureHeader);
+      expect(differentSignatureReplay.status).toBe(200);
+      expect(await differentSignatureReplay.json()).toEqual(firstBody);
+      expect(verifyCalls).toBe(1);
     });
   });
 
