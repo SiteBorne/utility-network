@@ -47,6 +47,7 @@ export const SHADOW_REASON_CODES = [
   'ENVELOPE_PAYMENT_BINDING_MISMATCH',
   'ENVELOPE_PAYMENT_IDENTIFIER_MISMATCH',
   'RESULT_IDENTITY_MISMATCH',
+  'RESULT_CONTENT_DIGEST_VERSION_INCOMPARABLE',
   // subject axes
   'STORED_SUBJECTS_ABSENT',
   'PAYER_SUBJECT_MISMATCH',
@@ -139,8 +140,11 @@ export interface ResultAuthorizationEnvelopeV1 {
   /** Result identity, Release 1: the job's x402_service_results row is keyed
    * 1:1 by job_id. */
   readonly result_ref: string;
-  /** Optional content digest of the persisted result. Not persisted in
-   * Release 1 (ABSENT); when present it must equal the replay-side digest. */
+  /** Optional ResultContentDigest of the released result body, in the
+   * self-describing form `result_content_digest.v<N>:sha256:<64 hex>` (see
+   * result-content-digest.ts). Not bound in Release 1 (null); when present on
+   * both sides and of the same version it must be equal. A differing version
+   * is incomparable, not a mismatch. */
   readonly result_content_digest: string | null;
   readonly subjects: SubjectSlots;
   /** When the envelope evidence was captured (ISO). Carried, never read
@@ -175,10 +179,26 @@ export type AxisOutcome =
   | 'BOTH_ABSENT'
   | 'INCOMPARABLE';
 
+/**
+ * Whether result CONTENT was actually verified. Independent of `classification`:
+ * a MATCH driven by subjects says nothing about content unless this is
+ * BOUND_MATCH. Anything other than BOUND_MATCH must never be read as "content
+ * verified" (absent and incomparable digests are not evidence of sameness).
+ */
+export const CONTENT_DIGEST_OUTCOMES = [
+  'BOUND_MATCH',
+  'BOUND_MISMATCH',
+  'ABSENT',
+  'INCOMPARABLE',
+  'NOT_EVALUATED',
+] as const;
+export type ContentDigestOutcome = (typeof CONTENT_DIGEST_OUTCOMES)[number];
+
 export interface ResultAuthorizationShadowEvaluation {
   readonly classification: ShadowClassification;
   readonly reason_codes: readonly ShadowReasonCode[];
   readonly evidence_completeness: ShadowEvidenceCompleteness;
+  readonly content_digest_outcome: ContentDigestOutcome;
   readonly axes: Readonly<Record<SubjectAxis, AxisOutcome | 'NOT_EVALUATED'>>;
   readonly policy_version: typeof RESULT_AUTHORIZATION_SHADOW_POLICY_VERSION;
   readonly envelope_version: typeof RESULT_AUTHORIZATION_ENVELOPE_VERSION;
@@ -186,6 +206,10 @@ export interface ResultAuthorizationShadowEvaluation {
 
 const HEX64 = /^[0-9a-f]{64}$/;
 const KEY_VERSION = /^[a-z0-9][a-z0-9._-]{0,31}$/;
+/** Format of result-content-digest.ts. Duplicated here on purpose: this module
+ * must stay import-free (asserted by the gate); a drift-guard test pins the two
+ * definitions together. */
+const RESULT_CONTENT_DIGEST = /^result_content_digest\.v([1-9][0-9]{0,2}):sha256:[0-9a-f]{64}$/;
 const OPAQUE_ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
@@ -201,13 +225,15 @@ function result(
   classification: ShadowClassification,
   reasons: Iterable<ShadowReasonCode>,
   completeness: ShadowEvidenceCompleteness,
-  axes: ResultAuthorizationShadowEvaluation['axes'] = NOT_EVALUATED
+  axes: ResultAuthorizationShadowEvaluation['axes'] = NOT_EVALUATED,
+  contentOutcome: ContentDigestOutcome = 'NOT_EVALUATED'
 ): ResultAuthorizationShadowEvaluation {
   const set = new Set(reasons);
   return Object.freeze({
     classification,
     reason_codes: Object.freeze(SHADOW_REASON_CODES.filter((c) => set.has(c))),
     evidence_completeness: completeness,
+    content_digest_outcome: contentOutcome,
     axes: Object.freeze({ ...axes }),
     policy_version: RESULT_AUTHORIZATION_SHADOW_POLICY_VERSION,
     envelope_version: RESULT_AUTHORIZATION_ENVELOPE_VERSION,
@@ -249,7 +275,11 @@ function readSlots(v: unknown): SubjectSlots | null {
 
 const idOk = (v: unknown): v is string => typeof v === 'string' && OPAQUE_ID.test(v);
 const digestOk = (v: unknown): v is string => typeof v === 'string' && HEX64.test(v);
-const optDigestOk = (v: unknown): v is string | null => v === null || digestOk(v);
+const optContentDigestOk = (v: unknown): v is string | null =>
+  v === null || (typeof v === 'string' && RESULT_CONTENT_DIGEST.test(v));
+/** Version of an already-validated content digest string. */
+const contentDigestVersion = (d: string): number =>
+  Number((RESULT_CONTENT_DIGEST.exec(d) as RegExpExecArray)[1]);
 
 interface ParsedContext {
   readonly predicate: CurrentReplayPredicate;
@@ -270,7 +300,7 @@ function parseContext(v: unknown): ParsedContext | null {
     !digestOk(v.payment_identifier_digest) ||
     !digestOk(v.payment_binding_digest) ||
     !idOk(v.result_ref) ||
-    !optDigestOk(v.result_content_digest)
+    !optContentDigestOk(v.result_content_digest)
   ) {
     return null;
   }
@@ -313,7 +343,7 @@ function parseEnvelope(v: unknown): EnvelopeParse {
     !digestOk(v.payment_identifier_digest) ||
     !digestOk(v.payment_binding_digest) ||
     !idOk(v.result_ref) ||
-    !optDigestOk(v.result_content_digest) ||
+    !optContentDigestOk(v.result_content_digest) ||
     typeof v.evidence_captured_at !== 'string'
   ) {
     return { kind: 'error', reason: 'MALFORMED_ENVELOPE' };
@@ -406,23 +436,43 @@ export function evaluateResultAuthorizationShadow(
   if (env.payment_identifier_digest !== ctx.payment_identifier_digest) {
     identity.push('ENVELOPE_PAYMENT_IDENTIFIER_MISMATCH');
   }
-  if (
-    env.result_ref !== ctx.result_ref ||
-    (env.result_content_digest !== null &&
-      ctx.result_content_digest !== null &&
-      env.result_content_digest !== ctx.result_content_digest)
-  ) {
+  // Content digest: null on either side is "not bound", never a mismatch. Two
+  // digests are equal-or-not only within one version; across versions they are
+  // incomparable (a rotation artefact, not evidence of different content).
+  const carried: ShadowReasonCode[] = [];
+  let contentOutcome: ContentDigestOutcome = 'ABSENT';
+  if (env.result_content_digest !== null && ctx.result_content_digest !== null) {
+    if (
+      contentDigestVersion(env.result_content_digest) !==
+      contentDigestVersion(ctx.result_content_digest)
+    ) {
+      carried.push('RESULT_CONTENT_DIGEST_VERSION_INCOMPARABLE');
+      contentOutcome = 'INCOMPARABLE';
+    } else {
+      contentOutcome =
+        env.result_content_digest === ctx.result_content_digest ? 'BOUND_MATCH' : 'BOUND_MISMATCH';
+    }
+  }
+  if (env.result_ref !== ctx.result_ref || contentOutcome === 'BOUND_MISMATCH') {
     identity.push('RESULT_IDENTITY_MISMATCH');
   }
-  if (identity.length > 0) return result('MISMATCH', identity, 'NONE');
+  if (identity.length > 0) {
+    return result('MISMATCH', identity, 'NONE', NOT_EVALUATED, contentOutcome);
+  }
 
   if (SUBJECT_AXES.every((a) => env.stored[a].status === 'ABSENT')) {
     // Nothing was ever bound: honest legacy baseline, not a failure.
-    return result('LEGACY_UNBOUND', ['STORED_SUBJECTS_ABSENT'], 'NONE');
+    return result(
+      'LEGACY_UNBOUND',
+      ['STORED_SUBJECTS_ABSENT', ...carried],
+      'NONE',
+      NOT_EVALUATED,
+      contentOutcome
+    );
   }
 
   const axes = {} as Record<SubjectAxis, AxisOutcome>;
-  const reasons = new Set<ShadowReasonCode>();
+  const reasons = new Set<ShadowReasonCode>(carried);
   for (const axis of SUBJECT_AXES) {
     const cmp = compareAxis(env.stored[axis], ctx.candidate[axis]);
     axes[axis] = cmp.outcome;
@@ -445,18 +495,18 @@ export function evaluateResultAuthorizationShadow(
 
   // Any comparable mismatch dominates a match on another axis.
   if (compared.some((a) => axes[a] === 'MISMATCH')) {
-    return result('MISMATCH', reasons, completeness, axes);
+    return result('MISMATCH', reasons, completeness, axes, contentOutcome);
   }
 
   const authorityMatched = AUTHORITY_BEARING_AXES.some((a) => axes[a] === 'MATCH');
-  if (authorityMatched) return result('MATCH', reasons, completeness, axes);
+  if (authorityMatched) return result('MATCH', reasons, completeness, axes, contentOutcome);
 
   if (axes.payer_subject === 'MATCH') {
     reasons.add('PAYER_MATCH_WITHOUT_AUTHENTICATED_SUBJECT');
   } else {
     reasons.add('NO_AUTHORITY_BEARING_SUBJECT_COMPARED');
   }
-  return result('INSUFFICIENT_EVIDENCE', reasons, completeness, axes);
+  return result('INSUFFICIENT_EVIDENCE', reasons, completeness, axes, contentOutcome);
 }
 
 // ---------------------------------------------------------------------------
@@ -487,6 +537,7 @@ export interface ResultShadowTelemetryRecord {
   readonly classification: ShadowClassification;
   readonly reason_codes: readonly ShadowReasonCode[];
   readonly evidence_completeness: ShadowEvidenceCompleteness;
+  readonly content_digest_outcome: ContentDigestOutcome;
   readonly axes: ResultAuthorizationShadowEvaluation['axes'];
   readonly policy_version: string;
   readonly envelope_version: string;
@@ -509,6 +560,7 @@ export function projectResultShadowTelemetry(
     classification: evaluation.classification,
     reason_codes: evaluation.reason_codes,
     evidence_completeness: evaluation.evidence_completeness,
+    content_digest_outcome: evaluation.content_digest_outcome,
     axes: evaluation.axes,
     policy_version: evaluation.policy_version,
     envelope_version: evaluation.envelope_version,

@@ -1,4 +1,13 @@
-import { lstatSync, readdirSync, readFileSync } from 'node:fs';
+import {
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
@@ -16,6 +25,8 @@ import {
 } from './result-authorization-shadow';
 
 const hex = (c: string) => c.repeat(64);
+/** A well-formed v1 ResultContentDigest string (see result-content-digest.ts). */
+const cd = (c: string, version = 1) => `result_content_digest.v${version}:sha256:${hex(c)}`;
 type PresentSlot = Extract<SubjectSlot, { status: 'PRESENT' }>;
 const ABSENT: SubjectSlot = { status: 'ABSENT' };
 const present = (
@@ -167,13 +178,13 @@ describe('ResultAuthorizationEnvelopeV1 shadow comparator (SA-1, non-enforcing)'
       'RESULT_IDENTITY_MISMATCH',
     ]);
     const d = evalShadow(
-      ctx(s, { result_content_digest: hex('c') }),
-      env(s, { result_content_digest: hex('d') })
+      ctx(s, { result_content_digest: cd('c') }),
+      env(s, { result_content_digest: cd('d') })
     );
     expect(d.classification).toBe('MISMATCH');
     expect(d.reason_codes).toEqual(['RESULT_IDENTITY_MISMATCH']);
-    // Release 1 persists no content digest: absent on either side is not a mismatch.
-    expect(evalShadow(ctx(s, { result_content_digest: hex('c') }), env(s)).classification).toBe(
+    // Release 1 binds no content digest: absent on either side is not a mismatch.
+    expect(evalShadow(ctx(s, { result_content_digest: cd('c') }), env(s)).classification).toBe(
       'MATCH'
     );
     const wrongJob = evalShadow(ctx(s), env(s, { job_id: 'job_9' }));
@@ -206,6 +217,7 @@ describe('ResultAuthorizationEnvelopeV1 shadow comparator (SA-1, non-enforcing)'
     expect(Object.keys(r).sort()).toEqual([
       'axes',
       'classification',
+      'content_digest_outcome',
       'envelope_version',
       'evidence_completeness',
       'policy_version',
@@ -241,7 +253,9 @@ describe('ResultAuthorizationEnvelopeV1 shadow comparator (SA-1, non-enforcing)'
       'ERROR',
     ]);
     expect(SHADOW_REASON_CODES).toHaveLength(new Set(SHADOW_REASON_CODES).size);
-    expect(SHADOW_REASON_CODES.length).toBe(25);
+    // 25 in SA1-RESULT-SHADOW-ENVELOPE-DESIGN-01; +RESULT_CONTENT_DIGEST_VERSION_INCOMPARABLE
+    // in SA1-RESULT-CONTENT-DIGEST-DESIGN-01.
+    expect(SHADOW_REASON_CODES.length).toBe(26);
     for (const v of [...SHADOW_CLASSIFICATIONS, ...SHADOW_REASON_CODES]) {
       expect(v).toMatch(/^[A-Z_]+$/);
       expect(v).not.toMatch(/(^|_)(ALLOW|DENY|DENIED|AUTHORIZED|UNAUTHORIZED|GRANT|PERMIT)(_|$)/);
@@ -286,6 +300,7 @@ describe('ResultAuthorizationEnvelopeV1 shadow comparator (SA-1, non-enforcing)'
     expect(Object.keys(rec).sort()).toEqual([
       'axes',
       'classification',
+      'content_digest_outcome',
       'envelope_version',
       'event',
       'evidence_completeness',
@@ -398,17 +413,72 @@ describe('EXPECTED_RELEASE1_SHADOW_OUTCOMES matrix', () => {
 const REPO_ROOT = resolve(__dirname, '../../../..');
 const MODULE_SRC = readFileSync(resolve(__dirname, 'result-authorization-shadow.ts'), 'utf8');
 
-function walk(dir: string, out: string[] = []): string[] {
+function walk(dir: string, out: string[] = [], ext = /\.(ts|tsx|mts|js|mjs)$/): string[] {
   for (const name of readdirSync(dir)) {
     if (name === 'node_modules' || name === 'dist' || name === '.git' || name.startsWith('.'))
       continue;
     const p = join(dir, name);
     const st = lstatSync(p);
     if (st.isSymbolicLink()) continue;
-    if (st.isDirectory()) walk(p, out);
-    else if (/\.(ts|tsx|mts|js|mjs)$/.test(name)) out.push(p);
+    if (st.isDirectory()) walk(p, out, ext);
+    else if (ext.test(name)) out.push(p);
   }
   return out;
+}
+
+/** The only files allowed to mention an SA-1 primitive (repo-relative, exact). */
+const SA1_FILES = new Set(
+  [
+    'result-authorization-shadow.ts',
+    'result-authorization-shadow.test.ts',
+    'result-content-digest.ts',
+    'result-content-digest.test.ts',
+    'subject-digest.ts',
+    'subject-digest.test.ts',
+  ].map((n) => `/packages/vcm/src/security/${n}`)
+);
+const isSa1File = (relPath: string) => SA1_FILES.has(relPath);
+
+// Case-insensitive: macOS resolves `./Subject-Digest` to the same file.
+const SA1_REFERENCE =
+  /result-authorization-shadow|result-content-digest|subject-digest|evaluateResultAuthorizationShadow|projectResultShadowTelemetry|ResultAuthorizationEnvelopeV1|computeResultContentDigest|compareResultContentDigest|computeSubjectDigest/i;
+
+/** Code AND wiring surfaces (config/manifests/entrypoints), not only .ts. */
+const SCAN_EXT = /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs|json|jsonc|toml|py)$/;
+
+const SCAN_ROOTS = ['packages', 'apps', 'services', 'scripts'];
+
+/** Live paths an authorization decision could be wired into. Must be visited. */
+const LIVE_PATHS = [
+  '/apps/edge-api/src/control-plane/routes/x402-service.ts',
+  '/apps/edge-api/src/control-plane/workflows/production-dependencies.ts',
+  '/apps/edge-api/src/control-plane/workflows/paid-continuation-workflow.ts',
+  '/apps/edge-api/src/control-plane/repositories/d1/x402-quotes.ts',
+  '/packages/protocol-x402/src/replay/binding.ts',
+];
+
+function scanSa1References(
+  repoRoot: string,
+  roots: readonly string[],
+  allowed: (relPath: string) => boolean
+): { offenders: string[]; scanned: number; visited: string[] } {
+  const offenders: string[] = [];
+  const visited: string[] = [];
+  for (const root of roots) {
+    let files: string[];
+    try {
+      files = walk(join(repoRoot, root), [], SCAN_EXT);
+    } catch {
+      continue;
+    }
+    for (const f of files) {
+      const rel = f.replace(repoRoot, '');
+      visited.push(rel);
+      if (allowed(rel)) continue;
+      if (SA1_REFERENCE.test(readFileSync(f, 'utf8'))) offenders.push(rel);
+    }
+  }
+  return { offenders, scanned: visited.length, visited };
 }
 
 describe('formal non-interference gate', () => {
@@ -431,44 +501,173 @@ describe('formal non-interference gate', () => {
     }
   });
 
-  it('nothing outside this module and its test imports or references the shadow comparator', () => {
-    const roots = ['packages', 'apps', 'services', 'scripts'].map((d) => join(REPO_ROOT, d));
-    const offenders: string[] = [];
-    let scanned = 0;
-    for (const root of roots) {
+  it('nothing outside the SA-1 files imports or references any SA-1 primitive', () => {
+    const { offenders, scanned, visited } = scanSa1References(REPO_ROOT, SCAN_ROOTS, isSa1File);
+    // Non-vacuity: the walk must actually cover the monorepo source, including
+    // every live path an authorization decision could be wired into.
+    expect(scanned).toBeGreaterThan(200);
+    for (const live of LIVE_PATHS) expect(visited, live).toContain(live);
+    expect(offenders).toEqual([]);
+  });
+
+  it('mutation: a planted reference is caught, and the gate is clean once removed', () => {
+    const sandbox = mkdtempSync(join(tmpdir(), 'sa1-gate-'));
+    try {
+      const rel = 'apps/edge-api/src/control-plane/routes/planted.ts';
+      const file = join(sandbox, rel);
+      mkdirSync(join(sandbox, 'apps/edge-api/src/control-plane/routes'), { recursive: true });
+      const benign = "export const x = 1;\nexport const y = 'ok';\n";
+      writeFileSync(file, benign);
+
+      // 1. Baseline: the scanner sees the file and reports nothing.
+      const clean = scanSa1References(sandbox, ['apps'], () => false);
+      expect(clean.visited).toContain(`/${rel}`);
+      expect(clean.offenders).toEqual([]);
+
+      // 2. Plant each prohibited reference kind; the gate must fail for each.
+      const planted = [
+        "import { evaluateResultAuthorizationShadow } from '@siteborne/vcm/security/result-authorization-shadow';",
+        "import { computeResultContentDigest } from '../../../../../packages/vcm/src/security/result-content-digest';",
+        "import { computeSubjectDigest } from '@siteborne/vcm/src/security/subject-digest';",
+        'const e: ResultAuthorizationEnvelopeV1 | null = null;',
+        'projectResultShadowTelemetry(ev, jobId);',
+        'await compareResultContentDigest(body, expected);',
+        // case-variant path (case-insensitive filesystems resolve it)
+        "import { x } from '../security/Subject-Digest';",
+        "import { y } from '../security/RESULT-CONTENT-DIGEST';",
+      ];
+      for (const line of planted) {
+        writeFileSync(file, `${benign}${line}\n`);
+        const dirty = scanSa1References(sandbox, ['apps'], () => false);
+        expect(dirty.offenders, line).toEqual([`/${rel}`]);
+      }
+
+      // 2b. A non-TypeScript wiring surface (manifest/config) is also scanned.
+      writeFileSync(file, benign);
+      const cfg = join(sandbox, 'apps/edge-api/wiring.json');
+      writeFileSync(cfg, '{"main":"packages/vcm/src/security/subject-digest.ts"}');
+      expect(scanSa1References(sandbox, ['apps'], () => false).offenders).toEqual([
+        '/apps/edge-api/wiring.json',
+      ]);
+      rmSync(cfg);
+
+      // 3. Remove the mutation; the gate passes again.
+      writeFileSync(file, benign);
+      expect(scanSa1References(sandbox, ['apps'], () => false).offenders).toEqual([]);
+
+      // 4. The allowlist is not a hole: an allowlisted path is the only exemption.
+      writeFileSync(file, `${benign}${planted[0] as string}\n`);
+      expect(scanSa1References(sandbox, ['apps'], (r) => r === `/${rel}`).offenders).toEqual([]);
+      expect(scanSa1References(sandbox, ['apps'], () => false).offenders).toEqual([`/${rel}`]);
+    } finally {
+      rmSync(sandbox, { recursive: true, force: true });
+    }
+  });
+
+  it('SA-1 primitives import only the governed canonicalizer and use no clock/random/I-O', () => {
+    const banned = [
+      'Date',
+      'Math.random',
+      'fetch',
+      'process',
+      'console',
+      'setTimeout',
+      'localStorage',
+      'XMLHttpRequest',
+      'getRandomValues',
+      'randomUUID',
+      'generateKey',
+      'importKey',
+      'exportKey',
+      'deriveKey',
+      'env',
+    ];
+    for (const name of ['result-content-digest.ts', 'subject-digest.ts']) {
+      const raw = readFileSync(resolve(__dirname, name), 'utf8');
+      const code = raw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+      const specifiers = [...code.matchAll(/from\s+'([^']+)'/g)].map((m) => m[1]);
+      expect(specifiers, name).toEqual(['../canonical']);
+      expect(code, name).not.toMatch(/\brequire\s*\(/);
+      expect(code, name).not.toMatch(/\bimport\s*\(/);
+      for (const b of banned) {
+        expect(code, `${name}:${b}`).not.toMatch(new RegExp(`\\b${b.replace('.', '\\.')}\\b`));
+      }
+    }
+    // The content digest reaches SHA-256 only through the governed path.
+    const contentCode = readFileSync(resolve(__dirname, 'result-content-digest.ts'), 'utf8');
+    expect(contentCode.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '')).not.toMatch(
+      /\bcrypto\b|createHash/
+    );
+    // The only WebCrypto call in either primitive is HMAC sign.
+    const subjectCode = readFileSync(resolve(__dirname, 'subject-digest.ts'), 'utf8');
+    expect([...subjectCode.matchAll(/crypto\.subtle\.(\w+)/g)].map((m) => m[1])).toEqual(['sign']);
+  });
+
+  it('no SA-1 source contains authority vocabulary (allow/deny/grant/permit/authorized)', () => {
+    const authority =
+      /\b(allow|allowed|deny|denied|authorized|unauthorized|grant|granted|permit|permitted)\b/i;
+    for (const name of [
+      'result-authorization-shadow.ts',
+      'result-content-digest.ts',
+      'subject-digest.ts',
+    ]) {
+      const raw = readFileSync(resolve(__dirname, name), 'utf8');
+      const code = raw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+      expect(code, name).not.toMatch(authority);
+    }
+  });
+
+  it('adds no migration, public schema, or production secret/binding', () => {
+    const terms = /result_content_digest|subject_digest|result_authorization|SUBJECT_DIGEST_KEY/i;
+    for (const dir of ['migrations']) {
+      for (const name of readdirSync(join(REPO_ROOT, dir))) {
+        expect(readFileSync(join(REPO_ROOT, dir, name), 'utf8'), `${dir}/${name}`).not.toMatch(
+          terms
+        );
+      }
+    }
+    // Public/wire schemas and PCC.
+    let scannedSchemas = 0;
+    for (const dir of ['contracts', 'packages/contracts', 'packages/pcc-schema', 'registry']) {
       let files: string[] = [];
       try {
-        files = walk(root);
-        scanned += files.length;
+        files = walk(join(REPO_ROOT, dir), [], /\.(ts|json|yaml|yml)$/);
       } catch {
         continue;
       }
+      scannedSchemas += files.length;
       for (const f of files) {
-        if (
-          f.endsWith('result-authorization-shadow.ts') ||
-          f.endsWith('result-authorization-shadow.test.ts')
-        )
-          continue;
-        const text = readFileSync(f, 'utf8');
-        if (
-          /result-authorization-shadow|evaluateResultAuthorizationShadow|projectResultShadowTelemetry|ResultAuthorizationEnvelopeV1/.test(
-            text
-          )
-        ) {
-          offenders.push(f.replace(REPO_ROOT, ''));
-        }
+        expect(readFileSync(f, 'utf8'), f.replace(REPO_ROOT, '')).not.toMatch(terms);
       }
     }
-    // Non-vacuity: the walk must actually cover the monorepo source.
-    expect(scanned).toBeGreaterThan(200);
-    expect(offenders).toEqual([]);
+    expect(scannedSchemas).toBeGreaterThan(20);
+    // Production configuration: no new env var / secret / binding.
+    const envSrc = readFileSync(
+      join(REPO_ROOT, 'apps/edge-api/src/control-plane/config/env.ts'),
+      'utf8'
+    );
+    expect(envSrc).not.toMatch(terms);
+    for (const w of ['apps/edge-api/wrangler.toml', 'apps/edge-api/wrangler.jsonc']) {
+      try {
+        expect(readFileSync(join(REPO_ROOT, w), 'utf8'), w).not.toMatch(terms);
+      } catch (e) {
+        if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e;
+      }
+    }
   });
 
   it('is not re-exported through the security or vcm barrels (no public surface)', () => {
     const barrel = readFileSync(resolve(__dirname, 'index.ts'), 'utf8');
-    expect(barrel).not.toMatch(/result-authorization-shadow/);
     const vcmIndex = readFileSync(resolve(__dirname, '../index.ts'), 'utf8');
-    expect(vcmIndex).not.toMatch(/result-authorization-shadow/);
+    for (const m of [
+      /result-authorization-shadow/,
+      /result-content-digest/,
+      /subject-digest/,
+      /ResultContentDigest|SubjectDigest/,
+    ]) {
+      expect(barrel).not.toMatch(m);
+      expect(vcmIndex).not.toMatch(m);
+    }
   });
 
   it('protocol-x402 replay/binding source neither imports nor mentions the shadow model', () => {
@@ -499,7 +698,7 @@ describe('formal non-interference gate', () => {
       scanned += files.length;
       for (const f of files) {
         expect(readFileSync(f, 'utf8'), f).not.toMatch(
-          /ResultAuthorizationEnvelope|result_authorization_envelope/
+          /ResultAuthorizationEnvelope|result_authorization_envelope|result_content_digest|subject_digest|digest_key_version/
         );
       }
     }

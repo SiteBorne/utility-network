@@ -379,3 +379,19 @@ none. `SOURCE_BEHAVIOR_CHANGES=0` (nothing imports the new module).
 
 No worker upload, deployment, traffic, host, alert-worker, secret, D1, or
 payment action was performed. Nothing was pushed.
+
+## 20. Correction (added by SECURITY-AUTHORITY-SA1-RESULT-CONTENT-DIGEST-DESIGN-01)
+
+§18's statement that "Release 1 persists no result content hash" was overstated.
+Release 1 persists `payment_service_link_evidence.service_output_hash` (a digest
+of the PCC `candidate.output`) and, in the Workflow path, also
+`buyer_receipt_hash` / `verification_receipt_hash`, which are digests of exactly
+the released body. Those are never verified against the body at release, and
+none is linked to this envelope. The accurate finding is therefore: an existing
+released- body digest is never verified at release (Workflow path), and none
+exists for the Nevermined-recovery path. Also, the envelope's
+`result_content_digest` format is now the versioned string
+`result_content_digest.v<N>:sha256:<hex>` (was bare 64-hex), the reason-code
+vocabulary is 26, not 25 (`RESULT_CONTENT_DIGEST_VERSION_INCOMPARABLE`), and the
+evaluation and telemetry record carry `content_digest_outcome`. Details:
+`SECURITY-AUTHORITY-SA1-RESULT-CONTENT-DIGEST-DESIGN-01.md`.
