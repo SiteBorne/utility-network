@@ -443,3 +443,14 @@ read, against one real paid response), and decides what the released body should
 be. It must come **before** any shadow read-time integrity check, because the
 anchor's meaning depends on the body. The `__proto__` canonicalizer finding
 needs its own separate hardening checkpoint.
+
+## 14. Correction (added by RESULT-WIRE-BODY-CONFORMANCE-READONLY-AUDIT-01)
+
+NS-1 is resolved and no longer "UNRATED / not confirmed". The released body is
+the flat receipt for all four production executors, and the governed contract is
+the full PCC document (SUN-1222C). NS-1 is a runtime body defect with HIGH
+product, public- contract, and data-loss severity (not a security P0/P1). The
+"no new persisted digest is needed" conclusion above is scoped to the currently
+persisted flat body and does not hold if the body becomes the governed PCC
+document. Details and the next checkpoint:
+`RESULT-WIRE-BODY-CONFORMANCE-READONLY-AUDIT-01.md`.
