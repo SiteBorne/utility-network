@@ -21,8 +21,9 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import Ajv2020 from 'ajv/dist/2020.js';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { Context } from 'hono';
+import { parse as parseYaml } from 'yaml';
 import {
   FixtureDocumentWorkerBridge,
   buildProductionSigner,
@@ -30,7 +31,12 @@ import {
   verifyServiceReceipt,
   type WorkerResult,
 } from '@siteborne/service-runtime';
-import type { KeyRegistry, VerificationReceipt } from '@siteborne/verification';
+import {
+  hashPolicy,
+  loadPolicy,
+  type KeyRegistry,
+  type VerificationReceipt,
+} from '@siteborne/verification';
 import { MCP_PROTOCOL_VERSION, createSiteborneMcpHonoApp } from '@siteborne/protocol-mcp';
 import { MCP_SERVICE_OUTPUT_SCHEMAS } from '@siteborne/protocol-mcp';
 import {
@@ -51,6 +57,10 @@ import { buildWebContextV2ProductionExecutor } from '../src/control-plane/produc
 import { buildCompanyEvidenceGraphV2ProductionExecutor } from '../src/control-plane/production/company-evidence-graph-v2-production-executor';
 import { buildDocumentEvidenceJsonV2ProductionExecutor } from '../src/control-plane/production/document-evidence-json-v2-production-executor';
 import { FakeWorkflowStep } from './support/fake-workflow-step';
+import type {
+  VerifyAndSignParams,
+  VerifyAndSignResult,
+} from '../../../packages/service-runtime/src/pcc/verify-and-sign';
 import {
   buildDecryptedPayload,
   buildTestDependencies,
@@ -58,6 +68,51 @@ import {
   sealTestInput,
   TEST_JOB_ID,
 } from './support/paid-continuation-workflow-fixtures';
+import {
+  GOVERNED_CONTRACT_RELEASE,
+  GOVERNED_OUTPUT_SCHEMA_HASHES,
+  GOVERNED_PCC_SCHEMA_HASH,
+  GOVERNED_PCC_SCHEMA_RELEASE,
+  PCC_PROOF_NAMESPACE,
+  buildSelfVerifyingPcc,
+  canonicalHash,
+  classifyStoredResult,
+  pccDocumentProjection,
+  receiptPreimage,
+  replayWireBody,
+  serviceOutputProjection,
+  verifySelfVerifyingPcc,
+  type PublicVerifierResult,
+  type ReferenceReceipt,
+  type SelfVerifyingPccArtifact,
+} from './support/result-wire-body-reference-model';
+
+// Test-only observation point: capture the exact finalized document returned by
+// the real shared verifyAndSign implementation while leaving its behavior and
+// every production caller unchanged. Vitest hoists this mock before the service
+// modules load; importOriginal delegates all work to the production function.
+const capturedSignedResults = vi.hoisted(() => new Map<string, unknown>());
+vi.mock('../../../packages/service-runtime/src/pcc/verify-and-sign', async (importOriginal) => {
+  type VerifyAndSignModule = Record<string, unknown> & {
+    verifyAndSign: (
+      params: VerifyAndSignParams<string, unknown>
+    ) => Promise<VerifyAndSignResult<string, unknown>>;
+  };
+  const actual = await importOriginal<VerifyAndSignModule>();
+  return {
+    ...actual,
+    verifyAndSign: async (
+      params: Parameters<typeof actual.verifyAndSign>[0]
+    ): ReturnType<typeof actual.verifyAndSign> => {
+      const signed = await actual.verifyAndSign(params);
+      capturedSignedResults.set(signed.document.contract.service_id, {
+        ...signed,
+        signer: params.signer,
+      });
+      return signed;
+    },
+  };
+});
 
 const REPO = (p: string) => fileURLToPath(new URL(`../../../${p}`, import.meta.url));
 const readJson = (p: string) =>
@@ -77,6 +132,10 @@ function indepCanonical(v: unknown): string {
 }
 const indepHash = (v: unknown) =>
   `sha256:${createHash('sha256').update(indepCanonical(v)).digest('hex')}`;
+const fileHash = (p: string) =>
+  `sha256:${createHash('sha256')
+    .update(readFileSync(REPO(p)))
+    .digest('hex')}`;
 
 // ---- infrastructure fakes (edges only) ------------------------------------
 class FakeResultsD1 {
@@ -366,6 +425,30 @@ const chainFor = (c: ExecutorCase) => {
   return chains.get(c.serviceId) as Promise<Chain>;
 };
 
+const referenceArtifacts = new Map<string, Promise<SelfVerifyingPccArtifact>>();
+const referenceFor = async (c: ExecutorCase) => {
+  if (!referenceArtifacts.has(c.serviceId)) {
+    referenceArtifacts.set(
+      c.serviceId,
+      (async () => {
+        await chainFor(c);
+        return buildSelfVerifyingPcc(capturedSignedResults.get(c.serviceId) as never);
+      })()
+    );
+  }
+  return referenceArtifacts.get(c.serviceId) as Promise<SelfVerifyingPccArtifact>;
+};
+
+async function publicKeyForAsync(
+  c: ExecutorCase,
+  artifact: SelfVerifyingPccArtifact
+): Promise<Uint8Array> {
+  const chain = await chainFor(c);
+  const record = chain.registry.get(artifact.verificationReceipt.signing_key_id);
+  if (!record) throw new Error(`missing_public_key:${artifact.verificationReceipt.signing_key_id}`);
+  return record.public_key;
+}
+
 describe.each(CASES)(
   'RESULT-WIRE-BODY-CONFORMANCE: $serviceId (real executor -> real Workflow)',
   (c) => {
@@ -500,6 +583,32 @@ describe.each(CASES)(
 );
 
 describe('RESULT-WIRE-BODY-CONFORMANCE: cross-executor consistency', () => {
+  it('reference model starts from the actual finalized in-memory PCC', async () => {
+    const c = CASES[0];
+    await chainFor(c);
+    const captured = capturedSignedResults.get(c.serviceId);
+    await expect(buildSelfVerifyingPcc(captured as never)).resolves.toBeDefined();
+  }, 60_000);
+
+  it('captures the actual in-memory signed.document from all four real production executors', async () => {
+    await Promise.all(CASES.map((c) => chainFor(c)));
+    expect([...capturedSignedResults.keys()].sort()).toEqual(CASES.map((c) => c.serviceId).sort());
+  }, 120_000);
+
+  it.each(CASES)(
+    'the actual in-memory signed.document for $serviceId validates against its governed Release-2 output schema',
+    async (c) => {
+      await chainFor(c);
+      const captured = capturedSignedResults.get(c.serviceId) as { document: unknown } | undefined;
+      expect(captured).toBeDefined();
+      const validate = serviceValidator(c.schemaFile);
+      const valid = validate(captured?.document);
+      expect(validate.errors ?? [], JSON.stringify(validate.errors, null, 2)).toEqual([]);
+      expect(valid).toBe(true);
+    },
+    60_000
+  );
+
   it('all four executors release the identical flat-receipt key set', async () => {
     const keySets = await Promise.all(
       CASES.map(async (c) =>
@@ -515,6 +624,312 @@ describe('RESULT-WIRE-BODY-CONFORMANCE: cross-executor consistency', () => {
     const hashes = await Promise.all(CASES.map(async (c) => (await chainFor(c)).body.output_hash));
     expect(new Set(hashes).size).toBe(CASES.length);
   }, 120_000);
+});
+
+describe('RESULT-WIRE-BODY-DELIVERY-DESIGN-01: local-only self-verifying PCC reference model', () => {
+  const verifyReference = async (c: ExecutorCase, pcc: Record<string, unknown>) => {
+    const artifact = await referenceFor(c);
+    return verifySelfVerifyingPcc(pcc, await publicKeyForAsync(c, artifact));
+  };
+  const cloned = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
+  type ProofView = {
+    proof_version: '1.0.0';
+    receipt: ReferenceReceipt;
+    verification_material: { verifier_results: PublicVerifierResult[] };
+  };
+
+  it.each(CASES)('$serviceId freezes final service semantics before proof creation', async (c) => {
+    let frozenBeforeProof = false;
+    const artifact = await buildSelfVerifyingPcc(capturedSignedResults.get(c.serviceId) as never, {
+      onSemanticFreeze: (semanticPcc) => {
+        frozenBeforeProof =
+          Object.isFrozen(semanticPcc) &&
+          Object.isFrozen(semanticPcc.contract) &&
+          Object.isFrozen(semanticPcc.extensions);
+      },
+    });
+    expect(frozenBeforeProof).toBe(true);
+    expect(Object.isFrozen(artifact.serviceOutput)).toBe(true);
+    expect(Object.isFrozen(artifact.finalExtension)).toBe(true);
+    expect(Object.isFrozen(artifact.pccDocument)).toBe(true);
+    expect(() => {
+      (artifact.finalExtension as { forbidden?: boolean }).forbidden = true;
+    }).toThrow(TypeError);
+  });
+
+  it('verify_agent_output.v2 rejects a post-proof outcome/score mutation', async () => {
+    const c = CASES.find((entry) => entry.serviceId === 'verify_agent_output.v2') as ExecutorCase;
+    const artifact = await referenceFor(c);
+    const changed = cloned(artifact.wireBody);
+    const extension = (changed.extensions as Record<string, Record<string, unknown>>)[
+      'net.siteborne.agent-verification.v1'
+    ];
+    extension.outcome = extension.outcome === 'pass' ? 'fail' : 'pass';
+    extension.score = Number(extension.score) === 0 ? 1 : 0;
+    const verified = await verifyReference(c, changed);
+    expect(verified.valid).toBe(false);
+    expect(verified.errors).toEqual(
+      expect.arrayContaining(['output_hash_mismatch', 'pcc_document_hash_mismatch'])
+    );
+  });
+
+  it.each(CASES)('$serviceId reconstructs the signed preimage from delivered PCC', async (c) => {
+    const artifact = await referenceFor(c);
+    const proof = (artifact.wireBody.extensions as Record<string, ProofView>)[PCC_PROOF_NAMESPACE];
+    const reconstructed = receiptPreimage(proof.receipt);
+    expect(Object.keys(reconstructed)).not.toContain('signature');
+    expect(Object.keys(reconstructed)).not.toContain('receipt_id');
+    expect(reconstructed.service_id).toBe(c.serviceId);
+    expect(reconstructed.pcc_document_hash).toMatch(/^sha256:[a-f0-9]{64}$/);
+  });
+
+  it.each(CASES)('$serviceId verifies from delivered PCC plus public key', async (c) => {
+    const artifact = await referenceFor(c);
+    await expect(verifyReference(c, artifact.wireBody)).resolves.toEqual({
+      valid: true,
+      errors: [],
+    });
+  });
+
+  it.each(CASES)(
+    '$serviceId output_hash recomputes from its delivered service extension',
+    async (c) => {
+      const artifact = await referenceFor(c);
+      expect(await canonicalHash(serviceOutputProjection(artifact.wireBody))).toBe(
+        artifact.verificationReceipt.output_hash
+      );
+    }
+  );
+
+  it('modified service output fails verification', async () => {
+    const c = CASES[1];
+    const artifact = await referenceFor(c);
+    const changed = cloned(artifact.wireBody);
+    const extensionKey = Object.keys(changed.extensions as Record<string, unknown>).find(
+      (key) => key !== PCC_PROOF_NAMESPACE
+    ) as string;
+    (changed.extensions as Record<string, Record<string, unknown>>)[extensionKey].tampered = true;
+    const verified = await verifyReference(c, changed);
+    expect(verified.valid).toBe(false);
+    expect(verified.errors).toEqual(
+      expect.arrayContaining(['output_hash_mismatch', 'pcc_document_hash_mismatch'])
+    );
+  });
+
+  it.each([
+    [
+      'service_id',
+      (pcc: Record<string, unknown>) => {
+        (pcc.contract as Record<string, unknown>).service_id = 'other.v2';
+      },
+      'service_id_mismatch',
+    ],
+    [
+      'decision',
+      (pcc: Record<string, unknown>) => {
+        (pcc.verification as Record<string, unknown>).decision = 'fail';
+      },
+      'decision_mismatch',
+    ],
+    [
+      'proof_version',
+      (pcc: Record<string, unknown>) => {
+        const proof = (pcc.extensions as Record<string, ProofView>)[PCC_PROOF_NAMESPACE];
+        proof.proof_version = 'forged' as '1.0.0';
+      },
+      'proof_version_mismatch',
+    ],
+    [
+      'receipt_id',
+      (pcc: Record<string, unknown>) => {
+        const proof = (pcc.extensions as Record<string, ProofView>)[PCC_PROOF_NAMESPACE];
+        proof.receipt.receipt_id = `rcpt_${'0'.repeat(24)}`;
+      },
+      'receipt_id_mismatch',
+    ],
+  ] as const)('modified %s fails verification', async (_field, mutate, expectedError) => {
+    const c = CASES[0];
+    const artifact = await referenceFor(c);
+    const changed = cloned(artifact.wireBody);
+    mutate(changed);
+    const verified = await verifyReference(c, changed);
+    expect(verified.valid).toBe(false);
+    expect(verified.errors).toContain(expectedError);
+  });
+
+  it.each(CASES)('$serviceId fits the one PCC-native proof representation', async (c) => {
+    const artifact = await referenceFor(c);
+    expect(artifact.wireBody).toBe(artifact.pccDocument);
+    expect(
+      (artifact.wireBody.extensions as Record<string, unknown>)[PCC_PROOF_NAMESPACE]
+    ).toBeDefined();
+    expect('output' in artifact.wireBody).toBe(false);
+    expect('pcc' in artifact.wireBody).toBe(false);
+  });
+
+  it.each(CASES)(
+    '$serviceId proposed PCC validates under the governed Release-2 schema',
+    async (c) => {
+      const artifact = await referenceFor(c);
+      const validate = serviceValidator(c.schemaFile);
+      expect(validate(artifact.wireBody), JSON.stringify(validate.errors, null, 2)).toBe(true);
+    }
+  );
+
+  it('typed link evidence is independent of the public wire shape', async () => {
+    const artifact = await referenceFor(CASES[0]);
+    const malformedWire = cloned(artifact.wireBody);
+    delete (malformedWire.extensions as Record<string, unknown>)[PCC_PROOF_NAMESPACE];
+    expect(artifact.linkEvidenceInputs).toMatchObject({
+      receiptId: artifact.verificationReceipt.receipt_id,
+      signingKeyId: artifact.verificationReceipt.signing_key_id,
+      signature: artifact.verificationReceipt.signature,
+    });
+    expect(malformedWire).not.toEqual(artifact.wireBody);
+  });
+
+  it('legacy receipt-only storage is classified truthfully and never upgraded', async () => {
+    const chain = await chainFor(CASES[0]);
+    const classified = classifyStoredResult(chain.body);
+    expect(classified.kind).toBe('LEGACY_RECEIPT_ONLY');
+    expect(classified.body).toEqual(chain.body);
+    expect(classified.body).not.toHaveProperty('pcc_version');
+  });
+
+  it.each(CASES)(
+    '$serviceId initial and cached successful PCC are semantically identical',
+    async (c) => {
+      const artifact = await referenceFor(c);
+      expect(replayWireBody(artifact)).toEqual(artifact.wireBody);
+      expect(classifyStoredResult(replayWireBody(artifact)).kind).toBe('SELF_VERIFYING_PCC_VNEXT');
+    }
+  );
+
+  it('receipt and PCC hashes use non-circular projections', async () => {
+    const artifact = await referenceFor(CASES[0]);
+    const changedProof = cloned(artifact.wireBody);
+    (changedProof.extensions as Record<string, ProofView>)[PCC_PROOF_NAMESPACE].receipt.signature =
+      'x'.repeat(86);
+    changedProof.receipt = {};
+    expect(await canonicalHash(pccDocumentProjection(changedProof))).toBe(
+      artifact.verificationReceipt.pcc_document_hash
+    );
+    expect(await canonicalHash(serviceOutputProjection(changedProof))).toBe(
+      artifact.verificationReceipt.output_hash
+    );
+  });
+
+  it('contract_release derives from the normative contract release authority', async () => {
+    const release = parseYaml(
+      readFileSync(REPO('contracts/releases/2.0.0/CONTRACT_RELEASE.yaml'), 'utf8')
+    ) as { release: { version: string } };
+    expect(GOVERNED_CONTRACT_RELEASE).toBe(release.release.version);
+    for (const c of CASES) {
+      expect((await referenceFor(c)).verificationReceipt.contract_release).toBe(
+        release.release.version
+      );
+    }
+  });
+
+  it('policy_hash derives from the canonical governed verification policy', async () => {
+    const expected = await hashPolicy(loadPolicy());
+    expect(expected).not.toBe(`sha256:${'0'.repeat(64)}`);
+    for (const c of CASES)
+      expect((await referenceFor(c)).verificationReceipt.policy_hash).toBe(expected);
+  });
+
+  it('pcc_schema_hash derives from the governed PCC artifact and release authority', async () => {
+    const release = parseYaml(
+      readFileSync(REPO('contracts/releases/2.0.0/CONTRACT_RELEASE.yaml'), 'utf8')
+    ) as { pcc_dependency: { schema_release: string; schema_sha256: string } };
+    expect(GOVERNED_PCC_SCHEMA_RELEASE).toBe(release.pcc_dependency.schema_release);
+    expect(GOVERNED_PCC_SCHEMA_HASH).toBe(`sha256:${release.pcc_dependency.schema_sha256}`);
+    expect(GOVERNED_PCC_SCHEMA_HASH).toBe(
+      fileHash('contracts/releases/2.0.0/schemas/proof-carrying-context.schema.json')
+    );
+  });
+
+  it.each(CASES)(
+    '$serviceId output_schema_hash derives from its governed schema artifact',
+    async (c) => {
+      const expected = fileHash(`contracts/releases/2.0.0/schemas/services/${c.schemaFile}`);
+      expect(GOVERNED_OUTPUT_SCHEMA_HASHES[c.serviceId]).toBe(expected);
+      expect((await referenceFor(c)).verificationReceipt.output_schema_hash).toBe(expected);
+    }
+  );
+
+  it.each(CASES)('$serviceId proof construction is deterministic', async (c) => {
+    const first = await referenceFor(c);
+    const second = await buildSelfVerifyingPcc(capturedSignedResults.get(c.serviceId) as never);
+    expect(second.wireBody).toEqual(first.wireBody);
+    expect(second.verificationReceipt.signature).toBe(first.verificationReceipt.signature);
+  });
+
+  it('rejects non-Unicode-scalar strings before canonical hashing or signing', async () => {
+    await expect(canonicalHash({ value: '\ud800' })).rejects.toThrow('non_unicode_scalar:$.value');
+    await expect(canonicalHash({ value: '\udc00' })).rejects.toThrow('non_unicode_scalar:$.value');
+    await expect(canonicalHash({ nested: [{ value: 'a\ud800b' }] })).rejects.toThrow(
+      'non_unicode_scalar'
+    );
+    await expect(canonicalHash({ ['k\ud800']: 1 })).rejects.toThrow('non_unicode_scalar');
+    // a valid surrogate pair (one scalar value) remains accepted
+    await expect(canonicalHash({ value: '😀' })).resolves.toMatch(/^sha256:/);
+  });
+
+  it('verification rejects a delivered PCC carrying a lone surrogate', async () => {
+    const c = CASES[0];
+    const artifact = await referenceFor(c);
+    const changed = cloned(artifact.wireBody);
+    const extensionKey = Object.keys(changed.extensions as Record<string, unknown>).find(
+      (key) => key !== PCC_PROOF_NAMESPACE
+    ) as string;
+    (changed.extensions as Record<string, Record<string, unknown>>)[extensionKey].tampered =
+      '\ud800';
+    await expect(verifyReference(c, changed)).resolves.toEqual({
+      valid: false,
+      errors: ['non_unicode_scalar'],
+    });
+  });
+
+  it.each(CASES)(
+    '$serviceId output_hash and pcc_document_hash have distinct values and semantics',
+    async (c) => {
+      const receipt = (await referenceFor(c)).verificationReceipt;
+      expect(receipt.output_hash).not.toBe(receipt.pcc_document_hash);
+    }
+  );
+
+  it.each(CASES)(
+    '$serviceId cached replay is the exact serialized-and-reparsed initial PCC',
+    async (c) => {
+      const artifact = await referenceFor(c);
+      const reparsed = JSON.parse(JSON.stringify(artifact.wireBody));
+      expect(reparsed).toEqual(artifact.wireBody);
+      await expect(verifyReference(c, reparsed)).resolves.toEqual({ valid: true, errors: [] });
+    }
+  );
+
+  it.each(CASES)('$serviceId publishes only verifier hash preimage fields', async (c) => {
+    const artifact = await referenceFor(c);
+    const proof = (artifact.wireBody.extensions as Record<string, ProofView>)[PCC_PROOF_NAMESPACE];
+    for (const result of proof.verification_material.verifier_results) {
+      expect(Object.keys(result).sort()).toEqual([
+        'failure_codes',
+        'findings',
+        'status',
+        'verifier_id',
+      ]);
+      expect(result).not.toHaveProperty('audit_reference');
+      expect(result).not.toHaveProperty('input_hash');
+      expect(result).not.toHaveProperty('started_at');
+      for (const finding of result.findings) {
+        expect(Object.keys(finding).sort()).toEqual(['code', 'severity']);
+        expect(finding).not.toHaveProperty('message');
+        expect(finding).not.toHaveProperty('subject');
+      }
+    }
+    expect(JSON.stringify(artifact.wireBody)).not.toContain('privateKey');
+  });
 });
 
 const MCP_TOOL_BY_SERVICE: Record<string, string> = {
@@ -576,6 +991,17 @@ describe('RESULT-WIRE-BODY-CONFORMANCE: the real MCP SDK against the real releas
     expect(r.isError).not.toBe(true);
     expect(r.structuredContent).toEqual(frozenOutputExample('verify_agent_output.v2'));
   }, 60_000);
+
+  it.each(CASES)(
+    'the real MCP SDK accepts the proposed self-verifying PCC for $serviceId',
+    async (c) => {
+      const artifact = await referenceFor(c);
+      const r = await callViaMcp(c.serviceId, MCP_TOOL_BY_SERVICE[c.serviceId], artifact.wireBody);
+      expect(r.isError).not.toBe(true);
+      expect(r.structuredContent).toEqual(artifact.wireBody);
+    },
+    60_000
+  );
 
   it.each(CASES.map((c) => [c.serviceId, MCP_TOOL_BY_SERVICE[c.serviceId]] as const))(
     'the real released flat receipt of %s is REJECTED by the MCP SDK output validation (after the already-settled call)',
