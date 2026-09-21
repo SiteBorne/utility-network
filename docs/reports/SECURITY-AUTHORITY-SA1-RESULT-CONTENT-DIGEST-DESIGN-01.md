@@ -432,3 +432,18 @@ recomputed hash of `result_json.body` for Workflow-path rows, what the
 Nevermined-recovery path stores, and therefore whether a new persisted digest is
 needed at all. It would touch no write path. Separately, N1 (`__proto__`) needs
 its own decision because fixing it changes signed PCC hashes.
+
+## 15. Correction recorded by RESULT-BODY-INTEGRITY-READONLY-AUDIT-01
+
+Added after that audit; earlier sections are left as written.
+
+- This report describes the Workflow body as "the already-signed PCC". Source
+  shows it is the **flat signed `VerificationReceipt`**
+  (`outcome.result.receipt`), with no service output and no PCC-document fields.
+- The `buyer_receipt_hash` / `verification_receipt_hash` anchors reproduce from
+  `hashPaymentObject(body)`, so a new persisted result-content digest is
+  redundant for the production Workflow path, provided the body stays the
+  receipt.
+- `ResultContentDigest` hashes `{content, domain}` and therefore does not
+  reproduce those anchors.
+- See `SECURITY-AUTHORITY-SA1-RESULT-BODY-INTEGRITY-READONLY-AUDIT-01.md`.
