@@ -90,13 +90,13 @@ describe('computeModelDigest', () => {
       currentStaticExposures: [
         {
           surface: 'mcp',
-          registrationId: 'siteborne_company_evidence_graph',
+          registrationId: 'siteborne_build_company_evidence_graph',
           operationId: 'evaluate',
           exposureShape: 'standalone_tool',
           provenance: {
             sourcePackage: '@siteborne/protocol-mcp',
             sourceModule: 'src/constants.ts#MCP_SERVICE_TOOLS',
-            sourceRegistrationId: 'siteborne_company_evidence_graph',
+            sourceRegistrationId: 'siteborne_build_company_evidence_graph',
             runtimeSourceCommit: 'a'.repeat(40) as never,
             derivationMethod: 'typed_export',
           },
@@ -171,7 +171,7 @@ describe('computeRuntimeOverlayDigest', () => {
       protocolActivations: [
         {
           surface: 'mcp' as const,
-          registrationId: 'siteborne_company_evidence_graph',
+          registrationId: 'siteborne_build_company_evidence_graph',
           runtimeEnabled: true,
           economicAdmissionEnabled: false,
         },
@@ -190,7 +190,7 @@ describe('computeRuntimeOverlayDigest', () => {
       protocolActivations: [
         {
           surface: 'mcp' as const,
-          registrationId: 'siteborne_company_evidence_graph',
+          registrationId: 'siteborne_build_company_evidence_graph',
           runtimeEnabled: true,
           economicAdmissionEnabled: true,
         },

@@ -74,13 +74,13 @@ describe('projectOneService: base_price reconstruction (METADATA-VCM-04 §VII)',
       currentStaticExposures: [
         {
           surface: 'mcp' as const,
-          registrationId: 'siteborne_company_evidence_graph',
+          registrationId: 'siteborne_build_company_evidence_graph',
           operationId: 'evaluate',
           exposureShape: 'standalone_tool' as const,
           provenance: {
             sourcePackage: '@siteborne/protocol-mcp',
             sourceModule: 'src/constants.ts#MCP_SERVICE_TOOLS',
-            sourceRegistrationId: 'siteborne_company_evidence_graph',
+            sourceRegistrationId: 'siteborne_build_company_evidence_graph',
             runtimeSourceCommit: 'a'.repeat(40) as never,
             derivationMethod: 'typed_export' as const,
           },

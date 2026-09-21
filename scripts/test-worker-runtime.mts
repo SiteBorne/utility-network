@@ -279,13 +279,13 @@ async function runPhase0() {
 
     const unpaid = await fetch(`${base}/mcp`, {
       method: 'POST',
-      headers: mcpHeaders('tools/call', 'siteborne_company_evidence_graph'),
+      headers: mcpHeaders('tools/call', 'siteborne_build_company_evidence_graph'),
       body: JSON.stringify({
         jsonrpc: '2.0',
         id: 1207,
         method: 'tools/call',
         params: {
-          name: 'siteborne_company_evidence_graph',
+          name: 'siteborne_build_company_evidence_graph',
           arguments: {
             identifiers: { cik: '0000320193' },
             requested_field_groups: ['identity'],

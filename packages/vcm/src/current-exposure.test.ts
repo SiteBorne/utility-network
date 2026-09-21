@@ -14,7 +14,7 @@ const SOURCE_COMMIT = 'a'.repeat(40);
 function registration(overrides: Partial<CurrentRegistrationFact> = {}): CurrentRegistrationFact {
   return {
     surface: 'mcp',
-    registrationId: 'siteborne_company_evidence_graph',
+    registrationId: 'siteborne_build_company_evidence_graph',
     exposureShape: 'standalone_tool',
     target: {
       kind: 'service_interaction',

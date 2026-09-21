@@ -48,9 +48,9 @@ describe('edge-api /mcp route', () => {
     const tools = await client.listTools();
     expect(tools.tools.map((tool) => tool.name).sort()).toEqual(
       [
-        'siteborne_company_evidence_graph',
-        'siteborne_web_context_verified',
-        'siteborne_document_evidence_json',
+        'siteborne_build_company_evidence_graph',
+        'siteborne_retrieve_verified_web_context',
+        'siteborne_extract_document_evidence_json',
         'siteborne_verify_agent_output',
         'siteborne_get_quote',
         'siteborne_get_service_health',
@@ -72,7 +72,7 @@ describe('edge-api /mcp route', () => {
     // asserted below.
     const client = await connect();
     const result = await client.callTool({
-      name: 'siteborne_company_evidence_graph',
+      name: 'siteborne_build_company_evidence_graph',
       arguments: frozenInputExample('company_evidence_graph.v2') as Record<string, unknown>,
     });
     expect(result.isError).toBe(true);
@@ -97,9 +97,7 @@ describe('edge-api /mcp route', () => {
       },
     });
     expect(quote.isError).not.toBe(true);
-    expect(quote.structuredContent).toEqual(
-      expect.objectContaining({ network: 'eip155:84532' })
-    );
+    expect(quote.structuredContent).toEqual(expect.objectContaining({ network: 'eip155:84532' }));
   });
 
   it('quotes on the exact network/asset the real v2 CDP routes resolve to once production payment is fully authorized', async () => {

@@ -27,9 +27,9 @@ describe('@siteborne/mcp-server packed stdio entry', () => {
 
     expect(tools.tools.map((tool) => tool.name).sort()).toEqual(
       [
-        'siteborne_company_evidence_graph',
-        'siteborne_web_context_verified',
-        'siteborne_document_evidence_json',
+        'siteborne_build_company_evidence_graph',
+        'siteborne_retrieve_verified_web_context',
+        'siteborne_extract_document_evidence_json',
         'siteborne_verify_agent_output',
         'siteborne_get_quote',
         'siteborne_get_service_health',

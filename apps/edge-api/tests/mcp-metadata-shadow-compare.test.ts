@@ -90,9 +90,9 @@ describe('MCP metadata projection mode -- shadow_compare', () => {
     expect(response.status).toBe(200);
     expect(tools.map((t) => t.name).sort()).toEqual(
       [
-        'siteborne_company_evidence_graph',
-        'siteborne_web_context_verified',
-        'siteborne_document_evidence_json',
+        'siteborne_build_company_evidence_graph',
+        'siteborne_retrieve_verified_web_context',
+        'siteborne_extract_document_evidence_json',
         'siteborne_verify_agent_output',
         'siteborne_get_quote',
         'siteborne_get_service_health',
@@ -268,9 +268,9 @@ describe('MCP metadata projection mode -- vcm_primary_compare', () => {
       }))
     );
     expect(tools.map((tool) => tool.name)).toEqual([
-      'siteborne_company_evidence_graph',
-      'siteborne_web_context_verified',
-      'siteborne_document_evidence_json',
+      'siteborne_build_company_evidence_graph',
+      'siteborne_retrieve_verified_web_context',
+      'siteborne_extract_document_evidence_json',
       'siteborne_verify_agent_output',
       'siteborne_get_quote',
       'siteborne_get_service_health',

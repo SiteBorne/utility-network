@@ -211,7 +211,7 @@ function quoteToolDescription(): string {
   return (
     'Build a canonical x402 payment quote for one SITEBORNE service and exact request input. ' +
     'Use when: an agent needs the governed price, payee, network, asset, resource, expiry, and payment requirement before deciding whether to invoke a paid service. ' +
-    'Do not use when: evidence work is required now (use the matching siteborne_company_evidence_graph, siteborne_web_context_verified, siteborne_document_evidence_json, or siteborne_verify_agent_output tool), or only availability is needed (use siteborne_get_service_health). ' +
+    'Do not use when: evidence work is required now (use the matching siteborne_build_company_evidence_graph, siteborne_retrieve_verified_web_context, siteborne_extract_document_evidence_json, or siteborne_verify_agent_output tool), or only availability is needed (use siteborne_get_service_health). ' +
     `Parameters: scheme must be the one scheme the service is offered under (${offeredSchemesSentence()}); any other scheme is rejected with scheme_not_offered. input is hashed, so the quote binds only that exact request. ` +
     'Behavior: quote-only and read-only; it hashes the proposed input, and does not execute the underlying paid service, verify payment, call a provider, create a Workflow, or settle. ' +
     'Economics: free of charge. The returned amount is the exact price, or for upto an authorized maximum whose actual_amount is null because the real charge is measured at settlement and never exceeds it. ' +
@@ -471,7 +471,7 @@ const SERVICE_DESCRIPTION_PARTS: Readonly<
       'Build a proof-carrying graph of public company identity, SEC filings, website observations, regulatory mentions, and repository signals.',
     useWhen: 'the request needs entity-level evidence synthesized across sources.',
     doNotUse:
-      'one URL is the subject (use siteborne_web_context_verified), one document is the subject (use siteborne_document_evidence_json), or an existing agent output needs evaluation (use siteborne_verify_agent_output).',
+      'one URL is the subject (use siteborne_retrieve_verified_web_context), one document is the subject (use siteborne_extract_document_evidence_json), or an existing agent output needs evaluation (use siteborne_verify_agent_output).',
     parameters:
       'authoritative identifiers (cik, lei, isin, cusip, figi) resolve entities more reliably than company_name, ticker or domain alone, and combining them reduces ambiguity; requested_field_groups narrows provider work; maximum_authorized_price only constrains payment and never widens scope.',
     behavior: `open-world: a paid request queries public data providers over the network and persists governed payment, audit, job and Workflow state; ${REPLAY_SENTENCE}`,
@@ -484,7 +484,7 @@ const SERVICE_DESCRIPTION_PARTS: Readonly<
     purpose: 'Retrieve and verify evidence from one public web URL using direct HTTP retrieval.',
     useWhen: 'the request is specifically about the content and provenance of a URL.',
     doNotUse:
-      'evidence must be synthesized for a company (use siteborne_company_evidence_graph), extracted from an authorized document (use siteborne_document_evidence_json), checked against an existing output contract (use siteborne_verify_agent_output), or the page requires JavaScript rendering (rendered retrieval is not available).',
+      'evidence must be synthesized for a company (use siteborne_build_company_evidence_graph), extracted from an authorized document (use siteborne_extract_document_evidence_json), checked against an existing output contract (use siteborne_verify_agent_output), or the page requires JavaScript rendering (rendered retrieval is not available).',
     parameters:
       'retrieval_mode must be direct; rendered is defined but unavailable and is rejected before any payment challenge, never substituted with direct retrieval. output_mode structured needs buyer_schema and field_selectors to be meaningful; redirect_policy and max_redirects bound redirect following; max_content_size bounds returned bytes; maximum_authorized_price only constrains payment and never changes retrieval scope.',
     behavior: `open-world: a paid request performs bounded outbound HTTP retrieval of the target URL through a safe-egress boundary (private and loopback destinations are refused) and persists governed payment, audit, job and Workflow state; ${REPLAY_SENTENCE} Retrieval admission follows the governed runtime rate policy; no fixed public per-origin rate is promised.`,
@@ -498,7 +498,7 @@ const SERVICE_DESCRIPTION_PARTS: Readonly<
     useWhen:
       'the source of truth is a PDF or supported image and the desired result is evidence JSON.',
     doNotUse:
-      'a webpage alone is sufficient (use siteborne_web_context_verified), company-wide public evidence is needed (use siteborne_company_evidence_graph), or an existing agent response needs evaluation (use siteborne_verify_agent_output).',
+      'a webpage alone is sufficient (use siteborne_retrieve_verified_web_context), company-wide public evidence is needed (use siteborne_build_company_evidence_graph), or an existing agent response needs evaluation (use siteborne_verify_agent_output).',
     parameters:
       'provide exactly one reference mode: artifact_reference (an authorized stored artifact), upload_reference (a prior SITEBORNE upload handle, not document bytes) or document_url (a public URL, no credentials). ocr_permission must be true before image-based content is read by OCR, and OCR pages bill at the OCR tier; extraction_request.extract_tables and table_extraction_request request table extraction, and pages with tables bill at the table tier; declared_page_count and page_range are bounded by the page limit below; maximum_authorized_price only constrains payment.',
     behavior: `open-world: a paid request may read governed artifact storage or fetch a public document URL, calls the document provider, and persists payment, audit, job and Workflow state; ${REPLAY_SENTENCE}`,
@@ -512,7 +512,7 @@ const SERVICE_DESCRIPTION_PARTS: Readonly<
       'Evaluate a supplied agent output against explicit claims, deterministic requirements, a required JSON Schema, and optional evidence.',
     useWhen: 'the caller already has an output and needs a governed verification verdict.',
     doNotUse:
-      'evidence must first be gathered from a company (use siteborne_company_evidence_graph), URL (use siteborne_web_context_verified), or document (use siteborne_document_evidence_json), or independent reproduction of the output is required (not available).',
+      'evidence must first be gathered from a company (use siteborne_build_company_evidence_graph), URL (use siteborne_retrieve_verified_web_context), or document (use siteborne_extract_document_evidence_json), or independent reproduction of the output is required (not available).',
     parameters:
       'verification_mode must be standard; independent_reproduction is defined but unavailable and is rejected before any payment challenge, never downgraded to standard. required_schema must fit SITEBORNE JSON Schema Profile 1 or the request is rejected before payment; minimum_score sets the acceptance threshold; maximum_authorized_price only constrains payment and never relaxes verification policy.',
     behavior: `closed-world: standard mode evaluates only the supplied claims, requirements, output and evidence with no outbound retrieval, and persists governed payment, audit, job and Workflow state; ${REPLAY_SENTENCE} The verification policy and verdict rules do not depend on price or maximum_authorized_price.`,
@@ -542,8 +542,8 @@ function serviceToolDescription(
 const SERVICE_TOOL_TITLES: Readonly<Record<SiteborneServiceId, string>> = {
   'company_evidence_graph.v1': 'Build company evidence graph',
   'company_evidence_graph.v2': 'Build company evidence graph',
-  'web_context_verified.v1': 'Verify web context',
-  'web_context_verified.v2': 'Verify web context',
+  'web_context_verified.v1': 'Retrieve verified web context',
+  'web_context_verified.v2': 'Retrieve verified web context',
   'document_evidence_json.v1': 'Extract document evidence JSON',
   'document_evidence_json.v2': 'Extract document evidence JSON',
   'verify_agent_output.v1': 'Verify agent output',

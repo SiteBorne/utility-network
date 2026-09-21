@@ -10,9 +10,9 @@ export const MCP_SERVER_VERSION = '0.1.0' as const;
 // value remap, no rename). v1 protocol evidence is preserved separately
 // in fixtures/tests, not in this live map.
 export const MCP_SERVICE_TOOLS = {
-  siteborne_company_evidence_graph: 'company_evidence_graph.v2',
-  siteborne_web_context_verified: 'web_context_verified.v2',
-  siteborne_document_evidence_json: 'document_evidence_json.v2',
+  siteborne_build_company_evidence_graph: 'company_evidence_graph.v2',
+  siteborne_retrieve_verified_web_context: 'web_context_verified.v2',
+  siteborne_extract_document_evidence_json: 'document_evidence_json.v2',
   siteborne_verify_agent_output: 'verify_agent_output.v2',
 } as const satisfies Readonly<Record<string, SiteborneServiceId>>;
 

@@ -28,7 +28,7 @@ describe('MCP mirrored-header adversarial properties', () => {
             allowedHosts: ['test.local'],
             allowedOrigins: ['test.local'],
           });
-          const bodyName = 'siteborne_company_evidence_graph';
+          const bodyName = 'siteborne_build_company_evidence_graph';
           const body = {
             jsonrpc: '2.0',
             id: 7,

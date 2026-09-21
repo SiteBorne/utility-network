@@ -6,13 +6,13 @@ import { makeFixtureModel, makeFixtureService } from './test-fixtures';
 const GENERATED_AT = '2026-09-18T00:00:00.000Z' as never;
 const MCP_EXPOSURE = {
   surface: 'mcp' as const,
-  registrationId: 'siteborne_company_evidence_graph',
+  registrationId: 'siteborne_build_company_evidence_graph',
   operationId: 'evaluate',
   exposureShape: 'standalone_tool' as const,
   provenance: {
     sourcePackage: '@siteborne/protocol-mcp',
     sourceModule: 'src/constants.ts#MCP_SERVICE_TOOLS',
-    sourceRegistrationId: 'siteborne_company_evidence_graph',
+    sourceRegistrationId: 'siteborne_build_company_evidence_graph',
     runtimeSourceCommit: 'a'.repeat(40) as never,
     derivationMethod: 'typed_export' as const,
   },

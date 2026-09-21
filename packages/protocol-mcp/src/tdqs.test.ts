@@ -154,7 +154,8 @@ describe('TDQS economic and semantic metadata', () => {
 
   it('web_context_verified states direct/rendered, open-world, replay, rate policy and failure semantics', async () => {
     const tools = await listActualTools();
-    const d = tools.find((t) => t.name === 'siteborne_web_context_verified')!.description as string;
+    const d = tools.find((t) => t.name === 'siteborne_retrieve_verified_web_context')!
+      .description as string;
     expect(d).toContain('direct HTTP retrieval');
     expect(d).toContain('rendered is defined but unavailable');
     expect(d).toContain('never substituted with direct retrieval');
@@ -168,7 +169,7 @@ describe('TDQS economic and semantic metadata', () => {
 
   it('document_evidence_json states reference modes, OCR/table tiers, page limit and ceiling-vs-charge', async () => {
     const tools = await listActualTools();
-    const d = tools.find((t) => t.name === 'siteborne_document_evidence_json')!
+    const d = tools.find((t) => t.name === 'siteborne_extract_document_evidence_json')!
       .description as string;
     for (const term of [
       'artifact_reference',
@@ -229,9 +230,9 @@ describe('TDQS economic and semantic metadata', () => {
       expect(byName[name].annotations?.destructiveHint, name).toBe(false);
       expect(byName[name].annotations?.idempotentHint, name).toBe(true);
     }
-    expect(byName.siteborne_company_evidence_graph.annotations?.openWorldHint).toBe(true);
-    expect(byName.siteborne_web_context_verified.annotations?.openWorldHint).toBe(true);
-    expect(byName.siteborne_document_evidence_json.annotations?.openWorldHint).toBe(true);
+    expect(byName.siteborne_build_company_evidence_graph.annotations?.openWorldHint).toBe(true);
+    expect(byName.siteborne_retrieve_verified_web_context.annotations?.openWorldHint).toBe(true);
+    expect(byName.siteborne_extract_document_evidence_json.annotations?.openWorldHint).toBe(true);
     expect(byName.siteborne_verify_agent_output.annotations?.openWorldHint).toBe(false);
     for (const name of ['siteborne_get_quote', 'siteborne_get_service_health']) {
       expect(byName[name].annotations).toMatchObject({
@@ -267,7 +268,7 @@ describe('TDQS economic and semantic metadata', () => {
 
   it('mode selector docs and advertised examples never present an unavailable mode as usable', async () => {
     const byName = Object.fromEntries((await listActualTools()).map((t) => [t.name, t]));
-    const web = byName.siteborne_web_context_verified.inputSchema as unknown as {
+    const web = byName.siteborne_retrieve_verified_web_context.inputSchema as unknown as {
       properties: { retrieval_mode: { description: string } };
       examples?: { retrieval_mode?: string }[];
     };

@@ -4,14 +4,31 @@ The MCP server name is `net.siteborne/utility`, version `0.1.0`. Its tool
 inventory is immutable for SUN-0800A checkpoint 1: exactly four paid utility
 tools plus quote and health.
 
-| Tool                               | Contract boundary                                     | Local behavior                                                                                                                                |
-| ---------------------------------- | ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `siteborne_company_evidence_graph` | `company_evidence_graph.v1` frozen input/output       | Calls the injected paid-service boundary; closed default returns `payment_required`                                                           |
-| `siteborne_web_context_verified`   | `web_context_verified.v1` frozen input/output         | Calls the injected paid-service boundary; closed default returns `payment_required`                                                           |
-| `siteborne_document_evidence_json` | `document_evidence_json.v1` frozen input/output       | Calls the injected paid-service boundary; closed default returns `payment_required`                                                           |
-| `siteborne_verify_agent_output`    | `verify_agent_output.v1` frozen input/output          | Calls the injected paid-service boundary; closed default returns `payment_required`                                                           |
-| `siteborne_get_quote`              | Canonical pricing and x402 quote/requirement builders | Returns an exact charge or an `upto` authorization ceiling; never claims an actual `upto` charge before execution                             |
-| `siteborne_get_service_health`     | Local protocol and production-state boundary          | Reports protocol readiness and each service's effective version-local production state from the same governed resolver used by REST discovery |
+| Tool                                       | Contract boundary                                     | Local behavior                                                                                                                                |
+| ------------------------------------------ | ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `siteborne_build_company_evidence_graph`   | `company_evidence_graph.v1` frozen input/output       | Calls the injected paid-service boundary; closed default returns `payment_required`                                                           |
+| `siteborne_retrieve_verified_web_context`  | `web_context_verified.v1` frozen input/output         | Calls the injected paid-service boundary; closed default returns `payment_required`                                                           |
+| `siteborne_extract_document_evidence_json` | `document_evidence_json.v1` frozen input/output       | Calls the injected paid-service boundary; closed default returns `payment_required`                                                           |
+| `siteborne_verify_agent_output`            | `verify_agent_output.v1` frozen input/output          | Calls the injected paid-service boundary; closed default returns `payment_required`                                                           |
+| `siteborne_get_quote`                      | Canonical pricing and x402 quote/requirement builders | Returns an exact charge or an `upto` authorization ceiling; never claims an actual `upto` charge before execution                             |
+| `siteborne_get_service_health`             | Local protocol and production-state boundary          | Reports protocol readiness and each service's effective version-local production state from the same governed resolver used by REST discovery |
+
+## Naming convention
+
+Every tool name is `siteborne_<verb>_<noun phrase>`. The verb states what the
+call does and matches the verb that opens the tool description:
+
+| Tool verb  | Meaning                                                                               |
+| ---------- | ------------------------------------------------------------------------------------- |
+| `build`    | synthesize a company evidence graph across sources                                    |
+| `retrieve` | fetch and verify one public web URL                                                   |
+| `extract`  | extract evidence from one authorized document                                         |
+| `verify`   | evaluate a supplied agent output                                                      |
+| `get`      | read-only lookups that neither execute nor charge (`get_quote`, `get_service_health`) |
+
+`get_` is reserved for the two tools annotated `readOnlyHint: true`. The four
+paid service tools are `readOnlyHint: false` (they persist governed payment,
+audit and job state), so they must not use `get_`.
 
 ## Frozen service schemas
 

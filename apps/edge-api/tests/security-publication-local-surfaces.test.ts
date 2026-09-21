@@ -179,7 +179,7 @@ describe('MCP tools/list', () => {
       expect(t._meta?.['net.siteborne/security']).toBeInstanceOf(Array);
     }
     // pre-existing meta keys are untouched
-    const web = tools.find((t) => t.name === 'siteborne_web_context_verified')!;
+    const web = tools.find((t) => t.name === 'siteborne_retrieve_verified_web_context')!;
     expect(web._meta['net.siteborne/serviceId']).toBe('web_context_verified.v2');
     expect(web._meta['net.siteborne/paymentRequired']).toBe(true);
     expect(checkMcpParity(canonical, tools as never, SERVICE_TOOLS)).toEqual([]);

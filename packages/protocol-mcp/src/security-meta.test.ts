@@ -14,7 +14,7 @@ describe('additive security _meta injection', () => {
   it('accepts only net.siteborne/security* keys and never overrides an existing key', () => {
     const injected = buildSiteborneMcpDefinitionAuthorityInputs({
       securityMetaByToolName: {
-        siteborne_web_context_verified: {
+        siteborne_retrieve_verified_web_context: {
           'net.siteborne/security': [{ mode: 'direct' }],
           'net.siteborne/paymentRequired': false,
           'net.siteborne/serviceId': 'evil',
@@ -23,8 +23,8 @@ describe('additive security _meta injection', () => {
         },
       },
     });
-    const before = byName(base).siteborne_web_context_verified!;
-    const after = byName(injected).siteborne_web_context_verified!;
+    const before = byName(base).siteborne_retrieve_verified_web_context!;
+    const after = byName(injected).siteborne_retrieve_verified_web_context!;
     expect(after._meta).toEqual({
       ...before._meta,
       'net.siteborne/security': [{ mode: 'direct' }],

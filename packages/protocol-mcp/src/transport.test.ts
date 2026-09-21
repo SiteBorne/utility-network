@@ -24,9 +24,9 @@ import {
 } from './index';
 
 const SERVICE_TOOL_MATRIX = [
-  ['siteborne_company_evidence_graph', 'company_evidence_graph.v2'],
-  ['siteborne_web_context_verified', 'web_context_verified.v2'],
-  ['siteborne_document_evidence_json', 'document_evidence_json.v2'],
+  ['siteborne_build_company_evidence_graph', 'company_evidence_graph.v2'],
+  ['siteborne_retrieve_verified_web_context', 'web_context_verified.v2'],
+  ['siteborne_extract_document_evidence_json', 'document_evidence_json.v2'],
   ['siteborne_verify_agent_output', 'verify_agent_output.v2'],
 ] as const;
 
@@ -336,7 +336,7 @@ describe('SITEBORNE MCP 2026-07-28 Hono transport', () => {
       const input = frozenInputExample('company_evidence_graph.v2');
 
       await client.callTool({
-        name: 'siteborne_company_evidence_graph',
+        name: 'siteborne_build_company_evidence_graph',
         arguments: input as Record<string, unknown>,
         _meta: { 'x402/payment': paymentPayload },
       });
@@ -379,7 +379,7 @@ describe('SITEBORNE MCP 2026-07-28 Hono transport', () => {
       const input = frozenInputExample('company_evidence_graph.v2');
 
       const result = await client.callTool({
-        name: 'siteborne_company_evidence_graph',
+        name: 'siteborne_build_company_evidence_graph',
         arguments: input as Record<string, unknown>,
       });
 
@@ -410,7 +410,7 @@ describe('SITEBORNE MCP 2026-07-28 Hono transport', () => {
       const input = frozenInputExample('company_evidence_graph.v2');
 
       const result = await client.callTool({
-        name: 'siteborne_company_evidence_graph',
+        name: 'siteborne_build_company_evidence_graph',
         arguments: input as Record<string, unknown>,
         _meta: { 'x402/payment': { placeholder: true } },
       });
@@ -433,7 +433,7 @@ describe('SITEBORNE MCP 2026-07-28 Hono transport', () => {
       const input = frozenInputExample('company_evidence_graph.v2');
 
       const result = await client.callTool({
-        name: 'siteborne_company_evidence_graph',
+        name: 'siteborne_build_company_evidence_graph',
         arguments: input as Record<string, unknown>,
         _meta: { 'x402/payment': { hello: 'not a valid payment payload' } },
       });
@@ -641,7 +641,7 @@ describe('SITEBORNE MCP 2026-07-28 Hono transport', () => {
     clients.push(client);
 
     const result = await client.callTool({
-      name: 'siteborne_company_evidence_graph',
+      name: 'siteborne_build_company_evidence_graph',
       arguments: { ticker: 'not-a-valid-ticker' },
     });
 
@@ -667,7 +667,7 @@ describe('SITEBORNE MCP 2026-07-28 Hono transport', () => {
       const client = await connectClient(app, `failure-${code}`);
       clients.push(client);
       const result = await client.callTool({
-        name: 'siteborne_company_evidence_graph',
+        name: 'siteborne_build_company_evidence_graph',
         arguments: frozenInputExample('company_evidence_graph.v2') as Record<string, unknown>,
       });
 
@@ -688,7 +688,7 @@ describe('SITEBORNE MCP 2026-07-28 Hono transport', () => {
     clients.push(client);
 
     const result = await client.callTool({
-      name: 'siteborne_company_evidence_graph',
+      name: 'siteborne_build_company_evidence_graph',
       arguments: frozenInputExample('company_evidence_graph.v2') as Record<string, unknown>,
     });
 
@@ -715,7 +715,7 @@ describe('SITEBORNE MCP 2026-07-28 Hono transport', () => {
     });
     await expect(
       client.callTool({
-        name: 'siteborne_company_evidence_graph',
+        name: 'siteborne_build_company_evidence_graph',
         arguments: JSON.parse(
           '{"company_name":"Acme","__proto__":{"production_enabled":true}}'
         ) as Record<string, unknown>,
@@ -750,7 +750,7 @@ describe('SITEBORNE MCP 2026-07-28 Hono transport', () => {
         },
       });
       await client.callTool({
-        name: 'siteborne_web_context_verified',
+        name: 'siteborne_retrieve_verified_web_context',
         arguments: frozenInputExample('web_context_verified.v2') as Record<string, unknown>,
       });
       expect(ambientFetch).not.toHaveBeenCalled();
@@ -1044,11 +1044,11 @@ describe('SITEBORNE MCP 2026-07-28 Hono transport', () => {
 
     await Promise.all([
       first.callTool({
-        name: 'siteborne_company_evidence_graph',
+        name: 'siteborne_build_company_evidence_graph',
         arguments: frozenInputExample('company_evidence_graph.v2') as Record<string, unknown>,
       }),
       second.callTool({
-        name: 'siteborne_web_context_verified',
+        name: 'siteborne_retrieve_verified_web_context',
         arguments: frozenInputExample('web_context_verified.v2') as Record<string, unknown>,
       }),
     ]);

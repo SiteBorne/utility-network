@@ -81,12 +81,12 @@ describe('publication is derived from, and never broader than, the canonical dec
 });
 
 describe('surface helpers', () => {
-  const tools = { siteborne_web_context_verified: 'web_context_verified.v2' };
+  const tools = { siteborne_retrieve_verified_web_context: 'web_context_verified.v2' };
   it('MCP: keys only by tool name, only net.siteborne/security* keys', () => {
     const map = mcpSecurityMetaByToolName(publication, tools, ['siteborne_get_quote']);
     expect(Object.keys(map).sort()).toEqual([
       'siteborne_get_quote',
-      'siteborne_web_context_verified',
+      'siteborne_retrieve_verified_web_context',
     ]);
     for (const meta of Object.values(map)) {
       for (const k of Object.keys(meta)) expect(k.startsWith('net.siteborne/security')).toBe(true);

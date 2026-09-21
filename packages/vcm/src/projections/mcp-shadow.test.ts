@@ -160,13 +160,13 @@ describe('projectMcpToolsFromVcm -- unit shape', () => {
       currentStaticExposures: [
         {
           surface: 'mcp',
-          registrationId: 'siteborne_company_evidence_graph',
+          registrationId: 'siteborne_build_company_evidence_graph',
           operationId: 'evaluate',
           exposureShape: 'standalone_tool',
           provenance: {
             sourcePackage: '@siteborne/protocol-mcp',
             sourceModule: 'src/constants.ts#MCP_SERVICE_TOOLS',
-            sourceRegistrationId: 'siteborne_company_evidence_graph',
+            sourceRegistrationId: 'siteborne_build_company_evidence_graph',
             runtimeSourceCommit: 'a'.repeat(40) as never,
             derivationMethod: 'typed_export',
           },
@@ -178,11 +178,11 @@ describe('projectMcpToolsFromVcm -- unit shape', () => {
     const context: McpProjectionContext = {
       toolOrder: [
         'siteborne_get_service_health',
-        'siteborne_company_evidence_graph',
+        'siteborne_build_company_evidence_graph',
         'siteborne_get_quote',
       ],
       serviceTool: () => ({
-        toolName: 'siteborne_company_evidence_graph',
+        toolName: 'siteborne_build_company_evidence_graph',
         title: 'T',
         description: 'D',
         inputSchema: {},
@@ -228,7 +228,7 @@ describe('projectMcpToolsFromVcm -- unit shape', () => {
     const tools = projectMcpToolsFromVcm(view, context);
     expect(tools.map((t) => t.name)).toEqual([
       'siteborne_get_service_health',
-      'siteborne_company_evidence_graph',
+      'siteborne_build_company_evidence_graph',
       'siteborne_get_quote',
     ]);
   });
@@ -291,7 +291,7 @@ describe('buildCurrentMcpProjectionContext -- typed current authority', () => {
     expect(context.toolOrder).toEqual(MCP_TOOL_NAMES);
     expect(context.utilityTools).toHaveLength(2);
     expect(context.serviceTool('company_evidence_graph.v2').toolName).toBe(
-      'siteborne_company_evidence_graph'
+      'siteborne_build_company_evidence_graph'
     );
   });
 
