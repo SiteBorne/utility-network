@@ -12,7 +12,7 @@ release:
 pcc_dependency:
   schema_release: 2.0.0
   document_version: 2.0.0
-  schema_sha256: 71f3d09dd6ed0071a2f16c0e219e308de634a3ec3e63b02a4e9ce49302fa3a29
+  schema_sha256: 92ca8f7c220ae173f088acb1f318a88c31c256f8193146b680f2f61d2d421f6a
 services:
   - service_id: company_evidence_graph.v3
     contract_version: 3.0.0

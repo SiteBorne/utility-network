@@ -29,6 +29,7 @@ import {
   type VerificationMode,
   type VerificationReceipt,
   type VerificationResult,
+  type Signer,
 } from '@siteborne/verification';
 import {
   assertKnownFindingCode,
@@ -43,6 +44,7 @@ import {
 } from './governed-metadata';
 import { assertFiniteNumbers, assertUnicodeScalarValues } from './unicode-scalar';
 import type { ServiceFailureCode, ServiceId } from '../types';
+import { buildSelfVerifyingPcc, type SelfVerifyingPcc, type VNextReceipt } from './vnext-proof';
 
 export type DeepReadonly<T> = T extends (infer U)[]
   ? ReadonlyArray<DeepReadonly<U>>
@@ -112,7 +114,7 @@ export interface SemanticSnapshot<K extends string, E> {
 }
 
 export interface InternalResultArtifact<K extends string = string, E = unknown> {
-  readonly artifactVersion: 1;
+  readonly artifactVersion: 1 | 2;
   /** Extension exactly as the service produced it, before verdict-dependent finalization. */
   readonly serviceOutput: DeepReadonly<E>;
   /** Final service extension (outcome/score/etc. included). Proof-bearing. */
@@ -120,7 +122,7 @@ export interface InternalResultArtifact<K extends string = string, E = unknown> 
   /** Semantic PCC projection: no top-level receipt, no proof namespace. */
   readonly pccDocument: DeepReadonly<SemanticPccDocument<K, E>>;
   /** The receipt as issued for the current (legacy) wire representation. */
-  readonly verificationReceipt: DeepReadonly<VerificationReceipt>;
+  readonly verificationReceipt: DeepReadonly<VerificationReceipt | VNextReceipt>;
   readonly verifierResults: ReadonlyArray<DeepReadonly<GovernedVerifierResult>>;
   readonly governed: GovernedResultMetadata;
   /** Unsigned vNext preimage, its JCS text, and the receipt_id it would yield. */
@@ -132,7 +134,7 @@ export interface InternalResultArtifact<K extends string = string, E = unknown> 
   readonly serviceFailureCode?: ServiceFailureCode;
   readonly linkEvidenceInputs: LinkEvidenceInputs;
   /** Current public successful representation, unchanged this checkpoint. */
-  readonly wireBody: DeepReadonly<VerificationReceipt>;
+  readonly wireBody: DeepReadonly<VerificationReceipt | SelfVerifyingPcc>;
 }
 
 function cloneJson<T>(value: T): T {
@@ -261,6 +263,7 @@ export interface BuildInternalResultArtifactParams<K extends string, E> {
   requestId: string;
   verificationMode: VerificationMode;
   serviceFailureCode?: ServiceFailureCode;
+  signer?: Signer;
 }
 
 /** Proof phase: consumes a frozen snapshot; never mutates semantic state. */
@@ -328,6 +331,34 @@ export async function buildInternalResultArtifact<K extends string, E>(
   assertUnicodeScalarValues(preimage, '$.preimage');
   const canonicalPreimage = canonicalize(preimage);
   const futureReceiptId = `rcpt_${(await contentHash(canonicalPreimage)).slice('sha256:'.length, 'sha256:'.length + 24)}`;
+
+  if (governed.serviceId.endsWith('.v3')) {
+    if (!params.signer) throw new SemanticSnapshotError('vnext_signer_required');
+    const vnext = await buildSelfVerifyingPcc({
+      semanticPcc: snapshot.pccDocument,
+      preimage,
+      verifierResults,
+      signer: params.signer,
+    });
+    return deepFreeze({
+      artifactVersion: 2 as const,
+      serviceOutput: snapshot.serviceOutput,
+      finalExtension: snapshot.finalExtension,
+      pccDocument: snapshot.pccDocument,
+      verificationReceipt: vnext.receipt,
+      verifierResults,
+      governed,
+      proofPreimage: { preimage, canonicalPreimage, futureReceiptId },
+      ...(params.serviceFailureCode ? { serviceFailureCode: params.serviceFailureCode } : {}),
+      linkEvidenceInputs: {
+        receiptId: vnext.receipt.receipt_id,
+        signingKeyId: vnext.receipt.signing_key_id,
+        signature: vnext.receipt.signature,
+        buyerReceiptHash: vnext.buyerReceiptHash,
+      },
+      wireBody: vnext.wireBody,
+    }) as unknown as InternalResultArtifact<K, E>;
+  }
 
   const wireBody = deepFreeze(cloneJson(receipt));
   return deepFreeze({

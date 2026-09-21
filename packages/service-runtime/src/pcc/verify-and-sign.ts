@@ -34,6 +34,7 @@ import {
 import { toPccReceiptBlock } from './receipt-mapping';
 import { verifyServiceReceipt } from './receipt-verification';
 import type { ServiceExecutionContext } from '../types';
+import { verifySelfVerifyingPcc, type SelfVerifyingPcc } from './vnext-proof';
 
 export interface VerifyAndSignParams<TExtensionKey extends string, TExtension> {
   draft: PccDocument<TExtensionKey, TExtension>;
@@ -200,7 +201,31 @@ export async function verifyAndSign<TExtensionKey extends string, TExtension>(
     receipt: toPccReceiptBlock(receipt),
   };
 
-  const schemaId = getOutputSchemaId(finalized.contract.service_id);
+  let artifact = receiptCheck.valid
+    ? await buildInternalResultArtifact({
+        snapshot,
+        receipt,
+        verdict,
+        signer: params.signer,
+        requestId: context.request_id,
+        verificationMode: mode,
+        serviceFailureCode: verdict.decision === 'pass' ? undefined : 'verification_failed',
+      })
+    : undefined;
+
+  if (artifact?.artifactVersion === 2) {
+    const vnextCheck = await verifySelfVerifyingPcc(
+      artifact.wireBody as unknown as SelfVerifyingPcc,
+      params.keyRegistry
+    );
+    if (!vnextCheck.valid) artifact = undefined;
+  }
+
+  const deliveredDocument =
+    artifact?.artifactVersion === 2
+      ? (artifact.wireBody as unknown as PccDocument<TExtensionKey, TExtension>)
+      : finalized;
+  const schemaId = getOutputSchemaId(deliveredDocument.contract.service_id);
   let schemaValidAfterFinalization = false;
   let schemaErrors: string[] = [];
   if (schemaId) {
@@ -218,31 +243,23 @@ export async function verifyAndSign<TExtensionKey extends string, TExtension>(
       (getPrecompiledOutputValidator(schemaId) as ValidateFunction | undefined) ??
       getAjv().getSchema(schemaId);
     if (validate) {
-      schemaValidAfterFinalization = Boolean(validate(finalized));
+      schemaValidAfterFinalization = Boolean(validate(deliveredDocument));
       schemaErrors = (validate.errors ?? []).map(
         (e) => `${e.instancePath || '(root)'} ${e.message ?? 'invalid'}`
       );
     }
   }
 
-  const artifact = receiptCheck.valid
-    ? await buildInternalResultArtifact({
-        snapshot,
-        receipt,
-        verdict,
-        requestId: context.request_id,
-        verificationMode: mode,
-        serviceFailureCode: verdict.decision === 'pass' ? undefined : 'verification_failed',
-      })
-    : undefined;
-
   return {
-    document: finalized,
+    document: deliveredDocument,
     finalExtension: JSON.parse(JSON.stringify(snapshot.finalExtension)) as TExtension,
     artifact,
     verdict: effectiveVerdict,
-    outputHash: receipt.output_hash,
-    receiptId: receipt.receipt_id,
+    outputHash:
+      artifact?.artifactVersion === 2
+        ? artifact.proofPreimage.preimage.output_hash
+        : receipt.output_hash,
+    receiptId: artifact?.linkEvidenceInputs.receiptId ?? receipt.receipt_id,
     receipt,
     schemaValidAfterFinalization,
     schemaErrors,

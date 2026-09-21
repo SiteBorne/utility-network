@@ -5,7 +5,7 @@
     "file": "schemas/proof-carrying-context.schema.json",
     "id": "https://utility.siteborne.net/contracts/3.0.0/schemas/proof-carrying-context.schema.json",
     "title": "Proof-Carrying Context (PCC) v2.0.0",
-    "sha256": "71f3d09dd6ed0071a2f16c0e219e308de634a3ec3e63b02a4e9ce49302fa3a29",
+    "sha256": "92ca8f7c220ae173f088acb1f318a88c31c256f8193146b680f2f61d2d421f6a",
     "generated": {
       "typescript": "packages/contracts/generated/typescript/pcc.ts",
       "python": "packages/contracts/generated/python/pcc.py"

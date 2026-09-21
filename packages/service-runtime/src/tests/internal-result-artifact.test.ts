@@ -34,7 +34,13 @@ import {
 } from '../pcc';
 import type { PccDocument } from '../pcc/document-types';
 import { buildTestServiceContext } from './support';
-import { FIXED_TIME, FOUR_V2_SERVICES, KEY_HEX, runScenario } from './four-service-scenarios';
+import {
+  FIXED_TIME,
+  FOUR_V2_SERVICES,
+  FOUR_V3_SERVICES,
+  KEY_HEX,
+  runScenario,
+} from './four-service-scenarios';
 import { buildProductionSigner } from '../pcc';
 import { ALL_SERVICE_IDS, type ServiceId } from '../types';
 
@@ -58,6 +64,7 @@ const release = (version: string): ReleaseYaml =>
   parseYaml(
     read(`contracts/releases/${version}/CONTRACT_RELEASE.yaml`).toString('utf-8')
   ) as ReleaseYaml;
+const PROOF_VECTOR_SERVICES = [...FOUR_V2_SERVICES, ...FOUR_V3_SERVICES] as const;
 
 const realVersion = process.version;
 const realPlatform = process.platform;
@@ -325,6 +332,7 @@ describe('11-15: internal governed metadata derives from governed authorities, w
         'verify_agent_output.v2',
       ],
     ],
+    ['3.0.0', FOUR_V3_SERVICES],
   ] as const)(
     'release %s: contract_release, PCC schema and per-service schema hashes derive from CONTRACT_RELEASE.yaml + immutable schema bytes',
     (version, serviceIds) => {
@@ -356,15 +364,15 @@ describe('11-15: internal governed metadata derives from governed authorities, w
       expect(getGovernedMetadata(serviceId).serviceId).toBe(serviceId);
   });
 
-  it.each(FOUR_V2_SERVICES)(
+  it.each(PROOF_VECTOR_SERVICES)(
     '%s: the artifact carries the governed values in governed, preimage and semantic document',
     async (serviceId) => {
       const artifact = await artifactFor(serviceId);
       const governed = getGovernedMetadata(serviceId);
       expect(artifact.governed).toEqual(governed);
       const { preimage } = artifact.proofPreimage;
-      expect(preimage.contract_release).toBe('2.0.0');
-      expect(preimage.pcc_schema_release).toBe('1.1.0');
+      expect(preimage.contract_release).toBe(governed.contractRelease);
+      expect(preimage.pcc_schema_release).toBe(governed.pccSchemaRelease);
       expect(preimage.pcc_schema_hash).toBe(governed.pccSchemaHash);
       expect(preimage.policy_hash).toBe(governed.policyHash);
       expect(preimage.output_schema_hash).toBe(governed.outputSchemaHash);
@@ -373,7 +381,7 @@ describe('11-15: internal governed metadata derives from governed authorities, w
     }
   );
 
-  it.each(FOUR_V2_SERVICES)(
+  it.each(PROOF_VECTOR_SERVICES)(
     '%s: NEW_INTERNAL_PLACEHOLDER_HASHES=0 anywhere in the artifact',
     async (serviceId) => {
       const artifact = await artifactFor(serviceId);
@@ -612,7 +620,7 @@ async function reconstructPreimageBytes(artifact: InternalResultArtifact): Promi
 }
 
 describe('25-26: byte-exact preimage reconstruction', () => {
-  it.each(FOUR_V2_SERVICES)(
+  it.each(PROOF_VECTOR_SERVICES)(
     '%s: independently reconstructed canonical preimage bytes equal the artifact preimage bytes',
     async (serviceId) => {
       const artifact = await artifactFor(serviceId);
@@ -625,7 +633,7 @@ describe('25-26: byte-exact preimage reconstruction', () => {
     }
   );
 
-  it.each(FOUR_V2_SERVICES)(
+  it.each(PROOF_VECTOR_SERVICES)(
     '%s: repeated executions with identical semantic inputs produce identical preimage bytes',
     async (serviceId) => {
       const first = await artifactFor(serviceId);
@@ -635,7 +643,7 @@ describe('25-26: byte-exact preimage reconstruction', () => {
     }
   );
 
-  it.each(FOUR_V2_SERVICES)(
+  it.each(PROOF_VECTOR_SERVICES)(
     '%s: canonical preimage bytes equal the pinned pre-review golden',
     async (serviceId) => {
       const artifact = await artifactFor(serviceId);
@@ -659,7 +667,7 @@ describe('25-26: byte-exact preimage reconstruction', () => {
       return false;
     }
   })();
-  it.skipIf(!pythonAvailable).each(FOUR_V2_SERVICES)(
+  it.skipIf(!pythonAvailable).each(PROOF_VECTOR_SERVICES)(
     '%s: an independent (Python) canonicalizer reproduces the same preimage bytes',
     async (serviceId) => {
       const artifact = await artifactFor(serviceId);
@@ -709,7 +717,7 @@ describe('25-26: byte-exact preimage reconstruction', () => {
 });
 
 describe('27: output_hash and pcc_document_hash keep distinct meanings', () => {
-  it.each(FOUR_V2_SERVICES)('%s: output_hash != pcc_document_hash', async (serviceId) => {
+  it.each(PROOF_VECTOR_SERVICES)('%s: output_hash != pcc_document_hash', async (serviceId) => {
     const { preimage } = (await artifactFor(serviceId)).proofPreimage;
     expect(preimage.output_hash).not.toBe(preimage.pcc_document_hash);
   });
@@ -746,7 +754,7 @@ describe('30: the public proof namespace is never emitted', () => {
     }
   );
 
-  it('is absent from all non-test runtime source', () => {
+  it('is emitted by exactly one shared vNext proof core, never service-specific code', () => {
     const roots = [
       'packages/service-runtime/src',
       'apps/edge-api/src',
@@ -766,7 +774,7 @@ describe('30: the public proof namespace is never emitted', () => {
       }
     };
     for (const root of roots) walk(`${REPO}${root}`);
-    expect(offenders).toEqual([]);
+    expect(offenders).toEqual(['packages/service-runtime/src/pcc/vnext-proof.ts']);
   });
 });
 

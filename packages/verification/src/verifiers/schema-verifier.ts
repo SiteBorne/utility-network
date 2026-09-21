@@ -48,7 +48,16 @@ export class SchemaVerifier implements Verifier {
       });
     }
 
-    const schemaId = getOutputSchemaId(candidate.service_id);
+    // A v3 candidate reaches the mesh before the receipt proof exists. Validate
+    // that semantic draft against the byte-equivalent Release-2 service shape;
+    // the issuance boundary subsequently validates the delivered full PCC
+    // against the proof-required, release-qualified v3 schema. This keeps
+    // pre-proof validation non-circular without weakening final validation.
+    const isV3SemanticDraft = candidate.service_id.endsWith('.v3');
+    const semanticServiceId = isV3SemanticDraft
+      ? candidate.service_id.replace(/\.v3$/, '.v2')
+      : candidate.service_id;
+    const schemaId = getOutputSchemaId(semanticServiceId);
     if (!schemaId) {
       return buildResult(candidate, context, startedAt, {
         verifierId: this.verifierId,
@@ -84,7 +93,20 @@ export class SchemaVerifier implements Verifier {
       });
     }
 
-    const valid = validate(candidate.output);
+    let validationTarget = candidate.output;
+    if (isV3SemanticDraft) {
+      validationTarget = JSON.parse(JSON.stringify(candidate.output)) as unknown;
+      if (validationTarget && typeof validationTarget === 'object') {
+        const output = validationTarget as Record<string, unknown>;
+        output.pcc_version = '1.0.0';
+        if (output.contract && typeof output.contract === 'object') {
+          const contract = output.contract as Record<string, unknown>;
+          contract.service_id = semanticServiceId;
+          contract.service_version = 'v2';
+        }
+      }
+    }
+    const valid = validate(validationTarget);
     if (valid) {
       return buildResult(candidate, context, startedAt, {
         verifierId: this.verifierId,

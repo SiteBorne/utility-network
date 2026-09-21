@@ -30,7 +30,19 @@ export type ServiceId =
   | 'company_evidence_graph.v2'
   | 'web_context_verified.v2'
   | 'document_evidence_json.v2'
-  | 'verify_agent_output.v2';
+  | 'verify_agent_output.v2'
+  | 'company_evidence_graph.v3'
+  | 'web_context_verified.v3'
+  | 'document_evidence_json.v3'
+  | 'verify_agent_output.v3';
+
+export type ServiceVersion = 'v1' | 'v2' | 'v3';
+
+export function serviceVersionOf(serviceId: ServiceId): ServiceVersion {
+  if (serviceId.endsWith('.v3')) return 'v3';
+  if (serviceId.endsWith('.v2')) return 'v2';
+  return 'v1';
+}
 
 /** The single canonical inventory of implemented service IDs — every place
  * that needs "all implemented services" (the fixture-matrix verifier, the
@@ -46,6 +58,10 @@ export const ALL_SERVICE_IDS: readonly ServiceId[] = [
   'web_context_verified.v2',
   'document_evidence_json.v2',
   'verify_agent_output.v2',
+  'company_evidence_graph.v3',
+  'web_context_verified.v3',
+  'document_evidence_json.v3',
+  'verify_agent_output.v3',
 ];
 
 /** Closed service-level result classes (directive §6). Distinct from, but
@@ -95,7 +111,7 @@ export interface ServiceFailure {
 export interface ServiceExecutionResult<TOutput = unknown> {
   result_class: ServiceResultClass;
   service_id: ServiceId;
-  service_version: 'v1' | 'v2';
+  service_version: ServiceVersion;
   contract_release: string;
   request_id: string;
   job_id: string;

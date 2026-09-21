@@ -35,6 +35,21 @@ describe('SchemaVerifier', () => {
     expect(result.failure_codes).toContain('unknown_service');
   });
 
+  it('validates a v3 semantic draft before proof embedding, leaving final proof validation to the issuance boundary', async () => {
+    const verifier = new SchemaVerifier();
+    const context = buildContext({ clock: createTestClock() });
+    const output = validDocumentPccOutput({ pcc_version: '2.0.0' }) as Record<string, unknown>;
+    const contract = output.contract as Record<string, unknown>;
+    contract.service_id = 'document_evidence_json.v3';
+    contract.service_version = 'v3';
+    const result = await verifier.verify(
+      validCandidate({ service_id: 'document_evidence_json.v3', service_version: 'v3', output }),
+      context
+    );
+    expect(result.status).toBe('pass');
+    expect(result.findings).toHaveLength(0);
+  });
+
   it('caps findings at 50 even when the schema produces more violations', async () => {
     const verifier = new SchemaVerifier();
     const context = buildContext({ clock: createTestClock() });

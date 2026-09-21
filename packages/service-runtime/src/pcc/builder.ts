@@ -23,7 +23,7 @@ export interface BuildDraftDocumentParams<TExtensionKey extends string, TExtensi
   serviceId: string;
   // SUN-1000 checkpoint 1M: widened from the literal 'v1' — a v2 service
   // genuinely builds a 'v2' contract.
-  serviceVersion: 'v1' | 'v2';
+  serviceVersion: 'v1' | 'v2' | 'v3';
   inputHash: string;
   inputSchemaHash: string;
   outputSchemaHash: string;
@@ -82,7 +82,7 @@ export function buildDraftDocument<TExtensionKey extends string, TExtension>(
   const keyId = deterministicId('kid', `key:${params.seed}`);
 
   return {
-    pcc_version: '1.0.0',
+    pcc_version: params.serviceVersion === 'v3' ? '2.0.0' : '1.0.0',
     job_id: jobId,
     contract: {
       service_id: params.serviceId,

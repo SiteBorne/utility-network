@@ -51,7 +51,7 @@ const SCHEMA_HASH_PLACEHOLDER_B = 'sha256:' + '2'.repeat(64);
  * one. `contractRelease` differs per major (v1 stays pinned to its frozen
  * `1.0.0`; v2 declares the new `2.0.0` release) since that field records
  * which contract release governs the request, not the implementation. */
-function registerBothMajors(
+function registerAllMajors(
   registry: ServiceRegistry,
   base: string,
   service: RegisteredService['service'],
@@ -68,6 +68,13 @@ function registerBothMajors(
     ...overrides,
   });
   registry.register({
+    serviceId: `${base}.v3` as RegisteredService['serviceId'],
+    contractRelease: '3.0.0',
+    productionEnabled: false,
+    service,
+    ...overrides,
+  });
+  registry.register({
     serviceId: `${base}.v2` as RegisteredService['serviceId'],
     contractRelease: '2.0.0',
     productionEnabled: false,
@@ -79,7 +86,7 @@ function registerBothMajors(
 export function buildFixtureRegistry(deps: FixtureWiringDeps): ServiceRegistry {
   const registry = new ServiceRegistry();
 
-  registerBothMajors(
+  registerAllMajors(
     registry,
     'company_evidence_graph',
     new CompanyEvidenceGraphService({
@@ -113,7 +120,7 @@ export function buildFixtureRegistry(deps: FixtureWiringDeps): ServiceRegistry {
     }
   );
 
-  registerBothMajors(
+  registerAllMajors(
     registry,
     'web_context_verified',
     new WebContextVerifiedService({
@@ -135,7 +142,7 @@ export function buildFixtureRegistry(deps: FixtureWiringDeps): ServiceRegistry {
     }
   );
 
-  registerBothMajors(
+  registerAllMajors(
     registry,
     'document_evidence_json',
     new DocumentEvidenceJsonService({
@@ -151,7 +158,7 @@ export function buildFixtureRegistry(deps: FixtureWiringDeps): ServiceRegistry {
     }
   );
 
-  registerBothMajors(
+  registerAllMajors(
     registry,
     'verify_agent_output',
     new VerifyAgentOutputService({

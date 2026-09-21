@@ -19,6 +19,7 @@ import {
 } from '../../pcc';
 import type { KeyRegistry, Signer } from '@siteborne/verification';
 import type { LocalService, ServiceExecutionContext, ServiceExecutionResult } from '../../types';
+import { serviceVersionOf } from '../../types';
 import { buildAdapterContext } from '../adapter-context';
 import { resolveIdentity } from './identity';
 import { IMPLEMENTED_FIELD_GROUPS } from './types';
@@ -413,7 +414,7 @@ export class CompanyEvidenceGraphService
     const draft = buildDraftDocument({
       seed: `${context.service_id}:${inputHash}:${context.job_id}`,
       serviceId: context.service_id,
-      serviceVersion: context.service_id.endsWith('.v2') ? 'v2' : 'v1',
+      serviceVersion: serviceVersionOf(context.service_id),
       inputHash,
       inputSchemaHash: 'sha256:' + '1'.repeat(64),
       outputSchemaHash: 'sha256:' + '2'.repeat(64),
@@ -478,7 +479,7 @@ export class CompanyEvidenceGraphService
       // result must faithfully report whichever identity actually invoked
       // it.
       service_id: context.service_id,
-      service_version: context.service_id.endsWith('.v2') ? 'v2' : 'v1',
+      service_version: serviceVersionOf(context.service_id),
       contract_release: context.contract_release,
       request_id: context.request_id,
       job_id: draft.job_id,
@@ -530,7 +531,7 @@ function rejected(
   return {
     result_class: 'rejected',
     service_id: context.service_id,
-    service_version: context.service_id.endsWith('.v2') ? 'v2' : 'v1',
+    service_version: serviceVersionOf(context.service_id),
     contract_release: context.contract_release,
     request_id: context.request_id,
     job_id: context.job_id,

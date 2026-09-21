@@ -1,7 +1,7 @@
 cbff5573afaf58e77f8125b8bf588869df1130a2d881fa5bc6b50d5c06cd3506  ./COMPATIBILITY_REPORT.json
-b88ef61e0adef7e137661cc4915d0c40edef754ac053ede557c306556344ef51  ./CONTRACT_RELEASE.yaml
+954660722d4cbadec5314724b5048a4513c553f5d4ec5119a110467c13947acb  ./CONTRACT_RELEASE.yaml
 2384ccd0f63370db3a3f707a9da2d4059be817562d65d3bf715e42166be48ee3  ./examples/pcc-fixtures.ts
-3966e9dd513a83e852aa2e27a024b3cfd44f4ee65f4f4bacfcf2d86673788342  ./manifests/MANIFEST.json
+dd3c03e3341f358664ab76a5392dff9de2038503a3f8093197811406f2b11026  ./manifests/MANIFEST.json
 baf83d383a89f2c55d7bf3dc46f6292cd6d45d4f99795b776fe0143398f2e82c  ./metadata/company_evidence_graph.v3.json
 ae06460187a41157b56d43a8b31d085145d30eb3559d9e3197140b6cb0748357  ./metadata/document_evidence_json.v3.json
 e11f17c16d35c401d345b7e72d27b6dfb8d1457f91655ef821a39d7433dc530d  ./metadata/verify_agent_output.v3.json
@@ -18,7 +18,7 @@ a966b1d885ecb10d03d35f843bce625e60ca2ab6798040e178baa45ab5db3e31  ./schemas/comm
 c3c50ca6e7bea34236e2ed92004f61d69acf52b208ba6d38e072a46900d817a9  ./schemas/common/request-envelope.schema.json
 97f514fab559fd067673dad2b3aa546d47beb393160b40d4d1a34956158b03bb  ./schemas/common/service-metadata.schema.json
 aa968374d206ff5e8264dad3eca25be6b27e8bd849065843fa8488732c593d98  ./schemas/common/structured-error.schema.json
-71f3d09dd6ed0071a2f16c0e219e308de634a3ec3e63b02a4e9ce49302fa3a29  ./schemas/proof-carrying-context.schema.json
+92ca8f7c220ae173f088acb1f318a88c31c256f8193146b680f2f61d2d421f6a  ./schemas/proof-carrying-context.schema.json
 66d459905cd1a18b57ccb3fc40043a4e4c1a77bc7dba40676fcaf674cacb0f34  ./schemas/services/agent-verification-input.schema.json
 0aa731ce6c6761e33fd77d5adaf55debf385fad7fe6110225878a1d6e02144c9  ./schemas/services/agent-verification-output.schema.json
 8d9a6c432b019e24a2df4d48dd93424a8782febb49c0c88f7cf9208cf0204dd7  ./schemas/services/company-evidence-input.schema.json

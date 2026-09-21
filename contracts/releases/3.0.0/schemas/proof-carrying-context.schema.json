@@ -46,7 +46,10 @@
     },
     "currency": {
       "type": "string",
-      "enum": ["USD", "USDC"],
+      "enum": [
+        "USD",
+        "USDC"
+      ],
       "description": "Permitted currencies"
     },
     "service_id": {
@@ -104,22 +107,41 @@
     },
     "contract_mode": {
       "type": "string",
-      "enum": ["paid", "benchmark", "offline_verification"],
+      "enum": [
+        "paid",
+        "benchmark",
+        "offline_verification"
+      ],
       "description": "Contract mode determines required fields"
     },
     "subject_type": {
       "type": "string",
-      "enum": ["organization", "person", "document", "webpage", "other"],
+      "enum": [
+        "organization",
+        "person",
+        "document",
+        "webpage",
+        "other"
+      ],
       "description": "Subject type"
     },
     "materiality": {
       "type": "string",
-      "enum": ["material", "supporting", "contextual"],
+      "enum": [
+        "material",
+        "supporting",
+        "contextual"
+      ],
       "description": "Claim materiality classification"
     },
     "verification_status": {
       "type": "string",
-      "enum": ["verified", "unsupported", "disputed", "pending"],
+      "enum": [
+        "verified",
+        "unsupported",
+        "disputed",
+        "pending"
+      ],
       "description": "Claim verification status"
     },
     "locator_type": {
@@ -138,22 +160,41 @@
     },
     "accessibility_status": {
       "type": "string",
-      "enum": ["accessible", "unavailable", "restricted", "requires_authorization"],
+      "enum": [
+        "accessible",
+        "unavailable",
+        "restricted",
+        "requires_authorization"
+      ],
       "description": "Evidence accessibility status"
     },
     "authorization_classification": {
       "type": "string",
-      "enum": ["public", "buyer_authorized", "restricted", "confidential"],
+      "enum": [
+        "public",
+        "buyer_authorized",
+        "restricted",
+        "confidential"
+      ],
       "description": "Evidence authorization classification"
     },
     "freshness_status": {
       "type": "string",
-      "enum": ["fresh", "stale", "unknown"],
+      "enum": [
+        "fresh",
+        "stale",
+        "unknown"
+      ],
       "description": "Evidence freshness status"
     },
     "verification_decision": {
       "type": "string",
-      "enum": ["pass", "conditional", "fail", "quarantined"],
+      "enum": [
+        "pass",
+        "conditional",
+        "fail",
+        "quarantined"
+      ],
       "description": "Verification decision"
     },
     "signature_algorithm": {
@@ -169,7 +210,11 @@
     "transformation": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "timestamp", "tool_version"],
+      "required": [
+        "type",
+        "timestamp",
+        "tool_version"
+      ],
       "properties": {
         "type": {
           "type": "string",
@@ -191,7 +236,10 @@
     "locator": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "value"],
+      "required": [
+        "type",
+        "value"
+      ],
       "properties": {
         "type": {
           "$ref": "#/definitions/locator_type"
@@ -280,7 +328,14 @@
           "minLength": 1
         },
         "value": {
-          "type": ["string", "number", "boolean", "object", "array", "null"]
+          "type": [
+            "string",
+            "number",
+            "boolean",
+            "object",
+            "array",
+            "null"
+          ]
         },
         "confidence": {
           "type": "number",
@@ -304,7 +359,13 @@
     "completeness_vector_entry": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["dimension", "requested", "populated", "supported", "score"],
+      "required": [
+        "dimension",
+        "requested",
+        "populated",
+        "supported",
+        "score"
+      ],
       "properties": {
         "dimension": {
           "type": "string",
@@ -392,11 +453,21 @@
     "provenance_route": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "provider", "version"],
+      "required": [
+        "type",
+        "provider",
+        "version"
+      ],
       "properties": {
         "type": {
           "type": "string",
-          "enum": ["cache", "direct", "deterministic", "model", "hybrid"]
+          "enum": [
+            "cache",
+            "direct",
+            "deterministic",
+            "model",
+            "hybrid"
+          ]
         },
         "provider": {
           "type": "string",
@@ -445,7 +516,11 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["name", "version", "capabilities"],
+            "required": [
+              "name",
+              "version",
+              "capabilities"
+            ],
             "properties": {
               "name": {
                 "type": "string",
@@ -476,7 +551,11 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["name", "version", "provider"],
+            "required": [
+              "name",
+              "version",
+              "provider"
+            ],
             "properties": {
               "name": {
                 "type": "string",
@@ -516,7 +595,10 @@
         "cache_provenance": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["enabled", "hit"],
+          "required": [
+            "enabled",
+            "hit"
+          ],
           "properties": {
             "enabled": {
               "type": "boolean"
@@ -535,7 +617,11 @@
         "execution_environment": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["runtime", "version", "platform"],
+          "required": [
+            "runtime",
+            "version",
+            "platform"
+          ],
           "properties": {
             "runtime": {
               "type": "string",
@@ -614,14 +700,21 @@
         "prompt_injection_result": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["checked", "result"],
+          "required": [
+            "checked",
+            "result"
+          ],
           "properties": {
             "checked": {
               "type": "boolean"
             },
             "result": {
               "type": "string",
-              "enum": ["clean", "suspected", "confirmed"]
+              "enum": [
+                "clean",
+                "suspected",
+                "confirmed"
+              ]
             },
             "details": {
               "type": "string"
@@ -753,7 +846,10 @@
         },
         "network": {
           "type": "string",
-          "enum": ["base", "base-testnet"]
+          "enum": [
+            "base",
+            "base-testnet"
+          ]
         },
         "minimum_quality": {
           "type": "number",
@@ -778,7 +874,10 @@
     "subject": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "canonical_name"],
+      "required": [
+        "type",
+        "canonical_name"
+      ],
       "properties": {
         "type": {
           "$ref": "#/definitions/subject_type"
@@ -821,7 +920,11 @@
     "verification_proof_v1": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["proof_version", "receipt", "verification_material"],
+      "required": [
+        "proof_version",
+        "receipt",
+        "verification_material"
+      ],
       "properties": {
         "proof_version": {
           "type": "string",
@@ -833,7 +936,9 @@
         "verification_material": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["verifier_results"],
+          "required": [
+            "verifier_results"
+          ],
           "properties": {
             "verifier_results": {
               "type": "array",
@@ -849,7 +954,12 @@
     "public_verifier_result": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["verifier_id", "status", "findings", "failure_codes"],
+      "required": [
+        "verifier_id",
+        "status",
+        "findings",
+        "failure_codes"
+      ],
       "properties": {
         "verifier_id": {
           "type": "string",
@@ -865,7 +975,10 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["code", "severity"],
+            "required": [
+              "code",
+              "severity"
+            ],
             "properties": {
               "code": {
                 "type": "string",
@@ -986,7 +1099,10 @@
         },
         "verification_mode": {
           "type": "string",
-          "enum": ["standard", "independent_reproduction"]
+          "enum": [
+            "standard",
+            "independent_reproduction"
+          ]
         },
         "limitations": {
           "type": "array",
@@ -1014,25 +1130,142 @@
       }
     },
     "vnext_receipt": {
-      "allOf": [
-        {
-          "$ref": "#/definitions/vnext_receipt_preimage"
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "domain",
+        "proof_version",
+        "receipt_version",
+        "job_id",
+        "request_id",
+        "service_id",
+        "service_version",
+        "contract_release",
+        "pcc_schema_release",
+        "pcc_schema_hash",
+        "input_hash",
+        "output_schema_hash",
+        "output_hash",
+        "pcc_document_hash",
+        "evidence_hash",
+        "policy_hash",
+        "verifier_set_hash",
+        "decision",
+        "completeness",
+        "verification_mode",
+        "limitations",
+        "signing_key_id",
+        "canonicalization_algorithm",
+        "signature_algorithm",
+        "issued_at",
+        "receipt_id",
+        "signature"
+      ],
+      "properties": {
+        "domain": {
+          "type": "string",
+          "const": "SITEBORNE-PCC-VERIFICATION-PROOF-V1"
         },
-        {
-          "type": "object",
-          "required": ["receipt_id", "signature"],
-          "properties": {
-            "receipt_id": {
-              "type": "string",
-              "pattern": "^rcpt_[a-f0-9]{24}$"
-            },
-            "signature": {
-              "type": "string",
-              "pattern": "^[A-Za-z0-9_-]{86}$"
-            }
+        "proof_version": {
+          "type": "string",
+          "const": "1.0.0"
+        },
+        "receipt_version": {
+          "type": "string",
+          "const": "2.0.0"
+        },
+        "job_id": {
+          "$ref": "#/definitions/job_id"
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "service_id": {
+          "$ref": "#/definitions/service_id"
+        },
+        "service_version": {
+          "$ref": "#/definitions/service_version"
+        },
+        "contract_release": {
+          "type": "string",
+          "const": "3.0.0"
+        },
+        "pcc_schema_release": {
+          "type": "string",
+          "const": "2.0.0"
+        },
+        "pcc_schema_hash": {
+          "$ref": "#/definitions/hash"
+        },
+        "input_hash": {
+          "$ref": "#/definitions/hash"
+        },
+        "output_schema_hash": {
+          "$ref": "#/definitions/hash"
+        },
+        "output_hash": {
+          "$ref": "#/definitions/hash"
+        },
+        "pcc_document_hash": {
+          "$ref": "#/definitions/hash"
+        },
+        "evidence_hash": {
+          "$ref": "#/definitions/hash"
+        },
+        "policy_hash": {
+          "$ref": "#/definitions/hash"
+        },
+        "verifier_set_hash": {
+          "$ref": "#/definitions/hash"
+        },
+        "decision": {
+          "$ref": "#/definitions/verification_decision"
+        },
+        "completeness": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "verification_mode": {
+          "type": "string",
+          "enum": [
+            "standard",
+            "independent_reproduction"
+          ]
+        },
+        "limitations": {
+          "type": "array",
+          "maxItems": 200,
+          "items": {
+            "type": "string",
+            "minLength": 1
           }
+        },
+        "signing_key_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "canonicalization_algorithm": {
+          "type": "string",
+          "const": "RFC8785-JCS"
+        },
+        "signature_algorithm": {
+          "type": "string",
+          "const": "Ed25519"
+        },
+        "issued_at": {
+          "$ref": "#/definitions/timestamp_rfc3339"
+        },
+        "receipt_id": {
+          "type": "string",
+          "pattern": "^rcpt_[a-f0-9]{24}$"
+        },
+        "signature": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{86}$"
         }
-      ]
+      }
     }
   },
   "properties": {
@@ -1081,7 +1314,9 @@
         },
         {
           "type": "object",
-          "required": ["net.siteborne.verification-proof.v1"],
+          "required": [
+            "net.siteborne.verification-proof.v1"
+          ],
           "properties": {
             "net.siteborne.verification-proof.v1": {
               "$ref": "#/definitions/verification_proof_v1"

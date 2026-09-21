@@ -44,6 +44,12 @@ const V2_RELEASE = {
   pccSchemaHash: 'sha256:d32a8e25eba7a7ae4d7d7f7a14c565c1b92c8d8e10810ff885698ed102fdbcc0',
 } as const;
 
+const V3_RELEASE = {
+  contractRelease: '3.0.0',
+  pccSchemaRelease: '2.0.0',
+  pccSchemaHash: 'sha256:92ca8f7c220ae173f088acb1f318a88c31c256f8193146b680f2f61d2d421f6a',
+} as const;
+
 const OUTPUT_SCHEMA_HASHES: Readonly<Record<ServiceId, string>> = {
   'company_evidence_graph.v1':
     'sha256:a82474212615119aa510db7c3bb04e0d9fbf1a32eb740bc8821e10443818d112',
@@ -61,6 +67,14 @@ const OUTPUT_SCHEMA_HASHES: Readonly<Record<ServiceId, string>> = {
     'sha256:df91ed115ae0e29d8f4c211d95462ddd96e9714bc5f5e0ce0b820b370e0d5dde',
   'verify_agent_output.v2':
     'sha256:a9a462b89b290ecba1aa62ec6d2fd030572f326ed79f498a43690244b38ad679',
+  'company_evidence_graph.v3':
+    'sha256:988abf9957a2a4cba6ce1227120c9601936b4d2a5078f730ad81d419249ed90a',
+  'web_context_verified.v3':
+    'sha256:768455f58511cc7df7ec5d5e5f9767b6ce6ad991a84a0f39f8a4faa7f6189280',
+  'document_evidence_json.v3':
+    'sha256:e47d7d85b92441feff3c9c98ae058eaeb68b1cc6c7ff852be7e5af16c787da49',
+  'verify_agent_output.v3':
+    'sha256:0aa731ce6c6761e33fd77d5adaf55debf385fad7fe6110225878a1d6e02144c9',
 };
 
 /** Input schemas are byte-identical across releases 1.0.1 and 2.0.0. */
@@ -74,9 +88,13 @@ const INPUT_SCHEMA_HASHES: Readonly<Record<string, string>> = {
 export function getGovernedMetadata(serviceId: ServiceId): GovernedResultMetadata {
   const outputSchemaHash = OUTPUT_SCHEMA_HASHES[serviceId];
   if (!outputSchemaHash) throw new Error(`no_governed_metadata_for_service:${serviceId}`);
-  const inputSchemaHash = INPUT_SCHEMA_HASHES[serviceId.replace(/\.v[12]$/, '')];
+  const inputSchemaHash = INPUT_SCHEMA_HASHES[serviceId.replace(/\.v[123]$/, '')];
   if (!inputSchemaHash) throw new Error(`no_governed_input_schema_for_service:${serviceId}`);
-  const release = serviceId.endsWith('.v2') ? V2_RELEASE : V1_RELEASE;
+  const release = serviceId.endsWith('.v3')
+    ? V3_RELEASE
+    : serviceId.endsWith('.v2')
+      ? V2_RELEASE
+      : V1_RELEASE;
   return Object.freeze({
     serviceId,
     ...release,

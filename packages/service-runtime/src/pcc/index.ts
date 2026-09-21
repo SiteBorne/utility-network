@@ -11,3 +11,4 @@ export * from './unicode-scalar';
 export * from './code-vocabulary';
 export * from './governed-metadata';
 export * from './finalized-result';
+export * from './vnext-proof';

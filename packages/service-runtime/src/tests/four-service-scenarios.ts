@@ -9,6 +9,7 @@ import type { KeyRegistry, Signer } from '@siteborne/verification';
 import { buildFixtureRegistry } from '../wiring';
 import { executeLocalService } from '../dispatcher';
 import { buildProductionSigner } from '../pcc';
+import { getGovernedMetadata } from '../pcc';
 import {
   FixtureDocumentWorkerBridge,
   registerFixtureScenario,
@@ -31,16 +32,33 @@ export const FOUR_V2_SERVICES: ServiceId[] = [
   'verify_agent_output.v2',
 ];
 
+export const FOUR_V3_SERVICES: ServiceId[] = [
+  'company_evidence_graph.v3',
+  'web_context_verified.v3',
+  'document_evidence_json.v3',
+  'verify_agent_output.v3',
+];
+
 export async function runScenario(
-  serviceId: ServiceId
+  serviceId: ServiceId,
+  options: { verifyExpectedValue?: number; verifyCandidateValue?: number } = {}
 ): Promise<{ result: ServiceExecutionResult; signer: Signer; keyRegistry: KeyRegistry }> {
   const { signer, registry: keyRegistry } = (await buildProductionSigner(KEY_HEX, KEY_ID)) as {
     signer: Signer;
     registry: KeyRegistry;
   };
+  const governed = getGovernedMetadata(serviceId);
   const context = await buildTestServiceContext(serviceId, {
     request_id: 'req-fixed-0001',
     job_id: 'job-fixed-0001',
+    ...(serviceId.endsWith('.v3')
+      ? {
+          contract_release: governed.contractRelease,
+          pcc_schema_release: governed.pccSchemaRelease,
+          pcc_schema_hash: governed.pccSchemaHash,
+          policy_hash: governed.policyHash,
+        }
+      : {}),
   });
   (context.clock as { setTime(ms: number): void }).setTime(FIXED_TIME);
   const worker = new FixtureDocumentWorkerBridge(new Map());
@@ -85,10 +103,16 @@ export async function runScenario(
   } else {
     input = {
       verification_contract: {
-        claims: [{ claim_id: 'total', predicate: 'equals', expected_value: 42 }],
+        claims: [
+          {
+            claim_id: 'total',
+            predicate: 'equals',
+            expected_value: options.verifyExpectedValue ?? 42,
+          },
+        ],
         deterministic_requirements: [],
       },
-      candidate_output: { total: 42 },
+      candidate_output: { total: options.verifyCandidateValue ?? 42 },
       required_schema: {},
       verification_mode: 'standard',
     };
