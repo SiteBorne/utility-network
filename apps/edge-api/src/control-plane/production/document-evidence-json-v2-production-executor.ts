@@ -37,6 +37,7 @@ import type {
   WorkerResult,
 } from '@siteborne/service-runtime';
 import type { ServiceExecutor } from '../routes/x402-service';
+import { toExecutorOutcomeResult } from './finalized-outcome';
 import type { ArtifactStore as EdgeApiArtifactStore } from '../artifacts/store';
 import { D1ArtifactsRepository } from '../repositories/d1/artifacts';
 import { isAllowedMediaType } from '../artifacts/document-upload';
@@ -356,7 +357,7 @@ export function buildDocumentEvidenceJsonV2ProductionExecutor(
     const result = await executeLocalService(registry, 'document_evidence_json.v2', input, context);
 
     if (result.result_class !== 'success') {
-      return { result };
+      return toExecutorOutcomeResult(result);
     }
 
     const workerResult = getLastResult();
@@ -382,7 +383,7 @@ export function buildDocumentEvidenceJsonV2ProductionExecutor(
     const actualAmountAtomic = documentUsageToAtomicUnits(usage, 6);
 
     return {
-      result,
+      ...toExecutorOutcomeResult(result),
       actualAmountAtomic,
       resourceMetrics: {
         page_count: workerResult.pages.length,

@@ -1,0 +1,94 @@
+{
+  "result_class": "success",
+  "service_id": "company_evidence_graph.v2",
+  "service_version": "v2",
+  "contract_release": "1.0.0",
+  "request_id": "req-fixed-0001",
+  "job_id": "job_67097570cf6176017257f3da",
+  "input_hash": "sha256:bd492ea19dc06292d41720b6286785a72361a06c8ec40ec4340c31f52f75e2c2",
+  "output": {
+    "canonical_identity": {
+      "common_name": "Acme"
+    },
+    "field_groups": {
+      "website_evidence": {
+        "status": "complete",
+        "source_count": 1,
+        "evidence_ids": ["evd_2ebe150a1815645f71084dc3"]
+      }
+    },
+    "website_observations": [
+      {
+        "url": "https://acme.example/",
+        "extracted_at": "2026-09-01T12:00:00.000Z",
+        "content_hash": "sha256:709d745909ce896c0339851ef3d605559b49f6291222b962ea61c97f2e4369dd",
+        "evidence_ids": ["evd_2ebe150a1815645f71084dc3"]
+      }
+    ],
+    "source_coverage_summary": {
+      "sec": false,
+      "website": true,
+      "regulatory": false,
+      "repositories": false
+    }
+  },
+  "output_hash": "sha256:75ddcdc2ddc634f7b0be14d471b53ce13951a6d63e1927cd04768035fb91e627",
+  "pcc_hash": "sha256:75ddcdc2ddc634f7b0be14d471b53ce13951a6d63e1927cd04768035fb91e627",
+  "receipt_id": "rcpt_1743a35662aeb241d460ae38",
+  "receipt": {
+    "receipt_version": "1.0.0",
+    "job_id": "job_67097570cf6176017257f3da",
+    "request_id": "req-fixed-0001",
+    "service_id": "company_evidence_graph.v2",
+    "service_version": "v2",
+    "contract_release": "1.0.0",
+    "pcc_schema_release": "1.0.1",
+    "pcc_schema_hash": "sha256:f664208e387b161ab7897d8544d9c7d987501eba5764e2dde0ea69586e33dbb5",
+    "input_hash": "sha256:bd492ea19dc06292d41720b6286785a72361a06c8ec40ec4340c31f52f75e2c2",
+    "output_hash": "sha256:75ddcdc2ddc634f7b0be14d471b53ce13951a6d63e1927cd04768035fb91e627",
+    "evidence_hash": "sha256:08ffcee4ede6225c91311ab15a497e2643ae11de218222babcf1944af4b93ebc",
+    "policy_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    "verifier_set_hash": "sha256:45680d2da5db5213dcfce37be636b38e3955944bfb4a1ae171892ad416393e5d",
+    "decision": "pass",
+    "completeness": 1,
+    "verification_mode": "standard",
+    "limitations": [
+      "evidence_accessibility_ratio=1.000",
+      "prompt_injection_result=clean",
+      "signals_detected=0"
+    ],
+    "signing_key_id": "kid_aaaaaaaaaaaaaaaaaaaaaaaa",
+    "canonicalization_algorithm": "RFC8785-JCS",
+    "signature_algorithm": "Ed25519",
+    "issued_at": "2026-09-01T12:00:00.000Z",
+    "receipt_id": "rcpt_1743a35662aeb241d460ae38",
+    "signature": "nYKP6LliAOBEElNzDID5JKkvLRg8W0-Bf0ZgzGrzga5daXXJISLiLb-I92LYHUwOk7TOJB81WLnciiWdJckSAQ"
+  },
+  "verification": {
+    "schema_valid": true,
+    "material_claims_supported": true,
+    "evidence_accessibility": 1,
+    "freshness": 1,
+    "completeness": 1,
+    "cross_source_agreement": 1,
+    "provenance_valid": true,
+    "decision": "pass",
+    "score": 1
+  },
+  "warnings": [],
+  "limitations": [],
+  "completeness": {
+    "requested_fields": 1,
+    "populated_fields": 1,
+    "supported_fields": 1,
+    "missing_fields": []
+  },
+  "audit_references": ["req-fixed-0001"],
+  "metrics": {
+    "elapsed_ms": 0,
+    "dependency_calls": 1,
+    "claims_produced": 0,
+    "evidence_produced": 1,
+    "output_bytes": 3691
+  }
+}

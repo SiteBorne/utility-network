@@ -363,7 +363,12 @@ describe('SUN-1222C Model C lifecycle remediation', () => {
       paymentServiceLink,
       settlementTransactionReference: '0xtx',
       settlementEvidenceHash: 'sha256:' + '5'.repeat(64),
-      pcc: { signing_key_id: 'kid_aaaaaaaaaaaaaaaaaaaaaaaa', signature: 'A'.repeat(86) },
+      linkEvidenceInputs: {
+        receiptId: 'receipt-provider',
+        signingKeyId: 'kid_aaaaaaaaaaaaaaaaaaaaaaaa',
+        signature: 'A'.repeat(86),
+        buyerReceiptHash: 'sha256:' + 'b'.repeat(64),
+      },
       buyerReceiptId: 'receipt-workflow',
       createdAt: '2026-09-11T00:00:01.000Z',
     });

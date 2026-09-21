@@ -7,3 +7,7 @@ export * from './verify-and-sign';
 export * from './test-signer';
 export * from './production-signer';
 export * from './receipt-verification';
+export * from './unicode-scalar';
+export * from './code-vocabulary';
+export * from './governed-metadata';
+export * from './finalized-result';

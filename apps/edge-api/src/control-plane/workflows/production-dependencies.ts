@@ -42,6 +42,7 @@ import { buildProductionCdpChainReceiptChecker } from '../evidence/chain-receipt
 import { D1JobsRepository, D1StateEventsRepository } from '../repositories/d1/jobs';
 import { D1PaymentAttemptRepository } from '../repositories/d1/payment-attempts';
 import { D1PaymentFinalizationRepository } from '../repositories/d1/payment-finalization';
+import { hashPaymentObject } from '@siteborne/protocol-x402';
 import { X402ServiceResultRepository } from '../repositories/d1/x402-quotes';
 import { receiptPersistenceIdempotencyKey } from '../continuation/idempotency-keys';
 import type {
@@ -203,7 +204,7 @@ export const __TEST_ONLY_SUPPORTED_SERVICES: ReadonlySet<string> = SUPPORTED_SER
  * the same closing structural gate the pre-Workflow request-local path
  * always applied before ever reaching a settle call.
  */
-export const validateExecutorPcc: PccValidator = (outcome: ExecutorOutcome) => {
+export const validateExecutorPcc: PccValidator = async (outcome: ExecutorOutcome) => {
   if (outcome.result.result_class !== 'success') {
     return {
       valid: false,
@@ -213,7 +214,25 @@ export const validateExecutorPcc: PccValidator = (outcome: ExecutorOutcome) => {
   if (!outcome.result.receipt) {
     return { valid: false, reason: 'missing_receipt' };
   }
-  return { valid: true, pcc: outcome.result.receipt };
+  // Typed proof state must accompany the receipt: persistLinkEvidence never
+  // reads signing_key_id/signature off the response body, so a success without
+  // it is rejected here -- BEFORE settlement -- rather than after.
+  if (!outcome.linkEvidenceInputs) {
+    return { valid: false, reason: 'missing_link_evidence_inputs' };
+  }
+  // The typed buyer-receipt hash must describe exactly the representation this
+  // Workflow releases; a mismatch would persist link evidence for a different body.
+  if (
+    outcome.linkEvidenceInputs.buyerReceiptHash !==
+    (await hashPaymentObject(outcome.result.receipt))
+  ) {
+    return { valid: false, reason: 'link_evidence_hash_mismatch' };
+  }
+  return {
+    valid: true,
+    pcc: outcome.result.receipt,
+    linkEvidenceInputs: outcome.linkEvidenceInputs,
+  };
 };
 
 /** Real `JobStatePersistence` — thin adapter over the two real D1

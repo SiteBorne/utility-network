@@ -1,0 +1,87 @@
+{
+  "result_class": "success",
+  "service_id": "document_evidence_json.v2",
+  "service_version": "v2",
+  "contract_release": "1.0.0",
+  "request_id": "req-fixed-0001",
+  "job_id": "job_c70dd0a940cb44f0d4d29990",
+  "input_hash": "sha256:27ede9ab1f67f1c76064cd90399ba23ad797187c3d9fb63e3b48875644ed8801",
+  "output": {
+    "media_type_confirmed": "application/pdf",
+    "size_bytes_confirmed": 1530,
+    "total_pages": 1,
+    "processed_pages": 1,
+    "page_classifications": [
+      {
+        "page_number": 1,
+        "classification": "native_text",
+        "extraction_method": "native"
+      }
+    ],
+    "text_blocks": [
+      {
+        "page": 1,
+        "text": "SUN-0400A Fixture: Native Text Document\nThis page contains ordinary extractable native PDF text.\nIt exists solely to exercise the native-text extraction path."
+      }
+    ]
+  },
+  "output_hash": "sha256:7b5d3ab2a5165849a6e34984d21bfa43131cb7bfcc36a6240e93d1327f321660",
+  "pcc_hash": "sha256:7b5d3ab2a5165849a6e34984d21bfa43131cb7bfcc36a6240e93d1327f321660",
+  "receipt_id": "rcpt_86a12158883d562b2d4b4b96",
+  "receipt": {
+    "receipt_version": "1.0.0",
+    "job_id": "job_c70dd0a940cb44f0d4d29990",
+    "request_id": "req-fixed-0001",
+    "service_id": "document_evidence_json.v2",
+    "service_version": "v2",
+    "contract_release": "1.0.0",
+    "pcc_schema_release": "1.0.1",
+    "pcc_schema_hash": "sha256:f664208e387b161ab7897d8544d9c7d987501eba5764e2dde0ea69586e33dbb5",
+    "input_hash": "sha256:27ede9ab1f67f1c76064cd90399ba23ad797187c3d9fb63e3b48875644ed8801",
+    "output_hash": "sha256:7b5d3ab2a5165849a6e34984d21bfa43131cb7bfcc36a6240e93d1327f321660",
+    "evidence_hash": "sha256:0d13032be973dc1f618edb9bb12e79014779dfc7f454a1fb164b512200fe96e4",
+    "policy_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    "verifier_set_hash": "sha256:45680d2da5db5213dcfce37be636b38e3955944bfb4a1ae171892ad416393e5d",
+    "decision": "pass",
+    "completeness": 1,
+    "verification_mode": "standard",
+    "limitations": [
+      "evidence_accessibility_ratio=1.000",
+      "prompt_injection_result=clean",
+      "signals_detected=0"
+    ],
+    "signing_key_id": "kid_aaaaaaaaaaaaaaaaaaaaaaaa",
+    "canonicalization_algorithm": "RFC8785-JCS",
+    "signature_algorithm": "Ed25519",
+    "issued_at": "2026-09-01T12:00:00.000Z",
+    "receipt_id": "rcpt_86a12158883d562b2d4b4b96",
+    "signature": "aouYnSZXS-ayvoRiQw8-VzTTGzWBiKUT8zTfKpXCRBBaSCTg-oiclBdflmd7YnNVzs54nrzta6N3JXOj54CoBQ"
+  },
+  "verification": {
+    "schema_valid": true,
+    "material_claims_supported": true,
+    "evidence_accessibility": 1,
+    "freshness": 1,
+    "completeness": 1,
+    "cross_source_agreement": 1,
+    "provenance_valid": true,
+    "decision": "pass",
+    "score": 1
+  },
+  "warnings": [],
+  "limitations": [],
+  "completeness": {
+    "requested_fields": 1,
+    "populated_fields": 1,
+    "supported_fields": 1,
+    "missing_fields": []
+  },
+  "audit_references": ["req-fixed-0001"],
+  "metrics": {
+    "elapsed_ms": 0,
+    "dependency_calls": 1,
+    "claims_produced": 2,
+    "evidence_produced": 1,
+    "output_bytes": 4226
+  }
+}

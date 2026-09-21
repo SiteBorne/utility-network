@@ -26,6 +26,11 @@ import type { ValidateFunction } from 'ajv';
 import { toVerificationAuditSink, toVerificationClock } from '../context';
 import { toCandidateClaims, toCandidateEvidence } from './candidate-conversion';
 import type { PccDocument } from './document-types';
+import {
+  buildInternalResultArtifact,
+  freezeSemanticSnapshot,
+  type InternalResultArtifact,
+} from './finalized-result';
 import { toPccReceiptBlock } from './receipt-mapping';
 import { verifyServiceReceipt } from './receipt-verification';
 import type { ServiceExecutionContext } from '../types';
@@ -44,6 +49,15 @@ export interface VerifyAndSignParams<TExtensionKey extends string, TExtension> {
   /** claim_ids that should be treated as verified-absent by the mesh; see
    * pcc/document-types.ts's PccClaim doc comment. */
   verifiedAbsentClaimIds?: ReadonlySet<string>;
+  /**
+   * SEMANTIC FINALIZATION HOOK. Runs after the verification mesh verdict and
+   * BEFORE the semantic snapshot is frozen and any proof/hash/signature is
+   * produced, so every verdict-dependent field of the service extension
+   * (e.g. verify_agent_output's `outcome`/`score`) is final before proof
+   * construction. It must return a new extension value; the draft is never
+   * mutated. Omit for services whose extension does not depend on the verdict.
+   */
+  finalizeSemantics?: (verdict: MeshVerdict) => TExtension;
 }
 
 export interface VerifyAndSignResult<TExtensionKey extends string, TExtension> {
@@ -68,6 +82,14 @@ export interface VerifyAndSignResult<TExtensionKey extends string, TExtension> {
    * verify. See the runtime-boundary ADR referenced above. */
   receiptCryptographicallyValid: boolean;
   receiptVerificationStatus: string;
+  /** Mutable copy of the FINAL service extension (post semantic finalization).
+   * Detached from the frozen semantic snapshot: mutating it cannot change the
+   * proof-bearing state in `artifact`. */
+  finalExtension: TExtension;
+  /** The internal finalized-result artifact. Absent only when the runtime
+   * receipt self-verification failed (no proof-bearing state is produced for
+   * a result whose receipt does not verify). Never serialized onto a response. */
+  artifact?: InternalResultArtifact<TExtensionKey, TExtension>;
 }
 
 export async function verifyAndSign<TExtensionKey extends string, TExtension>(
@@ -124,6 +146,22 @@ export async function verifyAndSign<TExtensionKey extends string, TExtension>(
     policyId: context.policy_id,
   });
 
+  // SEMANTIC FINALIZATION -> IMMUTABLE SNAPSHOT, strictly before any proof.
+  const extensionKey = Object.keys(draft.extensions)[0] as TExtensionKey;
+  const finalExtension: TExtension = params.finalizeSemantics
+    ? params.finalizeSemantics(verdict)
+    : (draft.extensions[extensionKey] as TExtension);
+  const snapshot = await freezeSemanticSnapshot({
+    draft,
+    finalExtension,
+    verification: verdict.verification,
+    serviceId: context.service_id,
+  });
+
+  // PROOF PHASE. The legacy receipt below is issued over the legacy draft
+  // basis so the externally released wire body stays byte-identical until the
+  // governed wire cutover; it does not depend on, and cannot alter, the
+  // frozen snapshot.
   const receipt = await issueReceipt(candidate, verificationContext, verdict, params.signer);
 
   // Runtime receipt-verification boundary: cryptographically self-verify
@@ -187,8 +225,21 @@ export async function verifyAndSign<TExtensionKey extends string, TExtension>(
     }
   }
 
+  const artifact = receiptCheck.valid
+    ? await buildInternalResultArtifact({
+        snapshot,
+        receipt,
+        verdict,
+        requestId: context.request_id,
+        verificationMode: mode,
+        serviceFailureCode: verdict.decision === 'pass' ? undefined : 'verification_failed',
+      })
+    : undefined;
+
   return {
     document: finalized,
+    finalExtension: JSON.parse(JSON.stringify(snapshot.finalExtension)) as TExtension,
+    artifact,
     verdict: effectiveVerdict,
     outputHash: receipt.output_hash,
     receiptId: receipt.receipt_id,

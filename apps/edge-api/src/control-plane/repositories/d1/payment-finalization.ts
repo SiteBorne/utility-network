@@ -1,5 +1,6 @@
 import type { D1Database } from '@cloudflare/workers-types';
-import { hashPaymentObject, type PaymentServiceLink } from '@siteborne/protocol-x402';
+import type { PaymentServiceLink } from '@siteborne/protocol-x402';
+import { parseLinkEvidenceInputs, type LinkEvidenceInputs } from '@siteborne/service-runtime';
 import { D1LifecycleReconciliationRepository } from './lifecycle-reconciliation';
 import { D1WorkflowOwnerIntentRepository } from './workflow-owner-intents';
 import { D1PaymentAttemptRepository } from './payment-attempts';
@@ -10,7 +11,9 @@ export interface PersistLinkEvidenceInput {
   readonly paymentServiceLink: PaymentServiceLink;
   readonly settlementTransactionReference: string;
   readonly settlementEvidenceHash: string;
-  readonly pcc: unknown;
+  /** Typed proof state from the internal finalized-result artifact. Validated
+   * fail-closed; the public response body is never consulted. */
+  readonly linkEvidenceInputs: LinkEvidenceInputs | undefined;
   readonly buyerReceiptId: string;
   readonly createdAt: string;
 }
@@ -85,11 +88,8 @@ export class D1PaymentFinalizationRepository {
 
   async persistLinkEvidence(input: PersistLinkEvidenceInput): Promise<void> {
     const paymentAttemptId = await this.attemptId(input.paymentIdentifier);
-    const pcc = input.pcc as { signing_key_id?: unknown; signature?: unknown } | null;
-    if (!pcc || typeof pcc.signing_key_id !== 'string' || typeof pcc.signature !== 'string') {
-      throw new Error('settled requires durable signed PCC receipt evidence');
-    }
-    const buyerReceiptHash = await hashPaymentObject(input.pcc);
+    const typed = parseLinkEvidenceInputs(input.linkEvidenceInputs);
+    const buyerReceiptHash = typed.buyerReceiptHash;
     const link = input.paymentServiceLink;
     const result = await this.db
       .prepare(
@@ -117,7 +117,7 @@ export class D1PaymentFinalizationRepository {
         link.verification_evidence_hash,
         input.buyerReceiptId,
         buyerReceiptHash,
-        pcc.signing_key_id,
+        typed.signingKeyId,
         input.createdAt
       )
       .run();

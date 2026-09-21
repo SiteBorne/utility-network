@@ -14,6 +14,7 @@ import type {
   AuditEventSink as AdapterAuditEventSink,
 } from '@siteborne/provider-adapters';
 import type { VerificationMode, VerificationReceipt } from '@siteborne/verification';
+import type { InternalResultArtifact } from './pcc/finalized-result';
 
 /** The four frozen v1 service IDs, plus (SUN-1000 checkpoint 1M) the four
  * parallel v2 service IDs this package implements with the identical
@@ -124,6 +125,10 @@ export interface ServiceExecutionResult<TOutput = unknown> {
     decision: 'pass' | 'conditional' | 'fail' | 'quarantined';
     score: number;
   };
+  /** INTERNAL finalized-result artifact (typed semantic + proof state). Runtime
+   * and persistence consume this instead of reverse-parsing the response body.
+   * Never serialized onto any public response. */
+  finalized?: InternalResultArtifact;
   warnings: string[];
   limitations: string[];
   completeness?: {

@@ -167,6 +167,15 @@ export function buildSuccessfulExecutorOutcome(
       verification: { pcc_id: 'pcc_test_0001', signature: '0xpccsignature' },
       ...overrides,
     },
+    // Typed proof state, as the real production executors project it from the
+    // internal finalized-result artifact.
+    linkEvidenceInputs: {
+      receiptId: 'receipt_test_0001',
+      signingKeyId: 'kid_aaaaaaaaaaaaaaaaaaaaaaaa',
+      signature: 'A'.repeat(86),
+      // hashPaymentObject({ id: 'receipt_test_0001' }) -- the fixture receipt above.
+      buyerReceiptHash: 'sha256:0c1dd156d3d7f987938e4e8f951711b1eb91c681cae4838898038ec31b19748e',
+    },
   };
 }
 

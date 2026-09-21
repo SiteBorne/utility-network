@@ -184,6 +184,16 @@ export interface ExecutorOutcome {
     // as before this change.
     limitations?: readonly string[];
   };
+  /** Typed proof state projected from the internal finalized-result
+   * artifact (never read off `result.receipt`). Present for every real
+   * production executor; the paid-continuation Workflow persists link
+   * evidence from this, not from the response-body shape. */
+  linkEvidenceInputs?: {
+    readonly receiptId: string;
+    readonly signingKeyId: string;
+    readonly signature: string;
+    readonly buyerReceiptHash: string;
+  };
   /** Required when the route's scheme is `upto`: the atomic-unit actual
    * amount to charge, computed by the caller from the service's real
    * output metrics (e.g. document page count via

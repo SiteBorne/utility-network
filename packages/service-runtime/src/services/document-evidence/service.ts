@@ -274,6 +274,7 @@ export class DocumentEvidenceJsonService
       pcc_hash: signed.outputHash,
       receipt_id: signed.receiptId,
       receipt: signed.receipt,
+      finalized: signed.artifact,
       verification: toVerificationSummary(signed.verdict),
       warnings: worker.warnings,
       limitations: worker.limitations,

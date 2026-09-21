@@ -98,6 +98,7 @@ import SEC_EDGAR_FIXTURE from '../../../../../packages/provider-adapters/fixture
 // fields the service actually reads.
 import DOCUMENT_FIXTURE_WORKER_RESULT_JSON from '../../../../../packages/service-runtime/fixtures/document-worker-results/native-text-success.json' with { type: 'json' };
 import { createX402ServiceRoute } from './x402-service';
+import { toExecutorOutcomeResult } from '../production/finalized-outcome';
 import { composePreEconomicValidators, modeAvailabilityValidator } from './pre-economic-mode-gate';
 import type { ExecutorOutcome } from './x402-service';
 
@@ -456,7 +457,7 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
         input,
         context
       );
-      return { result };
+      return toExecutorOutcomeResult(result);
     },
   });
 
@@ -500,7 +501,7 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
         keyRegistry,
       });
       const result = await executeLocalService(registry, 'web_context_verified.v1', input, context);
-      return { result };
+      return toExecutorOutcomeResult(result);
     },
   });
 
@@ -556,7 +557,7 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
         context
       );
       if (result.result_class !== 'success') {
-        return { result };
+        return toExecutorOutcomeResult(result);
       }
       // Real per-page usage calculation (checkpoint 2's document-usage
       // module) from the fixture worker result's own pages — never a
@@ -570,7 +571,7 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
       );
       const actualAmountAtomic = documentUsageToAtomicUnits(usage, 6);
       return {
-        result,
+        ...toExecutorOutcomeResult(result),
         actualAmountAtomic,
         resourceMetrics: {
           page_count: DOCUMENT_FIXTURE_WORKER_RESULT.pages.length,
@@ -617,7 +618,7 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
         keyRegistry,
       });
       const result = await executeLocalService(registry, 'verify_agent_output.v1', input, context);
-      return { result };
+      return toExecutorOutcomeResult(result);
     },
   });
 
@@ -668,7 +669,7 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
         input,
         context
       );
-      return { result };
+      return toExecutorOutcomeResult(result);
     },
   });
 
@@ -709,7 +710,7 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
           input,
           context
         );
-        return { result };
+        return toExecutorOutcomeResult(result);
       },
     });
   }
@@ -754,7 +755,7 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
         keyRegistry,
       });
       const result = await executeLocalService(registry, 'web_context_verified.v2', input, context);
-      return { result };
+      return toExecutorOutcomeResult(result);
     },
   });
 
@@ -804,7 +805,7 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
           input,
           context
         );
-        return { result };
+        return toExecutorOutcomeResult(result);
       },
     });
   }
@@ -857,7 +858,7 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
         context
       );
       if (result.result_class !== 'success') {
-        return { result };
+        return toExecutorOutcomeResult(result);
       }
       const usage = calculateDocumentUsage(
         DOCUMENT_FIXTURE_WORKER_RESULT.pages.map((p) => ({
@@ -868,7 +869,7 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
       );
       const actualAmountAtomic = documentUsageToAtomicUnits(usage, 6);
       return {
-        result,
+        ...toExecutorOutcomeResult(result),
         actualAmountAtomic,
         resourceMetrics: {
           page_count: DOCUMENT_FIXTURE_WORKER_RESULT.pages.length,
@@ -936,7 +937,7 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
           context
         );
         if (result.result_class !== 'success') {
-          return { result };
+          return toExecutorOutcomeResult(result);
         }
         const usage = calculateDocumentUsage(
           DOCUMENT_FIXTURE_WORKER_RESULT.pages.map((p) => ({
@@ -995,7 +996,7 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
         keyRegistry,
       });
       const result = await executeLocalService(registry, 'verify_agent_output.v2', input, context);
-      return { result };
+      return toExecutorOutcomeResult(result);
     },
   });
 
@@ -1036,7 +1037,7 @@ export async function buildPaidServicesApp(config: PaidServicesConfig): Promise<
           input,
           context
         );
-        return { result };
+        return toExecutorOutcomeResult(result);
       },
     });
   }

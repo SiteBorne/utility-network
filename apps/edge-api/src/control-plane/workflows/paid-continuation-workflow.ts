@@ -71,6 +71,7 @@ import { openContinuationEnvelope, EnvelopeOpenError } from '../continuation/env
 import { reconcileAmbiguousSettlement } from '../continuation/settlement-reconciliation';
 import { createStateEvent, isTerminal, getAllowedTransitions } from '../state-machine';
 import type { JobState, TransitionReason, StateEvent } from '../state-machine';
+import type { LinkEvidenceInputs } from '@siteborne/service-runtime';
 import type { ServiceExecutor, ExecutorOutcome } from '../routes/x402-service';
 import type { D1PaymentAttemptRepository } from '../repositories/d1/payment-attempts';
 import type { Env } from '../config/env';
@@ -221,7 +222,14 @@ export type PaymentAttemptSettlementRepository = Pick<
 export type SettlementFacilitator = Pick<PaymentEvidenceProvider, 'settle'>;
 
 export type PccValidationResult =
-  | { readonly valid: true; readonly pcc: unknown }
+  | {
+      readonly valid: true;
+      readonly pcc: unknown;
+      /** Typed proof state for link-evidence persistence. Production
+       * validators always supply it; persistLinkEvidence fails closed
+       * when it is absent or malformed. */
+      readonly linkEvidenceInputs?: LinkEvidenceInputs;
+    }
   | { readonly valid: false; readonly reason: string };
 
 export type PccValidator = (
@@ -330,7 +338,8 @@ export interface WorkflowFinalizationPersistence {
     readonly paymentServiceLink: PaymentServiceLink;
     readonly settlementTransactionReference: string;
     readonly settlementEvidenceHash: string;
-    readonly pcc: unknown;
+    /** Typed proof state (never derived from the public response body). */
+    readonly linkEvidenceInputs: LinkEvidenceInputs | undefined;
     readonly buyerReceiptId: string;
     readonly createdAt: string;
   }): Promise<void>;
@@ -1245,7 +1254,7 @@ export async function runPaidContinuationWorkflow(
           paymentServiceLink,
           settlementTransactionReference,
           settlementEvidenceHash: settleOutcome.settlementEvidenceHash,
-          pcc: pccResult.pcc,
+          linkEvidenceInputs: pccResult.linkEvidenceInputs,
           buyerReceiptId: receipt.receiptId,
           createdAt: new Date().toISOString(),
         });

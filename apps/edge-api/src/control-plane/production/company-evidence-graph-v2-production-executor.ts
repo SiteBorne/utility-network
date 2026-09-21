@@ -54,6 +54,7 @@ import type {
 import type { KeyRegistry, Signer } from '@siteborne/verification';
 import type { D1Database } from '@cloudflare/workers-types';
 import type { ServiceExecutor } from '../routes/x402-service';
+import { toExecutorOutcomeResult } from './finalized-outcome';
 import { buildSecD1RateCoordinator } from '../rate-limit/sec-d1-rate-coordinator';
 
 function unreachableArtifactStore(): ArtifactStore {
@@ -203,6 +204,6 @@ export function buildCompanyEvidenceGraphV2ProductionExecutor(
     });
 
     const result = await executeLocalService(registry, 'company_evidence_graph.v2', input, context);
-    return { result };
+    return toExecutorOutcomeResult(result);
   };
 }

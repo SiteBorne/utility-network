@@ -318,7 +318,10 @@ describe('RESULT-BODY-INTEGRITY-READONLY-AUDIT-01: limits of the existing anchor
     const { linkInput, realLinks } = await runRealChain();
     const changed = {
       ...linkInput,
-      pcc: { ...(linkInput.pcc as Record<string, unknown>), decision: 'forged' },
+      linkEvidenceInputs: {
+        ...linkInput.linkEvidenceInputs!,
+        buyerReceiptHash: indepHash({ forged: true }),
+      },
     };
     await expect(realLinks.persistLinkEvidence(changed)).rejects.toThrow(
       'conflicting durable link/receipt evidence'

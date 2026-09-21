@@ -1,0 +1,87 @@
+{
+  "result_class": "success",
+  "service_id": "web_context_verified.v2",
+  "service_version": "v2",
+  "contract_release": "1.0.0",
+  "request_id": "req-fixed-0001",
+  "job_id": "job_90996176c7dd7d44c05a5f07",
+  "input_hash": "sha256:90f935cb4d7e939c5b2a6e668f03b165180a776e3576af8dad25d653363efba4",
+  "output": {
+    "requested_url": "https://acme.example/",
+    "retrieval_mode_requested": "direct",
+    "final_url": "https://acme.example/",
+    "retrieval_mode_used": "direct",
+    "http_metadata": {
+      "status_code": 200,
+      "content_type": "text/html",
+      "content_length": 63
+    },
+    "canonical_text": "<html><head><title>Fixture</title></head><body>hi</body></html>",
+    "content_hash": "sha256:709d745909ce896c0339851ef3d605559b49f6291222b962ea61c97f2e4369dd",
+    "truncation_status": {
+      "truncated": false,
+      "returned_bytes": 63
+    },
+    "character_count": 63,
+    "byte_count": 63
+  },
+  "output_hash": "sha256:c817cef3987f07dc49c66b4d9b92b007d877d7c6e10b4f95324742e3a70e112b",
+  "pcc_hash": "sha256:c817cef3987f07dc49c66b4d9b92b007d877d7c6e10b4f95324742e3a70e112b",
+  "receipt_id": "rcpt_61f7dd0bf24824326cc30aad",
+  "receipt": {
+    "receipt_version": "1.0.0",
+    "job_id": "job_90996176c7dd7d44c05a5f07",
+    "request_id": "req-fixed-0001",
+    "service_id": "web_context_verified.v2",
+    "service_version": "v2",
+    "contract_release": "1.0.0",
+    "pcc_schema_release": "1.0.1",
+    "pcc_schema_hash": "sha256:f664208e387b161ab7897d8544d9c7d987501eba5764e2dde0ea69586e33dbb5",
+    "input_hash": "sha256:90f935cb4d7e939c5b2a6e668f03b165180a776e3576af8dad25d653363efba4",
+    "output_hash": "sha256:c817cef3987f07dc49c66b4d9b92b007d877d7c6e10b4f95324742e3a70e112b",
+    "evidence_hash": "sha256:08ffcee4ede6225c91311ab15a497e2643ae11de218222babcf1944af4b93ebc",
+    "policy_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    "verifier_set_hash": "sha256:45680d2da5db5213dcfce37be636b38e3955944bfb4a1ae171892ad416393e5d",
+    "decision": "pass",
+    "completeness": 1,
+    "verification_mode": "standard",
+    "limitations": [
+      "evidence_accessibility_ratio=1.000",
+      "prompt_injection_result=clean",
+      "signals_detected=0"
+    ],
+    "signing_key_id": "kid_aaaaaaaaaaaaaaaaaaaaaaaa",
+    "canonicalization_algorithm": "RFC8785-JCS",
+    "signature_algorithm": "Ed25519",
+    "issued_at": "2026-09-01T12:00:00.000Z",
+    "receipt_id": "rcpt_61f7dd0bf24824326cc30aad",
+    "signature": "Z2daaFGz26t92hOX1bnK74uZEVlQUHOgqq4QrYI8NPN-EZlpCdBp0fYwCEfSffTBw4Rz0hvCJkyhx7EwPbUqDw"
+  },
+  "verification": {
+    "schema_valid": true,
+    "material_claims_supported": true,
+    "evidence_accessibility": 1,
+    "freshness": 1,
+    "completeness": 1,
+    "cross_source_agreement": 1,
+    "provenance_valid": true,
+    "decision": "pass",
+    "score": 1
+  },
+  "warnings": [],
+  "limitations": [],
+  "completeness": {
+    "requested_fields": 1,
+    "populated_fields": 1,
+    "supported_fields": 1,
+    "missing_fields": []
+  },
+  "audit_references": ["req-fixed-0001"],
+  "metrics": {
+    "elapsed_ms": 0,
+    "dependency_calls": 1,
+    "claims_produced": 2,
+    "evidence_produced": 1,
+    "output_bytes": 4204
+  }
+}

@@ -21,7 +21,7 @@
  * challenge — see `apps/edge-api/src/control-plane/routes/paid-services.ts`.
  */
 import { createHash } from 'node:crypto';
-import type { KeyRegistry, ReproductionInput, Signer } from '@siteborne/verification';
+import type { KeyRegistry, MeshVerdict, ReproductionInput, Signer } from '@siteborne/verification';
 import { buildClaim } from '../../claims/builder';
 import { buildEvidence } from '../../evidence/builder';
 import {
@@ -206,6 +206,26 @@ export class VerifyAgentOutputService
       extensionPayload: extension,
     });
 
+    // SEMANTIC FINALIZATION: `outcome`/`score` are verdict-dependent parts of
+    // the service result, so they are computed from the mesh verdict BEFORE the
+    // semantic snapshot is frozen and any proof is built (never afterwards, and
+    // never by mutating the signed draft's extension).
+    const finalizeSemantics = (verdict: MeshVerdict): AgentVerificationExtension => {
+      const meshPassed = verdict.decision === 'pass';
+      const outcome: 'pass' | 'fail' | 'conditional' = !meshPassed
+        ? verdict.decision === 'conditional'
+          ? 'conditional'
+          : 'fail'
+        : requirementsPassed && claimScore === 1
+          ? 'pass'
+          : 'conditional';
+      return {
+        ...extension,
+        outcome,
+        score: meshPassed ? (claimScore + (requirementsPassed ? 1 : 0)) / 2 : 0,
+      };
+    };
+
     const signed = await verifyAndSign({
       draft,
       context,
@@ -215,18 +235,14 @@ export class VerifyAgentOutputService
         input.verification_mode === 'independent_reproduction'
           ? (this.deps.reproduction ?? null)
           : undefined,
+      finalizeSemantics,
     });
 
     const meshPassed = signed.verdict.decision === 'pass';
-    const outcome: 'pass' | 'fail' | 'conditional' = !meshPassed
-      ? signed.verdict.decision === 'conditional'
-        ? 'conditional'
-        : 'fail'
-      : requirementsPassed && claimScore === 1
-        ? 'pass'
-        : 'conditional';
-    extension.outcome = outcome;
-    extension.score = meshPassed ? (claimScore + (requirementsPassed ? 1 : 0)) / 2 : 0;
+    // Receipt self-verification can force the effective verdict to 'fail'
+    // after the mesh ran; recompute against the effective verdict so the
+    // reported outcome matches the previous behaviour exactly.
+    const outcome = finalizeSemantics(signed.verdict).outcome;
 
     return {
       result_class:
@@ -242,7 +258,9 @@ export class VerifyAgentOutputService
       job_id: draft.job_id,
       input_hash: inputHash,
       output: meshPassed
-        ? signed.document.extensions['net.siteborne.agent-verification.v1']
+        ? signed.artifact
+          ? signed.finalExtension
+          : finalizeSemantics(signed.verdict)
         : undefined,
       output_hash: signed.outputHash,
       pcc_hash: signed.outputHash,
@@ -263,8 +281,12 @@ export class VerifyAgentOutputService
         dependency_calls: 0,
         claims_produced: claims.length,
         evidence_produced: evidence.length,
-        output_bytes: JSON.stringify(signed.document).length,
+        output_bytes: JSON.stringify({
+          ...signed.document,
+          extensions: { 'net.siteborne.agent-verification.v1': signed.finalExtension },
+        }).length,
       },
+      finalized: signed.artifact,
       failure: meshPassed
         ? undefined
         : {

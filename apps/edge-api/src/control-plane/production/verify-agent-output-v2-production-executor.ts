@@ -49,6 +49,7 @@ import {
 import type { ArtifactStore, InjectedClock } from '@siteborne/provider-adapters';
 import type { KeyRegistry, Signer } from '@siteborne/verification';
 import type { ServiceExecutor } from '../routes/x402-service';
+import { toExecutorOutcomeResult } from './finalized-outcome';
 
 function unreachableArtifactStore(): ArtifactStore {
   const fail = (method: string) => (): never => {
@@ -146,6 +147,6 @@ export function buildVerifyAgentOutputV2ProductionExecutor(
     });
 
     const result = await executeLocalService(registry, 'verify_agent_output.v2', input, context);
-    return { result };
+    return toExecutorOutcomeResult(result);
   };
 }

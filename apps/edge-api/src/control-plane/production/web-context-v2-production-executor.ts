@@ -39,6 +39,7 @@ import type {
 } from '@siteborne/provider-adapters';
 import type { KeyRegistry, Signer } from '@siteborne/verification';
 import type { ServiceExecutor } from '../routes/x402-service';
+import { toExecutorOutcomeResult } from './finalized-outcome';
 
 function unreachableArtifactStore(): ArtifactStore {
   const fail = (method: string) => (): never => {
@@ -162,6 +163,6 @@ export function buildWebContextV2ProductionExecutor(
     });
 
     const result = await executeLocalService(registry, 'web_context_verified.v2', input, context);
-    return { result };
+    return toExecutorOutcomeResult(result);
   };
 }
