@@ -425,9 +425,9 @@ Create a first-purchase validator requiring:
 Implement remote Streamable HTTP MCP and a public npm shim. Publish under the
 domain-verified namespace: net.siteborne/utility Tools:
 
-- siteborne_company_evidence_graph
-- siteborne_web_context_verified
-- siteborne_document_evidence_json
+- siteborne_build_company_evidence_graph
+- siteborne_retrieve_verified_web_context
+- siteborne_extract_document_evidence_json
 - siteborne_verify_agent_output
 - siteborne_get_quote
 - siteborne_get_service_health

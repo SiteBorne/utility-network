@@ -77,6 +77,27 @@ describe('TDQS 1.2 tool-definition contract', () => {
     expect(tools).toHaveLength(6);
   });
 
+  it('freezes the Release-1 names and advertises no legacy noun-first name', async () => {
+    const names = (await listActualTools()).map((tool) => tool.name);
+    expect(names).toEqual([
+      'siteborne_build_company_evidence_graph',
+      'siteborne_retrieve_verified_web_context',
+      'siteborne_extract_document_evidence_json',
+      'siteborne_verify_agent_output',
+      'siteborne_get_quote',
+      'siteborne_get_service_health',
+    ]);
+    expect(new Set(names).size).toBe(names.length);
+    for (const legacy of [
+      'siteborne_company_evidence_graph',
+      'siteborne_web_context_verified',
+      'siteborne_document_evidence_json',
+    ]) {
+      expect(names).not.toContain(legacy);
+      expect(MCP_TOOL_NAMES as readonly string[]).not.toContain(legacy);
+    }
+  });
+
   it('gives every actual tools/list definition selection, behavior, and return guidance', async () => {
     const tools = await listActualTools();
     for (const tool of tools) {
