@@ -150,6 +150,39 @@ describe('SUN-1221E6R-H2B2-R4: D1ResultReceiptPersistence durable PCC persistenc
     expect(persisted?.pcc).toEqual(REAL_PCC);
   });
 
+  it('stores an explicit vNext R2 reference without copying the full PCC into the D1 row', async () => {
+    const reference = {
+      storage: 'R2_CONTENT_ADDRESS' as const,
+      content_hash: `sha256:${'a'.repeat(64)}` as const,
+      byte_length: 4_900_000,
+      media_type: 'application/pcc+json' as const,
+    };
+    await persistence.persistResult({
+      jobId: 'job-vnext-reference',
+      paymentIdentifier: 'pay-vnext-reference',
+      cachedResult: {
+        ...CANONICAL_CACHED_RESPONSE,
+        result_format: 'SELF_VERIFYING_PCC_VNEXT',
+        result_reference: reference,
+        body: undefined,
+      },
+    } as never);
+    await persistence.persistReceipt({
+      jobId: 'job-vnext-reference',
+      paymentIdentifier: 'pay-vnext-reference',
+      pccReference: reference,
+    });
+
+    const persisted = await results.getByJobId<Record<string, unknown>>('job-vnext-reference');
+    expect(persisted).toMatchObject({
+      result_format: 'SELF_VERIFYING_PCC_VNEXT',
+      result_reference: reference,
+      pcc: null,
+      receipt_persisted: true,
+    });
+    expect(JSON.stringify(persisted)).not.toContain('net.siteborne.verification-proof.v1');
+  });
+
   it('WORKFLOW_OUTPUT_INDEPENDENCE: the persisted receipt is retrievable and byte-exact via getByJobId alone, with no dependence on Workflow step-history output', async () => {
     await persistence.persistReceipt({
       jobId: 'job-independence',

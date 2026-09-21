@@ -45,6 +45,7 @@ import { D1PaymentFinalizationRepository } from '../repositories/d1/payment-fina
 import { hashPaymentObject } from '@siteborne/protocol-x402';
 import { X402ServiceResultRepository } from '../repositories/d1/x402-quotes';
 import { receiptPersistenceIdempotencyKey } from '../continuation/idempotency-keys';
+import { PccResultArtifactStore, SELF_VERIFYING_PCC_VNEXT } from '../results/pcc-result-artifact';
 import type {
   PaidContinuationWorkflowDependencies,
   PaidContinuationWorkflowHostEnv,
@@ -220,17 +221,32 @@ export const validateExecutorPcc: PccValidator = async (outcome: ExecutorOutcome
   if (!outcome.linkEvidenceInputs) {
     return { valid: false, reason: 'missing_link_evidence_inputs' };
   }
+  const representation = outcome.resultRepresentation;
+  if (outcome.result.service_id?.endsWith('.v3') && !representation) {
+    return { valid: false, reason: 'missing_vnext_result_representation' };
+  }
+  if (representation?.format === SELF_VERIFYING_PCC_VNEXT && 'reference' in representation) {
+    if (representation.reference.content_hash !== outcome.linkEvidenceInputs.buyerReceiptHash) {
+      return { valid: false, reason: 'link_evidence_hash_mismatch' };
+    }
+    return {
+      valid: true,
+      pccReference: representation.reference,
+      linkEvidenceInputs: outcome.linkEvidenceInputs,
+    };
+  }
+  const candidateBody =
+    representation?.format === SELF_VERIFYING_PCC_VNEXT && 'body' in representation
+      ? representation.body
+      : outcome.result.receipt;
   // The typed buyer-receipt hash must describe exactly the representation this
   // Workflow releases; a mismatch would persist link evidence for a different body.
-  if (
-    outcome.linkEvidenceInputs.buyerReceiptHash !==
-    (await hashPaymentObject(outcome.result.receipt))
-  ) {
+  if (outcome.linkEvidenceInputs.buyerReceiptHash !== (await hashPaymentObject(candidateBody))) {
     return { valid: false, reason: 'link_evidence_hash_mismatch' };
   }
   return {
     valid: true,
-    pcc: outcome.result.receipt,
+    pcc: candidateBody,
     linkEvidenceInputs: outcome.linkEvidenceInputs,
   };
 };
@@ -329,17 +345,29 @@ export class D1ResultReceiptPersistence implements ResultReceiptPersistence {
           ...existing,
           receipt_persisted: true,
           receipt_id: receiptId,
-          pcc: input.pcc ?? null,
+          ...(input.pccReference
+            ? {
+                result_format: SELF_VERIFYING_PCC_VNEXT,
+                result_reference: input.pccReference,
+                pcc: null,
+              }
+            : { pcc: input.pcc ?? null }),
           durableEvidence: {
             ...(existing.durableEvidence ?? {}),
-            pcc: input.pcc ?? null,
+            pcc: input.pccReference ?? input.pcc ?? null,
           },
         }
       : {
           kind: 'workflow_receipt',
           receipt_persisted: true,
           receipt_id: receiptId,
-          pcc: input.pcc ?? null,
+          ...(input.pccReference
+            ? {
+                result_format: SELF_VERIFYING_PCC_VNEXT,
+                result_reference: input.pccReference,
+                pcc: null,
+              }
+            : { pcc: input.pcc ?? null }),
         };
     await this.results.finalize(input.jobId, finalRecord, new Date().toISOString());
     return { status: 'written', receiptId };
@@ -399,6 +427,9 @@ export async function buildProductionPaidContinuationWorkflowDependencies(
   const resultReceiptPersistence = new D1ResultReceiptPersistence(
     new X402ServiceResultRepository(env.DB)
   );
+  const resultArtifacts = env.ARTIFACTS
+    ? new PccResultArtifactStore(new R2ArtifactStoreAdapter(env.ARTIFACTS, 'results/pcc/'))
+    : undefined;
   const finalizationPersistence = new D1PaymentFinalizationRepository(env.DB);
   const chainReceiptChecker = buildProductionCdpChainReceiptChecker({
     productionRpcUrl: env.BASE_RPC_URL,
@@ -410,6 +441,7 @@ export async function buildProductionPaidContinuationWorkflowDependencies(
     clock: () => Math.floor(Date.now() / 1000),
     evidenceMode: 'production',
     executor: routeConfig.executor,
+    resultArtifacts,
     validatePcc: validateExecutorPcc,
     settlement: {
       repository: paymentAttempts,

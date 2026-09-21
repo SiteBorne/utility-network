@@ -15,10 +15,19 @@ import type { ExecutorOutcome } from '../routes/x402-service';
 export function toExecutorOutcomeResult(result: ServiceExecutionResult): {
   result: ExecutorOutcome['result'];
   linkEvidenceInputs?: ExecutorOutcome['linkEvidenceInputs'];
+  resultRepresentation?: ExecutorOutcome['resultRepresentation'];
 } {
   const { finalized, ...publicResult } = result;
   return {
     result: publicResult,
     ...(finalized ? { linkEvidenceInputs: finalized.linkEvidenceInputs } : {}),
+    ...(finalized?.artifactVersion === 2
+      ? {
+          resultRepresentation: {
+            format: 'SELF_VERIFYING_PCC_VNEXT' as const,
+            body: finalized.wireBody as Readonly<Record<string, unknown>>,
+          },
+        }
+      : {}),
   };
 }

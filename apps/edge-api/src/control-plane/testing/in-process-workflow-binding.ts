@@ -252,16 +252,19 @@ export function createInProcessWorkflowBinding(
               // (`persist-receipt`) -- should not happen given the real
               // workflow's own step ordering, kept only as a defensive
               // non-crash fallback.
-              const responseBody: Readonly<Record<string, unknown>> = capturedCachedResult
+              const responseBody: Readonly<Record<string, unknown>> = capturedCachedResult?.body
                 ? capturedCachedResult.body
-                : {
-                    service_id: metadata.service,
-                    result_class: capturedOutcome.result.result_class,
-                    output: capturedOutcome.result.output,
-                    receipt_id: receiptId,
-                    link_id: link.link_id,
-                    link_hash: link.link_hash,
-                  };
+                : capturedOutcome.resultRepresentation &&
+                    'body' in capturedOutcome.resultRepresentation
+                  ? capturedOutcome.resultRepresentation.body
+                  : {
+                      service_id: metadata.service,
+                      result_class: capturedOutcome.result.result_class,
+                      output: capturedOutcome.result.output,
+                      receipt_id: receiptId,
+                      link_id: link.link_id,
+                      link_hash: link.link_hash,
+                    };
               const settleResponse: SettleResponse | NeverminedPaymentResponse =
                 rail === 'nevermined'
                   ? {

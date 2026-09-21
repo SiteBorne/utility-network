@@ -112,6 +112,10 @@ import type {
   WorkflowContinuationResult,
 } from '../continuation/types';
 import type { DecryptedContinuationPayload } from '../workflows/paid-continuation-workflow';
+import {
+  resolveStoredResultBody,
+  type PccResultArtifactStore,
+} from '../results/pcc-result-artifact';
 
 /** Compact machine-readable codes only (same shape the CDP provider
  * accepts). Anything else is dropped so free-form facilitator text can
@@ -165,6 +169,8 @@ export interface ExecutorOutcome {
    * `executeLocalService` returned — never bypassed, never re-shaped. */
   result: {
     result_class: string;
+    service_id?: string;
+    service_version?: string;
     output?: unknown;
     output_hash?: string;
     receipt_id?: string;
@@ -194,6 +200,22 @@ export interface ExecutorOutcome {
     readonly signature: string;
     readonly buyerReceiptHash: string;
   };
+  /**
+   * Candidate result representation projected from the runtime's finalized
+   * artifact. The full body exists only at the executor/preparation boundary;
+   * the continuation Workflow replaces it with a content-addressed R2
+   * reference before its `invoke-executor` step returns. Legacy executors omit
+   * this field and retain their existing receipt-only behavior.
+   */
+  resultRepresentation?:
+    | {
+        readonly format: 'SELF_VERIFYING_PCC_VNEXT';
+        readonly body: Readonly<Record<string, unknown>>;
+      }
+    | {
+        readonly format: 'SELF_VERIFYING_PCC_VNEXT';
+        readonly reference: import('../results/pcc-result-artifact').VNextPccArtifactReference;
+      };
   /** Required when the route's scheme is `upto`: the atomic-unit actual
    * amount to charge, computed by the caller from the service's real
    * output metrics (e.g. document page count via
@@ -317,6 +339,9 @@ export interface X402ServiceRouteConfig {
   continuationEnvelopeKey?: CryptoKey;
   /** Defaults to `'v1'` when `continuationEnvelopeKey` is supplied. */
   continuationEnvelopeKeyId?: string;
+  /** Reader for explicitly versioned vNext result references. Legacy inline
+   * rows never consult it. */
+  resultArtifactReader?: Pick<PccResultArtifactStore, 'read'>;
 }
 
 export const PAYTO_NOT_CONFIGURED = 'siteborne-fixture:payto-not-configured';
@@ -847,6 +872,8 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
         // correct, honest response here.
         return null;
       }
+      const responseBody = await resolveStoredResultBody(cached, config.resultArtifactReader);
+      if (!responseBody) return null;
       c.header(
         'PAYMENT-RESPONSE',
         rail === 'nevermined'
@@ -855,7 +882,7 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
             )
           : encodePaymentResponseHeaderSafe(cached.settleResponse as SettleResponse)
       );
-      return c.json(cached.body, cached.status as never);
+      return c.json(responseBody, cached.status as never);
     }
 
     /**

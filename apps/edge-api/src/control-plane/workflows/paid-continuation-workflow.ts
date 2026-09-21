@@ -73,6 +73,7 @@ import { createStateEvent, isTerminal, getAllowedTransitions } from '../state-ma
 import type { JobState, TransitionReason, StateEvent } from '../state-machine';
 import type { LinkEvidenceInputs } from '@siteborne/service-runtime';
 import type { ServiceExecutor, ExecutorOutcome } from '../routes/x402-service';
+import type { VNextPccArtifactReference } from '../results/pcc-result-artifact';
 import type { D1PaymentAttemptRepository } from '../repositories/d1/payment-attempts';
 import type { Env } from '../config/env';
 import { buildProductionPaidContinuationWorkflowDependencies } from './production-dependencies';
@@ -224,7 +225,8 @@ export type SettlementFacilitator = Pick<PaymentEvidenceProvider, 'settle'>;
 export type PccValidationResult =
   | {
       readonly valid: true;
-      readonly pcc: unknown;
+      readonly pcc?: unknown;
+      readonly pccReference?: VNextPccArtifactReference;
       /** Typed proof state for link-evidence persistence. Production
        * validators always supply it; persistLinkEvidence fails closed
        * when it is absent or malformed. */
@@ -268,6 +270,8 @@ export interface PersistResultInput {
 
 export interface DurableCachedResult {
   readonly status: 200;
+  readonly result_format?: 'LEGACY_RECEIPT_ONLY' | 'SELF_VERIFYING_PCC_VNEXT';
+  readonly result_reference?: VNextPccArtifactReference;
   /**
    * SUN-1222C-PCC-WIRE-RESULT-IMPLEMENTATION: the governed v2 wire result
    * *is* the full PCC document (`durableEvidence.pcc`, unmodified) --
@@ -284,7 +288,7 @@ export interface DurableCachedResult {
    * schema, so nothing is lost, only relocated to its already-governed
    * home. See docs/reports/SUN-1222C-pcc-wire-result-governance-decision.md.
    */
-  readonly body: Readonly<Record<string, unknown>>;
+  readonly body?: Readonly<Record<string, unknown>>;
   readonly settleResponse: SettleResponse;
   readonly durableEvidence: {
     readonly pcc: unknown;
@@ -307,6 +311,7 @@ export interface PersistReceiptInput {
    * only so existing fakes that don't model PCC content keep compiling
    * unchanged. */
   readonly pcc?: unknown;
+  readonly pccReference?: VNextPccArtifactReference;
 }
 
 /** Idempotent (UPSERT-shaped) result/receipt persistence port — `status:
@@ -358,6 +363,17 @@ export interface PaidContinuationWorkflowDependencies {
    * fixtures explicitly supply `fixture`. */
   readonly evidenceMode: PaymentEvidenceMode;
   readonly executor: ServiceExecutor;
+  /** Existing private R2 result storage. Required whenever the executor
+   * produces a SELF_VERIFYING_PCC_VNEXT representation; unused for legacy. */
+  readonly resultArtifacts?: {
+    prepareExecutorOutcome(input: {
+      readonly outcome: ExecutorOutcome;
+      readonly jobId: string;
+      readonly serviceId: string;
+      readonly createdAt: string;
+    }): Promise<ExecutorOutcome>;
+    read(reference: VNextPccArtifactReference): Promise<Readonly<Record<string, unknown>>>;
+  };
   readonly validatePcc: PccValidator;
   readonly settlement: {
     readonly repository: PaymentAttemptSettlementRepository;
@@ -916,12 +932,36 @@ export async function runPaidContinuationWorkflow(
   let executorOutcome: ExecutorOutcome;
   try {
     executorOutcome = await step.do('invoke-executor', STEP_CONFIG.INVOKE_EXECUTOR, async () => {
-      return deps.executor(decrypted.executorInput, {
+      const outcome = await deps.executor(decrypted.executorInput, {
         job_id: jobId,
         request_id: input.request_id,
       });
+      if (!outcome.resultRepresentation) return outcome;
+      if (!deps.resultArtifacts) throw new Error('vnext_result_artifact_store_unavailable');
+      return deps.resultArtifacts.prepareExecutorOutcome({
+        outcome,
+        jobId,
+        serviceId: metadata.service,
+        createdAt: new Date().toISOString(),
+      });
     });
   } catch (e) {
+    const preparationCode = e instanceof Error ? e.message : errorCode(e);
+    if (
+      preparationCode === 'vnext_result_artifact_store_unavailable' ||
+      preparationCode === 'missing_link_evidence_inputs' ||
+      preparationCode === 'link_evidence_hash_mismatch' ||
+      preparationCode.startsWith('vnext_pcc_')
+    ) {
+      await transitionJobState(
+        jobId,
+        'REJECTED',
+        'VERIFICATION_FAILED',
+        deps.persistence.job,
+        boundedDetail(preparationCode)
+      );
+      return terminal('pcc_failed', jobId, { error_code: preparationCode });
+    }
     // SUN-1222C-R4-D4-CONTINUED: a thrown executor error's message is the
     // exact same text `terminal(...)` already puts in the (operator-only,
     // per R4-D3) `error_code` field — bounding it here too before it ever
@@ -1030,6 +1070,39 @@ export async function runPaidContinuationWorkflow(
     );
     return terminal('pcc_failed', jobId, { error_code: pccResult.reason });
   }
+
+  // Resolve the exact, already-staged candidate bytes before settlement.
+  // This read is the persistence-readiness gate: a missing, corrupt, or
+  // mismatched R2 object fails closed while payment is still untouched.
+  let verificationReceipt = pccResult.pcc;
+  if (pccResult.pccReference) {
+    if (!deps.resultArtifacts) {
+      await transitionJobState(
+        jobId,
+        'REJECTED',
+        'VERIFICATION_FAILED',
+        deps.persistence.job,
+        'vnext_result_artifact_store_unavailable'
+      );
+      return terminal('pcc_failed', jobId, {
+        error_code: 'vnext_result_artifact_store_unavailable',
+      });
+    }
+    try {
+      verificationReceipt = await deps.resultArtifacts.read(pccResult.pccReference);
+    } catch (e) {
+      const readFailureCode = e instanceof Error ? e.message : errorCode(e);
+      const detail = boundedDetail(readFailureCode);
+      await transitionJobState(
+        jobId,
+        'REJECTED',
+        'VERIFICATION_FAILED',
+        deps.persistence.job,
+        detail
+      );
+      return terminal('pcc_failed', jobId, { error_code: readFailureCode });
+    }
+  }
   await transitionJobState(jobId, 'SETTLING', 'VERIFICATION_PASSED', deps.persistence.job);
 
   // STEP 4 — settle. Zero blind retries (frozen invariant, STEP_CONFIG.SETTLE).
@@ -1099,7 +1172,6 @@ export async function runPaidContinuationWorkflow(
   }
   const settlementTransactionReference = settleOutcome.transactionReference;
 
-  const verificationReceipt = pccResult.pcc;
   const verificationReceiptId =
     executorOutcome.result.receipt_id ??
     (typeof verificationReceipt === 'object' &&
@@ -1194,7 +1266,14 @@ export async function runPaidContinuationWorkflow(
     // (== `pccResult.pcc`) is the exact same object every other use of
     // this result (durableEvidence.pcc below, receipt persistence)
     // already treats as authoritative.
-    body: verificationReceipt as Readonly<Record<string, unknown>>,
+    ...(pccResult.pccReference
+      ? {
+          result_format: 'SELF_VERIFYING_PCC_VNEXT' as const,
+          result_reference: pccResult.pccReference,
+        }
+      : {
+          body: verificationReceipt as Readonly<Record<string, unknown>>,
+        }),
     settleResponse: {
       success: true,
       transaction: settleOutcome.transactionReference ?? 'reconciled:transaction-unavailable',
@@ -1204,7 +1283,7 @@ export async function runPaidContinuationWorkflow(
       extra: { link_id: paymentServiceLink.link_id, payment_identifier: paymentIdentifier },
     },
     durableEvidence: {
-      pcc: verificationReceipt,
+      pcc: pccResult.pccReference ?? verificationReceipt,
       receipt: executorOutcome.result.receipt,
       settlement_evidence: settleOutcome.settlementEvidence,
       payment_service_link: paymentServiceLink,
@@ -1246,7 +1325,8 @@ export async function runPaidContinuationWorkflow(
         const receipt = await deps.persistence.resultReceipt.persistReceipt({
           jobId,
           paymentIdentifier,
-          pcc: pccResult.valid ? pccResult.pcc : undefined,
+          pcc: pccResult.pccReference ? undefined : verificationReceipt,
+          pccReference: pccResult.pccReference,
         });
         await deps.persistence.finalization.persistLinkEvidence({
           paymentIdentifier,
