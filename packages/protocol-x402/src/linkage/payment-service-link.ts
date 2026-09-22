@@ -32,7 +32,7 @@ interface PaymentServiceLinkInputBase {
   quote_id: string;
   requirement_id: string;
   service_id: SiteborneServiceId;
-  service_version: 'v1' | 'v2';
+  service_version: 'v1' | 'v2' | 'v3';
   request_input_hash: string;
   job_id: string;
   service_output_hash: string;

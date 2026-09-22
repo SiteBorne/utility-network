@@ -11,10 +11,10 @@ import type { Unknown_ } from './sentinels';
  * silently, when a v3 generation is introduced (v1/v2 are permanent
  * parallel identities per docs/contracts/VERSIONING.md, not a
  * deprecation ladder). */
-export type ServiceGeneration = 'v1' | 'v2';
+export type ServiceGeneration = 'v1' | 'v2' | 'v3';
 
 export function isServiceGeneration(value: string): value is ServiceGeneration {
-  return value === 'v1' || value === 'v2';
+  return value === 'v1' || value === 'v2' || value === 'v3';
 }
 
 /** contracts/releases/<version>/CONTRACT_RELEASE.yaml's own version. */

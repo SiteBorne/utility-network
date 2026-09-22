@@ -355,6 +355,21 @@ describe('validateNeverminedDocumentDynamicPlan', () => {
         amount: '17000',
         registration_allowed: true,
       },
+      'company_evidence_graph.v3': {
+        semantics: 'exact',
+        amount: '31200',
+        registration_allowed: false,
+      },
+      'web_context_verified.v3': {
+        semantics: 'exact',
+        amount: '8000',
+        registration_allowed: false,
+      },
+      'verify_agent_output.v3': {
+        semantics: 'exact',
+        amount: '17000',
+        registration_allowed: false,
+      },
     });
   });
 

@@ -22,6 +22,14 @@ import companyEvidenceOutputSchema from '../../../../contracts/releases/1.0.0/sc
 import webContextOutputSchema from '../../../../contracts/releases/1.0.0/schemas/services/web-context-output.schema.json' with { type: 'json' };
 import documentEvidenceOutputSchema from '../../../../contracts/releases/1.0.0/schemas/services/document-evidence-output.schema.json' with { type: 'json' };
 import agentVerificationOutputSchema from '../../../../contracts/releases/1.0.0/schemas/services/agent-verification-output.schema.json' with { type: 'json' };
+import companyEvidenceOutputSchemaV3 from '../../../../contracts/releases/3.0.0/schemas/services/company-evidence-output.schema.json' with { type: 'json' };
+import webContextOutputSchemaV3 from '../../../../contracts/releases/3.0.0/schemas/services/web-context-output.schema.json' with { type: 'json' };
+import documentEvidenceOutputSchemaV3 from '../../../../contracts/releases/3.0.0/schemas/services/document-evidence-output.schema.json' with { type: 'json' };
+import agentVerificationOutputSchemaV3 from '../../../../contracts/releases/3.0.0/schemas/services/agent-verification-output.schema.json' with { type: 'json' };
+import companyEvidenceOutputExampleV3 from '../../../../contracts/releases/3.0.0/examples/company_evidence_graph.v3.pcc.json' with { type: 'json' };
+import webContextOutputExampleV3 from '../../../../contracts/releases/3.0.0/examples/web_context_verified.v3.pcc.json' with { type: 'json' };
+import documentEvidenceOutputExampleV3 from '../../../../contracts/releases/3.0.0/examples/document_evidence_json.v3.pcc.json' with { type: 'json' };
+import agentVerificationOutputExampleV3 from '../../../../contracts/releases/3.0.0/examples/verify_agent_output.v3.pcc.json' with { type: 'json' };
 import moneySchema from '../../../../contracts/releases/1.0.0/schemas/common/money.schema.json' with { type: 'json' };
 import authorizedArtifactReferenceSchema from '../../../../contracts/releases/1.0.0/schemas/common/authorized-artifact-reference.schema.json' with { type: 'json' };
 import type { SiteborneServiceId } from '../types';
@@ -51,6 +59,10 @@ export const FROZEN_SERVICE_INPUT_SCHEMAS: Readonly<Record<SiteborneServiceId, u
   'web_context_verified.v2': webContextInputSchema,
   'document_evidence_json.v2': documentEvidenceInputSchema,
   'verify_agent_output.v2': agentVerificationInputSchema,
+  'company_evidence_graph.v3': companyEvidenceInputSchema,
+  'web_context_verified.v3': webContextInputSchema,
+  'document_evidence_json.v3': documentEvidenceInputSchema,
+  'verify_agent_output.v3': agentVerificationInputSchema,
 };
 
 /** Self-contained (`$ref`-free) input schemas ready to hand to the
@@ -85,6 +97,19 @@ const FROZEN_SERVICE_OUTPUT_SCHEMAS: Readonly<Record<SiteborneServiceId, unknown
   'web_context_verified.v2': webContextOutputSchema,
   'document_evidence_json.v2': documentEvidenceOutputSchema,
   'verify_agent_output.v2': agentVerificationOutputSchema,
+  'company_evidence_graph.v3': companyEvidenceOutputSchemaV3,
+  'web_context_verified.v3': webContextOutputSchemaV3,
+  'document_evidence_json.v3': documentEvidenceOutputSchemaV3,
+  'verify_agent_output.v3': agentVerificationOutputSchemaV3,
+};
+
+const VNEXT_FULL_PCC_EXAMPLES: Readonly<
+  Partial<Record<SiteborneServiceId, Readonly<Record<string, unknown>>>>
+> = {
+  'company_evidence_graph.v3': companyEvidenceOutputExampleV3,
+  'web_context_verified.v3': webContextOutputExampleV3,
+  'document_evidence_json.v3': documentEvidenceOutputExampleV3,
+  'verify_agent_output.v3': agentVerificationOutputExampleV3,
 };
 
 /** Each frozen input schema's own first `examples[]` entry — a
@@ -99,6 +124,8 @@ export function frozenInputExample(serviceId: SiteborneServiceId): unknown {
  * module-level comment above for why the output *schema* itself is not
  * bundled/embedded, only this example. */
 export function frozenOutputExample(serviceId: SiteborneServiceId): unknown {
+  const vNextExample = VNEXT_FULL_PCC_EXAMPLES[serviceId];
+  if (vNextExample) return vNextExample;
   return firstExample(FROZEN_SERVICE_OUTPUT_SCHEMAS[serviceId], serviceId, 'output');
 }
 

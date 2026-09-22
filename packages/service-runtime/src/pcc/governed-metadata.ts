@@ -47,7 +47,7 @@ const V2_RELEASE = {
 const V3_RELEASE = {
   contractRelease: '3.0.0',
   pccSchemaRelease: '2.0.0',
-  pccSchemaHash: 'sha256:92ca8f7c220ae173f088acb1f318a88c31c256f8193146b680f2f61d2d421f6a',
+  pccSchemaHash: 'sha256:9a93214ebd851f2f7dfa86cd9cec4b81d83d5e78aa857f380fd579ada27c00a5',
 } as const;
 
 const OUTPUT_SCHEMA_HASHES: Readonly<Record<ServiceId, string>> = {
@@ -68,13 +68,13 @@ const OUTPUT_SCHEMA_HASHES: Readonly<Record<ServiceId, string>> = {
   'verify_agent_output.v2':
     'sha256:a9a462b89b290ecba1aa62ec6d2fd030572f326ed79f498a43690244b38ad679',
   'company_evidence_graph.v3':
-    'sha256:988abf9957a2a4cba6ce1227120c9601936b4d2a5078f730ad81d419249ed90a',
+    'sha256:3567477e8ac4e76a57c6baec7cc6e2fa1aa502fca3087ed3753d2e99de036ae1',
   'web_context_verified.v3':
-    'sha256:768455f58511cc7df7ec5d5e5f9767b6ce6ad991a84a0f39f8a4faa7f6189280',
+    'sha256:34e9ca4c55b071cfaa2f182ecac5d2513a8ec6a4f3c0a6d0cf0b7027eeab1319',
   'document_evidence_json.v3':
-    'sha256:e47d7d85b92441feff3c9c98ae058eaeb68b1cc6c7ff852be7e5af16c787da49',
+    'sha256:058e6d50796d7adffc5deedd5b96679dcff78d98b77c022c06430885546aeff7',
   'verify_agent_output.v3':
-    'sha256:0aa731ce6c6761e33fd77d5adaf55debf385fad7fe6110225878a1d6e02144c9',
+    'sha256:7a164cc8bbd34c95608fcc6e420a36d29844ddfbc6c029439e9f4262cedf8a73',
 };
 
 /** Input schemas are byte-identical across releases 1.0.1 and 2.0.0. */

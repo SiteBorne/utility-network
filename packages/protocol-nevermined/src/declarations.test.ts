@@ -21,18 +21,23 @@ describe('four canonical Nevermined declarations', () => {
       'web_context_verified.v2',
       'document_evidence_json.v2',
       'verify_agent_output.v2',
+      'company_evidence_graph.v3',
+      'web_context_verified.v3',
+      'document_evidence_json.v3',
+      'verify_agent_output.v3',
     ]);
     expect(
       new Set(Object.values(NEVERMINED_DECLARATIONS).map((d) => d.agent.local_agent_id)).size
-    ).toBe(8);
+    ).toBe(12);
     expect(
       new Set(Object.values(NEVERMINED_DECLARATIONS).map((d) => d.plan.local_plan_id)).size
-    ).toBe(8);
+    ).toBe(12);
   });
 
   it.each([
     ['company_evidence_graph.v1', '39000'],
     ['company_evidence_graph.v2', '31200'],
+    ['company_evidence_graph.v3', '31200'],
     ['web_context_verified.v1', '9000'],
     ['verify_agent_output.v1', '19000'],
   ] as const)('%s derives its exact gross buyer amount from canonical pricing', (id, amount) => {
@@ -56,10 +61,10 @@ describe('four canonical Nevermined declarations', () => {
     for (const [serviceId, declaration] of Object.entries(NEVERMINED_DECLARATIONS)) {
       expect(declaration.agent.input_schema_hash).toMatch(/^sha256:[a-f0-9]{64}$/);
       expect(declaration.agent.output_schema_hash).toMatch(/^sha256:[a-f0-9]{64}$/);
-      expect(declaration.agent.pcc_version).toBe('1.0.0');
+      expect(declaration.agent.pcc_version).toBe(serviceId.endsWith('.v3') ? '2.0.0' : '1.0.0');
       // SUN-1000 checkpoint 1M: each declaration's endpoint matches its
       // own major (.v1 -> /v1/nevermined/, .v2 -> /v2/nevermined/).
-      const expectedPrefix = serviceId.endsWith('.v2') ? '/v2/nevermined/' : '/v1/nevermined/';
+      const expectedPrefix = `/v${serviceId.split('.v')[1]}/nevermined/`;
       expect(declaration.agent.endpoint.startsWith(expectedPrefix)).toBe(true);
       expect(declaration.agent.protocol_references).toEqual({ mcp: '/mcp', a2a: '/a2a' });
       expect(declaration.agent.production_enabled).toBe(false);

@@ -413,6 +413,7 @@ export class CompanyEvidenceGraphService
     // (both .v1 and .v2 now register the same service instance).
     const draft = buildDraftDocument({
       seed: `${context.service_id}:${inputHash}:${context.job_id}`,
+      idempotencyKey: context.idempotency_key,
       serviceId: context.service_id,
       serviceVersion: serviceVersionOf(context.service_id),
       inputHash,

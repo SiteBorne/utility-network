@@ -108,7 +108,7 @@ export interface ExternalSettlementEvidence {
 
 export interface PaymentEvidenceContext {
   service_id: SiteborneServiceId;
-  service_version: 'v1' | 'v2';
+  service_version: 'v1' | 'v2' | 'v3';
   scheme: 'exact' | 'upto';
   network: Network;
   asset: string;

@@ -1,0 +1,259 @@
+{
+  "pcc_version": "2.0.0",
+  "job_id": "job_0d7691098eff62efc9673d19",
+  "contract": {
+    "service_id": "web_context_verified.v3",
+    "service_version": "v3",
+    "input_hash": "sha256:90f935cb4d7e939c5b2a6e668f03b165180a776e3576af8dad25d653363efba4",
+    "input_schema_hash": "sha256:d3b0762020d4cc1d1e846960ed978cf1237b1741f90213adabe8ed931c2845ea",
+    "output_schema_hash": "sha256:34e9ca4c55b071cfaa2f182ecac5d2513a8ec6a4f3c0a6d0cf0b7027eeab1319",
+    "quote_id": "qte_f8b692dd3508cde1c9fc42d2",
+    "mode": "offline_verification",
+    "currency": "USD",
+    "minimum_quality": 0.8,
+    "freshness_seconds": 3600,
+    "issued_at": "2026-09-01T12:00:00.000Z",
+    "expires_at": "2026-09-01T13:00:00.000Z",
+    "idempotency_key": "idk_aaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "subject": {
+    "type": "webpage",
+    "canonical_name": "https://acme.example/",
+    "identifiers": {
+      "url": "https://acme.example/"
+    }
+  },
+  "claims": [
+    {
+      "claim_id": "clm_29fd784ac41a48ec472d0a69",
+      "predicate": "title",
+      "value": "Fixture",
+      "confidence": 0.9,
+      "evidence_ids": ["evd_983cbce92793258d8f1a27d5"],
+      "materiality": "material",
+      "verification_status": "verified"
+    },
+    {
+      "claim_id": "clm_91add5635791fa0e14693c69",
+      "predicate": "canonical_text",
+      "value": "<html><head><title>Fixture</title></head><body>hi</body></html>",
+      "confidence": 0.95,
+      "evidence_ids": ["evd_983cbce92793258d8f1a27d5"],
+      "materiality": "material",
+      "verification_status": "verified"
+    }
+  ],
+  "evidence": [
+    {
+      "evidence_id": "evd_983cbce92793258d8f1a27d5",
+      "source_uri": "https://acme.example/",
+      "retrieved_at": "2026-09-01T12:00:00.000Z",
+      "content_hash": "sha256:709d745909ce896c0339851ef3d605559b49f6291222b962ea61c97f2e4369dd",
+      "media_type": "text/html",
+      "locator": {
+        "type": "byte_range",
+        "value": "0-63"
+      },
+      "accessibility_status": "accessible",
+      "transformation_history": [],
+      "authorization_classification": "public",
+      "freshness_status": "fresh"
+    }
+  ],
+  "completeness": {
+    "requested_fields": 1,
+    "populated_fields": 1,
+    "supported_fields": 1,
+    "score": 1,
+    "missing_fields": [],
+    "unsupported_fields": [],
+    "stale_fields": [],
+    "vector": [
+      {
+        "dimension": "content",
+        "requested": 1,
+        "populated": 1,
+        "supported": 1,
+        "score": 1
+      }
+    ]
+  },
+  "provenance": {
+    "routes": [
+      {
+        "type": "direct",
+        "provider": "service-runtime:web-context-verified",
+        "version": "0.1.0"
+      }
+    ],
+    "providers": [
+      {
+        "name": "service-runtime:web-context-verified",
+        "version": "0.1.0",
+        "capabilities": []
+      }
+    ],
+    "tools": {},
+    "models": [],
+    "software_versions": {
+      "service-runtime": "0.1.0"
+    },
+    "policy_versions": {
+      "verification": "1.0.0"
+    },
+    "transformations": [],
+    "cache_provenance": {
+      "enabled": false,
+      "hit": false
+    },
+    "execution_environment": {
+      "runtime": "node",
+      "version": "v24.18.1",
+      "platform": "darwin"
+    },
+    "verification_routes": []
+  },
+  "verification": {
+    "schema_valid": true,
+    "material_claims_supported": true,
+    "evidence_accessibility": 1,
+    "freshness": 1,
+    "completeness": 1,
+    "cross_source_agreement": 1,
+    "provenance_valid": true,
+    "prompt_injection_result": {
+      "checked": true,
+      "result": "clean"
+    },
+    "deterministic_failures": [],
+    "verifier_versions": {
+      "schema_verifier": "1.0.0",
+      "evidence_accessibility_verifier": "1.0.0",
+      "freshness_verifier": "1.0.0",
+      "prompt_injection_verifier": "1.0.0",
+      "provenance_verifier": "1.0.0",
+      "claim_evidence_verifier": "1.0.0",
+      "completeness_verifier": "1.0.0",
+      "cross_source_verifier": "1.0.0"
+    },
+    "policy": "pol_000000000000000000000000",
+    "decision": "pass",
+    "score": 1,
+    "failed_requirements": []
+  },
+  "extensions": {
+    "net.siteborne.web-context.v1": {
+      "requested_url": "https://acme.example/",
+      "retrieval_mode_requested": "direct",
+      "final_url": "https://acme.example/",
+      "retrieval_mode_used": "direct",
+      "http_metadata": {
+        "status_code": 200,
+        "content_type": "text/html",
+        "content_length": 63
+      },
+      "canonical_text": "<html><head><title>Fixture</title></head><body>hi</body></html>",
+      "content_hash": "sha256:709d745909ce896c0339851ef3d605559b49f6291222b962ea61c97f2e4369dd",
+      "truncation_status": {
+        "truncated": false,
+        "returned_bytes": 63
+      },
+      "character_count": 63,
+      "byte_count": 63
+    },
+    "net.siteborne.verification-proof.v1": {
+      "proof_version": "1.0.0",
+      "receipt": {
+        "domain": "SITEBORNE-PCC-VERIFICATION-PROOF-V1",
+        "proof_version": "1.0.0",
+        "receipt_version": "2.0.0",
+        "job_id": "job_0d7691098eff62efc9673d19",
+        "request_id": "req-fixed-0001",
+        "service_id": "web_context_verified.v3",
+        "service_version": "v3",
+        "contract_release": "3.0.0",
+        "pcc_schema_release": "2.0.0",
+        "pcc_schema_hash": "sha256:9a93214ebd851f2f7dfa86cd9cec4b81d83d5e78aa857f380fd579ada27c00a5",
+        "input_hash": "sha256:90f935cb4d7e939c5b2a6e668f03b165180a776e3576af8dad25d653363efba4",
+        "output_schema_hash": "sha256:34e9ca4c55b071cfaa2f182ecac5d2513a8ec6a4f3c0a6d0cf0b7027eeab1319",
+        "output_hash": "sha256:4ba32e0d52eb998db49c9a928a76827ec33b6367c57822ae82c55974913d0d2d",
+        "pcc_document_hash": "sha256:8d5c1d8edbb232e4e03139a9246739e3203aa9e3fdfa839b96d02c1056b009c2",
+        "evidence_hash": "sha256:08ffcee4ede6225c91311ab15a497e2643ae11de218222babcf1944af4b93ebc",
+        "policy_hash": "sha256:def2b52c0b6c5598cb7e95d4d79b3dfe472bb9375edf2330fe8e2ca710de1401",
+        "verifier_set_hash": "sha256:45680d2da5db5213dcfce37be636b38e3955944bfb4a1ae171892ad416393e5d",
+        "decision": "pass",
+        "completeness": 1,
+        "verification_mode": "standard",
+        "limitations": [],
+        "signing_key_id": "kid_aaaaaaaaaaaaaaaaaaaaaaaa",
+        "canonicalization_algorithm": "RFC8785-JCS",
+        "signature_algorithm": "Ed25519",
+        "issued_at": "2026-09-01T12:00:00.000Z",
+        "receipt_id": "rcpt_109f1db39a133c70913c1af1",
+        "signature": "u-IHoUyhAu2zzu0o-84E-CRKBEtjR9pyTjSqnF_kgNHnTI2RNIOTWYJBx86B0_DoL9qnP2KaLZu62VzLGFiiDg"
+      },
+      "verification_material": {
+        "verifier_results": [
+          {
+            "verifier_id": "schema_verifier",
+            "status": "pass",
+            "findings": [],
+            "failure_codes": []
+          },
+          {
+            "verifier_id": "evidence_accessibility_verifier",
+            "status": "pass",
+            "findings": [],
+            "failure_codes": []
+          },
+          {
+            "verifier_id": "freshness_verifier",
+            "status": "pass",
+            "findings": [],
+            "failure_codes": []
+          },
+          {
+            "verifier_id": "prompt_injection_verifier",
+            "status": "pass",
+            "findings": [],
+            "failure_codes": []
+          },
+          {
+            "verifier_id": "provenance_verifier",
+            "status": "pass",
+            "findings": [],
+            "failure_codes": []
+          },
+          {
+            "verifier_id": "claim_evidence_verifier",
+            "status": "pass",
+            "findings": [],
+            "failure_codes": []
+          },
+          {
+            "verifier_id": "completeness_verifier",
+            "status": "pass",
+            "findings": [],
+            "failure_codes": []
+          },
+          {
+            "verifier_id": "cross_source_verifier",
+            "status": "pass",
+            "findings": [],
+            "failure_codes": []
+          }
+        ]
+      }
+    }
+  },
+  "receipt": {
+    "output_hash": "sha256:4ba32e0d52eb998db49c9a928a76827ec33b6367c57822ae82c55974913d0d2d",
+    "canonicalization_algorithm": "RFC8785-JCS",
+    "policy_hash": "sha256:def2b52c0b6c5598cb7e95d4d79b3dfe472bb9375edf2330fe8e2ca710de1401",
+    "schema_hash": "sha256:9a93214ebd851f2f7dfa86cd9cec4b81d83d5e78aa857f380fd579ada27c00a5",
+    "signature_algorithm": "Ed25519",
+    "signing_key_id": "kid_aaaaaaaaaaaaaaaaaaaaaaaa",
+    "signature": "u-IHoUyhAu2zzu0o-84E-CRKBEtjR9pyTjSqnF_kgNHnTI2RNIOTWYJBx86B0_DoL9qnP2KaLZu62VzLGFiiDg",
+    "signed_at": "2026-09-01T12:00:00.000Z"
+  }
+}

@@ -1,0 +1,244 @@
+{
+  "pcc_version": "2.0.0",
+  "job_id": "job_931a5c893b8b0de1605d8137",
+  "contract": {
+    "service_id": "company_evidence_graph.v3",
+    "service_version": "v3",
+    "input_hash": "sha256:bd492ea19dc06292d41720b6286785a72361a06c8ec40ec4340c31f52f75e2c2",
+    "input_schema_hash": "sha256:8d9a6c432b019e24a2df4d48dd93424a8782febb49c0c88f7cf9208cf0204dd7",
+    "output_schema_hash": "sha256:3567477e8ac4e76a57c6baec7cc6e2fa1aa502fca3087ed3753d2e99de036ae1",
+    "quote_id": "qte_7fc10c3b455b5f114ec92191",
+    "mode": "offline_verification",
+    "currency": "USD",
+    "minimum_quality": 0.8,
+    "freshness_seconds": 86400,
+    "issued_at": "2026-09-01T12:00:00.000Z",
+    "expires_at": "2026-09-02T12:00:00.000Z",
+    "idempotency_key": "idk_aaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "subject": {
+    "type": "organization",
+    "canonical_name": "Acme"
+  },
+  "claims": [],
+  "evidence": [
+    {
+      "evidence_id": "evd_2ebe150a1815645f71084dc3",
+      "source_uri": "https://acme.example/",
+      "retrieved_at": "2026-09-01T12:00:00.000Z",
+      "content_hash": "sha256:709d745909ce896c0339851ef3d605559b49f6291222b962ea61c97f2e4369dd",
+      "media_type": "text/html",
+      "locator": {
+        "type": "byte_range",
+        "value": "0-63"
+      },
+      "accessibility_status": "accessible",
+      "transformation_history": [],
+      "authorization_classification": "public",
+      "freshness_status": "fresh"
+    }
+  ],
+  "completeness": {
+    "requested_fields": 1,
+    "populated_fields": 1,
+    "supported_fields": 1,
+    "score": 1,
+    "missing_fields": [],
+    "unsupported_fields": [],
+    "stale_fields": [],
+    "vector": [
+      {
+        "dimension": "field_groups",
+        "requested": 1,
+        "populated": 1,
+        "supported": 1,
+        "score": 1
+      }
+    ]
+  },
+  "provenance": {
+    "routes": [
+      {
+        "type": "direct",
+        "provider": "service-runtime:company-evidence-graph",
+        "version": "0.1.0"
+      }
+    ],
+    "providers": [
+      {
+        "name": "service-runtime:company-evidence-graph",
+        "version": "0.1.0",
+        "capabilities": []
+      }
+    ],
+    "tools": {},
+    "models": [],
+    "software_versions": {
+      "service-runtime": "0.1.0"
+    },
+    "policy_versions": {
+      "verification": "1.0.0"
+    },
+    "transformations": [],
+    "cache_provenance": {
+      "enabled": false,
+      "hit": false
+    },
+    "execution_environment": {
+      "runtime": "node",
+      "version": "v24.18.1",
+      "platform": "darwin"
+    },
+    "verification_routes": []
+  },
+  "verification": {
+    "schema_valid": true,
+    "material_claims_supported": true,
+    "evidence_accessibility": 1,
+    "freshness": 1,
+    "completeness": 1,
+    "cross_source_agreement": 1,
+    "provenance_valid": true,
+    "prompt_injection_result": {
+      "checked": true,
+      "result": "clean"
+    },
+    "deterministic_failures": [],
+    "verifier_versions": {
+      "schema_verifier": "1.0.0",
+      "evidence_accessibility_verifier": "1.0.0",
+      "freshness_verifier": "1.0.0",
+      "prompt_injection_verifier": "1.0.0",
+      "provenance_verifier": "1.0.0",
+      "claim_evidence_verifier": "1.0.0",
+      "completeness_verifier": "1.0.0",
+      "cross_source_verifier": "1.0.0"
+    },
+    "policy": "pol_000000000000000000000000",
+    "decision": "pass",
+    "score": 1,
+    "failed_requirements": []
+  },
+  "extensions": {
+    "net.siteborne.company-evidence.v1": {
+      "canonical_identity": {
+        "common_name": "Acme"
+      },
+      "field_groups": {
+        "website_evidence": {
+          "status": "complete",
+          "source_count": 1,
+          "evidence_ids": ["evd_2ebe150a1815645f71084dc3"]
+        }
+      },
+      "website_observations": [
+        {
+          "url": "https://acme.example/",
+          "extracted_at": "2026-09-01T12:00:00.000Z",
+          "content_hash": "sha256:709d745909ce896c0339851ef3d605559b49f6291222b962ea61c97f2e4369dd",
+          "evidence_ids": ["evd_2ebe150a1815645f71084dc3"]
+        }
+      ],
+      "source_coverage_summary": {
+        "sec": false,
+        "website": true,
+        "regulatory": false,
+        "repositories": false
+      }
+    },
+    "net.siteborne.verification-proof.v1": {
+      "proof_version": "1.0.0",
+      "receipt": {
+        "domain": "SITEBORNE-PCC-VERIFICATION-PROOF-V1",
+        "proof_version": "1.0.0",
+        "receipt_version": "2.0.0",
+        "job_id": "job_931a5c893b8b0de1605d8137",
+        "request_id": "req-fixed-0001",
+        "service_id": "company_evidence_graph.v3",
+        "service_version": "v3",
+        "contract_release": "3.0.0",
+        "pcc_schema_release": "2.0.0",
+        "pcc_schema_hash": "sha256:9a93214ebd851f2f7dfa86cd9cec4b81d83d5e78aa857f380fd579ada27c00a5",
+        "input_hash": "sha256:bd492ea19dc06292d41720b6286785a72361a06c8ec40ec4340c31f52f75e2c2",
+        "output_schema_hash": "sha256:3567477e8ac4e76a57c6baec7cc6e2fa1aa502fca3087ed3753d2e99de036ae1",
+        "output_hash": "sha256:f857db6e4000a3fa08f0e1d80218e9e330e7e7e7ba0cc218a7ef3081d6ef21d7",
+        "pcc_document_hash": "sha256:4cd506f62b0e8482765a87e5827c4bd54b912dcf00e570b47d0138f759dc4349",
+        "evidence_hash": "sha256:08ffcee4ede6225c91311ab15a497e2643ae11de218222babcf1944af4b93ebc",
+        "policy_hash": "sha256:def2b52c0b6c5598cb7e95d4d79b3dfe472bb9375edf2330fe8e2ca710de1401",
+        "verifier_set_hash": "sha256:45680d2da5db5213dcfce37be636b38e3955944bfb4a1ae171892ad416393e5d",
+        "decision": "pass",
+        "completeness": 1,
+        "verification_mode": "standard",
+        "limitations": [],
+        "signing_key_id": "kid_aaaaaaaaaaaaaaaaaaaaaaaa",
+        "canonicalization_algorithm": "RFC8785-JCS",
+        "signature_algorithm": "Ed25519",
+        "issued_at": "2026-09-01T12:00:00.000Z",
+        "receipt_id": "rcpt_1a72d9275586b5935dc7acbb",
+        "signature": "DJBqaKBoIb3prP-HHNu-DXdNhCKTXpoev1ETI7M5HyGEqZJUyAzHT-nrTvKC4Ur6b3oyFbWG_i01kXLmXrloCw"
+      },
+      "verification_material": {
+        "verifier_results": [
+          {
+            "verifier_id": "schema_verifier",
+            "status": "pass",
+            "findings": [],
+            "failure_codes": []
+          },
+          {
+            "verifier_id": "evidence_accessibility_verifier",
+            "status": "pass",
+            "findings": [],
+            "failure_codes": []
+          },
+          {
+            "verifier_id": "freshness_verifier",
+            "status": "pass",
+            "findings": [],
+            "failure_codes": []
+          },
+          {
+            "verifier_id": "prompt_injection_verifier",
+            "status": "pass",
+            "findings": [],
+            "failure_codes": []
+          },
+          {
+            "verifier_id": "provenance_verifier",
+            "status": "pass",
+            "findings": [],
+            "failure_codes": []
+          },
+          {
+            "verifier_id": "claim_evidence_verifier",
+            "status": "pass",
+            "findings": [],
+            "failure_codes": []
+          },
+          {
+            "verifier_id": "completeness_verifier",
+            "status": "pass",
+            "findings": [],
+            "failure_codes": []
+          },
+          {
+            "verifier_id": "cross_source_verifier",
+            "status": "pass",
+            "findings": [],
+            "failure_codes": []
+          }
+        ]
+      }
+    }
+  },
+  "receipt": {
+    "output_hash": "sha256:f857db6e4000a3fa08f0e1d80218e9e330e7e7e7ba0cc218a7ef3081d6ef21d7",
+    "canonicalization_algorithm": "RFC8785-JCS",
+    "policy_hash": "sha256:def2b52c0b6c5598cb7e95d4d79b3dfe472bb9375edf2330fe8e2ca710de1401",
+    "schema_hash": "sha256:9a93214ebd851f2f7dfa86cd9cec4b81d83d5e78aa857f380fd579ada27c00a5",
+    "signature_algorithm": "Ed25519",
+    "signing_key_id": "kid_aaaaaaaaaaaaaaaaaaaaaaaa",
+    "signature": "DJBqaKBoIb3prP-HHNu-DXdNhCKTXpoev1ETI7M5HyGEqZJUyAzHT-nrTvKC4Ur6b3oyFbWG_i01kXLmXrloCw",
+    "signed_at": "2026-09-01T12:00:00.000Z"
+  }
+}

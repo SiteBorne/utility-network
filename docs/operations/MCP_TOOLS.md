@@ -67,7 +67,8 @@ a payment.
 
 - `status: ready_local`;
 - MCP protocol `2026-07-28`;
-- six tools;
+- ten tools (four established service tools, four explicit v3 candidate tools,
+  quote, and health);
 - `implementation: real_executor` only for services with a governed Worker
   production composition; the older `local_fixture_verified` value remains for
   services without one;

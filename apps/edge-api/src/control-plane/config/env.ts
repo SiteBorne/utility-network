@@ -111,6 +111,9 @@ export interface Env {
    * This is independent of, and does not itself enable, real payment
    * execution: `production_enabled` remains `false` regardless. */
   PAID_ROUTES_ENABLED?: string;
+  /** Exact governed selector for the non-default public Release 3 result
+   * contract. Absent keeps every v3 execution path closed. */
+  RESULT_CONTRACT_RELEASE_SELECTION?: string;
   /** SUN-1218 checkpoint X: the route-specific activation gate for
    * `verify_agent_output.v2` / CDP, required IN ADDITION TO
    * `PAID_ROUTES_ENABLED` (both must be the exact literal `'true'`) --

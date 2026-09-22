@@ -28,7 +28,11 @@ export type SiteborneServiceId =
   | 'company_evidence_graph.v2'
   | 'web_context_verified.v2'
   | 'document_evidence_json.v2'
-  | 'verify_agent_output.v2';
+  | 'verify_agent_output.v2'
+  | 'company_evidence_graph.v3'
+  | 'web_context_verified.v3'
+  | 'document_evidence_json.v3'
+  | 'verify_agent_output.v3';
 
 /** Every payment-domain artifact this package produces binds these fields
  * (directive §7). `unknown` protocol version is handled separately by
@@ -36,7 +40,7 @@ export type SiteborneServiceId =
 export interface PaymentContextBinding {
   x402_version: number;
   service_id: SiteborneServiceId;
-  service_version: 'v1' | 'v2';
+  service_version: 'v1' | 'v2' | 'v3';
   contract_release: string;
   request_id: string;
   job_id?: string;

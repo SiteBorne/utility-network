@@ -129,11 +129,12 @@ function unusedAuditSink(): AuditEventSink {
 export function buildWebContextV2ProductionExecutor(
   signer: Signer,
   keyRegistry: KeyRegistry,
-  httpClient: InjectedHttpClient
+  httpClient: InjectedHttpClient,
+  serviceId: 'web_context_verified.v2' | 'web_context_verified.v3' = 'web_context_verified.v2'
 ): ServiceExecutor {
   return async (input, ctx) => {
     const clock = realClock();
-    const context = buildServiceContext('web_context_verified.v2', {
+    const context = buildServiceContext(serviceId, {
       job_id: ctx.job_id,
       request_id: ctx.request_id,
       clock,
@@ -152,8 +153,8 @@ export function buildWebContextV2ProductionExecutor(
 
     const registry = new ServiceRegistry();
     registry.register({
-      serviceId: 'web_context_verified.v2',
-      contractRelease: '2.0.0',
+      serviceId,
+      contractRelease: serviceId.endsWith('.v3') ? '3.0.0' : '2.0.0',
       productionEnabled: false,
       service: new WebContextVerifiedService({ httpClient, publicHttp, signer, keyRegistry }),
       implementationVersion: '0.1.0',
@@ -162,7 +163,7 @@ export function buildWebContextV2ProductionExecutor(
       implementationStatus: 'local_fixture_verified',
     });
 
-    const result = await executeLocalService(registry, 'web_context_verified.v2', input, context);
+    const result = await executeLocalService(registry, serviceId, input, context);
     return toExecutorOutcomeResult(result);
   };
 }

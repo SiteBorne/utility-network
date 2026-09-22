@@ -175,6 +175,27 @@ describe('SUN-1221C: web_context_verified.v2/CDP real requirement matches the ex
     expect(config.serviceId).toBe('web_context_verified.v2');
   });
 
+  it('projects unchanged economics through the explicit v3 candidate identity and full-PCC contract', async () => {
+    const config = await buildWebContextV2CdpProductionRouteConfig(
+      mainnetAuthorizedTestEnv(),
+      db,
+      { evidenceMode: 'fixture' },
+      'web_context_verified.v3'
+    );
+    if ('unavailable' in config) throw new Error(`unexpectedly unavailable: ${config.reason}`);
+    expect(config).toMatchObject({
+      serviceId: 'web_context_verified.v3',
+      path: '/v3/web/context',
+      contractRelease: '3.0.0',
+      pccDependency: '2.0.0',
+      outputSchemaHash: 'sha256:34e9ca4c55b071cfaa2f182ecac5d2513a8ec6a4f3c0a6d0cf0b7027eeab1319',
+      pricingKey: 'web_context_verified_direct_v2',
+    });
+    const app = new Hono();
+    createX402ServiceRoute(app, config);
+    expect((await get402Requirement(app, config.path)).amount).toBe(EXPECTED_AMOUNT_ATOMIC);
+  });
+
   it("never charges verify_agent_output.v2's amount (19000) -- proves the two services are economically distinct, not accidentally sharing a price", async () => {
     const requirement = await buildRealMainnetRequirement();
     expect(requirement.amount).not.toBe('19000');

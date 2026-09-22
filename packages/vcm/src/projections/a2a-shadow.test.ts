@@ -167,8 +167,8 @@ describe('projectA2aFromVcm -- real-data parity against buildUnsignedSiteborneAg
       console.error('A2A_UNEXPLAINED_DIFFERENCES', JSON.stringify(unexplained, null, 2));
     }
     expect(unexplained).toEqual([]);
-    expect(existing.skills).toHaveLength(8);
-    expect(shadow.skills).toHaveLength(8);
+    expect(existing.skills).toHaveLength(SITEBORNE_SERVICE_IDS.length);
+    expect(shadow.skills).toHaveLength(SITEBORNE_SERVICE_IDS.length);
 
     const summary = summarizeDifferences(differences);
     expect(summary.UNEXPLAINED_DIFFERENCE).toBe(0);

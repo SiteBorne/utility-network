@@ -169,7 +169,7 @@ describe('A2A Agent Card', () => {
 });
 
 describe('MCP tools/list', () => {
-  it('serves six tools, each with additive security _meta, and parity holds', async () => {
+  it('serves ten tools, each with additive security _meta, and parity holds', async () => {
     const tools = await fetchTools();
     expect(tools.map((t) => t.name).sort()).toEqual(
       [...Object.keys(SERVICE_TOOLS), 'siteborne_get_quote', 'siteborne_get_service_health'].sort()
@@ -346,7 +346,7 @@ describe('security metadata survives every metadata projection mode', () => {
       const err = vi.spyOn(console, 'error').mockImplementation(() => undefined);
       const legacy = await fetchTools();
       const tools = await fetchTools({ ...wallet, MCP_METADATA_PROJECTION_MODE: mode });
-      expect(tools).toHaveLength(6);
+      expect(tools).toHaveLength(10);
       expect(securityOnly(tools)).toEqual(securityOnly(legacy));
       expect(JSON.stringify(tools)).toBe(JSON.stringify(legacy));
       await new Promise((r) => setTimeout(r, 30));

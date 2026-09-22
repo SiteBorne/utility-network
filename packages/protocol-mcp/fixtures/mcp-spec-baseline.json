@@ -14,6 +14,10 @@
     "siteborne_retrieve_verified_web_context",
     "siteborne_extract_document_evidence_json",
     "siteborne_verify_agent_output",
+    "siteborne_build_company_evidence_graph_v3_candidate",
+    "siteborne_retrieve_verified_web_context_v3_candidate",
+    "siteborne_extract_document_evidence_json_v3_candidate",
+    "siteborne_verify_agent_output_v3_candidate",
     "siteborne_get_quote",
     "siteborne_get_service_health"
   ],

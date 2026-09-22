@@ -1,0 +1,242 @@
+{
+  "pcc_version": "2.0.0",
+  "job_id": "job_eee24f8971b7e0a1b7d05826",
+  "contract": {
+    "service_id": "verify_agent_output.v3",
+    "service_version": "v3",
+    "input_hash": "sha256:43234bf78156087637b771707e58e84e7ec41d7a7a7a4929b41fdb0d0b961994",
+    "input_schema_hash": "sha256:66d459905cd1a18b57ccb3fc40043a4e4c1a77bc7dba40676fcaf674cacb0f34",
+    "output_schema_hash": "sha256:7a164cc8bbd34c95608fcc6e420a36d29844ddfbc6c029439e9f4262cedf8a73",
+    "quote_id": "qte_74d0f098bac63237dfd1ea78",
+    "mode": "offline_verification",
+    "currency": "USD",
+    "minimum_quality": 0.8,
+    "freshness_seconds": 3600,
+    "issued_at": "2026-09-01T12:00:00.000Z",
+    "expires_at": "2026-09-01T13:00:00.000Z",
+    "idempotency_key": "idk_aaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "subject": {
+    "type": "other",
+    "canonical_name": "candidate:job-fixed-0001"
+  },
+  "claims": [
+    {
+      "claim_id": "clm_27532bdfcd7aeec88f085c56",
+      "predicate": "total",
+      "value": false,
+      "confidence": 0.5,
+      "evidence_ids": ["evd_b0860953e3ffc2c6024bcdba"],
+      "materiality": "material",
+      "verification_status": "unsupported"
+    }
+  ],
+  "evidence": [
+    {
+      "evidence_id": "evd_b0860953e3ffc2c6024bcdba",
+      "source_uri": "candidate://job-fixed-0001",
+      "retrieved_at": "2026-09-01T12:00:00.000Z",
+      "content_hash": "sha256:30ec76b729d8089e51989e1970e68a6de3eacd4b946fa24db44ebb334bccace5",
+      "media_type": "application/json",
+      "locator": {
+        "type": "json_pointer",
+        "value": "/"
+      },
+      "accessibility_status": "accessible",
+      "transformation_history": [],
+      "authorization_classification": "buyer_authorized",
+      "freshness_status": "fresh"
+    }
+  ],
+  "completeness": {
+    "requested_fields": 1,
+    "populated_fields": 1,
+    "supported_fields": 0,
+    "score": 0,
+    "missing_fields": [],
+    "unsupported_fields": ["some claims or deterministic requirements did not pass"],
+    "stale_fields": [],
+    "vector": [
+      {
+        "dimension": "requirements",
+        "requested": 1,
+        "populated": 1,
+        "supported": 0,
+        "score": 0
+      }
+    ]
+  },
+  "provenance": {
+    "routes": [
+      {
+        "type": "direct",
+        "provider": "service-runtime:verify-agent-output",
+        "version": "0.1.0"
+      }
+    ],
+    "providers": [
+      {
+        "name": "service-runtime:verify-agent-output",
+        "version": "0.1.0",
+        "capabilities": []
+      }
+    ],
+    "tools": {},
+    "models": [],
+    "software_versions": {
+      "service-runtime": "0.1.0"
+    },
+    "policy_versions": {
+      "verification": "1.0.0"
+    },
+    "transformations": [],
+    "cache_provenance": {
+      "enabled": false,
+      "hit": false
+    },
+    "execution_environment": {
+      "runtime": "node",
+      "version": "v24.18.1",
+      "platform": "darwin"
+    },
+    "verification_routes": []
+  },
+  "verification": {
+    "schema_valid": true,
+    "material_claims_supported": true,
+    "evidence_accessibility": 1,
+    "freshness": 1,
+    "completeness": 0,
+    "cross_source_agreement": 1,
+    "provenance_valid": true,
+    "prompt_injection_result": {
+      "checked": true,
+      "result": "clean"
+    },
+    "deterministic_failures": [],
+    "verifier_versions": {
+      "schema_verifier": "1.0.0",
+      "evidence_accessibility_verifier": "1.0.0",
+      "freshness_verifier": "1.0.0",
+      "prompt_injection_verifier": "1.0.0",
+      "provenance_verifier": "1.0.0",
+      "claim_evidence_verifier": "1.0.0",
+      "completeness_verifier": "1.0.0",
+      "cross_source_verifier": "1.0.0"
+    },
+    "policy": "pol_000000000000000000000000",
+    "decision": "pass",
+    "score": 0.75,
+    "failed_requirements": []
+  },
+  "extensions": {
+    "net.siteborne.agent-verification.v1": {
+      "verification_mode": "standard",
+      "requirement_results": [],
+      "claim_support_result": {
+        "supported": false,
+        "supported_count": 0,
+        "unsupported_count": 1
+      },
+      "failed_requirements": ["claim:total"],
+      "candidate_output_hash": "sha256:30ec76b729d8089e51989e1970e68a6de3eacd4b946fa24db44ebb334bccace5",
+      "policy_version": "v1.0.0",
+      "outcome": "conditional",
+      "score": 0.5
+    },
+    "net.siteborne.verification-proof.v1": {
+      "proof_version": "1.0.0",
+      "receipt": {
+        "domain": "SITEBORNE-PCC-VERIFICATION-PROOF-V1",
+        "proof_version": "1.0.0",
+        "receipt_version": "2.0.0",
+        "job_id": "job_eee24f8971b7e0a1b7d05826",
+        "request_id": "req-fixed-0001",
+        "service_id": "verify_agent_output.v3",
+        "service_version": "v3",
+        "contract_release": "3.0.0",
+        "pcc_schema_release": "2.0.0",
+        "pcc_schema_hash": "sha256:9a93214ebd851f2f7dfa86cd9cec4b81d83d5e78aa857f380fd579ada27c00a5",
+        "input_hash": "sha256:43234bf78156087637b771707e58e84e7ec41d7a7a7a4929b41fdb0d0b961994",
+        "output_schema_hash": "sha256:7a164cc8bbd34c95608fcc6e420a36d29844ddfbc6c029439e9f4262cedf8a73",
+        "output_hash": "sha256:a0bffd06137ea52f8652f9775ed82bcbe105fead6cba87ce9d0bef3023323ea2",
+        "pcc_document_hash": "sha256:f2ce98d15f6a3b244a869c5ebbe56429b56c134e442ddb796f282ef5b501f477",
+        "evidence_hash": "sha256:33c0b236a0292fc61a1fb4d419b797bdf31b12cdac40716c35ddf36571526a6f",
+        "policy_hash": "sha256:def2b52c0b6c5598cb7e95d4d79b3dfe472bb9375edf2330fe8e2ca710de1401",
+        "verifier_set_hash": "sha256:45680d2da5db5213dcfce37be636b38e3955944bfb4a1ae171892ad416393e5d",
+        "decision": "pass",
+        "completeness": 0,
+        "verification_mode": "standard",
+        "limitations": [],
+        "signing_key_id": "kid_aaaaaaaaaaaaaaaaaaaaaaaa",
+        "canonicalization_algorithm": "RFC8785-JCS",
+        "signature_algorithm": "Ed25519",
+        "issued_at": "2026-09-01T12:00:00.000Z",
+        "receipt_id": "rcpt_91054ad76dfcf60b667f3a2d",
+        "signature": "FoA9dMomrVNF2cE4spW7kTE9--Af-VrKWXMVH8_RUQyDcyWeAjUwIr5r5rYx-FMyjaD1r1F1CDi0m88DwpZlDw"
+      },
+      "verification_material": {
+        "verifier_results": [
+          {
+            "verifier_id": "schema_verifier",
+            "status": "pass",
+            "findings": [],
+            "failure_codes": []
+          },
+          {
+            "verifier_id": "evidence_accessibility_verifier",
+            "status": "pass",
+            "findings": [],
+            "failure_codes": []
+          },
+          {
+            "verifier_id": "freshness_verifier",
+            "status": "pass",
+            "findings": [],
+            "failure_codes": []
+          },
+          {
+            "verifier_id": "prompt_injection_verifier",
+            "status": "pass",
+            "findings": [],
+            "failure_codes": []
+          },
+          {
+            "verifier_id": "provenance_verifier",
+            "status": "pass",
+            "findings": [],
+            "failure_codes": []
+          },
+          {
+            "verifier_id": "claim_evidence_verifier",
+            "status": "pass",
+            "findings": [],
+            "failure_codes": []
+          },
+          {
+            "verifier_id": "completeness_verifier",
+            "status": "pass",
+            "findings": [],
+            "failure_codes": []
+          },
+          {
+            "verifier_id": "cross_source_verifier",
+            "status": "pass",
+            "findings": [],
+            "failure_codes": []
+          }
+        ]
+      }
+    }
+  },
+  "receipt": {
+    "output_hash": "sha256:a0bffd06137ea52f8652f9775ed82bcbe105fead6cba87ce9d0bef3023323ea2",
+    "canonicalization_algorithm": "RFC8785-JCS",
+    "policy_hash": "sha256:def2b52c0b6c5598cb7e95d4d79b3dfe472bb9375edf2330fe8e2ca710de1401",
+    "schema_hash": "sha256:9a93214ebd851f2f7dfa86cd9cec4b81d83d5e78aa857f380fd579ada27c00a5",
+    "signature_algorithm": "Ed25519",
+    "signing_key_id": "kid_aaaaaaaaaaaaaaaaaaaaaaaa",
+    "signature": "FoA9dMomrVNF2cE4spW7kTE9--Af-VrKWXMVH8_RUQyDcyWeAjUwIr5r5rYx-FMyjaD1r1F1CDi0m88DwpZlDw",
+    "signed_at": "2026-09-01T12:00:00.000Z"
+  }
+}

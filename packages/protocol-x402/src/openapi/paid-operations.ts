@@ -238,8 +238,8 @@ export const ECONOMIC_PROJECTION_COMPONENT_SCHEMA = {
   properties: {
     service_id: { type: 'string' },
     capability_id: { type: 'string' },
-    service_version: { type: 'string', enum: ['v1', 'v2'] },
-    contract_role: { type: 'string', enum: ['current', 'compatibility'] },
+    service_version: { type: 'string', enum: ['v1', 'v2', 'v3'] },
+    contract_role: { type: 'string', enum: ['current', 'compatibility', 'candidate'] },
     resource: { type: 'string' },
     scheme: { type: 'string', enum: ['exact', 'upto'] },
     pricing_model: { type: 'string', enum: ['fixed_per_request', 'metered_per_page_tiered'] },

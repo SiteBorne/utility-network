@@ -18,6 +18,10 @@ export const NEVERMINED_ROUTES: Readonly<Record<SiteborneServiceId, string>> = {
   'web_context_verified.v2': '/v2/nevermined/web/context',
   'document_evidence_json.v2': '/v2/nevermined/document/evidence-json',
   'verify_agent_output.v2': '/v2/nevermined/verify/agent-output',
+  'company_evidence_graph.v3': '/v3/nevermined/company/evidence-graph',
+  'web_context_verified.v3': '/v3/nevermined/web/context',
+  'document_evidence_json.v3': '/v3/nevermined/document/evidence-json',
+  'verify_agent_output.v3': '/v3/nevermined/verify/agent-output',
 };
 
 const OPEN_ROUTES = new Set(ALL_BAZAAR_SERVICE_IDS.map((id) => resolveServiceRoute(id).path));

@@ -93,7 +93,8 @@ function buildCompanyEvidenceGraphV2ModalSafeEgressClient(env: {
 export async function buildCompanyEvidenceGraphV2CdpProductionRouteConfig(
   env: CompanyEvidenceGraphV2CdpProductionEnv,
   db: D1Database,
-  explicitTestEvidenceOverride?: ExplicitTestEvidenceOverride
+  explicitTestEvidenceOverride?: ExplicitTestEvidenceOverride,
+  serviceId: 'company_evidence_graph.v2' | 'company_evidence_graph.v3' = 'company_evidence_graph.v2'
 ): Promise<X402ServiceRouteConfig | ProductionCompositionUnavailable> {
   if (!db) {
     return { unavailable: true, reason: 'no D1 database binding supplied' };
@@ -176,13 +177,14 @@ export async function buildCompanyEvidenceGraphV2CdpProductionRouteConfig(
     signer,
     registry,
     httpClient,
-    db
+    db,
+    serviceId
   );
 
   const asset = resolvePaymentAsset(network);
 
   return {
-    serviceId: 'company_evidence_graph.v2',
+    serviceId,
     scheme: 'exact',
     pricingKey: 'company_evidence_graph_v2',
     rail: 'cdp',
@@ -190,12 +192,9 @@ export async function buildCompanyEvidenceGraphV2CdpProductionRouteConfig(
     asset: asset.address,
     paymentRequirementExtra: { name: asset.name, version: asset.version },
     payTo: env.SELLER_WALLET_ADDRESS,
-    path: '/v2/company/evidence-graph',
-    inputSchema: BUNDLED_SERVICE_INPUT_SCHEMAS['company_evidence_graph.v2'] as Record<
-      string,
-      unknown
-    >,
-    contractRelease: '2.0.0',
+    path: serviceId.endsWith('.v3') ? '/v3/company/evidence-graph' : '/v2/company/evidence-graph',
+    inputSchema: BUNDLED_SERVICE_INPUT_SCHEMAS[serviceId] as Record<string, unknown>,
+    contractRelease: serviceId.endsWith('.v3') ? '3.0.0' : '2.0.0',
     // SUN-1222B-S3R: `company_evidence_graph.v2`'s output schema (unlike
     // `web_context_verified.v2`'s) genuinely differs from its v1 sibling --
     // the `service_id`/`service_version` fields widen from `const` to
@@ -205,12 +204,15 @@ export async function buildCompanyEvidenceGraphV2CdpProductionRouteConfig(
     // manifest -- matches the value `paid-services.ts`'s existing fixture
     // route already declares for this same service ID.
     inputSchemaHash: 'sha256:8d9a6c432b019e24a2df4d48dd93424a8782febb49c0c88f7cf9208cf0204dd7',
-    outputSchemaHash: 'sha256:5593736dfc60089aa3f01de664eb67ccba3a58e03449a66e91f477324e24861b',
-    pccDependency: '1.1.0',
+    outputSchemaHash: serviceId.endsWith('.v3')
+      ? 'sha256:3567477e8ac4e76a57c6baec7cc6e2fa1aa502fca3087ed3753d2e99de036ae1'
+      : 'sha256:5593736dfc60089aa3f01de664eb67ccba3a58e03449a66e91f477324e24861b',
+    pccDependency: serviceId.endsWith('.v3') ? '2.0.0' : '1.1.0',
     db,
     clock: () => new Date().toISOString(),
     evidenceMode: cdpEvidence.evidenceMode,
     evidenceProvider: cdpEvidence.evidenceProvider,
+    pccKeyRegistry: registry,
     executor,
   };
 }

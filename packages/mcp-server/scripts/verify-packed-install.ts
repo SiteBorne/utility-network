@@ -1,18 +1,18 @@
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 
-const EXPECTED_TOOLS = [
-  'siteborne_build_company_evidence_graph',
-  'siteborne_retrieve_verified_web_context',
-  'siteborne_extract_document_evidence_json',
-  'siteborne_verify_agent_output',
-  'siteborne_get_quote',
-  'siteborne_get_service_health',
-].sort();
+const EXPECTED_TOOLS = (
+  JSON.parse(
+    readFileSync(
+      new URL('../../protocol-mcp/fixtures/mcp-spec-baseline.json', import.meta.url),
+      'utf8'
+    )
+  ) as { tools: string[] }
+).tools.sort();
 
 const temporaryDirectory = mkdtempSync(join(tmpdir(), 'siteborne-mcp-pack-'));
 const npmEnvironment = {

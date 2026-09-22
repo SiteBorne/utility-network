@@ -32,7 +32,7 @@ function project(
   overrides: { productionEnabled?: boolean; destination?: PaymentDestination | null } = {}
 ): EconomicOfferProjection {
   return projectEconomicOffer(buildEconomicOffer(serviceId), {
-    resource: `https://utility.siteborne.net/${serviceId.includes('.v2') ? 'v2' : 'v1'}/x`,
+    resource: `https://utility.siteborne.net/${serviceId.slice(serviceId.lastIndexOf('.') + 1)}/x`,
     productionEnabled: overrides.productionEnabled ?? false,
     destination: overrides.destination === undefined ? DESTINATION : overrides.destination,
   });

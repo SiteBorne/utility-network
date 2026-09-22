@@ -1,0 +1,43 @@
+{
+  "service_id": "verify_agent_output.v3",
+  "service_version": "v3",
+  "title": "Agent Output Verification",
+  "description": "Verifies the output of another agent against provided criteria, performing independent reproduction and comparison to produce a verification receipt.",
+  "capabilities": ["independent_reproduction", "output_comparison", "verification_receipt"],
+  "input_schema_uri": "https://siteborne.net/schemas/services/agent-verification-input.schema.json",
+  "input_schema_hash": "sha256:66d459905cd1a18b57ccb3fc40043a4e4c1a77bc7dba40676fcaf674cacb0f34",
+  "output_schema_uri": "https://utility.siteborne.net/contracts/3.0.0/schemas/services/agent-verification-output.schema.json",
+  "output_schema_hash": "sha256:7a164cc8bbd34c95608fcc6e420a36d29844ddfbc6c029439e9f4262cedf8a73",
+  "pcc_version": "2.0.0",
+  "pricing_schemes": ["exact", "upto"],
+  "base_price": {
+    "amount": "0.017",
+    "currency": "USD"
+  },
+  "maximum_price": {
+    "amount": "0.049",
+    "currency": "USD"
+  },
+  "execution_mode": "async",
+  "maximum_input_bytes": 1048576,
+  "expected_latency_class": "variable",
+  "authorization_classification": "buyer_authorized",
+  "promotion_state": "executable_candidate",
+  "production_enabled": false,
+  "declared_limitations": [
+    "Requires deterministic agent behavior for reproduction",
+    "Cannot verify non-deterministic or time-dependent outputs",
+    "External API calls in original agent may not be reproducible",
+    "Limited to agent outputs that can be re-executed"
+  ],
+  "protocols": {
+    "x402": "planned",
+    "mcp": "planned",
+    "a2a": "planned",
+    "nevermined": "planned",
+    "agentverse": "planned",
+    "coinbase_bazaar": "planned",
+    "mcp_registry": "planned"
+  },
+  "updated_at": "2026-09-21T19:00:00Z"
+}

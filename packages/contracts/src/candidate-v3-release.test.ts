@@ -85,4 +85,36 @@ describe('RESULT-PCC-WIRE-CUTOVER-01 candidate release', () => {
       'b552a649f624a359dd2ab409fb6265a5cb7a8317cb1439056e25bdabd37089ed'
     );
   });
+
+  it('has a complete immutable checksum inventory, external full-PCC examples, and no placeholder hashes', () => {
+    const sums = bytes(join(releaseRoot, 'SHA256SUMS')).toString('utf8').trim().split('\n');
+    for (const line of sums) {
+      const match = /^([0-9a-f]{64}) {2}\.\/(.+)$/.exec(line);
+      expect(match, line).not.toBeNull();
+      expect(sha256(join(releaseRoot, match![2]))).toBe(match![1]);
+    }
+
+    for (const serviceId of serviceIds) {
+      const example = JSON.parse(
+        bytes(join(releaseRoot, `examples/${serviceId}.pcc.json`)).toString('utf8')
+      ) as {
+        pcc_version: string;
+        contract: { service_id: string; service_version: string; output_schema_hash: string };
+        extensions: Record<string, unknown>;
+      };
+      expect(example).toMatchObject({
+        pcc_version: '2.0.0',
+        contract: { service_id: serviceId, service_version: 'v3' },
+      });
+      expect(example.extensions['net.siteborne.verification-proof.v1']).toBeDefined();
+    }
+
+    const governedText = [
+      bytes(join(releaseRoot, 'CONTRACT_RELEASE.yaml')).toString('utf8'),
+      ...serviceIds.map((serviceId) =>
+        bytes(join(releaseRoot, `metadata/${serviceId}.json`)).toString('utf8')
+      ),
+    ].join('\n');
+    expect(governedText).not.toMatch(/sha256:(0{64}|9{64}|4{64}|7{64})/);
+  });
 });

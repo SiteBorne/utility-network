@@ -6,38 +6,39 @@ release:
   source_commit: pending
   parent_release: 2.0.0
   classification: major
-  reason: "RESULT-PCC-WIRE-CUTOVER-01 parallel candidate: PCC 2.0.0 requires a governed self-verifying
+  reason:
+    'RESULT-PCC-WIRE-CUTOVER-01 parallel candidate: PCC 2.0.0 requires a governed self-verifying
     proof and changes signature, document-hash, and successful-result semantics. Service Contract
-    3.0.0 introduces four non-default .v3 identities while preserving Release 2."
+    3.0.0 introduces four non-default .v3 identities while preserving Release 2.'
 pcc_dependency:
   schema_release: 2.0.0
   document_version: 2.0.0
-  schema_sha256: 92ca8f7c220ae173f088acb1f318a88c31c256f8193146b680f2f61d2d421f6a
+  schema_sha256: 9a93214ebd851f2f7dfa86cd9cec4b81d83d5e78aa857f380fd579ada27c00a5
 services:
   - service_id: company_evidence_graph.v3
     contract_version: 3.0.0
     input_schema: schemas/services/company-evidence-input.schema.json
     input_schema_sha256: 8d9a6c432b019e24a2df4d48dd93424a8782febb49c0c88f7cf9208cf0204dd7
     output_schema: schemas/services/company-evidence-output.schema.json
-    output_schema_sha256: 988abf9957a2a4cba6ce1227120c9601936b4d2a5078f730ad81d419249ed90a
+    output_schema_sha256: 3567477e8ac4e76a57c6baec7cc6e2fa1aa502fca3087ed3753d2e99de036ae1
   - service_id: web_context_verified.v3
     contract_version: 3.0.0
     input_schema: schemas/services/web-context-input.schema.json
     input_schema_sha256: d3b0762020d4cc1d1e846960ed978cf1237b1741f90213adabe8ed931c2845ea
     output_schema: schemas/services/web-context-output.schema.json
-    output_schema_sha256: 768455f58511cc7df7ec5d5e5f9767b6ce6ad991a84a0f39f8a4faa7f6189280
+    output_schema_sha256: 34e9ca4c55b071cfaa2f182ecac5d2513a8ec6a4f3c0a6d0cf0b7027eeab1319
   - service_id: document_evidence_json.v3
     contract_version: 3.0.0
     input_schema: schemas/services/document-evidence-input.schema.json
     input_schema_sha256: 19e64c92f088ed8b7a45eef561c5426bb59ce5cc3576b85482aded4f620e57ba
     output_schema: schemas/services/document-evidence-output.schema.json
-    output_schema_sha256: e47d7d85b92441feff3c9c98ae058eaeb68b1cc6c7ff852be7e5af16c787da49
+    output_schema_sha256: 058e6d50796d7adffc5deedd5b96679dcff78d98b77c022c06430885546aeff7
   - service_id: verify_agent_output.v3
     contract_version: 3.0.0
     input_schema: schemas/services/agent-verification-input.schema.json
     input_schema_sha256: 66d459905cd1a18b57ccb3fc40043a4e4c1a77bc7dba40676fcaf674cacb0f34
     output_schema: schemas/services/agent-verification-output.schema.json
-    output_schema_sha256: 0aa731ce6c6761e33fd77d5adaf55debf385fad7fe6110225878a1d6e02144c9
+    output_schema_sha256: 7a164cc8bbd34c95608fcc6e420a36d29844ddfbc6c029439e9f4262cedf8a73
 common_schemas:
   - path: schemas/common/money.schema.json
     sha256: 4567307ae24362cb33c1078072cd4d409eb14c0a2783e9941c1d0ec0e7d4b90f

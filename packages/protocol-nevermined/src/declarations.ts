@@ -13,7 +13,7 @@ import { NEVERMINED_ROUTES } from './routes';
 export interface NeverminedAgentDeclaration {
   local_agent_id: string;
   service_id: SiteborneServiceId;
-  service_version: 'v1' | 'v2';
+  service_version: 'v1' | 'v2' | 'v3';
   title: string;
   /** SUN-1000 checkpoint 1O-B: the real, on-provider Nevermined agent
    * display name — see `deriveNeverminedAgentDisplayName` below. `title`
@@ -154,7 +154,8 @@ function buildDeclaration(serviceId: SiteborneServiceId): NeverminedServiceDecla
   const service = REGISTRY_SERVICES[serviceId];
   const base = serviceId.replace(/\.v\d+$/, '');
   const document = base === 'document_evidence_json';
-  const isV2 = serviceId.endsWith('.v2');
+  const usesV2Economics = serviceId.endsWith('.v2') || serviceId.endsWith('.v3');
+  const isV3 = serviceId.endsWith('.v3');
   // SUN-1222C-R3: all four v2 services now have dedicated, isolated
   // experiment pricing keys (document's headline `amount` stays on the
   // unchanged max_job ceiling — see actual_tiers_atomic below for its
@@ -165,13 +166,16 @@ function buildDeclaration(serviceId: SiteborneServiceId): NeverminedServiceDecla
     'company_evidence_graph.v2': 'company_evidence_graph_v2',
     'web_context_verified.v2': 'web_context_verified_direct_v2',
     'verify_agent_output.v2': 'verify_agent_output_standard_v2',
+    'company_evidence_graph.v3': 'company_evidence_graph_v2',
+    'web_context_verified.v3': 'web_context_verified_direct_v2',
+    'verify_agent_output.v3': 'verify_agent_output_standard_v2',
   };
   const fixedKey = document
     ? undefined
     : (V2_PRICING_KEY_OVERRIDES[serviceId] ??
       FIXED_PRICING_KEYS[base as keyof typeof FIXED_PRICING_KEYS]);
   const amount = document ? atomic('document_evidence_json_max_job') : atomic(fixedKey!);
-  const serviceVersion = serviceId.endsWith('.v2') ? 'v2' : 'v1';
+  const serviceVersion = serviceId.endsWith('.v3') ? 'v3' : serviceId.endsWith('.v2') ? 'v2' : 'v1';
   const registered = V2_REGISTERED_IDS[serviceId];
   return {
     agent: {
@@ -228,12 +232,12 @@ function buildDeclaration(serviceId: SiteborneServiceId): NeverminedServiceDecla
       // capability claim by itself. Checkpoint 2H proved the zero-credit native
       // lifecycle and replay; checkpoint 2I proved the full-bundle partial-
       // balance top-up policy and the same exactly-once recovery properties.
-      sandbox_capability_verified: document,
-      dynamic_live_allowed: document,
-      registration_allowed: true,
+      sandbox_capability_verified: document && !isV3,
+      dynamic_live_allowed: document && !isV3,
+      registration_allowed: !isV3,
       ...(document
         ? {
-            actual_tiers_atomic: isV2
+            actual_tiers_atomic: usesV2Economics
               ? {
                   native: atomic('document_evidence_json_native_v2'),
                   ocr: atomic('document_evidence_json_ocr_v2'),

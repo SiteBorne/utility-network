@@ -175,6 +175,7 @@ export const GENERATED_OUTPUT_VALIDATORS_PATH = join(
 
 const REPO_ROOT = join(__dirname, '..', '..', '..');
 const SCHEMAS_DIR = join(REPO_ROOT, 'schemas');
+const CANDIDATE_SCHEMAS_DIR = join(REPO_ROOT, 'contracts', 'releases', '3.0.0', 'schemas');
 
 /** Loads every canonical schema file `schema-registry.ts`'s `getAjv()`
  * registers, in the same order, from the real repository `schemas/`
@@ -198,15 +199,28 @@ function loadCanonicalSchemas(): { all: unknown[]; pccSchema: unknown } {
     readFileSync(join(SCHEMAS_DIR, 'proof-carrying-context.schema.json'), 'utf-8')
   );
   all.push(pccSchema);
+  all.push(
+    JSON.parse(
+      readFileSync(join(CANDIDATE_SCHEMAS_DIR, 'proof-carrying-context.schema.json'), 'utf-8')
+    )
+  );
+  for (const file of OUTPUT_SCHEMA_FILES) {
+    if (file.startsWith(CANDIDATE_SCHEMAS_DIR)) {
+      all.push(JSON.parse(readFileSync(file, 'utf-8')));
+    }
+  }
   return { all, pccSchema };
 }
 
 const OUTPUT_SCHEMA_FILES = [
-  'company-evidence-output.schema.json',
-  'web-context-output.schema.json',
-  'document-evidence-output.schema.json',
-  'agent-verification-output.schema.json',
-];
+  'company-evidence',
+  'web-context',
+  'document-evidence',
+  'agent-verification',
+].flatMap((base) => [
+  join(SCHEMAS_DIR, 'services', `${base}-output.schema.json`),
+  join(CANDIDATE_SCHEMAS_DIR, 'services', `${base}-output.schema.json`),
+]);
 
 export function generateOutputModuleSource(): string {
   // Mirrors `schema-registry.ts`'s `getAjv()` construction exactly (same
@@ -228,7 +242,7 @@ export function generateOutputModuleSource(): string {
   const refs: Record<string, string> = {};
   const seenExportNames = new Set<string>();
   for (const file of OUTPUT_SCHEMA_FILES) {
-    const schema = JSON.parse(readFileSync(join(SCHEMAS_DIR, 'services', file), 'utf-8')) as {
+    const schema = JSON.parse(readFileSync(file, 'utf-8')) as {
       $id: string;
     };
     const id = schema.$id;
@@ -241,7 +255,7 @@ export function generateOutputModuleSource(): string {
     if (!validate) {
       throw new Error(`output schema $id "${id}" did not resolve to a compiled validator`);
     }
-    const exportName = exportNameForSchemaId(id);
+    const exportName = `${id.includes('/contracts/3.0.0/') ? 'candidateV3' : 'active'}${exportNameForSchemaId(id)[0].toUpperCase()}${exportNameForSchemaId(id).slice(1)}`;
     if (seenExportNames.has(exportName)) {
       throw new Error(
         `derived export name collision for output schema $id "${id}": "${exportName}"`

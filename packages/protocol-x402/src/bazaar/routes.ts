@@ -32,6 +32,7 @@
  */
 import openapiDocV1 from '../../../../contracts/releases/1.0.1/openapi/service-contracts.openapi.json' with { type: 'json' };
 import openapiDocV2 from '../../../../contracts/releases/2.0.0/openapi/service-contracts.openapi.json' with { type: 'json' };
+import openapiDocV3 from '../../../../contracts/releases/3.0.0/openapi/service-contracts.openapi.json' with { type: 'json' };
 import type { SiteborneServiceId } from '../types';
 
 interface OpenApiOperation {
@@ -77,6 +78,7 @@ function buildRouteTable(): Record<string, ServiceRoute> {
   // disjoint (.v1 vs .v2), so this is simply a merge, never an override.
   addRoutesFrom(table, openapiDocV1);
   addRoutesFrom(table, openapiDocV2);
+  addRoutesFrom(table, openapiDocV3);
   return table;
 }
 

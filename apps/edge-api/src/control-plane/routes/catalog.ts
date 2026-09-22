@@ -133,8 +133,8 @@ const EconomicsProjectionSchema = z
   .object({
     service_id: z.string(),
     capability_id: z.string(),
-    service_version: z.enum(['v1', 'v2']),
-    contract_role: z.enum(['current', 'compatibility']),
+    service_version: z.enum(['v1', 'v2', 'v3']),
+    contract_role: z.enum(['current', 'compatibility', 'candidate']),
     resource: z.string(),
     scheme: z.enum(['exact', 'upto']),
     pricing_model: z.enum(['fixed_per_request', 'metered_per_page_tiered']),

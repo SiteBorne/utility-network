@@ -22,7 +22,9 @@
  */
 import type { Context, Hono } from 'hono';
 import type { ValidateFunction } from 'ajv';
+import type { KeyRegistry } from '@siteborne/verification';
 import { inputValidatorsById } from '../../generated/input-validators.generated.js';
+import type { VNextPccArtifactReference } from '../results/pcc-result-artifact';
 import { buildNeverminedPaymentRequiredLocal } from '../evidence/nevermined-http-client';
 import {
   NEVERMINED_DECLARATIONS,
@@ -113,8 +115,11 @@ import type {
 } from '../continuation/types';
 import type { DecryptedContinuationPayload } from '../workflows/paid-continuation-workflow';
 import {
+  classifyStoredResultRecord,
   resolveStoredResultBody,
+  SELF_VERIFYING_PCC_VNEXT,
   type PccResultArtifactStore,
+  validateGovernedVNextPcc,
 } from '../results/pcc-result-artifact';
 
 /** Compact machine-readable codes only (same shape the CDP provider
@@ -214,7 +219,7 @@ export interface ExecutorOutcome {
       }
     | {
         readonly format: 'SELF_VERIFYING_PCC_VNEXT';
-        readonly reference: import('../results/pcc-result-artifact').VNextPccArtifactReference;
+        readonly reference: VNextPccArtifactReference;
       };
   /** Required when the route's scheme is `upto`: the atomic-unit actual
    * amount to charge, computed by the caller from the service's real
@@ -231,6 +236,12 @@ export type ServiceExecutor = (
   input: unknown,
   ctx: { job_id: string; request_id: string }
 ) => Promise<ExecutorOutcome>;
+
+function serviceVersionForId(serviceId: SiteborneServiceId): 'v1' | 'v2' | 'v3' {
+  if (serviceId.endsWith('.v3')) return 'v3';
+  if (serviceId.endsWith('.v2')) return 'v2';
+  return 'v1';
+}
 
 export interface X402ServiceRouteConfig {
   serviceId: SiteborneServiceId;
@@ -262,6 +273,9 @@ export interface X402ServiceRouteConfig {
    * `inputSchema` with no precompiled entry AND no `inputValidator`
    * still fails closed at construction time. */
   inputValidator?: ValidateFunction;
+  /** Verification authority paired with the production signer. Candidate
+   * v3 Workflows use it to reverify the resolved full PCC before settlement. */
+  pccKeyRegistry?: KeyRegistry;
   executor: ServiceExecutor;
   contractRelease: string;
   inputSchemaHash: string;
@@ -600,7 +614,7 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
       const quote: Quote = await buildQuote({
         x402_version: SUPPORTED_X402_VERSION,
         service_id: config.serviceId,
-        service_version: config.serviceId.endsWith('.v2') ? 'v2' : 'v1',
+        service_version: serviceVersionForId(config.serviceId),
         contract_release: config.contractRelease,
         input_hash: inputHash,
         pricing_key: config.pricingKey,
@@ -803,7 +817,7 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
       quote_id: stored.quote.quote_id,
       requirement_id: stored.requirement_id,
       service_id: config.serviceId,
-      service_version: config.serviceId.endsWith('.v2') ? 'v2' : 'v1',
+      service_version: serviceVersionForId(config.serviceId),
       contract_release: config.contractRelease,
       request_input_hash: inputHash,
       resource_id: resourceUrl,
@@ -874,6 +888,14 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
       }
       const responseBody = await resolveStoredResultBody(cached, config.resultArtifactReader);
       if (!responseBody) return null;
+      if (classifyStoredResultRecord(cached) === SELF_VERIFYING_PCC_VNEXT) {
+        const validationFailure = await validateGovernedVNextPcc(
+          config.serviceId,
+          responseBody,
+          config.pccKeyRegistry
+        );
+        if (validationFailure) return null;
+      }
       c.header(
         'PAYMENT-RESPONSE',
         rail === 'nevermined'
@@ -975,7 +997,7 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
         quote_id: draft.quote_id,
         requirement_id: draft.requirement_id,
         service_id: config.serviceId,
-        service_version: config.serviceId.endsWith('.v2') ? 'v2' : 'v1',
+        service_version: serviceVersionForId(config.serviceId),
         request_input_hash: draft.request_input_hash,
         job_id: job.id,
         service_output_hash: draft.output_hash,
@@ -1149,7 +1171,7 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
       id: jobId,
       request_id: requestId,
       service_id: config.serviceId,
-      service_version: config.serviceId.endsWith('.v2') ? 'v2' : 'v1',
+      service_version: serviceVersionForId(config.serviceId),
       input_hash: inputHash,
       input_schema_hash: config.inputSchemaHash,
       output_schema_hash: config.outputSchemaHash,
@@ -1180,7 +1202,7 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
 
     const evidenceContext: PaymentEvidenceContext = {
       service_id: config.serviceId,
-      service_version: config.serviceId.endsWith('.v2') ? 'v2' : 'v1',
+      service_version: serviceVersionForId(config.serviceId),
       scheme: config.scheme,
       network: config.network,
       asset: config.asset,

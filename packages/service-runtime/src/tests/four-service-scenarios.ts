@@ -53,6 +53,7 @@ export async function runScenario(
     job_id: 'job-fixed-0001',
     ...(serviceId.endsWith('.v3')
       ? {
+          idempotency_key: 'idk_aaaaaaaaaaaaaaaaaaaaaaaa',
           contract_release: governed.contractRelease,
           pcc_schema_release: governed.pccSchemaRelease,
           pcc_schema_hash: governed.pccSchemaHash,

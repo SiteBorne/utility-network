@@ -214,6 +214,7 @@ export async function buildDocumentEvidenceJsonV2CdpProductionRouteConfig(
     clock: () => new Date().toISOString(),
     evidenceMode: cdpEvidence.evidenceMode,
     evidenceProvider: cdpEvidence.evidenceProvider,
+    pccKeyRegistry: registry,
     executor,
   };
 }

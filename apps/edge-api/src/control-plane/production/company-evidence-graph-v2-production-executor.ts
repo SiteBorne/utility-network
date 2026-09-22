@@ -144,11 +144,12 @@ export function buildCompanyEvidenceGraphV2ProductionExecutor(
   signer: Signer,
   keyRegistry: KeyRegistry,
   httpClient: InjectedHttpClient,
-  db: D1Database
+  db: D1Database,
+  serviceId: 'company_evidence_graph.v2' | 'company_evidence_graph.v3' = 'company_evidence_graph.v2'
 ): ServiceExecutor {
   return async (input, ctx) => {
     const clock = realClock();
-    const context = buildServiceContext('company_evidence_graph.v2', {
+    const context = buildServiceContext(serviceId, {
       job_id: ctx.job_id,
       request_id: ctx.request_id,
       clock,
@@ -186,8 +187,8 @@ export function buildCompanyEvidenceGraphV2ProductionExecutor(
 
     const registry = new ServiceRegistry();
     registry.register({
-      serviceId: 'company_evidence_graph.v2',
-      contractRelease: '2.0.0',
+      serviceId,
+      contractRelease: serviceId.endsWith('.v3') ? '3.0.0' : '2.0.0',
       productionEnabled: false,
       service: new CompanyEvidenceGraphService({
         httpClient,
@@ -203,7 +204,7 @@ export function buildCompanyEvidenceGraphV2ProductionExecutor(
       implementationStatus: 'local_fixture_verified',
     });
 
-    const result = await executeLocalService(registry, 'company_evidence_graph.v2', input, context);
+    const result = await executeLocalService(registry, serviceId, input, context);
     return toExecutorOutcomeResult(result);
   };
 }

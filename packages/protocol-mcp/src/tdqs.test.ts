@@ -71,10 +71,10 @@ function withoutDescriptions(value: unknown): unknown {
 }
 
 describe('TDQS 1.2 tool-definition contract', () => {
-  it('preserves the exact six established tool names', async () => {
+  it('preserves the six established tools and adds four explicitly named v3 candidates', async () => {
     const tools = await listActualTools();
     expect(tools.map((tool) => tool.name).sort()).toEqual([...MCP_TOOL_NAMES].sort());
-    expect(tools).toHaveLength(6);
+    expect(tools).toHaveLength(10);
   });
 
   it('freezes the Release-1 names and advertises no legacy noun-first name', async () => {
@@ -84,6 +84,10 @@ describe('TDQS 1.2 tool-definition contract', () => {
       'siteborne_retrieve_verified_web_context',
       'siteborne_extract_document_evidence_json',
       'siteborne_verify_agent_output',
+      'siteborne_build_company_evidence_graph_v3_candidate',
+      'siteborne_retrieve_verified_web_context_v3_candidate',
+      'siteborne_extract_document_evidence_json_v3_candidate',
+      'siteborne_verify_agent_output_v3_candidate',
       'siteborne_get_quote',
       'siteborne_get_service_health',
     ]);

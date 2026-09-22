@@ -1,5 +1,6 @@
 import { Client } from '@modelcontextprotocol/client';
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
+import { MCP_TOOL_NAMES } from '@siteborne/protocol-mcp';
 import { afterEach, describe, expect, it } from 'vitest';
 
 const clients: Client[] = [];
@@ -8,7 +9,7 @@ afterEach(async () => {
 });
 
 describe('@siteborne/mcp-server packed stdio entry', () => {
-  it('negotiates 2026-07-28 and lists the same six tools', async () => {
+  it('negotiates 2026-07-28 and lists the same ten tools', async () => {
     const client = new Client(
       { name: 'siteborne-stdio-test', version: '1.0.0' },
       { versionNegotiation: { mode: { pin: '2026-07-28' } } }
@@ -25,15 +26,6 @@ describe('@siteborne/mcp-server packed stdio entry', () => {
 
     const tools = await client.listTools();
 
-    expect(tools.tools.map((tool) => tool.name).sort()).toEqual(
-      [
-        'siteborne_build_company_evidence_graph',
-        'siteborne_retrieve_verified_web_context',
-        'siteborne_extract_document_evidence_json',
-        'siteborne_verify_agent_output',
-        'siteborne_get_quote',
-        'siteborne_get_service_health',
-      ].sort()
-    );
+    expect(tools.tools.map((tool) => tool.name).sort()).toEqual([...MCP_TOOL_NAMES].sort());
   });
 });

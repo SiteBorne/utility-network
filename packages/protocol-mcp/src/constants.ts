@@ -14,6 +14,10 @@ export const MCP_SERVICE_TOOLS = {
   siteborne_retrieve_verified_web_context: 'web_context_verified.v2',
   siteborne_extract_document_evidence_json: 'document_evidence_json.v2',
   siteborne_verify_agent_output: 'verify_agent_output.v2',
+  siteborne_build_company_evidence_graph_v3_candidate: 'company_evidence_graph.v3',
+  siteborne_retrieve_verified_web_context_v3_candidate: 'web_context_verified.v3',
+  siteborne_extract_document_evidence_json_v3_candidate: 'document_evidence_json.v3',
+  siteborne_verify_agent_output_v3_candidate: 'verify_agent_output.v3',
 } as const satisfies Readonly<Record<string, SiteborneServiceId>>;
 
 export const MCP_TOOL_NAMES = [

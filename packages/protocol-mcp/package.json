@@ -15,7 +15,8 @@
     }
   },
   "scripts": {
-    "build": "pnpm run typecheck && esbuild src/index.ts --bundle --platform=node --format=esm --target=node20 --outfile=dist/index.js --banner:js='import { createRequire as __createRequire } from \"node:module\"; const require = __createRequire(import.meta.url);'",
+    "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
+    "build": "pnpm run typecheck && pnpm run clean && esbuild src/index.ts --bundle --platform=node --format=esm --target=node20 --outfile=dist/index.js --banner:js='import { createRequire as __createRequire } from \"node:module\"; const require = __createRequire(import.meta.url);'",
     "test": "vitest run",
     "test:property": "vitest run --config vitest.property.config.ts",
     "lint": "eslint src/ scripts/",

@@ -38,6 +38,8 @@ import {
 } from './production-dependencies';
 import type { PaidContinuationWorkflowHostEnv } from './paid-continuation-workflow';
 
+const PUBLIC_V3_SERVICES = ['company_evidence_graph.v3', 'web_context_verified.v3'] as const;
+
 function minimalHostEnv(
   overrides: Partial<PaidContinuationWorkflowHostEnv> = {}
 ): PaidContinuationWorkflowHostEnv {
@@ -180,13 +182,30 @@ describe('SUN-1221E6R-H2BF4 buildProductionPaidContinuationWorkflowDependencies 
   // SUN-1222D-PRE-WORKFLOW-DISPATCH-FIX §11 -- registry coherence.
   // ---------------------------------------------------------------------
 
-  it('REGISTRY_COHERENCE: supported service count is exactly 4', () => {
-    expect(__TEST_ONLY_SUPPORTED_SERVICES.size).toBe(4);
+  it('REGISTRY_COHERENCE: supported service count is exactly 6', () => {
+    expect(__TEST_ONLY_SUPPORTED_SERVICES.size).toBe(6);
   });
 
-  it('REGISTRY_COHERENCE: exactly the four intended production services are supported, no more, no fewer', () => {
-    expect([...__TEST_ONLY_SUPPORTED_SERVICES].sort()).toEqual([...FOUR_SERVICES].sort());
+  it('REGISTRY_COHERENCE: supports the four v2 services and only the two public v3 candidates', () => {
+    expect([...__TEST_ONLY_SUPPORTED_SERVICES].sort()).toEqual(
+      [...FOUR_SERVICES, ...PUBLIC_V3_SERVICES].sort()
+    );
   });
+
+  it.each(PUBLIC_V3_SERVICES)(
+    'PUBLIC_V3_WORKFLOW_DISPATCH: %s reaches its governed production composition',
+    async (serviceId) => {
+      const result = await buildProductionPaidContinuationWorkflowDependencies(
+        minimalHostEnv(),
+        serviceId
+      );
+      expect('unavailable' in result && result.unavailable).toBe(true);
+      expect('unavailable' in result && result.reason).toContain(
+        'PAID_RECEIPT_SIGNING_PRIVATE_KEY is missing'
+      );
+      expect('unavailable' in result && result.reason).not.toContain('unsupported service');
+    }
+  );
 
   it('REGISTRY_COHERENCE: an unknown service has no dependency factory', () => {
     expect(__TEST_ONLY_SUPPORTED_SERVICES.has('not_a_real_service')).toBe(false);
@@ -204,7 +223,13 @@ describe('SUN-1221E6R-H2BF4 buildProductionPaidContinuationWorkflowDependencies 
   });
 
   it('REGISTRY_COHERENCE: no unreleased/Nevermined-fallback service is accidentally supported', () => {
-    for (const other of ['nevermined.v1', 'nevermined_fallback', 'unreleased_service.v3']) {
+    for (const other of [
+      'document_evidence_json.v3',
+      'verify_agent_output.v3',
+      'nevermined.v1',
+      'nevermined_fallback',
+      'unreleased_service.v3',
+    ]) {
       expect(__TEST_ONLY_SUPPORTED_SERVICES.has(other)).toBe(false);
     }
   });

@@ -11,7 +11,7 @@ describe('credential-independent no-network proof', () => {
         resolveNeverminedConfig({ NVM_API_KEY: 'fixture', NVM_ENVIRONMENT: 'sandbox' }).ok
       ).toBe(true);
       // SUN-1000 checkpoint 1M: 4 v1 + 4 v2 declarations.
-      expect(Object.keys(NEVERMINED_DECLARATIONS)).toHaveLength(8);
+      expect(Object.keys(NEVERMINED_DECLARATIONS)).toHaveLength(12);
       expect(fetchSpy).not.toHaveBeenCalled();
     } finally {
       globalThis.fetch = original;

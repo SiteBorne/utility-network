@@ -184,6 +184,27 @@ describe('SUN-1222B-S3R: company_evidence_graph.v2/CDP real requirement matches 
     expect(config.serviceId).toBe('company_evidence_graph.v2');
   });
 
+  it('projects the same economics through the explicit v3 candidate identity and full-PCC contract', async () => {
+    const config = await buildCompanyEvidenceGraphV2CdpProductionRouteConfig(
+      mainnetAuthorizedTestEnv(),
+      db,
+      { evidenceMode: 'fixture' },
+      'company_evidence_graph.v3'
+    );
+    if ('unavailable' in config) throw new Error(`unexpectedly unavailable: ${config.reason}`);
+    expect(config).toMatchObject({
+      serviceId: 'company_evidence_graph.v3',
+      path: '/v3/company/evidence-graph',
+      contractRelease: '3.0.0',
+      pccDependency: '2.0.0',
+      outputSchemaHash: 'sha256:3567477e8ac4e76a57c6baec7cc6e2fa1aa502fca3087ed3753d2e99de036ae1',
+      pricingKey: 'company_evidence_graph_v2',
+    });
+    const app = new Hono();
+    createX402ServiceRoute(app, config);
+    expect((await get402Requirement(app, config.path)).amount).toBe(EXPECTED_AMOUNT_ATOMIC);
+  });
+
   it('never charges the drifted registry maximum_price (190000 atomic) -- proves the real path uses governance, not the unresolved registry field', async () => {
     const requirement = await buildRealMainnetRequirement();
     expect(requirement.amount).not.toBe('190000');

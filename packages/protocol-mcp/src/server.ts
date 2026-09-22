@@ -82,6 +82,10 @@ const quoteInputSchema = z
         'web_context_verified.v2',
         'document_evidence_json.v2',
         'verify_agent_output.v2',
+        'company_evidence_graph.v3',
+        'web_context_verified.v3',
+        'document_evidence_json.v3',
+        'verify_agent_output.v3',
       ])
       .describe(
         'Canonical SITEBORNE service and major version to price; selects that service’s governed pricing key, contract release, and production resource URL.'
@@ -111,9 +115,9 @@ const quoteOutputSchema = z
     // SUN-1000 checkpoint 1M: widened from the literal 'v1'/'1.0.0' — a
     // v2 quote genuinely reports service_version 'v2' and
     // contract_release '2.0.0'.
-    service_version: z.enum(['v1', 'v2']).describe('Service contract major version.'),
+    service_version: z.enum(['v1', 'v2', 'v3']).describe('Service contract major version.'),
     contract_release: z
-      .enum(['1.0.0', '2.0.0'])
+      .enum(['1.0.0', '2.0.0', '3.0.0'])
       .describe('Contract release the quoted service belongs to.'),
     input_hash: z.string().describe('Canonical hash of the exact request input this quote binds.'),
     pricing_key: z
@@ -182,7 +186,7 @@ const healthOutputSchema = z
     server_name: z.literal(MCP_SERVER_NAME),
     server_version: z.literal(MCP_SERVER_VERSION),
     protocol_version: z.literal(MCP_PROTOCOL_VERSION),
-    tools: z.literal(6),
+    tools: z.literal(MCP_TOOL_NAMES.length),
     production_ready: z.literal(false),
     production_enabled: z.boolean(),
     external_publication: z.literal('blocked_external'),
@@ -224,7 +228,7 @@ const HEALTH_TOOL_DESCRIPTION =
   'Report MCP server readiness and production-enable status for each SITEBORNE service. Use when: an agent must check protocol availability, tool count, or whether a service is currently production-enabled before selecting a paid tool. Do not use when: a quote is needed (use siteborne_get_quote) or company, web, document, or agent-output evidence work is required (use the corresponding SITEBORNE service tool). Behavior: read-only and credential-independent; it does not perform paid evidence work, create quotes, verify payment, call providers, write service state, create Workflows, or settle. Economics: free of charge; it never issues a payment challenge. Failure: it depends on no provider, so it does not fail because a provider is unavailable. Returns: the server and protocol versions plus truthful local, production, and external-publication status for all four evidence services.';
 
 const SERVICE_INPUT_DESCRIPTION_OVERRIDES: Readonly<
-  Record<SiteborneServiceId, Readonly<Record<string, string>>>
+  Partial<Record<SiteborneServiceId, Readonly<Record<string, string>>>>
 > = {
   'company_evidence_graph.v1': {},
   'company_evidence_graph.v2': {
@@ -391,7 +395,11 @@ const SERVICE_INPUT_DESCRIPTION_OVERRIDES: Readonly<
 };
 
 function describeInputSchema(serviceId: SiteborneServiceId): unknown {
-  const overrides = SERVICE_INPUT_DESCRIPTION_OVERRIDES[serviceId];
+  const v2Equivalent = serviceId.replace(/\.v3$/, '.v2') as SiteborneServiceId;
+  const overrides =
+    SERVICE_INPUT_DESCRIPTION_OVERRIDES[serviceId] ??
+    SERVICE_INPUT_DESCRIPTION_OVERRIDES[v2Equivalent] ??
+    {};
   const visit = (value: unknown, path: string): unknown => {
     if (Array.isArray(value)) return value.map((child) => visit(child, path));
     if (value === null || typeof value !== 'object') return value;
@@ -527,7 +535,9 @@ function serviceToolDescription(
   serviceId: SiteborneServiceId,
   options: CreateSiteborneMcpOptions
 ): string {
-  const parts = SERVICE_DESCRIPTION_PARTS[serviceId];
+  const parts =
+    SERVICE_DESCRIPTION_PARTS[serviceId] ??
+    SERVICE_DESCRIPTION_PARTS[serviceId.replace(/\.v3$/, '.v2') as SiteborneServiceId];
   // v1 identities have no MCP tool (every tool binds a v2 service).
   if (!parts) return '';
   return (
@@ -548,7 +558,23 @@ const SERVICE_TOOL_TITLES: Readonly<Record<SiteborneServiceId, string>> = {
   'document_evidence_json.v2': 'Extract document evidence JSON',
   'verify_agent_output.v1': 'Verify agent output',
   'verify_agent_output.v2': 'Verify agent output',
+  'company_evidence_graph.v3': 'Build company evidence graph (v3 candidate)',
+  'web_context_verified.v3': 'Retrieve verified web context (v3 candidate)',
+  'document_evidence_json.v3': 'Extract document evidence JSON (v3 candidate)',
+  'verify_agent_output.v3': 'Verify agent output (v3 candidate)',
 };
+
+const RESULT_AUTHORIZATION_BLOCKED_SERVICES = new Set<SiteborneServiceId>([
+  'document_evidence_json.v3',
+  'verify_agent_output.v3',
+]);
+
+const VNEXT_CANDIDATE_SERVICES = new Set<SiteborneServiceId>([
+  'company_evidence_graph.v3',
+  'web_context_verified.v3',
+  'document_evidence_json.v3',
+  'verify_agent_output.v3',
+]);
 
 const HOSTILE_OBJECT_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
@@ -626,11 +652,16 @@ async function buildCanonicalQuote(
   const expiresAt = new Date(now.getTime() + (config.ttlSeconds ?? 300) * 1000).toISOString();
   // SUN-1000 checkpoint 1M: derived from the requested service_id's own
   // major suffix rather than hardcoded literals.
-  const isV2 = input.service_id.endsWith('.v2');
+  const serviceVersion = input.service_id.endsWith('.v3')
+    ? 'v3'
+    : input.service_id.endsWith('.v2')
+      ? 'v2'
+      : 'v1';
   const quote = await buildQuote({
     service_id: input.service_id,
-    service_version: isV2 ? 'v2' : 'v1',
-    contract_release: isV2 ? '2.0.0' : '1.0.0',
+    service_version: serviceVersion,
+    contract_release:
+      serviceVersion === 'v3' ? '3.0.0' : serviceVersion === 'v2' ? '2.0.0' : '1.0.0',
     input_hash: await hashPaymentObject(input.input),
     pricing_key: pricingKey,
     pricing_source_version: resolvePricingSourceVersion(),
@@ -835,6 +866,21 @@ function buildSiteborneMcpHandlers(
       if (containsHostileObjectKey(input)) {
         return errorResult('invalid_input', 'input contains a forbidden object key');
       }
+      if (
+        VNEXT_CANDIDATE_SERVICES.has(serviceId) &&
+        options.releaseSelection !== '3.0.0-public-candidate'
+      ) {
+        return errorResult(
+          'candidate_release_not_selected',
+          `${serviceId} requires governed release selection 3.0.0-public-candidate`
+        );
+      }
+      if (RESULT_AUTHORIZATION_BLOCKED_SERVICES.has(serviceId)) {
+        return errorResult(
+          'result_authorization_required',
+          `${serviceId} candidate activation is blocked until buyer-authorized result access is enforced`
+        );
+      }
       // SUN-1222C-MCP-PAYMENT-DESIGN-CORRECTION: the official carrier
       // for the buyer's payment authorization on a retried tools/call.
       const paymentPayload = extractPaymentPayload(
@@ -867,6 +913,21 @@ function buildSiteborneMcpHandlers(
       return errorResult('quote_configuration_unavailable', 'quote configuration is unavailable');
     }
     const quoteInput = input as z.infer<typeof quoteInputSchema>;
+    if (
+      VNEXT_CANDIDATE_SERVICES.has(quoteInput.service_id) &&
+      options.releaseSelection !== '3.0.0-public-candidate'
+    ) {
+      return errorResult(
+        'candidate_release_not_selected',
+        `${quoteInput.service_id} requires governed release selection 3.0.0-public-candidate`
+      );
+    }
+    if (RESULT_AUTHORIZATION_BLOCKED_SERVICES.has(quoteInput.service_id)) {
+      return errorResult(
+        'result_authorization_required',
+        `${quoteInput.service_id} candidate activation is blocked until buyer-authorized result access is enforced`
+      );
+    }
     const notOffered = checkQuoteOffered(quoteInput);
     if (notOffered) return notOffered;
     const quote = await buildCanonicalQuote(
@@ -886,7 +947,7 @@ function buildSiteborneMcpHandlers(
       server_name: MCP_SERVER_NAME,
       server_version: MCP_SERVER_VERSION,
       protocol_version: MCP_PROTOCOL_VERSION,
-      tools: 6 as const,
+      tools: MCP_TOOL_NAMES.length,
       production_ready: options.health?.production_ready ?? false,
       production_enabled: options.health?.production_enabled ?? false,
       external_publication: 'blocked_external' as const,

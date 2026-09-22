@@ -10,10 +10,10 @@ import { getRuntimeEffectiveView, resetRuntimeEffectiveViewCacheForTests } from 
 const COMMIT = 'a'.repeat(40);
 
 describe('getRuntimeEffectiveView', () => {
-  it('builds all 8 real services with zero LegacyImportError', async () => {
+  it('builds all 12 real services with zero LegacyImportError', async () => {
     resetRuntimeEffectiveViewCacheForTests();
     const view = await getRuntimeEffectiveView(COMMIT);
-    expect(view.services).toHaveLength(8);
+    expect(view.services).toHaveLength(12);
   });
 
   it('memoizes per isolate: a second call for the same commit returns the identical promise-resolved object', async () => {
@@ -28,7 +28,7 @@ describe('getRuntimeEffectiveView', () => {
     const first = await getRuntimeEffectiveView(COMMIT);
     const second = await getRuntimeEffectiveView('b'.repeat(40));
     expect(second).not.toBe(first);
-    expect(second.services).toHaveLength(8);
+    expect(second.services).toHaveLength(12);
   });
 
   it('produces a digest deterministically (same commit, fresh cache, same digest)', async () => {

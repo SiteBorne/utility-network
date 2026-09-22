@@ -235,16 +235,16 @@ describe('projectMcpToolsFromVcm -- unit shape', () => {
 });
 
 describe('projectMcpToolsFromVcm -- real-data parity against the real MCP server', () => {
-  it('reproduces the real six-tool tools/list output with zero unexplained differences', async () => {
+  it('reproduces the real tools/list output with zero unexplained differences', async () => {
     const [effective, realTools] = await Promise.all([
       realEightServiceEffectiveView(),
       listRealTools(),
     ]);
-    expect(realTools).toHaveLength(6);
+    expect(realTools).toHaveLength(MCP_TOOL_NAMES.length);
 
     const context = contextFromRealTools(realTools);
     const shadowTools = projectMcpToolsFromVcm(effective, context);
-    expect(shadowTools).toHaveLength(6);
+    expect(shadowTools).toHaveLength(MCP_TOOL_NAMES.length);
 
     const differences = compareProjections(realTools, shadowTools);
     const unexplained = unexplainedDifferences(differences);
@@ -302,10 +302,10 @@ describe('buildCurrentMcpProjectionContext -- typed current authority', () => {
     expect(context.toolOrder).toEqual(MCP_TOOL_NAMES);
   });
 
-  it('maps exactly four v2 service-backed interactions', () => {
+  it('maps all v2 and explicit v3 candidate service-backed interactions', () => {
     const authority = buildSiteborneMcpDefinitionAuthorityInputs({});
     const context = buildCurrentMcpProjectionContext(authority);
-    expect(authority.serviceTools).toHaveLength(4);
+    expect(authority.serviceTools).toHaveLength(Object.keys(MCP_SERVICE_TOOLS).length);
     expect(
       authority.serviceTools.map((tool) => context.serviceTool(tool.serviceId).toolName)
     ).toEqual(Object.keys(MCP_SERVICE_TOOLS));

@@ -1,4 +1,12 @@
-import { canonicalize, contentHash } from '@siteborne/verification';
+import {
+  canonicalize,
+  contentHash,
+  getOutputSchemaId,
+  type KeyRegistry,
+} from '@siteborne/verification';
+import { verifySelfVerifyingPcc, type SelfVerifyingPcc } from '@siteborne/service-runtime';
+import type { ValidateFunction } from 'ajv';
+import { outputValidatorsById } from '../../generated/output-validators.generated.js';
 import type { ArtifactStore } from '../artifacts/store';
 import type { ArtifactRecord } from '../types';
 import type { ExecutorOutcome } from '../routes/x402-service';
@@ -35,6 +43,24 @@ export interface LegacyResultRecord {
 }
 
 export type StoredResultRecord = VNextPccResultRecord | LegacyResultRecord;
+
+export async function validateGovernedVNextPcc(
+  serviceId: string,
+  pcc: Readonly<Record<string, unknown>>,
+  keyRegistry?: KeyRegistry
+): Promise<string | null> {
+  const schemaId = getOutputSchemaId(serviceId);
+  const validator = schemaId
+    ? (outputValidatorsById[schemaId] as ValidateFunction | undefined)
+    : undefined;
+  if (!validator) return 'missing_precompiled_output_validator';
+  if (!validator(pcc)) return 'pcc_schema_validation_failed';
+  if (!keyRegistry) return 'missing_pcc_key_registry';
+  const verification = await verifySelfVerifyingPcc(pcc as SelfVerifyingPcc, keyRegistry);
+  return verification.valid
+    ? null
+    : `pcc_crypto_verification_failed:${verification.errors[0] ?? 'unknown'}`;
+}
 
 function authorizationClass(serviceId: string): ArtifactRecord['authorization_class'] {
   return serviceId === 'company_evidence_graph.v3' || serviceId === 'web_context_verified.v3'

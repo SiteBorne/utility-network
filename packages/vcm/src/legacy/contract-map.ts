@@ -24,6 +24,7 @@ export interface ContractMapEntry {
 const CONTRACT_MAP: Readonly<Record<ServiceGeneration, ContractMapEntry>> = {
   v1: { contractReleaseVersion: '1.0.0', pccSchemaRelease: '1.0.1' },
   v2: { contractReleaseVersion: '2.0.0', pccSchemaRelease: '1.1.0' },
+  v3: { contractReleaseVersion: '3.0.0', pccSchemaRelease: '2.0.0' },
 };
 
 export function contractMapFor(generation: ServiceGeneration): ContractMapEntry {

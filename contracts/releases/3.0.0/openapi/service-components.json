@@ -149,7 +149,7 @@
     },
     "CompanyEvidenceGraphOutput": {
       "title": "Company Evidence Graph Output",
-      "description": "Output schema for company_evidence_graph.v1 service. Must be a valid PCC 1.0.0 document with required net.siteborne.company-evidence.v1 extension.",
+      "description": "Output schema for company_evidence_graph.v1 service. Must be a valid PCC 1.0.0 document with required net.siteborne.company-evidence.v1 extension. Governed candidate output for Service Contract 3.0.0 / PCC 2.0.0.",
       "allOf": [
         {
           "$ref": "#/components/schemas/PCCDocument"
@@ -163,10 +163,10 @@
               "required": ["service_id", "service_version", "output_schema_hash"],
               "properties": {
                 "service_id": {
-                  "enum": ["company_evidence_graph.v1", "company_evidence_graph.v3"]
+                  "enum": ["company_evidence_graph.v3"]
                 },
                 "service_version": {
-                  "enum": ["v1", "v2"]
+                  "enum": ["v3"]
                 },
                 "output_schema_hash": {
                   "type": "string",
@@ -604,7 +604,7 @@
     },
     "VerifiedWebContextOutput": {
       "title": "Verified Web Context Output",
-      "description": "Output schema for web_context_verified.v1 service. Must be a valid PCC 1.0.0 document with required net.siteborne.web-context.v1 extension.",
+      "description": "Output schema for web_context_verified.v1 service. Must be a valid PCC 1.0.0 document with required net.siteborne.web-context.v1 extension. Governed candidate output for Service Contract 3.0.0 / PCC 2.0.0.",
       "allOf": [
         {
           "$ref": "#/components/schemas/PCCDocument"
@@ -618,10 +618,10 @@
               "required": ["service_id", "service_version", "output_schema_hash"],
               "properties": {
                 "service_id": {
-                  "enum": ["web_context_verified.v1", "web_context_verified.v3"]
+                  "enum": ["web_context_verified.v3"]
                 },
                 "service_version": {
-                  "enum": ["v1", "v2"]
+                  "enum": ["v3"]
                 },
                 "output_schema_hash": {
                   "type": "string",
@@ -989,7 +989,7 @@
     },
     "DocumentEvidenceJSONOutput": {
       "title": "Document Evidence JSON Output",
-      "description": "Output schema for document_evidence_json.v1 service. Must be a valid PCC 1.0.0 document with required net.siteborne.document-evidence.v1 extension.",
+      "description": "Output schema for document_evidence_json.v1 service. Must be a valid PCC 1.0.0 document with required net.siteborne.document-evidence.v1 extension. Governed candidate output for Service Contract 3.0.0 / PCC 2.0.0.",
       "allOf": [
         {
           "$ref": "#/components/schemas/PCCDocument"
@@ -1003,10 +1003,10 @@
               "required": ["service_id", "service_version", "output_schema_hash"],
               "properties": {
                 "service_id": {
-                  "enum": ["document_evidence_json.v1", "document_evidence_json.v3"]
+                  "enum": ["document_evidence_json.v3"]
                 },
                 "service_version": {
-                  "enum": ["v1", "v2"]
+                  "enum": ["v3"]
                 },
                 "output_schema_hash": {
                   "type": "string",
@@ -1475,7 +1475,7 @@
     },
     "AgentOutputVerificationOutput": {
       "title": "Agent Output Verification Output",
-      "description": "Output schema for verify_agent_output.v1 service. Must be a valid PCC 1.0.0 document with required net.siteborne.agent-verification.v1 extension.",
+      "description": "Output schema for verify_agent_output.v1 service. Must be a valid PCC 1.0.0 document with required net.siteborne.agent-verification.v1 extension. Governed candidate output for Service Contract 3.0.0 / PCC 2.0.0.",
       "allOf": [
         {
           "$ref": "#/components/schemas/PCCDocument"
@@ -1489,10 +1489,10 @@
               "required": ["service_id", "service_version", "output_schema_hash"],
               "properties": {
                 "service_id": {
-                  "enum": ["verify_agent_output.v1", "verify_agent_output.v3"]
+                  "enum": ["verify_agent_output.v3"]
                 },
                 "service_version": {
-                  "enum": ["v1", "v2"]
+                  "enum": ["v3"]
                 },
                 "output_schema_hash": {
                   "type": "string",

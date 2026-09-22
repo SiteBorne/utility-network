@@ -111,7 +111,7 @@ describe('validateEconomicConstraints', () => {
 
       expect(result.ok).toBe(true);
       expect(result.errors).toEqual([]);
-      expect(model.services.length).toBe(8);
+      expect(model.services.length).toBe(12);
     }
   );
 

@@ -3,21 +3,13 @@
   "service_version": "v3",
   "title": "Document Evidence JSON",
   "description": "Processes documents (PDF, images, native text) through OCR, table extraction, and structured data extraction, producing verified JSON evidence with page-level provenance.",
-  "capabilities": [
-    "native_text_extraction",
-    "ocr",
-    "table_extraction",
-    "page_level_provenance"
-  ],
+  "capabilities": ["native_text_extraction", "ocr", "table_extraction", "page_level_provenance"],
   "input_schema_uri": "https://siteborne.net/schemas/services/document-evidence-input.schema.json",
   "input_schema_hash": "sha256:19e64c92f088ed8b7a45eef561c5426bb59ce5cc3576b85482aded4f620e57ba",
   "output_schema_uri": "https://utility.siteborne.net/contracts/3.0.0/schemas/services/document-evidence-output.schema.json",
-  "output_schema_hash": "sha256:e47d7d85b92441feff3c9c98ae058eaeb68b1cc6c7ff852be7e5af16c787da49",
+  "output_schema_hash": "sha256:058e6d50796d7adffc5deedd5b96679dcff78d98b77c022c06430885546aeff7",
   "pcc_version": "2.0.0",
-  "pricing_schemes": [
-    "exact",
-    "upto"
-  ],
+  "pricing_schemes": ["exact", "upto"],
   "base_price": {
     "amount": "0.012",
     "currency": "USD"

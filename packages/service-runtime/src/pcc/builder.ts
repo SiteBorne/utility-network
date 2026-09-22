@@ -20,6 +20,7 @@ import type {
 
 export interface BuildDraftDocumentParams<TExtensionKey extends string, TExtension> {
   seed: string; // deterministic seed for job_id, e.g. `${service_id}:${input_hash}`
+  idempotencyKey?: string;
   serviceId: string;
   // SUN-1000 checkpoint 1M: widened from the literal 'v1' — a v2 service
   // genuinely builds a 'v2' contract.
@@ -77,7 +78,8 @@ export function buildDraftDocument<TExtensionKey extends string, TExtension>(
 
   const jobId = deterministicId('job', params.seed);
   const quoteId = 'qte_' + deterministicId('req', `quote:${params.seed}`).slice(4);
-  const idempotencyKey = 'idk_' + deterministicId('req', `idem:${params.seed}`).slice(4);
+  const idempotencyKey =
+    params.idempotencyKey ?? 'idk_' + deterministicId('req', `idem:${params.seed}`).slice(4);
   const policyId = deterministicId('pol', `policy:${params.seed}`);
   const keyId = deterministicId('kid', `key:${params.seed}`);
 

@@ -930,9 +930,9 @@
       }
     },
     "PCCDocument": {
-      "title": "Proof-Carrying Context (PCC) v1.0.0",
-      "description": "Normative schema for Proof-Carrying Context 1.0.0. Frozen after compatibility validation passes. Schema patch 1.0.1 (SUN-0100 correction): extension_container now structurally permits qualified extension keys via patternProperties, matching documented semantics; pcc_version (document content compatibility) is unchanged at 1.0.0. Schema minor 1.1.0 (SUN-1000 checkpoint 1M): service_id enum gains 4 new .v2 members (additive-only per packages/pcc-schema/policy/COMPATIBILITY.md section 1/section 4, which explicitly classifies new enum values as minor-compatible -- not the docs/contracts/COMPATIBILITY_POLICY.md service-contract-release taxonomy, which does not govern this file); the 4 existing .v1 members are unchanged and remain valid; pcc_version is unchanged at 1.0.0.",
-      "pcc_version": "1.0.0",
+      "title": "Proof-Carrying Context (PCC) v2.0.0",
+      "description": "Normative PCC 2.0.0 candidate. Requires a governed, reconstructible self-verifying receipt proof at extensions[\"net.siteborne.verification-proof.v1\"]. The full PCC is the successful result root.",
+      "pcc_version": "2.0.0",
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -950,7 +950,7 @@
       "definitions": {
         "pcc_version": {
           "type": "string",
-          "const": "1.0.0",
+          "const": "2.0.0",
           "description": "PCC specification version"
         },
         "job_id": {
@@ -985,6 +985,10 @@
             "web_context_verified.v1",
             "document_evidence_json.v1",
             "verify_agent_output.v1",
+            "company_evidence_graph.v2",
+            "web_context_verified.v2",
+            "document_evidence_json.v2",
+            "verify_agent_output.v2",
             "company_evidence_graph.v3",
             "web_context_verified.v3",
             "document_evidence_json.v3",
@@ -1742,6 +1746,336 @@
           "additionalProperties": true,
           "maxProperties": 200,
           "description": "Bounded JSON data payload for a single namespaced extension (PCC 1.0.1). Must be a JSON object; unbounded, executable, or policy-changing structures are out of scope for structural validation. Individual services may further narrow this shape for their own namespace via allOf composition."
+        },
+        "verification_proof_v1": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["proof_version", "receipt", "verification_material"],
+          "properties": {
+            "proof_version": {
+              "type": "string",
+              "const": "1.0.0"
+            },
+            "receipt": {
+              "$ref": "#/definitions/vnext_receipt"
+            },
+            "verification_material": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["verifier_results"],
+              "properties": {
+                "verifier_results": {
+                  "type": "array",
+                  "maxItems": 100,
+                  "items": {
+                    "$ref": "#/definitions/public_verifier_result"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "public_verifier_result": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["verifier_id", "status", "findings", "failure_codes"],
+          "properties": {
+            "verifier_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "status": {
+              "type": "string",
+              "minLength": 1
+            },
+            "findings": {
+              "type": "array",
+              "maxItems": 200,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["code", "severity"],
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "severity": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            },
+            "failure_codes": {
+              "type": "array",
+              "maxItems": 200,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "vnext_receipt_preimage": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "domain",
+            "proof_version",
+            "receipt_version",
+            "job_id",
+            "request_id",
+            "service_id",
+            "service_version",
+            "contract_release",
+            "pcc_schema_release",
+            "pcc_schema_hash",
+            "input_hash",
+            "output_schema_hash",
+            "output_hash",
+            "pcc_document_hash",
+            "evidence_hash",
+            "policy_hash",
+            "verifier_set_hash",
+            "decision",
+            "completeness",
+            "verification_mode",
+            "limitations",
+            "signing_key_id",
+            "canonicalization_algorithm",
+            "signature_algorithm",
+            "issued_at"
+          ],
+          "properties": {
+            "domain": {
+              "type": "string",
+              "const": "SITEBORNE-PCC-VERIFICATION-PROOF-V1"
+            },
+            "proof_version": {
+              "type": "string",
+              "const": "1.0.0"
+            },
+            "receipt_version": {
+              "type": "string",
+              "const": "2.0.0"
+            },
+            "job_id": {
+              "$ref": "#/definitions/job_id"
+            },
+            "request_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "service_id": {
+              "$ref": "#/definitions/service_id"
+            },
+            "service_version": {
+              "$ref": "#/definitions/service_version"
+            },
+            "contract_release": {
+              "type": "string",
+              "const": "3.0.0"
+            },
+            "pcc_schema_release": {
+              "type": "string",
+              "const": "2.0.0"
+            },
+            "pcc_schema_hash": {
+              "$ref": "#/definitions/hash"
+            },
+            "input_hash": {
+              "$ref": "#/definitions/hash"
+            },
+            "output_schema_hash": {
+              "$ref": "#/definitions/hash"
+            },
+            "output_hash": {
+              "$ref": "#/definitions/hash"
+            },
+            "pcc_document_hash": {
+              "$ref": "#/definitions/hash"
+            },
+            "evidence_hash": {
+              "$ref": "#/definitions/hash"
+            },
+            "policy_hash": {
+              "$ref": "#/definitions/hash"
+            },
+            "verifier_set_hash": {
+              "$ref": "#/definitions/hash"
+            },
+            "decision": {
+              "$ref": "#/definitions/verification_decision"
+            },
+            "completeness": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "verification_mode": {
+              "type": "string",
+              "enum": ["standard", "independent_reproduction"]
+            },
+            "limitations": {
+              "type": "array",
+              "maxItems": 200,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "signing_key_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "canonicalization_algorithm": {
+              "type": "string",
+              "const": "RFC8785-JCS"
+            },
+            "signature_algorithm": {
+              "type": "string",
+              "const": "Ed25519"
+            },
+            "issued_at": {
+              "$ref": "#/definitions/timestamp_rfc3339"
+            }
+          }
+        },
+        "vnext_receipt": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "domain",
+            "proof_version",
+            "receipt_version",
+            "job_id",
+            "request_id",
+            "service_id",
+            "service_version",
+            "contract_release",
+            "pcc_schema_release",
+            "pcc_schema_hash",
+            "input_hash",
+            "output_schema_hash",
+            "output_hash",
+            "pcc_document_hash",
+            "evidence_hash",
+            "policy_hash",
+            "verifier_set_hash",
+            "decision",
+            "completeness",
+            "verification_mode",
+            "limitations",
+            "signing_key_id",
+            "canonicalization_algorithm",
+            "signature_algorithm",
+            "issued_at",
+            "receipt_id",
+            "signature"
+          ],
+          "properties": {
+            "domain": {
+              "type": "string",
+              "const": "SITEBORNE-PCC-VERIFICATION-PROOF-V1"
+            },
+            "proof_version": {
+              "type": "string",
+              "const": "1.0.0"
+            },
+            "receipt_version": {
+              "type": "string",
+              "const": "2.0.0"
+            },
+            "job_id": {
+              "$ref": "#/definitions/job_id"
+            },
+            "request_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "service_id": {
+              "$ref": "#/definitions/service_id"
+            },
+            "service_version": {
+              "$ref": "#/definitions/service_version"
+            },
+            "contract_release": {
+              "type": "string",
+              "const": "3.0.0"
+            },
+            "pcc_schema_release": {
+              "type": "string",
+              "const": "2.0.0"
+            },
+            "pcc_schema_hash": {
+              "$ref": "#/definitions/hash"
+            },
+            "input_hash": {
+              "$ref": "#/definitions/hash"
+            },
+            "output_schema_hash": {
+              "$ref": "#/definitions/hash"
+            },
+            "output_hash": {
+              "$ref": "#/definitions/hash"
+            },
+            "pcc_document_hash": {
+              "$ref": "#/definitions/hash"
+            },
+            "evidence_hash": {
+              "$ref": "#/definitions/hash"
+            },
+            "policy_hash": {
+              "$ref": "#/definitions/hash"
+            },
+            "verifier_set_hash": {
+              "$ref": "#/definitions/hash"
+            },
+            "decision": {
+              "$ref": "#/definitions/verification_decision"
+            },
+            "completeness": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "verification_mode": {
+              "type": "string",
+              "enum": ["standard", "independent_reproduction"]
+            },
+            "limitations": {
+              "type": "array",
+              "maxItems": 200,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "signing_key_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "canonicalization_algorithm": {
+              "type": "string",
+              "const": "RFC8785-JCS"
+            },
+            "signature_algorithm": {
+              "type": "string",
+              "const": "Ed25519"
+            },
+            "issued_at": {
+              "$ref": "#/definitions/timestamp_rfc3339"
+            },
+            "receipt_id": {
+              "type": "string",
+              "pattern": "^rcpt_[a-f0-9]{24}$"
+            },
+            "signature": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{86}$"
+            }
+          }
         }
       },
       "properties": {
@@ -1784,7 +2118,20 @@
           "$ref": "#/definitions/receipt"
         },
         "extensions": {
-          "$ref": "#/definitions/extension_container"
+          "allOf": [
+            {
+              "$ref": "#/definitions/extension_container"
+            },
+            {
+              "type": "object",
+              "required": ["net.siteborne.verification-proof.v1"],
+              "properties": {
+                "net.siteborne.verification-proof.v1": {
+                  "$ref": "#/definitions/verification_proof_v1"
+                }
+              }
+            }
+          ]
         }
       }
     }

@@ -74,6 +74,8 @@ export interface CreateSiteborneMcpOptions {
   health?: McpHealthConfiguration;
   allowedHosts?: string[];
   allowedOrigins?: string[];
+  /** Exact governed selector required before any Release 3 candidate tool executes. */
+  releaseSelection?: '3.0.0-public-candidate';
   onServerCreated?: (serverInstanceId: string) => void;
   /**
    * PRODUCTION-SECURITY-DECLARATIONS-PUBLICATION-01: additive per-tool `_meta`

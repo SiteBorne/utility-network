@@ -30,8 +30,10 @@ export interface ServiceCapabilityStatus {
   excluded_modes: readonly { mode: string; reason: string }[];
 }
 
-export const SERVICE_CAPABILITY_STATUS: Readonly<
-  Record<SiteborneServiceId, ServiceCapabilityStatus>
+type ExistingServiceId = Exclude<SiteborneServiceId, `${string}.v3`>;
+
+const EXISTING_SERVICE_CAPABILITY_STATUS: Readonly<
+  Record<ExistingServiceId, ServiceCapabilityStatus>
 > = {
   'company_evidence_graph.v1': {
     implementation_status: 'local_fixture_verified',
@@ -120,4 +122,14 @@ export const SERVICE_CAPABILITY_STATUS: Readonly<
       },
     ],
   },
+};
+
+export const SERVICE_CAPABILITY_STATUS: Readonly<
+  Record<SiteborneServiceId, ServiceCapabilityStatus>
+> = {
+  ...EXISTING_SERVICE_CAPABILITY_STATUS,
+  'company_evidence_graph.v3': EXISTING_SERVICE_CAPABILITY_STATUS['company_evidence_graph.v2'],
+  'web_context_verified.v3': EXISTING_SERVICE_CAPABILITY_STATUS['web_context_verified.v2'],
+  'document_evidence_json.v3': EXISTING_SERVICE_CAPABILITY_STATUS['document_evidence_json.v2'],
+  'verify_agent_output.v3': EXISTING_SERVICE_CAPABILITY_STATUS['verify_agent_output.v2'],
 };

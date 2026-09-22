@@ -43,9 +43,14 @@ import { D1JobsRepository, D1StateEventsRepository } from '../repositories/d1/jo
 import { D1PaymentAttemptRepository } from '../repositories/d1/payment-attempts';
 import { D1PaymentFinalizationRepository } from '../repositories/d1/payment-finalization';
 import { hashPaymentObject } from '@siteborne/protocol-x402';
+import type { KeyRegistry } from '@siteborne/verification';
 import { X402ServiceResultRepository } from '../repositories/d1/x402-quotes';
 import { receiptPersistenceIdempotencyKey } from '../continuation/idempotency-keys';
-import { PccResultArtifactStore, SELF_VERIFYING_PCC_VNEXT } from '../results/pcc-result-artifact';
+import {
+  PccResultArtifactStore,
+  SELF_VERIFYING_PCC_VNEXT,
+  validateGovernedVNextPcc,
+} from '../results/pcc-result-artifact';
 import type {
   PaidContinuationWorkflowDependencies,
   PaidContinuationWorkflowHostEnv,
@@ -104,6 +109,26 @@ const ROUTE_CONFIG_BUILDERS: Record<
       },
       env.DB
     ),
+  'web_context_verified.v3': (env) =>
+    buildWebContextV2CdpProductionRouteConfig(
+      {
+        PAID_RECEIPT_SIGNING_PRIVATE_KEY: env.PAID_RECEIPT_SIGNING_PRIVATE_KEY,
+        PAID_RECEIPT_SIGNING_KEY_ID: env.PAID_RECEIPT_SIGNING_KEY_ID,
+        SELLER_WALLET_ADDRESS: env.SELLER_WALLET_ADDRESS,
+        CDP_API_KEY_ID: env.CDP_API_KEY_ID,
+        CDP_API_KEY_SECRET: env.CDP_API_KEY_SECRET,
+        PAYMENT_ENVIRONMENT: env.PAYMENT_ENVIRONMENT,
+        PRODUCTION_ENABLED: env.PRODUCTION_ENABLED,
+        HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP: env.HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP,
+        PRODUCTION_CDP_CREDENTIALS_APPROVED: env.PRODUCTION_CDP_CREDENTIALS_APPROVED,
+        MODAL_WEBCTX_ENDPOINT_URL: env.MODAL_WEBCTX_ENDPOINT_URL,
+        MODAL_WEBCTX_PROXY_KEY: env.MODAL_WEBCTX_PROXY_KEY,
+        MODAL_WEBCTX_PROXY_SECRET: env.MODAL_WEBCTX_PROXY_SECRET,
+      },
+      env.DB,
+      undefined,
+      'web_context_verified.v3'
+    ),
   'verify_agent_output.v2': (env) =>
     buildVerifyAgentOutputV2CdpProductionRouteConfig(
       {
@@ -140,6 +165,26 @@ const ROUTE_CONFIG_BUILDERS: Record<
         MODAL_WEBCTX_PROXY_SECRET: env.MODAL_WEBCTX_PROXY_SECRET,
       },
       env.DB
+    ),
+  'company_evidence_graph.v3': (env) =>
+    buildCompanyEvidenceGraphV2CdpProductionRouteConfig(
+      {
+        PAID_RECEIPT_SIGNING_PRIVATE_KEY: env.PAID_RECEIPT_SIGNING_PRIVATE_KEY,
+        PAID_RECEIPT_SIGNING_KEY_ID: env.PAID_RECEIPT_SIGNING_KEY_ID,
+        SELLER_WALLET_ADDRESS: env.SELLER_WALLET_ADDRESS,
+        CDP_API_KEY_ID: env.CDP_API_KEY_ID,
+        CDP_API_KEY_SECRET: env.CDP_API_KEY_SECRET,
+        PAYMENT_ENVIRONMENT: env.PAYMENT_ENVIRONMENT,
+        PRODUCTION_ENABLED: env.PRODUCTION_ENABLED,
+        HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP: env.HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP,
+        PRODUCTION_CDP_CREDENTIALS_APPROVED: env.PRODUCTION_CDP_CREDENTIALS_APPROVED,
+        MODAL_WEBCTX_ENDPOINT_URL: env.MODAL_WEBCTX_ENDPOINT_URL,
+        MODAL_WEBCTX_PROXY_KEY: env.MODAL_WEBCTX_PROXY_KEY,
+        MODAL_WEBCTX_PROXY_SECRET: env.MODAL_WEBCTX_PROXY_SECRET,
+      },
+      env.DB,
+      undefined,
+      'company_evidence_graph.v3'
     ),
   // SUN-1222D-PRE-WORKFLOW-DISPATCH-FIX — genuinely new. Reuses the real
   // `document_evidence_json.v2` production composition (SUN-1222B-S3R)
@@ -205,51 +250,68 @@ export const __TEST_ONLY_SUPPORTED_SERVICES: ReadonlySet<string> = SUPPORTED_SER
  * the same closing structural gate the pre-Workflow request-local path
  * always applied before ever reaching a settle call.
  */
-export const validateExecutorPcc: PccValidator = async (outcome: ExecutorOutcome) => {
-  if (outcome.result.result_class !== 'success') {
-    return {
-      valid: false,
-      reason: outcome.result.failure?.code ?? outcome.result.result_class,
-    };
-  }
-  if (!outcome.result.receipt) {
-    return { valid: false, reason: 'missing_receipt' };
-  }
-  // Typed proof state must accompany the receipt: persistLinkEvidence never
-  // reads signing_key_id/signature off the response body, so a success without
-  // it is rejected here -- BEFORE settlement -- rather than after.
-  if (!outcome.linkEvidenceInputs) {
-    return { valid: false, reason: 'missing_link_evidence_inputs' };
-  }
-  const representation = outcome.resultRepresentation;
-  if (outcome.result.service_id?.endsWith('.v3') && !representation) {
-    return { valid: false, reason: 'missing_vnext_result_representation' };
-  }
-  if (representation?.format === SELF_VERIFYING_PCC_VNEXT && 'reference' in representation) {
-    if (representation.reference.content_hash !== outcome.linkEvidenceInputs.buyerReceiptHash) {
+export function buildExecutorPccValidator(keyRegistry?: KeyRegistry): PccValidator {
+  return async (outcome: ExecutorOutcome, resolvedPcc?: Readonly<Record<string, unknown>>) => {
+    if (outcome.result.result_class !== 'success') {
+      return {
+        valid: false,
+        reason: outcome.result.failure?.code ?? outcome.result.result_class,
+      };
+    }
+    if (!outcome.result.receipt) {
+      return { valid: false, reason: 'missing_receipt' };
+    }
+    // Typed proof state must accompany the receipt: persistLinkEvidence never
+    // reads signing_key_id/signature off the response body, so a success without
+    // it is rejected here -- BEFORE settlement -- rather than after.
+    if (!outcome.linkEvidenceInputs) {
+      return { valid: false, reason: 'missing_link_evidence_inputs' };
+    }
+    const representation = outcome.resultRepresentation;
+    if (outcome.result.service_id?.endsWith('.v3') && !representation) {
+      return { valid: false, reason: 'missing_vnext_result_representation' };
+    }
+    if (
+      !resolvedPcc &&
+      representation?.format === SELF_VERIFYING_PCC_VNEXT &&
+      'reference' in representation
+    ) {
+      if (representation.reference.content_hash !== outcome.linkEvidenceInputs.buyerReceiptHash) {
+        return { valid: false, reason: 'link_evidence_hash_mismatch' };
+      }
+      return {
+        valid: true,
+        pccReference: representation.reference,
+        linkEvidenceInputs: outcome.linkEvidenceInputs,
+      };
+    }
+    const candidateBody =
+      resolvedPcc ??
+      (representation?.format === SELF_VERIFYING_PCC_VNEXT && 'body' in representation
+        ? representation.body
+        : outcome.result.receipt);
+    // The typed buyer-receipt hash must describe exactly the representation this
+    // Workflow releases; a mismatch would persist link evidence for a different body.
+    if (outcome.linkEvidenceInputs.buyerReceiptHash !== (await hashPaymentObject(candidateBody))) {
       return { valid: false, reason: 'link_evidence_hash_mismatch' };
+    }
+    if (outcome.result.service_id?.endsWith('.v3')) {
+      const validationFailure = await validateGovernedVNextPcc(
+        outcome.result.service_id,
+        candidateBody as Readonly<Record<string, unknown>>,
+        keyRegistry
+      );
+      if (validationFailure) return { valid: false, reason: validationFailure };
     }
     return {
       valid: true,
-      pccReference: representation.reference,
+      pcc: candidateBody,
       linkEvidenceInputs: outcome.linkEvidenceInputs,
     };
-  }
-  const candidateBody =
-    representation?.format === SELF_VERIFYING_PCC_VNEXT && 'body' in representation
-      ? representation.body
-      : outcome.result.receipt;
-  // The typed buyer-receipt hash must describe exactly the representation this
-  // Workflow releases; a mismatch would persist link evidence for a different body.
-  if (outcome.linkEvidenceInputs.buyerReceiptHash !== (await hashPaymentObject(candidateBody))) {
-    return { valid: false, reason: 'link_evidence_hash_mismatch' };
-  }
-  return {
-    valid: true,
-    pcc: candidateBody,
-    linkEvidenceInputs: outcome.linkEvidenceInputs,
   };
-};
+}
+
+export const validateExecutorPcc = buildExecutorPccValidator();
 
 /** Real `JobStatePersistence` — thin adapter over the two real D1
  * repositories the pre-Workflow request-local path already used for
@@ -442,7 +504,7 @@ export async function buildProductionPaidContinuationWorkflowDependencies(
     evidenceMode: 'production',
     executor: routeConfig.executor,
     resultArtifacts,
-    validatePcc: validateExecutorPcc,
+    validatePcc: buildExecutorPccValidator(routeConfig.pccKeyRegistry),
     settlement: {
       repository: paymentAttempts,
       evidenceProvider: routeConfig.evidenceProvider,

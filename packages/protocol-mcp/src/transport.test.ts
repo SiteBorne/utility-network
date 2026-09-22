@@ -115,7 +115,7 @@ async function readJsonRpcResult(response: Response): Promise<{
 }
 
 describe('SITEBORNE MCP 2026-07-28 Hono transport', () => {
-  it('the pure legacy definition builder reproduces the current six tools/list definitions', async () => {
+  it('the pure legacy definition builder reproduces the current ten tools/list definitions', async () => {
     const options: CreateSiteborneMcpOptions = {
       quote: {
         network: 'eip155:84532',
@@ -263,7 +263,7 @@ describe('SITEBORNE MCP 2026-07-28 Hono transport', () => {
     expect(createSiteborneMcpServer).not.toThrow();
   });
 
-  it('lists exactly the six frozen SITEBORNE tools through the official modern client', async () => {
+  it('lists the six stable tools plus four explicit v3 candidate tools through the official modern client', async () => {
     const { app } = createFixtureApp();
     const client = await connectClient(app);
     clients.push(client);
@@ -271,7 +271,7 @@ describe('SITEBORNE MCP 2026-07-28 Hono transport', () => {
     const listed = await client.listTools();
 
     expect(listed.tools.map((tool) => tool.name).sort()).toEqual([...MCP_TOOL_NAMES].sort());
-    expect(listed.tools).toHaveLength(6);
+    expect(listed.tools).toHaveLength(10);
   });
 
   it.each(SERVICE_TOOL_MATRIX)(
@@ -301,6 +301,109 @@ describe('SITEBORNE MCP 2026-07-28 Hono transport', () => {
         expect.objectContaining({ protocol_version: MCP_PROTOCOL_VERSION }),
         undefined
       );
+    }
+  );
+
+  it.each([
+    ['siteborne_build_company_evidence_graph_v3_candidate', 'company_evidence_graph.v3'],
+    ['siteborne_retrieve_verified_web_context_v3_candidate', 'web_context_verified.v3'],
+  ] as const)(
+    'accepts the full self-verifying PCC from %s through the real MCP SDK when Release 3 is selected',
+    async (toolName, serviceId) => {
+      const boundary = createBoundary();
+      const app = createSiteborneMcpHonoApp({
+        serviceBoundary: boundary,
+        releaseSelection: '3.0.0-public-candidate',
+        allowedHosts: ['test.local'],
+        allowedOrigins: ['test.local'],
+      });
+      const client = await connectClient(app);
+      clients.push(client);
+
+      const result = await client.callTool({
+        name: toolName,
+        arguments: frozenInputExample(serviceId) as Record<string, unknown>,
+      });
+
+      expect(result.isError).not.toBe(true);
+      expect(result.structuredContent).toEqual(frozenOutputExample(serviceId));
+      expect(result.structuredContent).toMatchObject({
+        pcc_version: '2.0.0',
+        contract: { service_id: serviceId, service_version: 'v3' },
+      });
+    }
+  );
+
+  it('rejects a v3 quote when the governed candidate release is not selected', async () => {
+    const { app } = createFixtureApp();
+    const client = await connectClient(app);
+    clients.push(client);
+    const result = await client.callTool({
+      name: 'siteborne_get_quote',
+      arguments: {
+        service_id: 'company_evidence_graph.v3',
+        scheme: 'exact',
+        input: purchasableInputExample('company_evidence_graph.v3'),
+      },
+    });
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result.content)).toContain('candidate_release_not_selected');
+  });
+
+  it('quotes a selected public v3 service with v3 / contract 3.0.0 identity', async () => {
+    const app = createSiteborneMcpHonoApp({
+      releaseSelection: '3.0.0-public-candidate',
+      quote: {
+        network: 'eip155:84532',
+        asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7c',
+        payee: '0x7f44a2dd237938F18632d4CcA40f4c690295E6E1',
+        now: () => new Date('2026-08-10T12:00:00.000Z'),
+      },
+      allowedHosts: ['test.local'],
+      allowedOrigins: ['test.local'],
+    });
+    const client = await connectClient(app);
+    clients.push(client);
+    const result = await client.callTool({
+      name: 'siteborne_get_quote',
+      arguments: {
+        service_id: 'company_evidence_graph.v3',
+        scheme: 'exact',
+        input: purchasableInputExample('company_evidence_graph.v3'),
+      },
+    });
+    expect(result.isError).not.toBe(true);
+    expect(result.structuredContent).toMatchObject({
+      service_id: 'company_evidence_graph.v3',
+      service_version: 'v3',
+      contract_release: '3.0.0',
+    });
+  });
+
+  it.each([
+    ['siteborne_extract_document_evidence_json_v3_candidate', 'document_evidence_json.v3'],
+    ['siteborne_verify_agent_output_v3_candidate', 'verify_agent_output.v3'],
+  ] as const)(
+    'blocks buyer-authorized candidate %s before the execution boundary even when Release 3 is selected',
+    async (toolName, serviceId) => {
+      const boundary = createBoundary();
+      const app = createSiteborneMcpHonoApp({
+        serviceBoundary: boundary,
+        releaseSelection: '3.0.0-public-candidate',
+        allowedHosts: ['test.local'],
+        allowedOrigins: ['test.local'],
+      });
+      const client = await connectClient(app);
+      clients.push(client);
+
+      const result = await client.callTool({
+        name: toolName,
+        arguments: frozenInputExample(serviceId) as Record<string, unknown>,
+      });
+
+      expect(result.isError).toBe(true);
+      expect(JSON.stringify(result.content)).toContain('result_authorization_required');
+      expect(boundary.execute).not.toHaveBeenCalled();
     }
   );
 
@@ -619,6 +722,7 @@ describe('SITEBORNE MCP 2026-07-28 Hono transport', () => {
       expect.objectContaining({
         server_name: MCP_SERVER_NAME,
         protocol_version: MCP_PROTOCOL_VERSION,
+        tools: 10,
         production_ready: false,
         production_enabled: false,
         services: expect.objectContaining({
@@ -631,7 +735,7 @@ describe('SITEBORNE MCP 2026-07-28 Hono transport', () => {
       })
     );
     expect(Object.keys((result.structuredContent as { services: object }).services)).toHaveLength(
-      4
+      8
     );
   });
 
@@ -1025,7 +1129,7 @@ describe('SITEBORNE MCP 2026-07-28 Hono transport', () => {
 
       const listed = await client.listTools();
 
-      expect(listed.tools).toHaveLength(6);
+      expect(listed.tools).toHaveLength(10);
     });
   });
 

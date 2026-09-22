@@ -46,4 +46,8 @@ export const SITEBORNE_SERVICE_IDS = [
   'web_context_verified.v2',
   'document_evidence_json.v2',
   'verify_agent_output.v2',
+  'company_evidence_graph.v3',
+  'web_context_verified.v3',
+  'document_evidence_json.v3',
+  'verify_agent_output.v3',
 ] as const satisfies readonly SiteborneServiceId[];

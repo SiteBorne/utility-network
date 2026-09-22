@@ -58,13 +58,6 @@ async function canonicalHash(value: unknown): Promise<string> {
   return contentHash(canonicalize(value));
 }
 
-function asRecord(value: unknown, label: string): Record<string, unknown> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error(`${label}_must_be_object`);
-  }
-  return value as Record<string, unknown>;
-}
-
 function serviceExtensionKey(pcc: SelfVerifyingPcc): string {
   const keys = Object.keys(pcc.extensions).filter((key) => key !== PCC_PROOF_NAMESPACE);
   if (keys.length !== 1) throw new Error(`expected_one_service_extension_got_${keys.length}`);

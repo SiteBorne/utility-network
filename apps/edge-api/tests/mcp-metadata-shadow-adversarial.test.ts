@@ -81,7 +81,7 @@ describe('MCP metadata shadow_compare -- adversarial VCM behavior never reaches 
     await new Promise((resolve) => setTimeout(resolve, 20));
 
     expect(response.status).toBe(200);
-    expect(tools).toHaveLength(6); // real, unaffected by the mutated shadow
+    expect(tools).toHaveLength(10); // real, unaffected by the mutated shadow
 
     const lines = [...logSpy.mock.calls, ...errorSpy.mock.calls]
       .map((call) => {
@@ -104,7 +104,7 @@ describe('MCP metadata shadow_compare -- adversarial VCM behavior never reaches 
     spy.mockRestore();
     logSpy.mockRestore();
     errorSpy.mockRestore();
-  });
+  }, 15_000);
 
   it('a throwing VCM tool projection never changes the served response', async () => {
     vi.resetModules();
@@ -120,7 +120,7 @@ describe('MCP metadata shadow_compare -- adversarial VCM behavior never reaches 
     await new Promise((resolve) => setTimeout(resolve, 20));
 
     expect(response.status).toBe(200);
-    expect(tools).toHaveLength(6);
+    expect(tools).toHaveLength(10);
 
     spy.mockRestore();
     errorSpy.mockRestore();
@@ -140,7 +140,7 @@ describe('MCP metadata shadow_compare -- adversarial VCM behavior never reaches 
     await new Promise((resolve) => setTimeout(resolve, 20));
 
     expect(response.status).toBe(200);
-    expect(tools).toHaveLength(6);
+    expect(tools).toHaveLength(10);
 
     spy.mockRestore();
     errorSpy.mockRestore();
@@ -163,7 +163,7 @@ describe('MCP metadata shadow_compare -- adversarial VCM behavior never reaches 
     await new Promise((resolve) => setTimeout(resolve, 20));
 
     expect(response.status).toBe(200);
-    expect(tools).toHaveLength(6);
+    expect(tools).toHaveLength(10);
 
     spy.mockRestore();
   });
@@ -190,7 +190,7 @@ describe('MCP metadata vcm_primary_compare -- fail-safe definition selection', (
     });
 
     expect(response.status).toBe(200);
-    expect(tools).toHaveLength(6);
+    expect(tools).toHaveLength(10);
     expect(tools[0]?.description).not.toContain('mismatch');
     expect(tools.map((tool) => tool.name)).toEqual([...protocolMcp.MCP_TOOL_NAMES]);
     const lines = structuredLines(errorSpy);
@@ -218,7 +218,7 @@ describe('MCP metadata vcm_primary_compare -- fail-safe definition selection', (
     });
 
     expect(response.status).toBe(200);
-    expect(tools).toHaveLength(6);
+    expect(tools).toHaveLength(10);
     expect(
       structuredLines(errorSpy).some(
         (line) => line.event === 'metadata_projection_fallback_total' && line.reason === 'projector'
@@ -245,7 +245,7 @@ describe('MCP metadata vcm_primary_compare -- fail-safe definition selection', (
     });
 
     expect(response.status).toBe(200);
-    expect(tools).toHaveLength(6);
+    expect(tools).toHaveLength(10);
     expect(
       structuredLines(errorSpy).some(
         (line) =>
@@ -270,7 +270,7 @@ describe('MCP metadata vcm_primary_compare -- fail-safe definition selection', (
     });
 
     expect(response.status).toBe(200);
-    expect(tools).toHaveLength(6);
+    expect(tools).toHaveLength(10);
     expect(
       structuredLines(errorSpy).some(
         (line) =>
@@ -334,7 +334,7 @@ describe('MCP metadata vcm_primary_compare -- fail-safe definition selection', (
     });
 
     expect(response.status).toBe(200);
-    expect(tools).toHaveLength(6);
+    expect(tools).toHaveLength(10);
 
     lifecycleSpy.mockRestore();
     comparisonSpy.mockRestore();

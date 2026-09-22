@@ -224,7 +224,11 @@ export function createInProcessWorkflowBinding(
                 quote_id: `quote_${jobId}`,
                 requirement_id: `req_${jobId}`,
                 service_id: metadata.service as never,
-                service_version: metadata.service.endsWith('.v2') ? 'v2' : 'v1',
+                service_version: metadata.service.endsWith('.v3')
+                  ? 'v3'
+                  : metadata.service.endsWith('.v2')
+                    ? 'v2'
+                    : 'v1',
                 request_input_hash: await hashPaymentObject({ jobId }),
                 job_id: jobId,
                 service_output_hash: capturedOutcome.result.output_hash ?? '',

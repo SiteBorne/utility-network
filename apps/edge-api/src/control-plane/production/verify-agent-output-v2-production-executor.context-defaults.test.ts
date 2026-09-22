@@ -127,9 +127,7 @@ describe('SUN-1216 residual adjudication: buildServiceContext fixture-default re
 
   it('SUN-1221C: the second audited call site (web_context_verified.v2) also supplies clock/artifact_store/audit as unconditional, non-nullable expressions', () => {
     const source = readFileSync(WEB_CONTEXT_EXECUTOR_PATH, 'utf8');
-    const callMatch = source.match(
-      /buildServiceContext\('web_context_verified\.v2',\s*\{([\s\S]*?)\}\s*\);/
-    );
+    const callMatch = source.match(/buildServiceContext\(serviceId,\s*\{([\s\S]*?)\}\s*\);/);
     expect(callMatch).not.toBeNull();
     const callBody = callMatch![1];
 
@@ -154,13 +152,12 @@ describe('SUN-1216 residual adjudication: buildServiceContext fixture-default re
       source,
       'clock must be bound via an unconditional, non-nullable nullary-call const declaration'
     ).toMatch(/const clock = [a-zA-Z0-9_]+\(\);/);
+    expect(source).toContain("serviceId: 'web_context_verified.v2' | 'web_context_verified.v3'");
   });
 
   it('SUN-1222B-S3R: the third audited call site (company_evidence_graph.v2) also supplies clock/artifact_store/audit as unconditional, non-nullable expressions', () => {
     const source = readFileSync(COMPANY_EVIDENCE_EXECUTOR_PATH, 'utf8');
-    const callMatch = source.match(
-      /buildServiceContext\('company_evidence_graph\.v2',\s*\{([\s\S]*?)\}\s*\);/
-    );
+    const callMatch = source.match(/buildServiceContext\(serviceId,\s*\{([\s\S]*?)\}\s*\);/);
     expect(callMatch).not.toBeNull();
     const callBody = callMatch![1];
 
@@ -183,6 +180,9 @@ describe('SUN-1216 residual adjudication: buildServiceContext fixture-default re
       source,
       'clock must be bound via an unconditional, non-nullable nullary-call const declaration'
     ).toMatch(/const clock = [a-zA-Z0-9_]+\(\);/);
+    expect(source).toContain(
+      "serviceId: 'company_evidence_graph.v2' | 'company_evidence_graph.v3'"
+    );
   });
 
   it('SUN-1222B-S3R: the fourth audited call site (document_evidence_json.v2) also supplies clock/artifact_store/audit as unconditional, non-nullable expressions -- artifact_store here is genuinely used (unlike the other three), so it is a real call taking the injected R2-backed store as its one argument, not a nullary stub', () => {

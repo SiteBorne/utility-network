@@ -57,6 +57,8 @@ export const MCP_X402_SERVICE_PATHS: Readonly<Partial<Record<SiteborneServiceId,
   'web_context_verified.v2': '/v2/web/context',
   'document_evidence_json.v2': '/v2/document/evidence-json',
   'verify_agent_output.v2': '/v2/verify/agent-output',
+  'company_evidence_graph.v3': '/v3/company/evidence-graph',
+  'web_context_verified.v3': '/v3/web/context',
 };
 
 /** A 402/error REST response body -- code/message/error only. The 200

@@ -44,6 +44,10 @@ import { companyEvidenceGraphV2CdpProductionRoute } from '../control-plane/route
 import { webContextVerifiedV2CdpProductionRoute } from '../control-plane/routes/production-web-context-v2-cdp-route';
 import { documentEvidenceJsonV2CdpProductionRoute } from '../control-plane/routes/production-document-evidence-v2-cdp-route';
 import { verifyAgentOutputV2CdpProductionRoute } from '../control-plane/routes/production-verify-v2-cdp-route';
+import {
+  companyEvidenceGraphV3CandidateRoute,
+  webContextVerifiedV3CandidateRoute,
+} from '../control-plane/routes/production-public-v3-candidate-routes';
 
 // SUN-1222C-MCP-PAYMENT-DESIGN-CORRECTION (Architecture C): the ONLY place
 // the MCP payment adapter is wired to real production route functions.
@@ -59,6 +63,8 @@ const MCP_X402_PRODUCTION_HANDLERS: Readonly<
   'web_context_verified.v2': webContextVerifiedV2CdpProductionRoute,
   'document_evidence_json.v2': documentEvidenceJsonV2CdpProductionRoute,
   'verify_agent_output.v2': verifyAgentOutputV2CdpProductionRoute,
+  'company_evidence_graph.v3': companyEvidenceGraphV3CandidateRoute,
+  'web_context_verified.v3': webContextVerifiedV3CandidateRoute,
 };
 
 const MCP_ALLOWED_HOSTS = [
@@ -290,6 +296,10 @@ export async function mcpRoute(context: Context<{ Bindings: Env }>): Promise<Res
       new URL(context.req.raw.url).origin
     ),
   };
+
+  if (context.env?.RESULT_CONTRACT_RELEASE_SELECTION === '3.0.0-public-candidate') {
+    options.releaseSelection = '3.0.0-public-candidate';
+  }
 
   if (context.env?.SELLER_WALLET_ADDRESS) {
     // SUN-1222C-MCP-PRE-CUTOVER-REMEDIATION: previously hardcoded

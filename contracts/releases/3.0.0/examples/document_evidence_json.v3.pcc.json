@@ -1,0 +1,259 @@
+{
+  "pcc_version": "2.0.0",
+  "job_id": "job_9f31c531972e77f3b9a3b943",
+  "contract": {
+    "service_id": "document_evidence_json.v3",
+    "service_version": "v3",
+    "input_hash": "sha256:27ede9ab1f67f1c76064cd90399ba23ad797187c3d9fb63e3b48875644ed8801",
+    "input_schema_hash": "sha256:19e64c92f088ed8b7a45eef561c5426bb59ce5cc3576b85482aded4f620e57ba",
+    "output_schema_hash": "sha256:058e6d50796d7adffc5deedd5b96679dcff78d98b77c022c06430885546aeff7",
+    "quote_id": "qte_c9479070da83a44fdb6d5b6a",
+    "mode": "offline_verification",
+    "currency": "USD",
+    "minimum_quality": 0.8,
+    "freshness_seconds": 86400,
+    "issued_at": "2026-09-01T12:00:00.000Z",
+    "expires_at": "2026-09-02T12:00:00.000Z",
+    "idempotency_key": "idk_aaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "subject": {
+    "type": "document",
+    "canonical_name": "doc/char.pdf",
+    "identifiers": {
+      "artifact_id": "doc/char.pdf"
+    }
+  },
+  "claims": [
+    {
+      "claim_id": "clm_5d6a6a1738f33dce9612e019",
+      "predicate": "page_1_text",
+      "value": "SUN-0400A Fixture: Native Text Document\nThis page contains ordinary extractable native PDF text.\nIt exists solely to exercise the native-text extraction path.",
+      "confidence": 0.99,
+      "evidence_ids": ["evd_ec8e7aebdedd69ce5c5453af"],
+      "materiality": "material",
+      "verification_status": "verified"
+    },
+    {
+      "claim_id": "clm_5c1def502c778af9d3a128b1",
+      "predicate": "page_count",
+      "value": 1,
+      "confidence": 1,
+      "evidence_ids": ["evd_ec8e7aebdedd69ce5c5453af"],
+      "materiality": "material",
+      "verification_status": "verified"
+    }
+  ],
+  "evidence": [
+    {
+      "evidence_id": "evd_ec8e7aebdedd69ce5c5453af",
+      "source_uri": "artifact://doc/char.pdf",
+      "retrieved_at": "2026-09-01T12:00:00.000Z",
+      "content_hash": "sha256:dc4fc283375720fef924ecf5741491f865926a1329994424cfd69d7b5429ea01",
+      "media_type": "application/pdf",
+      "locator": {
+        "type": "page_region",
+        "value": "page:1"
+      },
+      "accessibility_status": "accessible",
+      "transformation_history": [],
+      "authorization_classification": "buyer_authorized",
+      "freshness_status": "fresh"
+    }
+  ],
+  "completeness": {
+    "requested_fields": 1,
+    "populated_fields": 1,
+    "supported_fields": 1,
+    "score": 1,
+    "missing_fields": [],
+    "unsupported_fields": [],
+    "stale_fields": [],
+    "vector": [
+      {
+        "dimension": "pages",
+        "requested": 1,
+        "populated": 1,
+        "supported": 1,
+        "score": 1
+      }
+    ]
+  },
+  "provenance": {
+    "routes": [
+      {
+        "type": "direct",
+        "provider": "service-runtime:document-evidence-json",
+        "version": "0.1.0"
+      }
+    ],
+    "providers": [
+      {
+        "name": "service-runtime:document-evidence-json",
+        "version": "0.1.0",
+        "capabilities": []
+      }
+    ],
+    "tools": {},
+    "models": [],
+    "software_versions": {
+      "service-runtime": "0.1.0"
+    },
+    "policy_versions": {
+      "verification": "1.0.0"
+    },
+    "transformations": [],
+    "cache_provenance": {
+      "enabled": false,
+      "hit": false
+    },
+    "execution_environment": {
+      "runtime": "node",
+      "version": "v24.18.1",
+      "platform": "darwin"
+    },
+    "verification_routes": []
+  },
+  "verification": {
+    "schema_valid": true,
+    "material_claims_supported": true,
+    "evidence_accessibility": 1,
+    "freshness": 1,
+    "completeness": 1,
+    "cross_source_agreement": 1,
+    "provenance_valid": true,
+    "prompt_injection_result": {
+      "checked": true,
+      "result": "clean"
+    },
+    "deterministic_failures": [],
+    "verifier_versions": {
+      "schema_verifier": "1.0.0",
+      "evidence_accessibility_verifier": "1.0.0",
+      "freshness_verifier": "1.0.0",
+      "prompt_injection_verifier": "1.0.0",
+      "provenance_verifier": "1.0.0",
+      "claim_evidence_verifier": "1.0.0",
+      "completeness_verifier": "1.0.0",
+      "cross_source_verifier": "1.0.0"
+    },
+    "policy": "pol_000000000000000000000000",
+    "decision": "pass",
+    "score": 1,
+    "failed_requirements": []
+  },
+  "extensions": {
+    "net.siteborne.document-evidence.v1": {
+      "media_type_confirmed": "application/pdf",
+      "size_bytes_confirmed": 1530,
+      "total_pages": 1,
+      "processed_pages": 1,
+      "page_classifications": [
+        {
+          "page_number": 1,
+          "classification": "native_text",
+          "extraction_method": "native"
+        }
+      ],
+      "text_blocks": [
+        {
+          "page": 1,
+          "text": "SUN-0400A Fixture: Native Text Document\nThis page contains ordinary extractable native PDF text.\nIt exists solely to exercise the native-text extraction path."
+        }
+      ]
+    },
+    "net.siteborne.verification-proof.v1": {
+      "proof_version": "1.0.0",
+      "receipt": {
+        "domain": "SITEBORNE-PCC-VERIFICATION-PROOF-V1",
+        "proof_version": "1.0.0",
+        "receipt_version": "2.0.0",
+        "job_id": "job_9f31c531972e77f3b9a3b943",
+        "request_id": "req-fixed-0001",
+        "service_id": "document_evidence_json.v3",
+        "service_version": "v3",
+        "contract_release": "3.0.0",
+        "pcc_schema_release": "2.0.0",
+        "pcc_schema_hash": "sha256:9a93214ebd851f2f7dfa86cd9cec4b81d83d5e78aa857f380fd579ada27c00a5",
+        "input_hash": "sha256:27ede9ab1f67f1c76064cd90399ba23ad797187c3d9fb63e3b48875644ed8801",
+        "output_schema_hash": "sha256:058e6d50796d7adffc5deedd5b96679dcff78d98b77c022c06430885546aeff7",
+        "output_hash": "sha256:742b74b909817949a4a50427e9f1269f7a2fe71a1af7d083d5951dc3bda8c781",
+        "pcc_document_hash": "sha256:062d8b5b7152b9d9d8eee78c37905eda8b758f292b17200a907b6363587fdbcc",
+        "evidence_hash": "sha256:0d13032be973dc1f618edb9bb12e79014779dfc7f454a1fb164b512200fe96e4",
+        "policy_hash": "sha256:def2b52c0b6c5598cb7e95d4d79b3dfe472bb9375edf2330fe8e2ca710de1401",
+        "verifier_set_hash": "sha256:45680d2da5db5213dcfce37be636b38e3955944bfb4a1ae171892ad416393e5d",
+        "decision": "pass",
+        "completeness": 1,
+        "verification_mode": "standard",
+        "limitations": [],
+        "signing_key_id": "kid_aaaaaaaaaaaaaaaaaaaaaaaa",
+        "canonicalization_algorithm": "RFC8785-JCS",
+        "signature_algorithm": "Ed25519",
+        "issued_at": "2026-09-01T12:00:00.000Z",
+        "receipt_id": "rcpt_33f12491f8773aac6c5cef6f",
+        "signature": "4Lm2cFRjj3_aOz5FgkOFQ6fbtUI1sM3DrBNCgFP9C2xVrEHw2f-uA9tNfTbEbBf4t2mUTvbvrWVupSZLkeQ2Ag"
+      },
+      "verification_material": {
+        "verifier_results": [
+          {
+            "verifier_id": "schema_verifier",
+            "status": "pass",
+            "findings": [],
+            "failure_codes": []
+          },
+          {
+            "verifier_id": "evidence_accessibility_verifier",
+            "status": "pass",
+            "findings": [],
+            "failure_codes": []
+          },
+          {
+            "verifier_id": "freshness_verifier",
+            "status": "pass",
+            "findings": [],
+            "failure_codes": []
+          },
+          {
+            "verifier_id": "prompt_injection_verifier",
+            "status": "pass",
+            "findings": [],
+            "failure_codes": []
+          },
+          {
+            "verifier_id": "provenance_verifier",
+            "status": "pass",
+            "findings": [],
+            "failure_codes": []
+          },
+          {
+            "verifier_id": "claim_evidence_verifier",
+            "status": "pass",
+            "findings": [],
+            "failure_codes": []
+          },
+          {
+            "verifier_id": "completeness_verifier",
+            "status": "pass",
+            "findings": [],
+            "failure_codes": []
+          },
+          {
+            "verifier_id": "cross_source_verifier",
+            "status": "pass",
+            "findings": [],
+            "failure_codes": []
+          }
+        ]
+      }
+    }
+  },
+  "receipt": {
+    "output_hash": "sha256:742b74b909817949a4a50427e9f1269f7a2fe71a1af7d083d5951dc3bda8c781",
+    "canonicalization_algorithm": "RFC8785-JCS",
+    "policy_hash": "sha256:def2b52c0b6c5598cb7e95d4d79b3dfe472bb9375edf2330fe8e2ca710de1401",
+    "schema_hash": "sha256:9a93214ebd851f2f7dfa86cd9cec4b81d83d5e78aa857f380fd579ada27c00a5",
+    "signature_algorithm": "Ed25519",
+    "signing_key_id": "kid_aaaaaaaaaaaaaaaaaaaaaaaa",
+    "signature": "4Lm2cFRjj3_aOz5FgkOFQ6fbtUI1sM3DrBNCgFP9C2xVrEHw2f-uA9tNfTbEbBf4t2mUTvbvrWVupSZLkeQ2Ag",
+    "signed_at": "2026-09-01T12:00:00.000Z"
+  }
+}

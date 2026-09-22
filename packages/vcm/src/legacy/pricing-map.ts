@@ -30,18 +30,22 @@ const PRIMARY_TIER_KEY: Readonly<
   company_evidence_graph: {
     v1: 'company_evidence_graph',
     v2: 'company_evidence_graph_v2',
+    v3: 'company_evidence_graph_v2',
   },
   web_context_verified: {
     v1: 'web_context_verified_direct',
     v2: 'web_context_verified_direct_v2',
+    v3: 'web_context_verified_direct_v2',
   },
   document_evidence_json: {
     v1: 'document_evidence_json_native',
     v2: 'document_evidence_json_native_v2',
+    v3: 'document_evidence_json_native_v2',
   },
   verify_agent_output: {
     v1: 'verify_agent_output_standard',
     v2: 'verify_agent_output_standard_v2',
+    v3: 'verify_agent_output_standard_v2',
   },
 };
 

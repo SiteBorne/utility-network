@@ -1,0 +1,43 @@
+{
+  "service_id": "web_context_verified.v3",
+  "service_version": "v3",
+  "title": "Verified Web Context",
+  "description": "Fetches and verifies web content from direct HTTP requests or browser-rendered pages, extracting structured data with cryptographic proof of retrieval and content integrity.",
+  "capabilities": ["direct_fetch", "browser_rendered", "content_extraction", "structured_data"],
+  "input_schema_uri": "https://siteborne.net/schemas/services/web-context-input.schema.json",
+  "input_schema_hash": "sha256:d3b0762020d4cc1d1e846960ed978cf1237b1741f90213adabe8ed931c2845ea",
+  "output_schema_uri": "https://utility.siteborne.net/contracts/3.0.0/schemas/services/web-context-output.schema.json",
+  "output_schema_hash": "sha256:34e9ca4c55b071cfaa2f182ecac5d2513a8ec6a4f3c0a6d0cf0b7027eeab1319",
+  "pcc_version": "2.0.0",
+  "pricing_schemes": ["exact", "upto"],
+  "base_price": {
+    "amount": "0.008",
+    "currency": "USD"
+  },
+  "maximum_price": {
+    "amount": "0.008",
+    "currency": "USD"
+  },
+  "execution_mode": "async",
+  "maximum_input_bytes": 5242880,
+  "expected_latency_class": "variable",
+  "authorization_classification": "public",
+  "promotion_state": "executable_candidate",
+  "production_enabled": false,
+  "declared_limitations": [
+    "Direct fetch cannot execute JavaScript",
+    "Browser-rendered limited to static content extraction",
+    "Rate limits apply to external sites",
+    "No authentication or private content access"
+  ],
+  "protocols": {
+    "x402": "planned",
+    "mcp": "planned",
+    "a2a": "planned",
+    "nevermined": "planned",
+    "agentverse": "planned",
+    "coinbase_bazaar": "planned",
+    "mcp_registry": "planned"
+  },
+  "updated_at": "2026-09-21T19:00:00Z"
+}

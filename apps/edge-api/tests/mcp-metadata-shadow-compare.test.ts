@@ -68,12 +68,12 @@ function collectStructuredLogLines(spies: {
 }
 
 describe('MCP metadata projection mode -- default/absent', () => {
-  it('serves the real six tools and runs no VCM comparison when unset', async () => {
+  it('serves the real ten tools and runs no VCM comparison when unset', async () => {
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const { response, tools } = await callToolsList();
     expect(response.status).toBe(200);
-    expect(tools).toHaveLength(6);
+    expect(tools).toHaveLength(10);
     await new Promise((resolve) => setTimeout(resolve, 20));
     const lines = collectStructuredLogLines({ log: logSpy, error: errorSpy });
     expect(lines.some((l) => String(l.event).startsWith('metadata_projection_'))).toBe(false);
@@ -83,21 +83,12 @@ describe('MCP metadata projection mode -- default/absent', () => {
 });
 
 describe('MCP metadata projection mode -- shadow_compare', () => {
-  it('still serves the real six tools unchanged (VCM never becomes the served producer)', async () => {
+  it('still serves the real ten tools unchanged (VCM never becomes the served producer)', async () => {
     const { response, tools } = await callToolsList({
       MCP_METADATA_PROJECTION_MODE: 'shadow_compare',
     });
     expect(response.status).toBe(200);
-    expect(tools.map((t) => t.name).sort()).toEqual(
-      [
-        'siteborne_build_company_evidence_graph',
-        'siteborne_retrieve_verified_web_context',
-        'siteborne_extract_document_evidence_json',
-        'siteborne_verify_agent_output',
-        'siteborne_get_quote',
-        'siteborne_get_service_health',
-      ].sort()
-    );
+    expect(tools.map((t) => t.name).sort()).toEqual([...protocolMcp.MCP_TOOL_NAMES].sort());
   });
 
   it('computes and compares the VCM shadow tool list and records a match (real data already proven parity)', async () => {
@@ -106,7 +97,7 @@ describe('MCP metadata projection mode -- shadow_compare', () => {
     const observed = await callToolsList({ MCP_METADATA_PROJECTION_MODE: 'shadow_compare' });
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(observed.response.headers.get('content-type')).toContain('text/event-stream');
-    expect(observed.tools).toHaveLength(6);
+    expect(observed.tools).toHaveLength(10);
     const lines = collectStructuredLogLines({ log: logSpy, error: errorSpy });
     expect(
       lines.some((l) => l.event === 'metadata_projection_compare_total' && l.surface === 'mcp')
@@ -167,9 +158,9 @@ describe('MCP metadata projection mode -- shadow_compare', () => {
     }
   );
 
-  it('models the live application/json JSON-RPC tools/list representation and records a six-tool match without changing the served bytes', async () => {
+  it('models the live application/json JSON-RPC tools/list representation and records a ten-tool match without changing the served bytes', async () => {
     const baseline = await callToolsList();
-    expect(baseline.tools).toHaveLength(6);
+    expect(baseline.tools).toHaveLength(10);
     const jsonBody = JSON.stringify({
       jsonrpc: '2.0',
       id: 17,
@@ -191,7 +182,7 @@ describe('MCP metadata projection mode -- shadow_compare', () => {
     expect(observed.response.status).toBe(200);
     expect(observed.response.headers.get('content-type')).toContain('application/json');
     expect(observed.body).toBe(jsonBody);
-    expect(observed.tools).toHaveLength(6);
+    expect(observed.tools).toHaveLength(10);
     const lines = collectStructuredLogLines({ log: logSpy, error: errorSpy });
     expect(
       lines.some(
@@ -243,7 +234,7 @@ describe('MCP metadata projection mode -- shadow_compare', () => {
 });
 
 describe('MCP metadata projection mode -- vcm_primary_compare', () => {
-  it('vcm_primary_compare selects six matching VCM definitions before app construction', async () => {
+  it('vcm_primary_compare selects ten matching VCM definitions before app construction', async () => {
     const actualCreate = protocolMcp.createSiteborneMcpHonoApp;
     let selectedOptions: protocolMcp.CreateSiteborneMcpOptions | undefined;
     const createSpy = vi
@@ -259,7 +250,7 @@ describe('MCP metadata projection mode -- vcm_primary_compare', () => {
 
     expect(response.status).toBe(200);
     expect(createSpy).toHaveBeenCalledTimes(1);
-    expect(selectedOptions?.toolDefinitions).toHaveLength(6);
+    expect(selectedOptions?.toolDefinitions).toHaveLength(10);
     expect(tools.map(({ name, title, description }) => ({ name, title, description }))).toEqual(
       selectedOptions?.toolDefinitions?.map(({ name, title, description }) => ({
         name,
@@ -267,14 +258,7 @@ describe('MCP metadata projection mode -- vcm_primary_compare', () => {
         description,
       }))
     );
-    expect(tools.map((tool) => tool.name)).toEqual([
-      'siteborne_build_company_evidence_graph',
-      'siteborne_retrieve_verified_web_context',
-      'siteborne_extract_document_evidence_json',
-      'siteborne_verify_agent_output',
-      'siteborne_get_quote',
-      'siteborne_get_service_health',
-    ]);
+    expect(tools.map((tool) => tool.name)).toEqual([...protocolMcp.MCP_TOOL_NAMES]);
 
     createSpy.mockRestore();
   });
@@ -291,7 +275,7 @@ describe('MCP metadata projection mode -- vcm_primary_compare', () => {
 
     await callToolsList({ MCP_METADATA_PROJECTION_MODE: 'vcm_primary_compare' });
 
-    expect(selectedDefinitions).toHaveLength(6);
+    expect(selectedDefinitions).toHaveLength(10);
     for (const definition of selectedDefinitions ?? []) {
       expect(definition).not.toHaveProperty('handler');
       expect(definition).not.toHaveProperty('execute');
@@ -320,7 +304,7 @@ describe('MCP metadata projection mode -- vcm_primary_compare', () => {
     expect(observed.response.status).toBe(200);
     expect(observed.response.headers.get('content-type')).toContain('application/json');
     expect(observed.tools).toEqual(selectedDefinitions);
-    expect(observed.tools).toHaveLength(6);
+    expect(observed.tools).toHaveLength(10);
 
     createSpy.mockRestore();
   });
@@ -332,7 +316,7 @@ describe('MCP metadata projection mode -- vcm_primary_compare', () => {
 
     expect(observed.response.status).toBe(200);
     expect(observed.response.headers.get('content-type')).toContain('text/event-stream');
-    expect(observed.tools).toHaveLength(6);
+    expect(observed.tools).toHaveLength(10);
   });
 
   it('emits primary attempt success compare and match for every valid primary tools/list', async () => {
@@ -369,7 +353,7 @@ describe('MCP metadata projection mode -- unauthorized future modes refuse to se
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const { tools } = await callToolsList({ MCP_METADATA_PROJECTION_MODE: 'vcm_only' });
-    expect(tools).toHaveLength(6);
+    expect(tools).toHaveLength(10);
     await new Promise((resolve) => setTimeout(resolve, 20));
     const lines = collectStructuredLogLines({ log: logSpy, error: errorSpy });
     expect(lines.some((l) => l.event === 'metadata_projection_mode_not_yet_authorized')).toBe(true);

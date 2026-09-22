@@ -25,12 +25,16 @@
  */
 import companyEvidenceGraphV1 from '../../../registry/services/company_evidence_graph.v1.json';
 import companyEvidenceGraphV2 from '../../../registry/services/company_evidence_graph.v2.json';
+import companyEvidenceGraphV3 from '../../../registry/services/company_evidence_graph.v3.json';
 import documentEvidenceJsonV1 from '../../../registry/services/document_evidence_json.v1.json';
 import documentEvidenceJsonV2 from '../../../registry/services/document_evidence_json.v2.json';
+import documentEvidenceJsonV3 from '../../../registry/services/document_evidence_json.v3.json';
 import verifyAgentOutputV1 from '../../../registry/services/verify_agent_output.v1.json';
 import verifyAgentOutputV2 from '../../../registry/services/verify_agent_output.v2.json';
+import verifyAgentOutputV3 from '../../../registry/services/verify_agent_output.v3.json';
 import webContextVerifiedV1 from '../../../registry/services/web_context_verified.v1.json';
 import webContextVerifiedV2 from '../../../registry/services/web_context_verified.v2.json';
+import webContextVerifiedV3 from '../../../registry/services/web_context_verified.v3.json';
 import { legacyRegistryToVCM } from './legacy/import-registry';
 import type { LegacyRegistryServiceFile } from './legacy/types';
 import { project, type EffectiveMetadataView } from './effective-view';
@@ -44,12 +48,16 @@ import { emptyOverlay } from './runtime-overlay';
 const RUNTIME_REGISTRY_FILES: readonly LegacyRegistryServiceFile[] = [
   companyEvidenceGraphV1,
   companyEvidenceGraphV2,
+  companyEvidenceGraphV3,
   documentEvidenceJsonV1,
   documentEvidenceJsonV2,
+  documentEvidenceJsonV3,
   verifyAgentOutputV1,
   verifyAgentOutputV2,
+  verifyAgentOutputV3,
   webContextVerifiedV1,
   webContextVerifiedV2,
+  webContextVerifiedV3,
 ] as unknown as readonly LegacyRegistryServiceFile[];
 
 export const VCM_SCHEMA_VERSION = '0.3.0';

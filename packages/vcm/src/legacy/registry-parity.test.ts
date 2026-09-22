@@ -31,9 +31,9 @@ const IMPORT_OPTIONS = {
 };
 
 describe('registry parity law', () => {
-  it('discovers exactly the 8 known registry files', () => {
+  it('discovers exactly the 12 known registry files', () => {
     const files = readAllRegistryFiles();
-    expect(files.length).toBe(8);
+    expect(files.length).toBe(12);
   });
 
   it('round-trips every current registry file with structural parity', async () => {
@@ -51,13 +51,13 @@ describe('registry parity law', () => {
       discovered: files.length,
       pass: results.filter((r) => r.pass).length,
       fail: failed.length,
-    }).toEqual({ discovered: 8, pass: 8, fail: 0 });
+    }).toEqual({ discovered: 12, pass: 12, fail: 0 });
   });
 
-  it('imports all 8 services without throwing (LEGACY_PARITY is representational, not a validity claim)', async () => {
+  it('imports all 12 services without throwing (LEGACY_PARITY is representational, not a validity claim)', async () => {
     const files = readAllRegistryFiles();
     const model = await legacyRegistryToVCM(files, IMPORT_OPTIONS);
-    expect(model.services.length).toBe(8);
+    expect(model.services.length).toBe(12);
   });
 
   it('derives current A2A and MCP exposure independently of frozen planned declarations', async () => {
@@ -65,8 +65,8 @@ describe('registry parity law', () => {
     const model = await legacyRegistryToVCM(files, IMPORT_OPTIONS);
     const serviceExposures = model.services.flatMap((service) => service.currentStaticExposures);
 
-    expect(serviceExposures.filter((exposure) => exposure.surface === 'a2a')).toHaveLength(8);
-    expect(serviceExposures.filter((exposure) => exposure.surface === 'mcp')).toHaveLength(4);
+    expect(serviceExposures.filter((exposure) => exposure.surface === 'a2a')).toHaveLength(12);
+    expect(serviceExposures.filter((exposure) => exposure.surface === 'mcp')).toHaveLength(8);
     expect(
       model.currentStaticUtilityExposures.filter((exposure) => exposure.surface === 'mcp')
     ).toHaveLength(2);

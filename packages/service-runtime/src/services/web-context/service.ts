@@ -171,6 +171,7 @@ export class WebContextVerifiedService
     const draft = buildDraftDocument({
       // SUN-1000 checkpoint 1M: derived from context.service_id.
       seed: `${context.service_id}:${inputHash}:${context.job_id}`,
+      idempotencyKey: context.idempotency_key,
       serviceId: context.service_id,
       serviceVersion: serviceVersionOf(context.service_id),
       inputHash,

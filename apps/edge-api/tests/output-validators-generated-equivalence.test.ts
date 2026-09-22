@@ -156,8 +156,8 @@ describe('generated standalone output validators cover every known service_id', 
       expect(id).toBeTruthy();
       ids.add(id!);
     }
-    // 8 known service_ids share only 4 unique output schema files (v1/v2 pairs).
-    expect(ids.size).toBe(4);
+    // v1/v2 share four active files; v3 adds four release-qualified files.
+    expect(ids.size).toBe(8);
     for (const id of ids) {
       expect(outputValidatorsById[id]).toBeDefined();
     }

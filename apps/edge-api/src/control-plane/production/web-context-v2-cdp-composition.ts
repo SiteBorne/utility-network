@@ -158,7 +158,8 @@ export function buildWebContextV2ModalSafeEgressClient(env: {
 export async function buildWebContextV2CdpProductionRouteConfig(
   env: WebContextV2CdpProductionEnv,
   db: D1Database,
-  explicitTestEvidenceOverride?: ExplicitTestEvidenceOverride
+  explicitTestEvidenceOverride?: ExplicitTestEvidenceOverride,
+  serviceId: 'web_context_verified.v2' | 'web_context_verified.v3' = 'web_context_verified.v2'
 ): Promise<X402ServiceRouteConfig | ProductionCompositionUnavailable> {
   if (!db) {
     return { unavailable: true, reason: 'no D1 database binding supplied' };
@@ -243,7 +244,8 @@ export async function buildWebContextV2CdpProductionRouteConfig(
   const executor: ServiceExecutor = buildWebContextV2ProductionExecutor(
     signer,
     registry,
-    httpClient
+    httpClient,
+    serviceId
   );
 
   // Same domain-metadata sourcing as verify's composition (SUN-1220K/L):
@@ -252,7 +254,7 @@ export async function buildWebContextV2CdpProductionRouteConfig(
   const asset = resolvePaymentAsset(network);
 
   return {
-    serviceId: 'web_context_verified.v2',
+    serviceId,
     scheme: 'exact',
     pricingKey: 'web_context_verified_direct_v2',
     rail: 'cdp',
@@ -260,26 +262,26 @@ export async function buildWebContextV2CdpProductionRouteConfig(
     asset: asset.address,
     paymentRequirementExtra: { name: asset.name, version: asset.version },
     payTo: env.SELLER_WALLET_ADDRESS,
-    path: '/v2/web/context',
+    path: serviceId.endsWith('.v3') ? '/v3/web/context' : '/v2/web/context',
     // PRODUCTION-ECONOMICS-DISCOVERY-01: `rendered` has a governed price but is
     // not purchasable; reject before any quote/402 rather than after payment.
-    preEconomicBodyValidator: modeAvailabilityValidator('web_context_verified.v2'),
-    inputSchema: BUNDLED_SERVICE_INPUT_SCHEMAS['web_context_verified.v2'] as Record<
-      string,
-      unknown
-    >,
-    contractRelease: '2.0.0',
+    preEconomicBodyValidator: modeAvailabilityValidator(serviceId),
+    inputSchema: BUNDLED_SERVICE_INPUT_SCHEMAS[serviceId] as Record<string, unknown>,
+    contractRelease: serviceId.endsWith('.v3') ? '3.0.0' : '2.0.0',
     // SUN-1221B §6: v1/v2 share the exact same schema files -- these
     // hashes are copied verbatim from the frozen release manifest
     // (docs/contracts/SERVICE_CONTRACT_RELEASE_1.0.0.md, the
     // `web_context_verified.v1` row), never recomputed or invented.
     inputSchemaHash: 'sha256:d3b0762020d4cc1d1e846960ed978cf1237b1741f90213adabe8ed931c2845ea',
-    outputSchemaHash: 'sha256:138bccc34ad8c320daec36890b8867fca9f709040b80c689710fd4bde49042de',
-    pccDependency: '1.1.0',
+    outputSchemaHash: serviceId.endsWith('.v3')
+      ? 'sha256:34e9ca4c55b071cfaa2f182ecac5d2513a8ec6a4f3c0a6d0cf0b7027eeab1319'
+      : 'sha256:138bccc34ad8c320daec36890b8867fca9f709040b80c689710fd4bde49042de',
+    pccDependency: serviceId.endsWith('.v3') ? '2.0.0' : '1.1.0',
     db,
     clock: () => new Date().toISOString(),
     evidenceMode: cdpEvidence.evidenceMode,
     evidenceProvider: cdpEvidence.evidenceProvider,
+    pccKeyRegistry: registry,
     // Unlike verify_agent_output.v2, web_context_verified.v2's schema has
     // no comparable buyer-supplied `required_schema`/Profile-1 field the
     // executor actually consumes (SUN-1221B §8/§18: `buyer_schema` is

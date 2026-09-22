@@ -1,4 +1,5 @@
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
+import { MCP_TOOL_NAMES } from '@siteborne/protocol-mcp';
 import { frozenInputExample } from '@siteborne/protocol-x402';
 import { afterEach, describe, expect, it } from 'vitest';
 import { app } from '../src/index';
@@ -43,19 +44,10 @@ const PRODUCTION_AUTHORIZED_ENV = {
 };
 
 describe('edge-api /mcp route', () => {
-  it('mounts the modern MCP endpoint with exactly six tools', async () => {
+  it('mounts the modern MCP endpoint with exactly ten tools', async () => {
     const client = await connect();
     const tools = await client.listTools();
-    expect(tools.tools.map((tool) => tool.name).sort()).toEqual(
-      [
-        'siteborne_build_company_evidence_graph',
-        'siteborne_retrieve_verified_web_context',
-        'siteborne_extract_document_evidence_json',
-        'siteborne_verify_agent_output',
-        'siteborne_get_quote',
-        'siteborne_get_service_health',
-      ].sort()
-    );
+    expect(tools.tools.map((tool) => tool.name).sort()).toEqual([...MCP_TOOL_NAMES].sort());
   });
 
   it('does not expose useful service execution without the paid boundary', async () => {

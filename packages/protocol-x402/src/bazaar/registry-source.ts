@@ -19,6 +19,10 @@ import companyEvidenceGraphV2 from '../../../../registry/services/company_eviden
 import webContextVerifiedV2 from '../../../../registry/services/web_context_verified.v2.json' with { type: 'json' };
 import documentEvidenceJsonV2 from '../../../../registry/services/document_evidence_json.v2.json' with { type: 'json' };
 import verifyAgentOutputV2 from '../../../../registry/services/verify_agent_output.v2.json' with { type: 'json' };
+import companyEvidenceGraphV3 from '../../../../registry/services/company_evidence_graph.v3.json' with { type: 'json' };
+import webContextVerifiedV3 from '../../../../registry/services/web_context_verified.v3.json' with { type: 'json' };
+import documentEvidenceJsonV3 from '../../../../registry/services/document_evidence_json.v3.json' with { type: 'json' };
+import verifyAgentOutputV3 from '../../../../registry/services/verify_agent_output.v3.json' with { type: 'json' };
 import { resolveServiceMaxPriceUsd } from '../pricing/mapping';
 import type { SiteborneServiceId } from '../types';
 import { governDeclaredLimitations } from '@siteborne/pricing';
@@ -89,6 +93,12 @@ export const REGISTRY_SERVICES: Readonly<Record<SiteborneServiceId, RegistryServ
     verifyAgentOutputV2 as RegistryServiceEntry,
     resolveServiceMaxPriceUsd('verify_agent_output_standard_v2')
   ),
+  'company_evidence_graph.v3': companyEvidenceGraphV3 as RegistryServiceEntry,
+  'web_context_verified.v3': webContextVerifiedV3 as RegistryServiceEntry,
+  'document_evidence_json.v3': withGovernedRegistryLimitations(
+    documentEvidenceJsonV3 as RegistryServiceEntry
+  ),
+  'verify_agent_output.v3': verifyAgentOutputV3 as RegistryServiceEntry,
 };
 
 export const ALL_BAZAAR_SERVICE_IDS: readonly SiteborneServiceId[] = [
@@ -100,4 +110,8 @@ export const ALL_BAZAAR_SERVICE_IDS: readonly SiteborneServiceId[] = [
   'web_context_verified.v2',
   'document_evidence_json.v2',
   'verify_agent_output.v2',
+  'company_evidence_graph.v3',
+  'web_context_verified.v3',
+  'document_evidence_json.v3',
+  'verify_agent_output.v3',
 ];

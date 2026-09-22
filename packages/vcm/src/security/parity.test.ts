@@ -11,6 +11,7 @@ import {
 import type { SiteborneServiceId } from '@siteborne/protocol-x402';
 import {
   MCP_SERVICE_TOOLS,
+  MCP_TOOL_NAMES,
   buildSiteborneMcpDefinitionAuthorityInputs,
 } from '@siteborne/protocol-mcp';
 import { buildUnsignedSiteborneAgentCard } from '@siteborne/protocol-a2a';
@@ -34,7 +35,7 @@ describe('MCP parity', () => {
   const inputs = buildSiteborneMcpDefinitionAuthorityInputs();
   const tools = [...inputs.serviceTools, ...inputs.utilityTools];
   it('the live MCP tool definitions agree with the declaration', () => {
-    expect(tools.length).toBe(6);
+    expect(tools.length).toBe(MCP_TOOL_NAMES.length);
     expect(msgs(checkMcpParity(d, tools, MCP_SERVICE_TOOLS as Record<string, string>))).toEqual([]);
   });
   it('detects a paid tool annotated read-only', () => {

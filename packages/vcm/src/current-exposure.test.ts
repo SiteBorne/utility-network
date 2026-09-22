@@ -31,7 +31,7 @@ function registration(overrides: Partial<CurrentRegistrationFact> = {}): Current
 }
 
 describe('deriveCurrentCodeExposure', () => {
-  it('derives all eight A2A skills from the Agent Card registration authority', () => {
+  it('derives every A2A skill from the Agent Card registration authority', () => {
     const model = makeFixtureModel(
       SITEBORNE_SERVICE_IDS.map((serviceId) => {
         const [family, generation] = serviceId.split('.');
@@ -44,7 +44,7 @@ describe('deriveCurrentCodeExposure', () => {
     const derived = deriveCurrentCodeExposure(model.services, SOURCE_COMMIT);
     const a2a = derived.serviceExposures.filter(({ exposure }) => exposure.surface === 'a2a');
 
-    expect(a2a).toHaveLength(8);
+    expect(a2a).toHaveLength(SITEBORNE_SERVICE_IDS.length);
     expect(a2a.map(({ serviceId }) => serviceId)).toEqual([...SITEBORNE_SERVICE_IDS]);
     expect(a2a.every(({ exposure }) => exposure.exposureShape === 'skill')).toBe(true);
     expect(
@@ -75,7 +75,7 @@ describe('deriveCurrentCodeExposure', () => {
 
     expect(serviceMcp).toHaveLength(Object.keys(MCP_SERVICE_TOOLS).length);
     expect(utilityMcp).toHaveLength(MCP_TOOL_NAMES.length - Object.keys(MCP_SERVICE_TOOLS).length);
-    expect(serviceMcp.length + utilityMcp.length).toBe(6);
+    expect(serviceMcp.length + utilityMcp.length).toBe(MCP_TOOL_NAMES.length);
     expect(serviceMcp.map(({ serviceId }) => serviceId).sort()).toEqual(
       Object.values(MCP_SERVICE_TOOLS).sort()
     );

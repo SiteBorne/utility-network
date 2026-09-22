@@ -242,6 +242,7 @@ export async function buildVerifyAgentOutputV2CdpProductionRouteConfig(
     clock: () => new Date().toISOString(),
     evidenceMode: cdpEvidence.evidenceMode,
     evidenceProvider: cdpEvidence.evidenceProvider,
+    pccKeyRegistry: registry,
     preEconomicBodyValidator: verifyAgentOutputPreEconomicCheck,
     executor,
   };

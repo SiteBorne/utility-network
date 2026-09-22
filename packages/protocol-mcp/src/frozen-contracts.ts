@@ -15,9 +15,17 @@ import webOutput from '../../../contracts/releases/2.0.0/schemas/services/web-co
 import documentOutput from '../../../contracts/releases/2.0.0/schemas/services/document-evidence-output.schema.json' with { type: 'json' };
 import agentOutput from '../../../contracts/releases/2.0.0/schemas/services/agent-verification-output.schema.json' with { type: 'json' };
 import pccSchema from '../../../contracts/releases/2.0.0/schemas/proof-carrying-context.schema.json' with { type: 'json' };
+import companyOutputV3 from '../../../contracts/releases/3.0.0/schemas/services/company-evidence-output.schema.json' with { type: 'json' };
+import webOutputV3 from '../../../contracts/releases/3.0.0/schemas/services/web-context-output.schema.json' with { type: 'json' };
+import documentOutputV3 from '../../../contracts/releases/3.0.0/schemas/services/document-evidence-output.schema.json' with { type: 'json' };
+import agentOutputV3 from '../../../contracts/releases/3.0.0/schemas/services/agent-verification-output.schema.json' with { type: 'json' };
+import pccSchemaV3 from '../../../contracts/releases/3.0.0/schemas/proof-carrying-context.schema.json' with { type: 'json' };
 import moneySchema from '../../../contracts/releases/1.0.0/schemas/common/money.schema.json' with { type: 'json' };
 
-const PCC_SCHEMA_ID = 'https://utility.siteborne.net/schemas/proof-carrying-context.schema.json';
+const PCC_SCHEMA_IDS = new Set([
+  'https://utility.siteborne.net/schemas/proof-carrying-context.schema.json',
+  'https://utility.siteborne.net/contracts/3.0.0/schemas/proof-carrying-context.schema.json',
+]);
 const MONEY_SCHEMA_ID = 'https://siteborne.net/schemas/common/money.schema.json';
 
 function rewritePccInternalRefs(value: unknown): unknown {
@@ -38,7 +46,7 @@ function bundlePccReference(schema: unknown): unknown {
   if (schema === null || typeof schema !== 'object') return schema;
   const result: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(schema as Record<string, unknown>)) {
-    if (key === '$ref' && value === PCC_SCHEMA_ID) {
+    if (key === '$ref' && typeof value === 'string' && PCC_SCHEMA_IDS.has(value)) {
       result[key] = '#/$defs/pcc';
     } else if (key === '$ref' && value === MONEY_SCHEMA_ID) {
       result[key] = '#/$defs/money';
@@ -49,8 +57,8 @@ function bundlePccReference(schema: unknown): unknown {
   return result;
 }
 
-function selfContainedOutputSchema(schema: unknown): unknown {
-  const rewrittenPcc = rewritePccInternalRefs(pccSchema) as Record<string, unknown>;
+function selfContainedOutputSchema(schema: unknown, pcc: unknown = pccSchema): unknown {
+  const rewrittenPcc = rewritePccInternalRefs(pcc) as Record<string, unknown>;
   const { $id: _pccId, $schema: _pccDialect, ...embeddedPcc } = rewrittenPcc;
   const { $id: _moneyId, $schema: _moneyDialect, ...embeddedMoney } = moneySchema;
   void _pccId;
@@ -78,6 +86,10 @@ export const MCP_SERVICE_OUTPUT_SCHEMAS: Readonly<Record<SiteborneServiceId, unk
   'web_context_verified.v2': selfContainedOutputSchema(webOutput),
   'document_evidence_json.v2': selfContainedOutputSchema(documentOutput),
   'verify_agent_output.v2': selfContainedOutputSchema(agentOutput),
+  'company_evidence_graph.v3': selfContainedOutputSchema(companyOutputV3, pccSchemaV3),
+  'web_context_verified.v3': selfContainedOutputSchema(webOutputV3, pccSchemaV3),
+  'document_evidence_json.v3': selfContainedOutputSchema(documentOutputV3, pccSchemaV3),
+  'verify_agent_output.v3': selfContainedOutputSchema(agentOutputV3, pccSchemaV3),
 };
 
 export const MCP_SERVICE_SCHEMA_METADATA: Readonly<
@@ -114,5 +126,25 @@ export const MCP_SERVICE_SCHEMA_METADATA: Readonly<
   'verify_agent_output.v2': {
     input_uri: 'https://siteborne.net/schemas/services/agent-verification-input.schema.json',
     output_uri: 'https://siteborne.net/schemas/services/agent-verification-output.schema.json',
+  },
+  'company_evidence_graph.v3': {
+    input_uri: 'https://siteborne.net/schemas/services/company-evidence-input.schema.json',
+    output_uri:
+      'https://utility.siteborne.net/contracts/3.0.0/schemas/services/company-evidence-output.schema.json',
+  },
+  'web_context_verified.v3': {
+    input_uri: 'https://siteborne.net/schemas/services/web-context-input.schema.json',
+    output_uri:
+      'https://utility.siteborne.net/contracts/3.0.0/schemas/services/web-context-output.schema.json',
+  },
+  'document_evidence_json.v3': {
+    input_uri: 'https://siteborne.net/schemas/services/document-evidence-input.schema.json',
+    output_uri:
+      'https://utility.siteborne.net/contracts/3.0.0/schemas/services/document-evidence-output.schema.json',
+  },
+  'verify_agent_output.v3': {
+    input_uri: 'https://siteborne.net/schemas/services/agent-verification-input.schema.json',
+    output_uri:
+      'https://utility.siteborne.net/contracts/3.0.0/schemas/services/agent-verification-output.schema.json',
   },
 };

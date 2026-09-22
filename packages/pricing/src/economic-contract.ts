@@ -41,6 +41,10 @@ export const ECONOMIC_SERVICE_IDS = [
   'web_context_verified.v2',
   'document_evidence_json.v2',
   'verify_agent_output.v2',
+  'company_evidence_graph.v3',
+  'web_context_verified.v3',
+  'document_evidence_json.v3',
+  'verify_agent_output.v3',
 ] as const;
 export type EconomicServiceId = (typeof ECONOMIC_SERVICE_IDS)[number];
 
@@ -57,7 +61,7 @@ export type EconomicPriceUnit = 'request' | 'page';
 export type EconomicActualSettlementModel =
   | 'equals_exact_amount'
   | 'measured_usage_not_exceeding_authorization';
-export type EconomicContractRole = 'current' | 'compatibility';
+export type EconomicContractRole = 'current' | 'compatibility' | 'candidate';
 
 /** Governed product posture -- NOT a runtime flag. `production_enabled` (the
  * operational fact) is independent and injected at projection time. */
@@ -85,7 +89,7 @@ interface EconomicServiceDefinition {
    * description of what a paid call may touch. `verify_agent_output` evaluates
    * only supplied material and performs no outbound retrieval. */
   readonly openWorld: boolean;
-  readonly generation: 'v1' | 'v2';
+  readonly generation: 'v1' | 'v2' | 'v3';
   readonly scheme: EconomicScheme;
   readonly pricingModel: EconomicPricingModel;
   readonly releasePosture: EconomicReleasePosture;
@@ -110,190 +114,217 @@ const DOCUMENT_MODE: EconomicModeDefinition = {
   available: true,
 };
 
+type ExistingEconomicServiceId = Exclude<EconomicServiceId, `${string}.v3`>;
+
+const EXISTING_DEFINITIONS: Readonly<Record<ExistingEconomicServiceId, EconomicServiceDefinition>> =
+  {
+    'company_evidence_graph.v1': {
+      family: 'company_evidence_graph',
+      openWorld: true,
+      generation: 'v1',
+      scheme: 'exact',
+      pricingModel: 'fixed_per_request',
+      releasePosture: 'compatibility_not_admitted',
+      defaultMode: 'standard',
+      modeSelectorField: null,
+      modes: [
+        {
+          mode: 'standard',
+          pricingKey: 'company_evidence_graph',
+          amountKind: 'exact',
+          unit: 'request',
+          available: true,
+        },
+      ],
+      tierKeys: null,
+    },
+    'company_evidence_graph.v2': {
+      family: 'company_evidence_graph',
+      openWorld: true,
+      generation: 'v2',
+      scheme: 'exact',
+      pricingModel: 'fixed_per_request',
+      releasePosture: 'defined_not_production_admitted',
+      defaultMode: 'standard',
+      modeSelectorField: null,
+      modes: [
+        {
+          mode: 'standard',
+          pricingKey: 'company_evidence_graph_v2',
+          amountKind: 'exact',
+          unit: 'request',
+          available: true,
+        },
+      ],
+      tierKeys: null,
+    },
+    'web_context_verified.v1': {
+      family: 'web_context_verified',
+      openWorld: true,
+      generation: 'v1',
+      scheme: 'exact',
+      pricingModel: 'fixed_per_request',
+      releasePosture: 'compatibility_not_admitted',
+      defaultMode: 'direct',
+      modeSelectorField: 'retrieval_mode',
+      modes: [
+        {
+          mode: 'direct',
+          pricingKey: 'web_context_verified_direct',
+          amountKind: 'exact',
+          unit: 'request',
+          available: true,
+        },
+        {
+          mode: 'rendered',
+          pricingKey: 'web_context_verified_rendered',
+          amountKind: 'exact',
+          unit: 'request',
+          available: false,
+          unavailableReason: RENDERED_UNAVAILABLE,
+        },
+      ],
+      tierKeys: null,
+    },
+    'web_context_verified.v2': {
+      family: 'web_context_verified',
+      openWorld: true,
+      generation: 'v2',
+      scheme: 'exact',
+      pricingModel: 'fixed_per_request',
+      releasePosture: 'first_release_candidate',
+      defaultMode: 'direct',
+      modeSelectorField: 'retrieval_mode',
+      modes: [
+        {
+          mode: 'direct',
+          pricingKey: 'web_context_verified_direct_v2',
+          amountKind: 'exact',
+          unit: 'request',
+          available: true,
+        },
+        {
+          mode: 'rendered',
+          pricingKey: 'web_context_verified_rendered',
+          amountKind: 'exact',
+          unit: 'request',
+          available: false,
+          unavailableReason: RENDERED_UNAVAILABLE,
+        },
+      ],
+      tierKeys: null,
+    },
+    'document_evidence_json.v1': {
+      family: 'document_evidence_json',
+      openWorld: true,
+      generation: 'v1',
+      scheme: 'upto',
+      pricingModel: 'metered_per_page_tiered',
+      releasePosture: 'compatibility_not_admitted',
+      defaultMode: 'extraction',
+      modeSelectorField: null,
+      modes: [DOCUMENT_MODE],
+      tierKeys: {
+        native: 'document_evidence_json_native',
+        ocr: 'document_evidence_json_ocr',
+        table: 'document_evidence_json_table',
+      },
+    },
+    'document_evidence_json.v2': {
+      family: 'document_evidence_json',
+      openWorld: true,
+      generation: 'v2',
+      scheme: 'upto',
+      pricingModel: 'metered_per_page_tiered',
+      releasePosture: 'defined_not_production_admitted',
+      defaultMode: 'extraction',
+      modeSelectorField: null,
+      modes: [DOCUMENT_MODE],
+      tierKeys: {
+        native: 'document_evidence_json_native_v2',
+        ocr: 'document_evidence_json_ocr_v2',
+        table: 'document_evidence_json_table_v2',
+      },
+    },
+    'verify_agent_output.v1': {
+      family: 'verify_agent_output',
+      openWorld: false,
+      generation: 'v1',
+      scheme: 'exact',
+      pricingModel: 'fixed_per_request',
+      releasePosture: 'compatibility_not_admitted',
+      defaultMode: 'standard',
+      modeSelectorField: 'verification_mode',
+      modes: [
+        {
+          mode: 'standard',
+          pricingKey: 'verify_agent_output_standard',
+          amountKind: 'exact',
+          unit: 'request',
+          available: true,
+        },
+        {
+          mode: 'independent_reproduction',
+          pricingKey: 'verify_agent_output_reproduction',
+          amountKind: 'exact',
+          unit: 'request',
+          available: false,
+          unavailableReason: REPRODUCTION_UNAVAILABLE,
+        },
+      ],
+      tierKeys: null,
+    },
+    'verify_agent_output.v2': {
+      family: 'verify_agent_output',
+      openWorld: false,
+      generation: 'v2',
+      scheme: 'exact',
+      pricingModel: 'fixed_per_request',
+      releasePosture: 'first_release_candidate',
+      defaultMode: 'standard',
+      modeSelectorField: 'verification_mode',
+      modes: [
+        {
+          mode: 'standard',
+          pricingKey: 'verify_agent_output_standard_v2',
+          amountKind: 'exact',
+          unit: 'request',
+          available: true,
+        },
+        {
+          mode: 'independent_reproduction',
+          pricingKey: 'verify_agent_output_reproduction',
+          amountKind: 'exact',
+          unit: 'request',
+          available: false,
+          unavailableReason: REPRODUCTION_UNAVAILABLE,
+        },
+      ],
+      tierKeys: null,
+    },
+  };
+
 const DEFINITIONS: Readonly<Record<EconomicServiceId, EconomicServiceDefinition>> = {
-  'company_evidence_graph.v1': {
-    family: 'company_evidence_graph',
-    openWorld: true,
-    generation: 'v1',
-    scheme: 'exact',
-    pricingModel: 'fixed_per_request',
-    releasePosture: 'compatibility_not_admitted',
-    defaultMode: 'standard',
-    modeSelectorField: null,
-    modes: [
-      {
-        mode: 'standard',
-        pricingKey: 'company_evidence_graph',
-        amountKind: 'exact',
-        unit: 'request',
-        available: true,
-      },
-    ],
-    tierKeys: null,
-  },
-  'company_evidence_graph.v2': {
-    family: 'company_evidence_graph',
-    openWorld: true,
-    generation: 'v2',
-    scheme: 'exact',
-    pricingModel: 'fixed_per_request',
+  ...EXISTING_DEFINITIONS,
+  'company_evidence_graph.v3': {
+    ...EXISTING_DEFINITIONS['company_evidence_graph.v2'],
+    generation: 'v3',
     releasePosture: 'defined_not_production_admitted',
-    defaultMode: 'standard',
-    modeSelectorField: null,
-    modes: [
-      {
-        mode: 'standard',
-        pricingKey: 'company_evidence_graph_v2',
-        amountKind: 'exact',
-        unit: 'request',
-        available: true,
-      },
-    ],
-    tierKeys: null,
   },
-  'web_context_verified.v1': {
-    family: 'web_context_verified',
-    openWorld: true,
-    generation: 'v1',
-    scheme: 'exact',
-    pricingModel: 'fixed_per_request',
-    releasePosture: 'compatibility_not_admitted',
-    defaultMode: 'direct',
-    modeSelectorField: 'retrieval_mode',
-    modes: [
-      {
-        mode: 'direct',
-        pricingKey: 'web_context_verified_direct',
-        amountKind: 'exact',
-        unit: 'request',
-        available: true,
-      },
-      {
-        mode: 'rendered',
-        pricingKey: 'web_context_verified_rendered',
-        amountKind: 'exact',
-        unit: 'request',
-        available: false,
-        unavailableReason: RENDERED_UNAVAILABLE,
-      },
-    ],
-    tierKeys: null,
-  },
-  'web_context_verified.v2': {
-    family: 'web_context_verified',
-    openWorld: true,
-    generation: 'v2',
-    scheme: 'exact',
-    pricingModel: 'fixed_per_request',
-    releasePosture: 'first_release_candidate',
-    defaultMode: 'direct',
-    modeSelectorField: 'retrieval_mode',
-    modes: [
-      {
-        mode: 'direct',
-        pricingKey: 'web_context_verified_direct_v2',
-        amountKind: 'exact',
-        unit: 'request',
-        available: true,
-      },
-      {
-        mode: 'rendered',
-        pricingKey: 'web_context_verified_rendered',
-        amountKind: 'exact',
-        unit: 'request',
-        available: false,
-        unavailableReason: RENDERED_UNAVAILABLE,
-      },
-    ],
-    tierKeys: null,
-  },
-  'document_evidence_json.v1': {
-    family: 'document_evidence_json',
-    openWorld: true,
-    generation: 'v1',
-    scheme: 'upto',
-    pricingModel: 'metered_per_page_tiered',
-    releasePosture: 'compatibility_not_admitted',
-    defaultMode: 'extraction',
-    modeSelectorField: null,
-    modes: [DOCUMENT_MODE],
-    tierKeys: {
-      native: 'document_evidence_json_native',
-      ocr: 'document_evidence_json_ocr',
-      table: 'document_evidence_json_table',
-    },
-  },
-  'document_evidence_json.v2': {
-    family: 'document_evidence_json',
-    openWorld: true,
-    generation: 'v2',
-    scheme: 'upto',
-    pricingModel: 'metered_per_page_tiered',
+  'web_context_verified.v3': {
+    ...EXISTING_DEFINITIONS['web_context_verified.v2'],
+    generation: 'v3',
     releasePosture: 'defined_not_production_admitted',
-    defaultMode: 'extraction',
-    modeSelectorField: null,
-    modes: [DOCUMENT_MODE],
-    tierKeys: {
-      native: 'document_evidence_json_native_v2',
-      ocr: 'document_evidence_json_ocr_v2',
-      table: 'document_evidence_json_table_v2',
-    },
   },
-  'verify_agent_output.v1': {
-    family: 'verify_agent_output',
-    openWorld: false,
-    generation: 'v1',
-    scheme: 'exact',
-    pricingModel: 'fixed_per_request',
-    releasePosture: 'compatibility_not_admitted',
-    defaultMode: 'standard',
-    modeSelectorField: 'verification_mode',
-    modes: [
-      {
-        mode: 'standard',
-        pricingKey: 'verify_agent_output_standard',
-        amountKind: 'exact',
-        unit: 'request',
-        available: true,
-      },
-      {
-        mode: 'independent_reproduction',
-        pricingKey: 'verify_agent_output_reproduction',
-        amountKind: 'exact',
-        unit: 'request',
-        available: false,
-        unavailableReason: REPRODUCTION_UNAVAILABLE,
-      },
-    ],
-    tierKeys: null,
+  'document_evidence_json.v3': {
+    ...EXISTING_DEFINITIONS['document_evidence_json.v2'],
+    generation: 'v3',
+    releasePosture: 'defined_not_production_admitted',
   },
-  'verify_agent_output.v2': {
-    family: 'verify_agent_output',
-    openWorld: false,
-    generation: 'v2',
-    scheme: 'exact',
-    pricingModel: 'fixed_per_request',
-    releasePosture: 'first_release_candidate',
-    defaultMode: 'standard',
-    modeSelectorField: 'verification_mode',
-    modes: [
-      {
-        mode: 'standard',
-        pricingKey: 'verify_agent_output_standard_v2',
-        amountKind: 'exact',
-        unit: 'request',
-        available: true,
-      },
-      {
-        mode: 'independent_reproduction',
-        pricingKey: 'verify_agent_output_reproduction',
-        amountKind: 'exact',
-        unit: 'request',
-        available: false,
-        unavailableReason: REPRODUCTION_UNAVAILABLE,
-      },
-    ],
-    tierKeys: null,
+  'verify_agent_output.v3': {
+    ...EXISTING_DEFINITIONS['verify_agent_output.v2'],
+    generation: 'v3',
+    releasePosture: 'defined_not_production_admitted',
   },
 };
 
@@ -319,7 +350,7 @@ export interface ResolvedTierPrice {
 export interface EconomicOffer {
   readonly serviceId: EconomicServiceId;
   readonly capabilityId: EconomicFamily;
-  readonly serviceVersion: 'v1' | 'v2';
+  readonly serviceVersion: 'v1' | 'v2' | 'v3';
   readonly contractRole: EconomicContractRole;
   readonly openWorld: boolean;
   readonly scheme: EconomicScheme;
@@ -371,7 +402,12 @@ export function buildEconomicOffer(serviceId: EconomicServiceId): EconomicOffer 
     serviceId,
     capabilityId: definition.family,
     serviceVersion: definition.generation,
-    contractRole: definition.generation === 'v2' ? 'current' : 'compatibility',
+    contractRole:
+      definition.generation === 'v2'
+        ? 'current'
+        : definition.generation === 'v3'
+          ? 'candidate'
+          : 'compatibility',
     openWorld: definition.openWorld,
     scheme: definition.scheme,
     pricingModel: definition.pricingModel,
@@ -420,7 +456,7 @@ export interface EconomicModeProjection {
 export interface EconomicOfferProjection {
   readonly service_id: EconomicServiceId;
   readonly capability_id: EconomicFamily;
-  readonly service_version: 'v1' | 'v2';
+  readonly service_version: 'v1' | 'v2' | 'v3';
   readonly contract_role: EconomicContractRole;
   readonly resource: string;
   readonly scheme: EconomicScheme;
@@ -531,14 +567,24 @@ export function validateEconomicProjection(projection: EconomicOfferProjection):
   const problems: string[] = [];
   const id = projection.service_id;
   const isV2 = id.endsWith('.v2');
+  const isV3 = id.endsWith('.v3');
   if (projection.contract_role === 'current' && !isV2) {
     problems.push(`${id}: a non-v2 service id is projected as the current commercial identity`);
   }
   if (projection.contract_role === 'compatibility' && isV2) {
     problems.push(`${id}: a v2 service id is projected as a compatibility identity`);
   }
+  if (projection.contract_role === 'candidate' && !isV3) {
+    problems.push(`${id}: a non-v3 service id is projected as a candidate identity`);
+  }
+  if (projection.contract_role !== 'candidate' && isV3) {
+    problems.push(`${id}: a v3 service id is not projected as a candidate identity`);
+  }
   if (projection.contract_role === 'current' && !projection.resource.includes('/v2/')) {
     problems.push(`${id}: current commercial identity resource is not a /v2/ path`);
+  }
+  if (projection.contract_role === 'candidate' && !projection.resource.includes('/v3/')) {
+    problems.push(`${id}: candidate commercial identity resource is not a /v3/ path`);
   }
   if (projection.scheme === 'exact') {
     if (projection.list_amount === null) problems.push(`${id}: exact scheme has no list_amount`);

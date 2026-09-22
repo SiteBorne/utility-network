@@ -235,7 +235,8 @@ export type PccValidationResult =
   | { readonly valid: false; readonly reason: string };
 
 export type PccValidator = (
-  outcome: ExecutorOutcome
+  outcome: ExecutorOutcome,
+  resolvedPcc?: Readonly<Record<string, unknown>>
 ) => PccValidationResult | Promise<PccValidationResult>;
 
 /** The read-only on-chain checker's exact type from
@@ -1101,6 +1102,20 @@ export async function runPaidContinuationWorkflow(
         detail
       );
       return terminal('pcc_failed', jobId, { error_code: readFailureCode });
+    }
+    const resolvedPccResult = await deps.validatePcc(
+      executorOutcome,
+      verificationReceipt as Readonly<Record<string, unknown>>
+    );
+    if (!resolvedPccResult.valid) {
+      await transitionJobState(
+        jobId,
+        'REJECTED',
+        'VERIFICATION_FAILED',
+        deps.persistence.job,
+        boundedDetail(resolvedPccResult.reason)
+      );
+      return terminal('pcc_failed', jobId, { error_code: resolvedPccResult.reason });
     }
   }
   await transitionJobState(jobId, 'SETTLING', 'VERIFICATION_PASSED', deps.persistence.job);
