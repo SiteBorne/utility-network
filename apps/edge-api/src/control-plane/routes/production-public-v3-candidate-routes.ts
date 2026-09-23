@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
-import { R2ArtifactStoreAdapter } from '../artifacts/store';
+import { R2ArtifactStoreAdapter, DOCUMENT_ARTIFACT_KEY_PREFIX } from '../artifacts/store';
 import type { Env } from '../config/env';
 import {
   isCompanyEvidenceGraphV2CdpRouteFlagEnabled,
@@ -138,7 +138,7 @@ export function documentEvidenceJsonV3CandidateRoute(
     c,
     (env) => buyerCandidateEnabled(env, isDocumentEvidenceJsonV2CdpRouteFlagEnabled),
     async () => {
-      const artifacts = new R2ArtifactStoreAdapter(c.env.ARTIFACTS, 'documents/');
+      const artifacts = new R2ArtifactStoreAdapter(c.env.ARTIFACTS, DOCUMENT_ARTIFACT_KEY_PREFIX);
       const built = await buildDocumentEvidenceJsonV2CdpProductionRouteConfig(
         compositionEnv(c.env),
         c.env.DB,

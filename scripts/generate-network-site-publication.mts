@@ -38,6 +38,17 @@ const CHECK = process.argv.includes('--check');
 const SITE = join(ROOT, 'apps', 'network-site');
 const SCHEMA_OUT = join(SITE, 'schemas');
 const CANONICAL_SCHEMA_ORIGIN = 'https://siteborne.net';
+// A non-active candidate release (e.g. Release 3, still undeployed) declares
+// release-qualified `$id`s/URIs on the utility origin so it can coexist with
+// the active release's validators (packages/verification/src/schema-registry.ts,
+// packages/protocol-mcp/src/frozen-contracts.ts). Those schemas are real and
+// hash-verified against their contract release source, but -- unlike the
+// active release -- are never written to apps/network-site/schemas, since
+// that publication artifact serves only the currently active contract
+// release. This pattern is a *source*-validity check only; live
+// reachability of a candidate URL is a separate, later concern (see
+// section 8/10 of the blocker-closure checkpoint).
+const CANDIDATE_SCHEMA_ORIGIN = 'https://utility.siteborne.net/contracts';
 
 function walk(dir: string): string[] {
   if (!existsSync(dir)) return [];
@@ -86,22 +97,43 @@ for (const file of readdirSync(join(ROOT, 'registry', 'services')).filter((f) =>
   for (const kind of ['input', 'output'] as const) {
     const uri = entry[`${kind}_schema_uri`];
     const declared = entry[`${kind}_schema_hash`];
-    if (!uri.startsWith(`${CANONICAL_SCHEMA_ORIGIN}/schemas/`)) {
-      problems.push(`${file}: ${kind}_schema_uri ${uri} is outside the canonical schema origin`);
+
+    if (uri.startsWith(`${CANONICAL_SCHEMA_ORIGIN}/schemas/`)) {
+      const rel = uri.slice(`${CANONICAL_SCHEMA_ORIGIN}/schemas/`.length);
+      const bytes = expected.get(rel);
+      if (!bytes) {
+        problems.push(
+          `${file}: ${kind}_schema_uri ${uri} has no source schema in contract release ${release}`
+        );
+        continue;
+      }
+      const actual = `sha256:${createHash('sha256').update(bytes).digest('hex')}`;
+      if (actual !== declared) {
+        problems.push(`${file}: ${kind}_schema_hash ${declared} !== published bytes ${actual}`);
+      }
       continue;
     }
-    const rel = uri.slice(`${CANONICAL_SCHEMA_ORIGIN}/schemas/`.length);
-    const bytes = expected.get(rel);
-    if (!bytes) {
-      problems.push(
-        `${file}: ${kind}_schema_uri ${uri} has no source schema in contract release ${release}`
-      );
+
+    if (uri.startsWith(`${CANDIDATE_SCHEMA_ORIGIN}/`)) {
+      const rest = uri.slice(`${CANDIDATE_SCHEMA_ORIGIN}/`.length);
+      const [candidateRelease, ...pathParts] = rest.split('/schemas/');
+      const rel = pathParts.join('/schemas/');
+      const candidateSchemaPath = join(ROOT, 'contracts', 'releases', candidateRelease, 'schemas', rel);
+      if (candidateRelease === release || !existsSync(candidateSchemaPath)) {
+        problems.push(
+          `${file}: ${kind}_schema_uri ${uri} has no candidate source schema at contracts/releases/${candidateRelease}/schemas/${rel}`
+        );
+        continue;
+      }
+      const bytes = readFileSync(candidateSchemaPath);
+      const actual = `sha256:${createHash('sha256').update(bytes).digest('hex')}`;
+      if (actual !== declared) {
+        problems.push(`${file}: ${kind}_schema_hash ${declared} !== candidate source bytes ${actual}`);
+      }
       continue;
     }
-    const actual = `sha256:${createHash('sha256').update(bytes).digest('hex')}`;
-    if (actual !== declared) {
-      problems.push(`${file}: ${kind}_schema_hash ${declared} !== published bytes ${actual}`);
-    }
+
+    problems.push(`${file}: ${kind}_schema_uri ${uri} is outside the canonical schema origin`);
   }
 }
 

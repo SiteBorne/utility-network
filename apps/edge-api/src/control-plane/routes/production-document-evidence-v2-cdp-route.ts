@@ -27,7 +27,7 @@ import { buildDocumentEvidenceJsonV2CdpProductionRouteConfig } from '../producti
 import { isDocumentEvidenceJsonV2CdpRouteFlagEnabled } from '../config/production-payment';
 import { outputValidatorsById } from '../../generated/output-validators.generated.js';
 import { importContinuationEnvelopeKey } from '../continuation/envelope';
-import { R2ArtifactStoreAdapter } from '../artifacts/store';
+import { R2ArtifactStoreAdapter, DOCUMENT_ARTIFACT_KEY_PREFIX } from '../artifacts/store';
 
 setPrecompiledOutputValidators(outputValidatorsById);
 
@@ -45,7 +45,9 @@ export async function documentEvidenceJsonV2CdpProductionRoute(
     return cachedSubApp.request(c.req.raw);
   }
 
-  const artifactStore = c.env.ARTIFACTS ? new R2ArtifactStoreAdapter(c.env.ARTIFACTS) : undefined;
+  const artifactStore = c.env.ARTIFACTS
+    ? new R2ArtifactStoreAdapter(c.env.ARTIFACTS, DOCUMENT_ARTIFACT_KEY_PREFIX)
+    : undefined;
 
   const config = await buildDocumentEvidenceJsonV2CdpProductionRouteConfig(
     {

@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { Miniflare } from 'miniflare';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   OPERATOR_CHECKPOINT,
   loadGovernedPlan,
@@ -14,6 +14,28 @@ import {
   type GovernedPlanRow,
   type OperatorDatabase,
 } from './reconcile-payment-attempts-core';
+
+/**
+ * Scoped (file-local, via `vi.setConfig`, never the global
+ * `vitest.config.ts`) timeout raise. Every test in this file that touches
+ * `createDatabase()` spins up a real Miniflare D1 instance and runs up to
+ * 10 migration files' statements sequentially against it, then (in the
+ * preexisting-state and mutation-matrix describes) seeds up to 17 rows each
+ * across two tables with individual `INSERT` statements -- real Miniflare/
+ * subprocess cold-start + serial-SQL cost, not contention or a hidden
+ * deadlock. Measured directly in this sandbox (isolated run, default
+ * 5000ms testTimeout): 16/38 tests in this file timed out purely on setup
+ * cost, while the reconciliation assertions that did complete were all
+ * correct; the full 38-test file took ~143s wall time end to end. A
+ * subsequent isolated re-run with a 20000ms scoped timeout passed 38/38
+ * (max observed single-test duration ~10.8s), but a second measurement run
+ * with two Miniflare-backed vitest processes racing for CPU in this same
+ * sandbox pushed one test past a 20000ms budget under that contention.
+ * 30000ms (6x the vitest default, ~3x the isolated-run maximum observed) is
+ * scoped to this file only so the global default -- appropriate for every
+ * other, non-Miniflare-backed test in the repo -- is untouched.
+ */
+vi.setConfig({ testTimeout: 30_000, hookTimeout: 30_000 });
 
 const ROOT = resolve(import.meta.dirname, '..');
 const MIGRATIONS = resolve(ROOT, 'migrations');

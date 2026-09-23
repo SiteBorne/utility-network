@@ -58,6 +58,23 @@ const DOCUMENTED_FUTURE_TARGETS = new Map([
     'Frozen contract $id of the proof-carrying-context schema (an $id cannot change without a contract major). Its published copy is apps/network-site/schemas/proof-carrying-context.schema.json; serving it on the utility origin is a later publication action.',
   ],
 ]);
+/** A non-active candidate release (e.g. Release 3) declares release-qualified
+ * schema `$id`s/URIs on the utility origin so it can coexist with the active
+ * release's validators (packages/verification/src/schema-registry.ts,
+ * packages/protocol-mcp/src/frozen-contracts.ts, and
+ * scripts/generate-network-site-publication.mts's CANDIDATE_SCHEMA_ORIGIN).
+ * These are real, source-verified schemas -- hash-checked against their own
+ * contract release -- but are never written to apps/network-site/schemas,
+ * since that artifact serves only the currently active release. Live
+ * reachability of a candidate URL is a later, separate publication action. */
+const CANDIDATE_SCHEMA_ORIGIN = 'https://utility.siteborne.net/contracts';
+function candidateReleaseSchemaPath(url: string): string | null {
+  const m = /^https:\/\/utility\.siteborne\.net\/contracts\/([^/]+)\/schemas\/(.+)$/.exec(url);
+  if (!m) return null;
+  const [, version, rel] = m;
+  const candidate = join(REPO, 'contracts', 'releases', version, 'schemas', rel);
+  return existsSync(candidate) ? candidate : null;
+}
 
 /** Values under these paths are example data or the request origin, never a
  * projected link: OpenAPI `examples`/`servers`, and the Bazaar sample request /
@@ -97,6 +114,7 @@ type Classification =
   | 'external_identity'
   | 'compat_not_served'
   | 'documented_future_target'
+  | 'candidate_release_target'
   | 'UNPUBLISHED';
 
 const EXACT_ROUTES = new Set(
@@ -107,6 +125,8 @@ function classify(url: string, compatUnserved: ReadonlySet<string>): Classificat
   const parsed = new URL(url);
   if (EXTERNAL_IDENTITY.has(url)) return 'external_identity';
   if (DOCUMENTED_FUTURE_TARGETS.has(url)) return 'documented_future_target';
+  if (url.startsWith(`${CANDIDATE_SCHEMA_ORIGIN}/`) && candidateReleaseSchemaPath(url))
+    return 'candidate_release_target';
   if (parsed.origin === CANONICAL_RESOURCE_ORIGIN) {
     if (compatUnserved.has(url)) return 'compat_not_served';
     return EXACT_ROUTES.has(parsed.pathname) ? 'utility_route' : 'UNPUBLISHED';
@@ -315,8 +335,17 @@ describe('every projected URL maps to a known publication artifact or a document
       .filter((u) => /\.(input|output)_schema_ref$/.test(u.path))
       .map((u) => u.url);
     expect(catalogUrls.length).toBeGreaterThan(0);
-    expect(catalogUrls.every((u) => u.startsWith(`${CANONICAL_SCHEMA_ORIGIN}/schemas/`))).toBe(
-      true
-    );
+    // Every catalog schema ref must be one of the two well-defined, non-
+    // request-origin schema origins: the active release's canonical origin,
+    // or a non-active candidate release's release-qualified origin (see
+    // CANDIDATE_SCHEMA_ORIGIN). Neither ever reflects the serving request's
+    // own origin/path.
+    expect(
+      catalogUrls.every(
+        (u) =>
+          u.startsWith(`${CANONICAL_SCHEMA_ORIGIN}/schemas/`) ||
+          (u.startsWith(`${CANDIDATE_SCHEMA_ORIGIN}/`) && candidateReleaseSchemaPath(u) !== null)
+      )
+    ).toBe(true);
   });
 });

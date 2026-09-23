@@ -687,6 +687,14 @@ describe('formal non-interference gate', () => {
       'packages/protocol-a2a/src',
       'packages/mcp-server/src',
     ];
+    // The envelope's own implementation module necessarily defines these
+    // terms; it is the private implementation this gate protects, not a
+    // public-facing surface. Wire-body leakage is proven separately, per
+    // service, by "absent from the public result surface and wire body"
+    // above -- this gate covers everything else in these trees.
+    const implementationFiles = new Set([
+      join(REPO_ROOT, 'apps/edge-api/src/control-plane/security/result-authorization.ts'),
+    ]);
     let scanned = 0;
     for (const s of surfaces) {
       let files: string[] = [];
@@ -695,6 +703,7 @@ describe('formal non-interference gate', () => {
       } catch {
         continue;
       }
+      files = files.filter((f) => !implementationFiles.has(f));
       scanned += files.length;
       for (const f of files) {
         expect(readFileSync(f, 'utf8'), f).not.toMatch(

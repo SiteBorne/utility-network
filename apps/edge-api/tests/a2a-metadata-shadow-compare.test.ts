@@ -15,8 +15,20 @@
  * on served content, not on logs.
  */
 import { AgentCard } from '@a2a-js/sdk';
+import { SITEBORNE_SERVICE_IDS } from '@siteborne/protocol-a2a';
 import { describe, expect, it, vi } from 'vitest';
 import { app } from '../src/index';
+
+/** The Agent Card's `skills[]` is a discovery-only enumeration of every
+ * registered service id/version family (v1+v2+v3 alike) -- it is never
+ * gated by `RESULT_CONTRACT_RELEASE_SELECTION` or any candidate selector;
+ * per-service callability is expressed separately via the x402 extension's
+ * `productionEnabled` flags. So the expected skill count here is derived
+ * from the same canonical `SITEBORNE_SERVICE_IDS` the card itself is built
+ * from, not a hardcoded literal that goes stale every time a new service
+ * family is registered (was hardcoded `8`, went stale when v3's four ids
+ * were added, actual is 12). */
+const EXPECTED_SKILL_COUNT = SITEBORNE_SERVICE_IDS.length;
 
 async function fetchCard(extraEnv: Record<string, string> = {}): Promise<Response> {
   return app.request(
@@ -94,7 +106,7 @@ describe('A2A metadata projection mode -- shadow_compare (first use in this modu
     const card = AgentCard.fromJSON(await response.json());
     expect(response.status).toBe(200);
     expect(card.signatures).toHaveLength(1);
-    expect(card.skills).toHaveLength(8);
+    expect(card.skills).toHaveLength(EXPECTED_SKILL_COUNT);
   });
 });
 
@@ -107,7 +119,7 @@ describe('A2A metadata projection mode -- vcm_primary_compare', () => {
     const lines = collectStructuredLogLines({ log: logSpy, error: errorSpy });
 
     expect(response.status).toBe(200);
-    expect(card.skills).toHaveLength(8);
+    expect(card.skills).toHaveLength(EXPECTED_SKILL_COUNT);
     expect(card.signatures).toHaveLength(1);
     expect(
       lines.some(
@@ -139,7 +151,7 @@ describe('A2A metadata projection mode -- unauthorized future modes refuse to se
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const response = await fetchCard({ A2A_METADATA_PROJECTION_MODE: 'vcm_only' });
     const card = AgentCard.fromJSON(await response.json());
-    expect(card.skills).toHaveLength(8);
+    expect(card.skills).toHaveLength(EXPECTED_SKILL_COUNT);
     const lines = collectStructuredLogLines({ log: logSpy, error: errorSpy });
     expect(lines.some((l) => l.event === 'metadata_projection_mode_not_yet_authorized')).toBe(true);
     expect(lines.some((l) => String(l.event).startsWith('metadata_projection_compare'))).toBe(

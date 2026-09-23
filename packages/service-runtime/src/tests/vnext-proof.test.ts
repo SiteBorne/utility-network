@@ -4,6 +4,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import {
   PCC_PROOF_NAMESPACE,
+  readGovernedPccDocumentHash,
   verifySelfVerifyingPcc,
   type SelfVerifyingPcc,
 } from '../pcc/vnext-proof';
@@ -184,5 +185,48 @@ describe('RESULT-PCC-WIRE-CUTOVER-01 vNext proof core', () => {
       valid: true,
       errors: [],
     });
+  });
+});
+
+describe('readGovernedPccDocumentHash — canonical shared accessor', () => {
+  it.each(FOUR_V3_SERVICES)(
+    "%s: reads the REAL governed PCC's nested receipt.pcc_document_hash",
+    async (serviceId) => {
+      const { result } = await runScenario(serviceId);
+      const wire = result.finalized!.wireBody as unknown as SelfVerifyingPcc;
+      const expected = wire.extensions[PCC_PROOF_NAMESPACE].receipt.pcc_document_hash;
+      expect(typeof expected).toBe('string');
+      expect(readGovernedPccDocumentHash(wire.extensions)).toBe(expected);
+    }
+  );
+
+  it('is NOT fooled by a flat pcc_document_hash on the proof object (the exact shape the real production defect used to read)', async () => {
+    const { result } = await runScenario('document_evidence_json.v3');
+    const wire = result.finalized!.wireBody as unknown as SelfVerifyingPcc;
+    const flatOnly = {
+      [PCC_PROOF_NAMESPACE]: {
+        // No `receipt` at all — only a flat field, the old (buggy) shape.
+        pcc_document_hash: wire.extensions[PCC_PROOF_NAMESPACE].receipt.pcc_document_hash,
+      },
+    };
+    expect(readGovernedPccDocumentHash(flatOnly)).toBeNull();
+  });
+
+  it.each([
+    ['null extensions', null],
+    ['undefined extensions', undefined],
+    ['array extensions', []],
+    ['string extensions', 'not-an-object'],
+    ['missing proof namespace', {}],
+    ['null proof', { [PCC_PROOF_NAMESPACE]: null }],
+    ['array proof', { [PCC_PROOF_NAMESPACE]: [] }],
+    ['missing receipt', { [PCC_PROOF_NAMESPACE]: {} }],
+    ['null receipt', { [PCC_PROOF_NAMESPACE]: { receipt: null } }],
+    ['array receipt', { [PCC_PROOF_NAMESPACE]: { receipt: [] } }],
+    ['missing hash field', { [PCC_PROOF_NAMESPACE]: { receipt: {} } }],
+    ['non-string hash field', { [PCC_PROOF_NAMESPACE]: { receipt: { pcc_document_hash: 12345 } } }],
+  ] as const)('fails closed (null, never throws) for: %s', (_label, malformed) => {
+    expect(() => readGovernedPccDocumentHash(malformed)).not.toThrow();
+    expect(readGovernedPccDocumentHash(malformed)).toBeNull();
   });
 });

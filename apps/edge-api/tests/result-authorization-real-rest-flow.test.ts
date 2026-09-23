@@ -167,7 +167,17 @@ describe('real buyer-authorized v3 REST initial/replay flows', () => {
             receipt_id: `rcpt_${job.id}`,
             service_id: serviceId,
             extensions: {
-              'net.siteborne.verification-proof.v1': { pcc_document_hash: pccHash },
+              // Real governed PCC shape: `pcc_document_hash` lives nested
+              // inside the proof's signed `receipt`
+              // (`extensions[PCC_PROOF_NAMESPACE].receipt.pcc_document_hash`
+              // — see `packages/service-runtime/src/pcc/vnext-proof.ts`'s
+              // `VNextProof`/`VNextReceipt`), never flat on the proof
+              // object itself. This fixture used to place it flat, which
+              // matched the release gate's OLD (buggy) field lookup rather
+              // than reality — now that the gate reads through the shared
+              // `readGovernedPccDocumentHash` accessor, this fixture must
+              // match the real shape too.
+              'net.siteborne.verification-proof.v1': { receipt: { pcc_document_hash: pccHash } },
             },
           };
           artifacts.set(contentHash, pcc);

@@ -25,6 +25,7 @@ import type { ValidateFunction } from 'ajv';
 import type { KeyRegistry } from '@siteborne/verification';
 import { inputValidatorsById } from '../../generated/input-validators.generated.js';
 import type { VNextPccArtifactReference } from '../results/pcc-result-artifact';
+import { readGovernedPccDocumentHash } from '@siteborne/service-runtime';
 import { buildNeverminedPaymentRequiredLocal } from '../evidence/nevermined-http-client';
 import {
   NEVERMINED_DECLARATIONS,
@@ -1129,15 +1130,14 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
             result_reference?: { content_hash?: unknown };
           };
           const contentHash = cachedRecord.result_reference?.content_hash;
-          const extensions = responseBody.extensions;
-          const proof =
-            extensions && typeof extensions === 'object' && !Array.isArray(extensions)
-              ? (extensions as Record<string, unknown>)['net.siteborne.verification-proof.v1']
-              : null;
-          const pccDocumentHash =
-            proof && typeof proof === 'object' && !Array.isArray(proof)
-              ? (proof as Record<string, unknown>).pcc_document_hash
-              : null;
+          // Canonical, verified accessor (packages/service-runtime's
+          // `readGovernedPccDocumentHash`) — the real governed PCC nests
+          // `pcc_document_hash` inside the proof's signed `receipt`
+          // (`extensions[PCC_PROOF_NAMESPACE].receipt.pcc_document_hash`),
+          // NOT flat on the proof object. Fails closed (`null`) on any
+          // malformed/missing shape rather than throwing or silently
+          // treating "absent" as "allowed".
+          const pccDocumentHash = readGovernedPccDocumentHash(responseBody.extensions);
           if (
             typeof contentHash !== 'string' ||
             !/^sha256:[0-9a-f]{64}$/u.test(contentHash) ||

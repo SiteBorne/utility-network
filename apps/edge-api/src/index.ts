@@ -47,7 +47,10 @@ import {
   buildServiceBindingStorageAlertTransport,
   type ServiceBindingFetcher,
 } from './control-plane/alerting/storage-alert-service-binding-transport';
-import { R2ArtifactStoreAdapter } from './control-plane/artifacts/store';
+import {
+  R2ArtifactStoreAdapter,
+  DOCUMENT_ARTIFACT_KEY_PREFIX,
+} from './control-plane/artifacts/store';
 import { D1ArtifactsRepository } from './control-plane/repositories/d1/artifacts';
 
 export type { ControlPlaneConfig };
@@ -346,7 +349,7 @@ export async function reclaimStaleArtifactsScheduled(
   if (!env.DB || !env.ARTIFACTS) return;
   const nowIso = new Date().toISOString();
   const result = await reclaimStaleArtifacts({
-    artifactStore: new R2ArtifactStoreAdapter(env.ARTIFACTS),
+    artifactStore: new R2ArtifactStoreAdapter(env.ARTIFACTS, DOCUMENT_ARTIFACT_KEY_PREFIX),
     artifactsRepository: new D1ArtifactsRepository(env.DB),
     nowIso: () => nowIso,
   });

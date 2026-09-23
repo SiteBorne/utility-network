@@ -73,6 +73,7 @@ import { reconcileAmbiguousSettlement } from '../continuation/settlement-reconci
 import { createStateEvent, isTerminal, getAllowedTransitions } from '../state-machine';
 import type { JobState, TransitionReason, StateEvent } from '../state-machine';
 import type { LinkEvidenceInputs } from '@siteborne/service-runtime';
+import { PCC_PROOF_NAMESPACE } from '@siteborne/service-runtime';
 import type { ServiceExecutor, ExecutorOutcome } from '../routes/x402-service';
 import type { VNextPccArtifactReference } from '../results/pcc-result-artifact';
 import type { D1PaymentAttemptRepository } from '../repositories/d1/payment-attempts';
@@ -1385,7 +1386,7 @@ export async function runPaidContinuationWorkflow(
       verificationReceipt && typeof verificationReceipt === 'object'
         ? (verificationReceipt as { extensions?: Record<string, unknown> }).extensions
         : undefined;
-    const proof = extensions?.['net.siteborne.verification-proof.v1'];
+    const proof = extensions?.[PCC_PROOF_NAMESPACE];
     const pccDocumentHash =
       proof && typeof proof === 'object'
         ? (proof as { pcc_document_hash?: unknown }).pcc_document_hash

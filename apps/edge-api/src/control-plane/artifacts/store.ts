@@ -1,5 +1,20 @@
 import type { ArtifactRecord } from '../types';
 
+/**
+ * Canonical R2 key-namespace prefix for buyer-uploaded document/image
+ * artifacts (`document-artifact-upload-route.ts`'s write path and every
+ * `document_evidence_json.v2`/`.v3` executor's read path). This is the ONE
+ * shared value both sides must construct their `R2ArtifactStoreAdapter`
+ * with — a prefix mismatch between the writer and a reader silently makes
+ * every real uploaded document unresolvable (404/`unavailable`) even
+ * though the object genuinely exists in the bucket, since both sides derive
+ * the same otherwise-correct `prefix + contentHash` key independently.
+ * Every real call site in this repo must reference this constant rather
+ * than a locally hand-typed string literal or the constructor's bare
+ * default, so the namespace can never drift back out of sync again.
+ */
+export const DOCUMENT_ARTIFACT_KEY_PREFIX = 'artifacts/';
+
 export async function computeHash(content: Uint8Array): Promise<string> {
   const hashBuffer = await crypto.subtle.digest('SHA-256', content);
   const hashArray = Array.from(new Uint8Array(hashBuffer));
@@ -114,7 +129,7 @@ export class R2ArtifactStoreAdapter implements ArtifactStore {
   private bucket: R2Bucket;
   private prefix: string;
 
-  constructor(bucket: R2Bucket, prefix = 'artifacts/') {
+  constructor(bucket: R2Bucket, prefix = DOCUMENT_ARTIFACT_KEY_PREFIX) {
     this.bucket = bucket;
     this.prefix = prefix;
   }

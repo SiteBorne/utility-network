@@ -259,11 +259,23 @@ describe('ResultContentDigest v1: content integrity', () => {
     expect(await codeOf(nest(RESULT_CONTENT_MAX_DEPTH + 1))).toBe(
       'RESULT_CONTENT_UNSUPPORTED_STRUCTURE'
     );
-    // Hostile depth is refused with a typed error, never an untyped RangeError:
-    // moderately deep input is caught by the depth bound; absurdly deep input
-    // overflows JSON.stringify first and is reported as not serializable.
+    // Hostile depth is refused with a typed error, never an untyped RangeError,
+    // at any depth beyond the bound. `assertSupportedStructure` walks the tree
+    // iteratively (an explicit stack, not recursion) specifically so it can
+    // never itself overflow the call stack, and it runs after `toStoredForm`'s
+    // `JSON.stringify`/`JSON.parse` round-trip -- so the depth check is only
+    // reachable at all if that round-trip didn't already throw first. On this
+    // engine (V8/Node), `JSON.stringify`/`JSON.parse` handle even absurdly deep
+    // nesting (100_000 levels) without hitting their own stack limit, so every
+    // depth past `RESULT_CONTENT_MAX_DEPTH` (64) is caught by the explicit
+    // bound as `RESULT_CONTENT_UNSUPPORTED_STRUCTURE`, never as
+    // `RESULT_CONTENT_NOT_SERIALIZABLE` -- a prior version of this test assumed
+    // stringify/parse would overflow first at 100_000 and expected the latter
+    // code; that assumption doesn't hold on this engine. The security property
+    // under test (typed, non-throwing classification at every depth) holds
+    // either way.
     expect(await codeOf(nest(1_000))).toBe('RESULT_CONTENT_UNSUPPORTED_STRUCTURE');
-    expect(await codeOf(nest(100_000))).toBe('RESULT_CONTENT_NOT_SERIALIZABLE');
+    expect(await codeOf(nest(100_000))).toBe('RESULT_CONTENT_UNSUPPORTED_STRUCTURE');
   });
 
   it('bounds size at the canonical-byte ceiling, exactly at the boundary', async () => {

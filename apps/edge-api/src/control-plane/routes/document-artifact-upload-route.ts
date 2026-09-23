@@ -24,7 +24,7 @@
  */
 import type { Context } from 'hono';
 import type { Env } from '../config/env';
-import { R2ArtifactStoreAdapter } from '../artifacts/store';
+import { R2ArtifactStoreAdapter, DOCUMENT_ARTIFACT_KEY_PREFIX } from '../artifacts/store';
 import { D1ArtifactsRepository } from '../repositories/d1/artifacts';
 import { D1DocumentIngressAdmissionRepository } from '../repositories/d1/document-ingress-admission';
 import {
@@ -149,7 +149,7 @@ export async function documentArtifactUploadRoute(
   }
 
   const contentType = c.req.header('content-type');
-  const artifactStore = new R2ArtifactStoreAdapter(c.env.ARTIFACTS);
+  const artifactStore = new R2ArtifactStoreAdapter(c.env.ARTIFACTS, DOCUMENT_ARTIFACT_KEY_PREFIX);
   const artifactsRepository = new D1ArtifactsRepository(c.env.DB);
 
   const result = await storeDocumentUpload(bytes, contentType, {

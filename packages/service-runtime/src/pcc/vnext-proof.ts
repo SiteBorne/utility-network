@@ -155,6 +155,35 @@ export async function buildSelfVerifyingPcc<K extends string, E>(params: {
   };
 }
 
+/**
+ * Canonical, shared accessor for the governed vNext proof's
+ * `pcc_document_hash` off a wire-shaped `extensions` object — the ONE place
+ * that knows this value lives at
+ * `extensions[PCC_PROOF_NAMESPACE].receipt.pcc_document_hash` (nested one
+ * level inside the signed `receipt`, NOT a flat field directly on the proof
+ * object — see `VNextProof`/`VNextReceipt` above). Every consumer that
+ * needs this value from an untyped/wire-shaped extensions bag (e.g. a
+ * buyer-authorized result-release gate) MUST go through this function
+ * rather than re-deriving its own `proof.xxx` property path, so the read
+ * location can never drift out of sync with the real governed PCC shape
+ * again.
+ *
+ * Fails closed: any malformed, missing, or wrongly-shaped input returns
+ * `null` rather than throwing — callers gating access on this value must
+ * treat `null` as "deny", never as "absent therefore allow".
+ */
+export function readGovernedPccDocumentHash(extensions: unknown): string | null {
+  if (extensions === null || typeof extensions !== 'object' || Array.isArray(extensions)) {
+    return null;
+  }
+  const proof = (extensions as Record<string, unknown>)[PCC_PROOF_NAMESPACE];
+  if (proof === null || typeof proof !== 'object' || Array.isArray(proof)) return null;
+  const receipt = (proof as Record<string, unknown>).receipt;
+  if (receipt === null || typeof receipt !== 'object' || Array.isArray(receipt)) return null;
+  const hash = (receipt as Record<string, unknown>).pcc_document_hash;
+  return typeof hash === 'string' ? hash : null;
+}
+
 export interface VNextVerificationResult {
   valid: boolean;
   errors: string[];

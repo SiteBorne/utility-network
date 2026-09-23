@@ -36,7 +36,7 @@ import { buildWebContextV2CdpProductionRouteConfig } from '../production/web-con
 import { buildVerifyAgentOutputV2CdpProductionRouteConfig } from '../production/verify-agent-output-v2-cdp-composition';
 import { buildCompanyEvidenceGraphV2CdpProductionRouteConfig } from '../production/company-evidence-graph-v2-cdp-composition';
 import { buildDocumentEvidenceJsonV2CdpProductionRouteConfig } from '../production/document-evidence-json-v2-cdp-composition';
-import { R2ArtifactStoreAdapter } from '../artifacts/store';
+import { R2ArtifactStoreAdapter, DOCUMENT_ARTIFACT_KEY_PREFIX } from '../artifacts/store';
 import { importContinuationEnvelopeKey } from '../continuation/envelope';
 import { buildProductionCdpChainReceiptChecker } from '../evidence/chain-receipt-checker';
 import { D1JobsRepository, D1StateEventsRepository } from '../repositories/d1/jobs';
@@ -231,7 +231,9 @@ const ROUTE_CONFIG_BUILDERS: Record<
         MODAL_DOCWORKER_PROXY_SECRET: env.MODAL_DOCWORKER_PROXY_SECRET,
       },
       env.DB,
-      env.ARTIFACTS ? new R2ArtifactStoreAdapter(env.ARTIFACTS) : undefined
+      env.ARTIFACTS
+        ? new R2ArtifactStoreAdapter(env.ARTIFACTS, DOCUMENT_ARTIFACT_KEY_PREFIX)
+        : undefined
     ),
   'document_evidence_json.v3': (env) =>
     buildDocumentEvidenceJsonV2CdpProductionRouteConfig(
@@ -250,7 +252,9 @@ const ROUTE_CONFIG_BUILDERS: Record<
         MODAL_DOCWORKER_PROXY_SECRET: env.MODAL_DOCWORKER_PROXY_SECRET,
       },
       env.DB,
-      env.ARTIFACTS ? new R2ArtifactStoreAdapter(env.ARTIFACTS, 'documents/') : undefined,
+      env.ARTIFACTS
+        ? new R2ArtifactStoreAdapter(env.ARTIFACTS, DOCUMENT_ARTIFACT_KEY_PREFIX)
+        : undefined,
       undefined,
       'document_evidence_json.v3'
     ),
