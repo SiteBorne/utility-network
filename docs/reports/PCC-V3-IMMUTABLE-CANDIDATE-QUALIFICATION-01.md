@@ -218,3 +218,21 @@ final artifact scope, rerun the full gate matrix, then seek a new independent
 review of that exact source commit. Only then can
 `PCC-V3-ZERO-TRAFFIC-CANDIDATE-DEPLOYMENT-01` be considered. No upload or
 deployment is authorized by this report.
+
+## Independent release review
+
+An independent clean-context, read-only reviewer inspected source commit
+`dde76bc5166d4662ffd5e102e29078766903ffc1` and returned `PASS_WITH_FINDINGS` for
+the local review, with `ZERO_TRAFFIC_UPLOAD_READY=NO`. The reviewer reproduced
+the four candidate schema-URL publication failures, checked the 0.017 verify
+authority chain, exact REST/MCP selector and buyer gates, initial/replay
+authorization source, R2 hash/length/canonical read checks, pre-settlement
+validation, 34-file Release 3 checksum scope, and absence of historical or
+active-v2 edits. No bounded-review auth bypass or private security-IP leak was
+found. MCP tool discovery includes four named v3 candidates, while their
+quote/call execution is selector-gated. The reviewer also found
+`source_commit: pending` in Release 3's normative descriptor, so no immutable
+source SHA can be inferred from it. The final report-only commit does not change
+candidate code or metadata. These findings do not close the publication,
+broad-baseline, production-schema upgrade, or deployed-artifact comparison
+gates.
