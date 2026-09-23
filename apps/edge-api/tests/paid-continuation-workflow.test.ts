@@ -13,6 +13,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
+import { hashPaymentObject } from '@siteborne/protocol-x402';
 import { runPaidContinuationWorkflow } from '../src/control-plane/workflows/paid-continuation-workflow';
 import { deriveWorkflowInstanceId } from '../src/control-plane/continuation/instance-id';
 import { FakeWorkflowStep } from './support/fake-workflow-step';
@@ -40,6 +41,74 @@ async function runHappyPath() {
 }
 
 describe('paid-continuation-workflow — step graph (H2AWI-2a)', () => {
+  it('binds a finalized buyer PCC resource before terminal delivery and fails closed on binding loss', async () => {
+    const metadata = buildTestMetadata();
+    const reference = {
+      storage: 'R2_CONTENT_ADDRESS' as const,
+      content_hash: `sha256:${'a'.repeat(64)}` as `sha256:${string}`,
+      byte_length: 128,
+      media_type: 'application/pcc+json' as const,
+    };
+    const pcc = {
+      receipt_id: 'receipt_test_0001',
+      extensions: {
+        'net.siteborne.verification-proof.v1': {
+          pcc_document_hash: `sha256:${'b'.repeat(64)}`,
+        },
+      },
+    };
+    const outcome = {
+      ...buildSuccessfulExecutorOutcome(),
+      resultRepresentation: { format: 'SELF_VERIFYING_PCC_VNEXT' as const, body: pcc },
+    };
+    const base = await buildTestDependencies({ executor: async () => outcome });
+    const bind = vi.fn(async () => {});
+    const deps = {
+      ...base,
+      resultArtifacts: {
+        prepareExecutorOutcome: async () => ({
+          ...outcome,
+          resultRepresentation: { format: 'SELF_VERIFYING_PCC_VNEXT' as const, reference },
+        }),
+        read: async () => pcc,
+      },
+      validatePcc: async () => ({
+        valid: true as const,
+        pcc,
+        pccReference: reference,
+        linkEvidenceInputs: outcome.linkEvidenceInputs,
+      }),
+      resultAuthorization: bind,
+    };
+    const input = await sealTestInput(metadata, { key: deps.envelopeKey });
+    const delivered = await runPaidContinuationWorkflow(
+      { payload: input },
+      new FakeWorkflowStep(),
+      deps
+    );
+    expect(delivered.status).toBe('settled');
+    expect(bind).toHaveBeenCalledWith({
+      jobId: metadata.job_id,
+      serviceId: metadata.service,
+      contentHash: reference.content_hash,
+      pccDocumentHash: `sha256:${'b'.repeat(64)}`,
+    });
+
+    const failingBase = await buildTestDependencies({ executor: async () => outcome });
+    const failed = await runPaidContinuationWorkflow(
+      { payload: await sealTestInput(metadata, { key: failingBase.envelopeKey }) },
+      new FakeWorkflowStep(),
+      {
+        ...failingBase,
+        resultArtifacts: deps.resultArtifacts,
+        validatePcc: deps.validatePcc,
+        resultAuthorization: async () => {
+          throw new Error('simulated_binding_loss');
+        },
+      }
+    );
+    expect(failed.status).toBe('persistence_failed_after_settlement');
+  });
   it('runs the 7 frozen steps in exact order on the happy path', async () => {
     const { result, step, metadata } = await runHappyPath();
 
@@ -131,6 +200,119 @@ describe('paid-continuation-workflow — executor integration (H2AWI-2b)', () =>
   it('calls the injected executor exactly once with the job routing input', async () => {
     const { deps } = await runHappyPath();
     expect(deps.executor).toHaveBeenCalledTimes(1);
+  });
+
+  it('settles and persists the executor-measured upto amount instead of the authorized maximum', async () => {
+    const metadata = buildTestMetadata();
+    const payload = buildDecryptedPayload(metadata);
+    const uptoPayload = {
+      ...payload,
+      settlementContext: {
+        ...payload.settlementContext,
+        scheme: 'upto' as const,
+        paymentPayload: { ...payload.settlementContext.paymentPayload, scheme: 'upto' },
+        paymentRequirements: {
+          ...payload.settlementContext.paymentRequirements,
+          scheme: 'upto',
+        },
+      },
+      verificationEvidence: { ...payload.verificationEvidence, scheme: 'upto' as const },
+    };
+    const deps = await buildTestDependencies({
+      executor: async () => ({
+        ...buildSuccessfulExecutorOutcome(),
+        actualAmountAtomic: '7000',
+        resourceMetrics: { page_count: 1 },
+      }),
+      settleResponse: {
+        ...fakeSettleSuccess(),
+        scheme: 'upto',
+        actual_amount: '7000',
+        authorized_maximum: '9000',
+        verification_evidence_hash: await hashPaymentObject(uptoPayload.verificationEvidence),
+      },
+    });
+    const input = await sealTestInput(metadata, { key: deps.envelopeKey, payload: uptoPayload });
+    const result = await runPaidContinuationWorkflow(
+      { payload: input },
+      new FakeWorkflowStep(),
+      deps
+    );
+    expect(deps.settle.mock.calls[0]?.[0].scheme).toBe('upto');
+    expect(await deps.settle.mock.results[0]?.value).toMatchObject({ scheme: 'upto' });
+    expect(result.status).toBe('settled');
+    expect(deps.settle).toHaveBeenCalledWith(expect.anything(), expect.anything(), '7000');
+    expect(
+      deps.resultReceiptPersistence.results.get(TEST_JOB_ID)?.cachedResult.settleResponse.amount
+    ).toBe('7000');
+  });
+
+  it('fails closed before settlement when the executor-measured amount exceeds authorization', async () => {
+    const metadata = buildTestMetadata();
+    const payload = buildDecryptedPayload(metadata);
+    const uptoPayload = {
+      ...payload,
+      settlementContext: {
+        ...payload.settlementContext,
+        scheme: 'upto' as const,
+        paymentPayload: { ...payload.settlementContext.paymentPayload, scheme: 'upto' },
+        paymentRequirements: {
+          ...payload.settlementContext.paymentRequirements,
+          scheme: 'upto',
+        },
+      },
+      verificationEvidence: { ...payload.verificationEvidence, scheme: 'upto' as const },
+    };
+    const deps = await buildTestDependencies({
+      executor: async () => ({
+        ...buildSuccessfulExecutorOutcome(),
+        actualAmountAtomic: '9001',
+        resourceMetrics: { page_count: 999 },
+      }),
+    });
+    const input = await sealTestInput(metadata, { key: deps.envelopeKey, payload: uptoPayload });
+    const result = await runPaidContinuationWorkflow(
+      { payload: input },
+      new FakeWorkflowStep(),
+      deps
+    );
+    expect(result).toMatchObject({
+      status: 'executor_rejected',
+      error_code: 'actual_amount_exceeds_authorized_maximum',
+    });
+    expect(deps.settle).not.toHaveBeenCalled();
+  });
+
+  it('fails closed before settlement when an upto executor omits its measured amount', async () => {
+    const metadata = buildTestMetadata();
+    const payload = buildDecryptedPayload(metadata);
+    const uptoPayload = {
+      ...payload,
+      settlementContext: {
+        ...payload.settlementContext,
+        scheme: 'upto' as const,
+        paymentPayload: { ...payload.settlementContext.paymentPayload, scheme: 'upto' },
+        paymentRequirements: {
+          ...payload.settlementContext.paymentRequirements,
+          scheme: 'upto',
+        },
+      },
+      verificationEvidence: { ...payload.verificationEvidence, scheme: 'upto' as const },
+    };
+    const deps = await buildTestDependencies({
+      executor: async () => buildSuccessfulExecutorOutcome(),
+    });
+    const input = await sealTestInput(metadata, { key: deps.envelopeKey, payload: uptoPayload });
+    const result = await runPaidContinuationWorkflow(
+      { payload: input },
+      new FakeWorkflowStep(),
+      deps
+    );
+    expect(result).toMatchObject({
+      status: 'executor_rejected',
+      error_code: 'actual_amount_required_for_upto',
+    });
+    expect(deps.settle).not.toHaveBeenCalled();
   });
 
   it('surfaces a resolved-but-unsuccessful ExecutorOutcome as executor_rejected, never calling PCC or settle', async () => {
@@ -266,7 +448,7 @@ describe('paid-continuation-workflow — durable rejection-detail capture (SUN-1
   // `StateEvent.evidence_ref`, an existing, already-nullable D1 column no
   // migration is needed for.
 
-  it('persists the specific rejection reason as the REJECTED event\'s evidence_ref (limitations-only shape)', async () => {
+  it("persists the specific rejection reason as the REJECTED event's evidence_ref (limitations-only shape)", async () => {
     const metadata = buildTestMetadata();
     const deps = await buildTestDependencies({
       executor: async () => ({
@@ -358,7 +540,10 @@ describe('paid-continuation-workflow — durable rejection-detail capture (SUN-1
     const metadata = buildTestMetadata();
     const deps = await buildTestDependencies({
       executor: async () => ({
-        result: { result_class: 'rejected', failure: { code: 'bad_input', message: 'plain reason' } },
+        result: {
+          result_class: 'rejected',
+          failure: { code: 'bad_input', message: 'plain reason' },
+        },
       }),
     });
     const input = await sealTestInput(metadata, { key: deps.envelopeKey });
@@ -368,19 +553,25 @@ describe('paid-continuation-workflow — durable rejection-detail capture (SUN-1
 
     const rejectedEvent = deps.jobPersistence.events.find((e) => e.to_state === 'REJECTED');
     expect(typeof rejectedEvent!.evidence_ref).toBe('string');
-    expect(rejectedEvent!.evidence_ref).not.toMatch(/signature|nonce|authorization|PAYMENT-SIGNATURE/i);
+    expect(rejectedEvent!.evidence_ref).not.toMatch(
+      /signature|nonce|authorization|PAYMENT-SIGNATURE/i
+    );
   });
 
   it('idempotency: re-running the same terminal transition never appends a second event', async () => {
     const metadata = buildTestMetadata();
     const deps = await buildTestDependencies({
-      executor: async () => ({ result: { result_class: 'rejected', failure: { code: 'x', message: 'one reason' } } }),
+      executor: async () => ({
+        result: { result_class: 'rejected', failure: { code: 'x', message: 'one reason' } },
+      }),
     });
     const input = await sealTestInput(metadata, { key: deps.envelopeKey });
     const step = new FakeWorkflowStep();
 
     await runPaidContinuationWorkflow({ payload: input }, step, deps);
-    const countAfterFirst = deps.jobPersistence.events.filter((e) => e.to_state === 'REJECTED').length;
+    const countAfterFirst = deps.jobPersistence.events.filter(
+      (e) => e.to_state === 'REJECTED'
+    ).length;
     expect(countAfterFirst).toBe(1);
 
     // Re-entering with the job already at the terminal REJECTED state (the
@@ -389,7 +580,9 @@ describe('paid-continuation-workflow — durable rejection-detail capture (SUN-1
     // already covers this; this test proves the new evidenceRef parameter
     // does not bypass it.
     await runPaidContinuationWorkflow({ payload: input }, step, deps);
-    const countAfterSecond = deps.jobPersistence.events.filter((e) => e.to_state === 'REJECTED').length;
+    const countAfterSecond = deps.jobPersistence.events.filter(
+      (e) => e.to_state === 'REJECTED'
+    ).length;
     expect(countAfterSecond).toBe(1);
   });
 
@@ -397,7 +590,10 @@ describe('paid-continuation-workflow — durable rejection-detail capture (SUN-1
     const metadata = buildTestMetadata();
     const deps = await buildTestDependencies({
       executor: async () => ({
-        result: { result_class: 'rejected', failure: { code: 'x', message: 'reason that fails to persist' } },
+        result: {
+          result_class: 'rejected',
+          failure: { code: 'x', message: 'reason that fails to persist' },
+        },
       }),
     });
     // Existing crash-matrix fixture mechanism (`failAppendStateEventForToState`)
@@ -440,7 +636,7 @@ describe('paid-continuation-workflow — PCC integration (H2AWI-2c)', () => {
   // only ever wrote the bare `VERIFICATION_FAILED` state-transition reason
   // and dropped `pccResult.reason` (e.g. `signature_mismatch`,
   // `missing_receipt`) before it could reach D1.
-  it('persists the specific PCC rejection reason as the REJECTED event\'s evidence_ref', async () => {
+  it("persists the specific PCC rejection reason as the REJECTED event's evidence_ref", async () => {
     const metadata = buildTestMetadata();
     const deps = await buildTestDependencies({
       validatePcc: () => ({ valid: false, reason: 'signature_mismatch' }),
@@ -469,7 +665,9 @@ describe('paid-continuation-workflow — PCC integration (H2AWI-2c)', () => {
     const rejectedEvent = deps.jobPersistence.events.find((e) => e.to_state === 'REJECTED');
     expect(typeof rejectedEvent!.evidence_ref).toBe('string');
     expect(rejectedEvent!.evidence_ref).toBe('missing_receipt');
-    expect(rejectedEvent!.evidence_ref).not.toMatch(/signature|nonce|authorization|PAYMENT-SIGNATURE/i);
+    expect(rejectedEvent!.evidence_ref).not.toMatch(
+      /signature|nonce|authorization|PAYMENT-SIGNATURE/i
+    );
   });
 });
 

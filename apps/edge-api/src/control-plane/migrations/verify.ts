@@ -47,6 +47,8 @@ export async function verifyMigrations(db: D1Database): Promise<MigrationVerific
       'payment_attempts',
       'x402_quotes',
       'x402_service_results',
+      'result_subject_bindings',
+      'result_resources',
     ];
 
     for (const table of requiredTables) {

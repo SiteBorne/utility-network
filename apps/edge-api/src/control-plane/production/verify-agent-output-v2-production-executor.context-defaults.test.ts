@@ -106,11 +106,10 @@ function walk(dir: string): string[] {
 describe('SUN-1216 residual adjudication: buildServiceContext fixture-default reachability (Finding A)', () => {
   it('the one production-reachable call site supplies clock/artifact_store/audit as unconditional, non-nullable expressions (never able to trigger the ?? fixture fallback)', () => {
     const source = readFileSync(EXECUTOR_PATH, 'utf8');
-    const callMatch = source.match(
-      /buildServiceContext\('verify_agent_output\.v2',\s*\{([\s\S]*?)\}\s*\);/
-    );
+    const callMatch = source.match(/buildServiceContext\(serviceId,\s*\{([\s\S]*?)\}\s*\);/);
     expect(callMatch).not.toBeNull();
     const callBody = callMatch![1];
+    expect(source).toContain("serviceId: 'verify_agent_output.v2' | 'verify_agent_output.v3'");
 
     // Each of the three fields must be present and bound to a literal
     // function-call expression -- `name()` or `nameFn()` -- never a
@@ -187,11 +186,12 @@ describe('SUN-1216 residual adjudication: buildServiceContext fixture-default re
 
   it('SUN-1222B-S3R: the fourth audited call site (document_evidence_json.v2) also supplies clock/artifact_store/audit as unconditional, non-nullable expressions -- artifact_store here is genuinely used (unlike the other three), so it is a real call taking the injected R2-backed store as its one argument, not a nullary stub', () => {
     const source = readFileSync(DOCUMENT_EVIDENCE_EXECUTOR_PATH, 'utf8');
-    const callMatch = source.match(
-      /buildServiceContext\('document_evidence_json\.v2',\s*\{([\s\S]*?)\}\s*\);/
-    );
+    const callMatch = source.match(/buildServiceContext\(serviceId,\s*\{([\s\S]*?)\}\s*\);/);
     expect(callMatch).not.toBeNull();
     const callBody = callMatch![1];
+    expect(source).toContain(
+      "serviceId: 'document_evidence_json.v2' | 'document_evidence_json.v3'"
+    );
 
     const auditFieldMatch = callBody.match(new RegExp('audit:\\s*([a-zA-Z0-9_]+\\(\\))'));
     expect(

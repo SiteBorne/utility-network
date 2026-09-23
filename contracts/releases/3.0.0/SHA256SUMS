@@ -13,7 +13,7 @@ b062e226808e5ce7ccc71f142c54731dbb7f05bdd44dab93fee904fca9916a1d  ./metadata/com
 bf272632c37c95ccf2aa966041051bd0e460fcf2c5b05fbb75164d2ffda1a4fd  ./metadata/web_context_verified.v3.json
 412fe40ee3e983b42dd4ef98dd2a815fbf208f66d3cc8bd8bc4f27ba862591cb  ./openapi/common-components.json
 d8bb82f3b772b86acebcac419670e0f5a5ea88a78f6b3340d11a1520c4b0c779  ./openapi/service-components.json
-2f67e87def38dafaf223966e964e538bc60b4a5028445f85f41e6c4f9c002341  ./openapi/service-contracts.openapi.json
+1a1e80ffd90242e7f317ec961beb815328f7774974f763d1a18e837c3278d52e  ./openapi/service-contracts.openapi.json
 2979350890d8b2376cf72fabbddbdbfe35182e693eb043d9ca20aa6fe86af994  ./schemas/common/async-job.schema.json
 772db35bb1d19bcee3cfbbfde41da88f77bb10b9afeabe505a15e6a0b25655ac  ./schemas/common/authorized-artifact-reference.schema.json
 4567307ae24362cb33c1078072cd4d409eb14c0a2783e9941c1d0ec0e7d4b90f  ./schemas/common/money.schema.json

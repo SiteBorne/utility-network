@@ -119,15 +119,19 @@ function verifyAgentOutputSchemaProfileCheck(
 /** PRODUCTION-ECONOMICS-DISCOVERY-01: an unavailable mode
  * (`independent_reproduction`) is rejected before the schema profile check and
  * before any quote/402 -- it must never be quoted at the standard price. */
-const verifyAgentOutputPreEconomicCheck = composePreEconomicValidators(
-  modeAvailabilityValidator('verify_agent_output.v2'),
-  verifyAgentOutputSchemaProfileCheck
-);
+const verifyAgentOutputPreEconomicCheck = (
+  serviceId: 'verify_agent_output.v2' | 'verify_agent_output.v3'
+) =>
+  composePreEconomicValidators(
+    modeAvailabilityValidator(serviceId),
+    verifyAgentOutputSchemaProfileCheck
+  );
 
 export async function buildVerifyAgentOutputV2CdpProductionRouteConfig(
   env: VerifyAgentOutputV2CdpProductionEnv,
   db: D1Database,
-  explicitTestEvidenceOverride?: ExplicitTestEvidenceOverride
+  explicitTestEvidenceOverride?: ExplicitTestEvidenceOverride,
+  serviceId: 'verify_agent_output.v2' | 'verify_agent_output.v3' = 'verify_agent_output.v2'
 ): Promise<X402ServiceRouteConfig | ProductionCompositionUnavailable> {
   if (!db) {
     return { unavailable: true, reason: 'no D1 database binding supplied' };
@@ -211,7 +215,11 @@ export async function buildVerifyAgentOutputV2CdpProductionRouteConfig(
     cdpEvidence = resolved;
   }
 
-  const executor: ServiceExecutor = buildVerifyAgentOutputV2ProductionExecutor(signer, registry);
+  const executor: ServiceExecutor = buildVerifyAgentOutputV2ProductionExecutor(
+    signer,
+    registry,
+    serviceId
+  );
 
   // SUN-1220L: the official pinned x402 exact/EIP-3009 signing path
   // (`ExactEvmScheme.createPaymentPayload` -> `signEIP3009Authorization`)
@@ -224,26 +232,30 @@ export async function buildVerifyAgentOutputV2CdpProductionRouteConfig(
   const asset = resolvePaymentAsset(network);
 
   return {
-    serviceId: 'verify_agent_output.v2',
+    serviceId,
     scheme: 'exact',
+    // Release 3 inherits the governed v2 economic definition. Result
+    // authorization is not authority to move it back to the v1 price key.
     pricingKey: 'verify_agent_output_standard_v2',
     rail: 'cdp',
     network,
     asset: asset.address,
     paymentRequirementExtra: { name: asset.name, version: asset.version },
     payTo: env.SELLER_WALLET_ADDRESS,
-    path: '/v2/verify/agent-output',
-    inputSchema: BUNDLED_SERVICE_INPUT_SCHEMAS['verify_agent_output.v2'] as Record<string, unknown>,
-    contractRelease: '2.0.0',
+    path: serviceId.endsWith('.v3') ? '/v3/verify/agent-output' : '/v2/verify/agent-output',
+    inputSchema: BUNDLED_SERVICE_INPUT_SCHEMAS[serviceId] as Record<string, unknown>,
+    contractRelease: serviceId.endsWith('.v3') ? '3.0.0' : '2.0.0',
     inputSchemaHash: 'sha256:66d459905cd1a18b57ccb3fc40043a4e4c1a77bc7dba40676fcaf674cacb0f34',
-    outputSchemaHash: 'sha256:a9a462b89b290ecba1aa62ec6d2fd030572f326ed79f498a43690244b38ad679',
-    pccDependency: '1.1.0',
+    outputSchemaHash: serviceId.endsWith('.v3')
+      ? 'sha256:7a164cc8bbd34c95608fcc6e420a36d29844ddfbc6c029439e9f4262cedf8a73'
+      : 'sha256:a9a462b89b290ecba1aa62ec6d2fd030572f326ed79f498a43690244b38ad679',
+    pccDependency: serviceId.endsWith('.v3') ? '2.0.0' : '1.1.0',
     db,
     clock: () => new Date().toISOString(),
     evidenceMode: cdpEvidence.evidenceMode,
     evidenceProvider: cdpEvidence.evidenceProvider,
     pccKeyRegistry: registry,
-    preEconomicBodyValidator: verifyAgentOutputPreEconomicCheck,
+    preEconomicBodyValidator: verifyAgentOutputPreEconomicCheck(serviceId),
     executor,
   };
 }

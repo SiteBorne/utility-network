@@ -38,6 +38,8 @@ import type { McpServiceExecutionBoundary } from '@siteborne/protocol-mcp';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import type { Env } from '../config/env';
+import type { VerifiedPrincipalEvidence } from '../security/result-authorization';
+import { attachVerifiedPrincipal } from '../security/verified-principal-context';
 
 /** A real production route function -- e.g.
  * `companyEvidenceGraphV2CdpProductionRoute` -- with the exact signature
@@ -59,6 +61,8 @@ export const MCP_X402_SERVICE_PATHS: Readonly<Partial<Record<SiteborneServiceId,
   'verify_agent_output.v2': '/v2/verify/agent-output',
   'company_evidence_graph.v3': '/v3/company/evidence-graph',
   'web_context_verified.v3': '/v3/web/context',
+  'document_evidence_json.v3': '/v3/document/evidence-json',
+  'verify_agent_output.v3': '/v3/verify/agent-output',
 };
 
 /** A 402/error REST response body -- code/message/error only. The 200
@@ -85,7 +89,8 @@ interface RestErrorResultBody {
 export function createMcpX402ServiceBoundary(
   env: Env,
   handlers: Readonly<Partial<Record<SiteborneServiceId, McpX402RouteHandler>>>,
-  origin: string
+  origin: string,
+  verifiedPrincipal: VerifiedPrincipalEvidence | null = null
 ): McpServiceExecutionBoundary {
   return {
     async execute(serviceId, input, _context, paymentPayload) {
@@ -112,6 +117,7 @@ export function createMcpX402ServiceBoundary(
         headers,
         body: JSON.stringify(input ?? {}),
       });
+      if (verifiedPrincipal) attachVerifiedPrincipal(request, verifiedPrincipal);
 
       // A throwaway, single-route Hono sub-app -- the standard, minimal
       // way to invoke an existing Hono route handler function with a

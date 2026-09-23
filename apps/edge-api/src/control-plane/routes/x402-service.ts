@@ -89,6 +89,7 @@ import type { D1Database } from '@cloudflare/workers-types';
 import { D1PaymentAttemptRepository } from '../repositories/d1/payment-attempts';
 import { D1JobsRepository, D1StateEventsRepository } from '../repositories/d1/jobs';
 import { D1AuditRepository } from '../repositories/d1/quota-audit-security';
+import { D1ResultAuthorizationRepository } from '../repositories/d1/result-authorization';
 import { X402QuoteRepository, X402ServiceResultRepository } from '../repositories/d1/x402-quotes';
 import { createAuditEvent } from '../audit/events';
 import { createStateEvent } from '../state-machine';
@@ -121,6 +122,16 @@ import {
   type PccResultArtifactStore,
   validateGovernedVNextPcc,
 } from '../results/pcc-result-artifact';
+import {
+  canonicalOpaqueResultId,
+  createResultSubjectBinding,
+  evaluateResultReleaseAuthorization,
+  governedResultConfidentiality,
+  publicResultAuthorizationError,
+  type ResultSubjectBindingV1,
+  type SubjectReferenceKey,
+  type VerifiedPrincipalEvidence,
+} from '../security/result-authorization';
 
 /** Compact machine-readable codes only (same shape the CDP provider
  * accepts). Anything else is dropped so free-form facilitator text can
@@ -356,6 +367,14 @@ export interface X402ServiceRouteConfig {
   /** Reader for explicitly versioned vNext result references. Legacy inline
    * rows never consult it. */
   resultArtifactReader?: Pick<PccResultArtifactStore, 'read'>;
+  /** Required for governed BUYER_AUTHORIZED Release 3 services. The callback
+   * is the sole protocol credential boundary; route code receives only the
+   * server-owned verified principal and never parses identity headers. */
+  resultAuthorization?: {
+    readonly authenticate: (context: Context) => Promise<VerifiedPrincipalEvidence | null>;
+    readonly subjectReferenceKey: SubjectReferenceKey;
+    readonly revokedSubjectRefs: () => Promise<readonly string[]>;
+  };
 }
 
 export const PAYTO_NOT_CONFIGURED = 'siteborne-fixture:payto-not-configured';
@@ -524,11 +543,62 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
     const jobsRepo = new D1JobsRepository(db);
     const stateEventsRepo = new D1StateEventsRepository(db);
     const auditRepo = new D1AuditRepository(db);
+    const resultAuthorizationRepo = new D1ResultAuthorizationRepository(db);
 
     async function audit(type: string, details: Record<string, unknown>) {
       await auditRepo.create(
         createAuditEvent(type, { serviceId: config.serviceId, actor: 'SYSTEM', details })
       );
+    }
+
+    async function bestEffortAuthorizationAudit(
+      type:
+        | 'authentication_success'
+        | 'authentication_failure'
+        | 'result_release_success'
+        | 'result_release_denied',
+      details: Record<string, unknown>
+    ): Promise<void> {
+      // An unauthenticated public request must not produce an unbounded
+      // durable D1 write before the admission boundary.
+      if (type === 'authentication_failure') return;
+      try {
+        await audit(type, details);
+      } catch {
+        // Authentication telemetry is observational. A telemetry outage must
+        // neither grant access nor replace the governed 401 response.
+      }
+    }
+
+    const confidentialityClass = governedResultConfidentiality(
+      config.serviceId,
+      serviceVersionForId(config.serviceId),
+      config.contractRelease
+    );
+    let verifiedPrincipal: VerifiedPrincipalEvidence | null = null;
+    if (confidentialityClass === 'BUYER_AUTHORIZED') {
+      if (!config.resultAuthorization) {
+        return c.json({ error: 'authentication_required' }, 401);
+      }
+      try {
+        verifiedPrincipal = await config.resultAuthorization.authenticate(c);
+      } catch {
+        verifiedPrincipal = null;
+      }
+      if (!verifiedPrincipal) {
+        await bestEffortAuthorizationAudit('authentication_failure', {
+          confidentiality_class: 'BUYER_AUTHORIZED',
+          reason: 'verified_principal_unavailable',
+        });
+        return c.json({ error: 'authentication_required' }, 401);
+      }
+      await bestEffortAuthorizationAudit('authentication_success', {
+        confidentiality_class: 'BUYER_AUTHORIZED',
+        verifier_id: verifiedPrincipal.verifier_id,
+        subject_type: verifiedPrincipal.subject.subject_type,
+        authentication_method: verifiedPrincipal.subject.authentication_method,
+        assurance_level: verifiedPrincipal.subject.assurance_level,
+      });
     }
 
     async function transition(
@@ -828,7 +898,76 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
       payee: stored.quote.payee,
     };
 
-    const acquireOutcome = await acquirePaymentAttempt(paymentAttempts, {
+    const jobId = crypto.randomUUID();
+    const requestId = crypto.randomUUID();
+    const job: Job = {
+      id: jobId,
+      request_id: requestId,
+      service_id: config.serviceId,
+      service_version: serviceVersionForId(config.serviceId),
+      input_hash: inputHash,
+      input_schema_hash: config.inputSchemaHash,
+      output_schema_hash: config.outputSchemaHash,
+      idempotency_key: paymentIdentifier,
+      contract_release: config.contractRelease,
+      pcc_dependency: config.pccDependency,
+      current_state: 'RECEIVED',
+      created_at: nowIso,
+      updated_at: nowIso,
+      expires_at: stored.quote.expires_at,
+      attempt_count: 1,
+      production_enabled: false,
+    };
+    let admittedSubjectBinding: ResultSubjectBindingV1 | null = null;
+    if (confidentialityClass === 'BUYER_AUTHORIZED') {
+      const authorization = config.resultAuthorization;
+      if (!authorization || !verifiedPrincipal) {
+        return c.json({ error: 'authentication_required' }, 401);
+      }
+      const bindingId = `rb_${crypto.randomUUID()}`;
+      admittedSubjectBinding = createResultSubjectBinding(
+        {
+          schema_version: 'result_resource.v1',
+          operation_id: jobId,
+          result_id: 'pending',
+          artifact_id: 'pending',
+          pcc_document_hash: `sha256:${'0'.repeat(64)}`,
+          service_id: config.serviceId,
+          service_version: serviceVersionForId(config.serviceId),
+          contract_release: config.contractRelease,
+          confidentiality_class: 'BUYER_AUTHORIZED',
+          result_binding_id: bindingId,
+        },
+        verifiedPrincipal,
+        {
+          subjectReferenceKey: authorization.subjectReferenceKey,
+          binding_id: bindingId,
+          created_at: nowIso,
+          authority_context_id: `ac_${crypto.randomUUID()}`,
+          policy_evaluation_id: `pe_${crypto.randomUUID()}`,
+        }
+      );
+    }
+
+    const acquireRepository = admittedSubjectBinding
+      ? {
+          acquire: async (record: Parameters<typeof paymentAttempts.acquire>[0]) => {
+            try {
+              const outcome = await resultAuthorizationRepo.acquireBuyerAuthorizedOperation(
+                record,
+                job,
+                admittedSubjectBinding
+              );
+              return outcome === 'acquired'
+                ? ({ status: 'acquired', record } as const)
+                : paymentAttempts.acquire(record);
+            } catch {
+              return { status: 'error', reason: 'result_subject_admission_failed' } as const;
+            }
+          },
+        }
+      : paymentAttempts;
+    const acquireOutcome = await acquirePaymentAttempt(acquireRepository, {
       binding,
       nowIso,
       ttlMs: paymentAttemptTtlMs,
@@ -861,14 +1000,85 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
      * `kind` discriminant check below for the other half of this fix).
      */
     async function reconstructFromJob(
-      options: { requireDelivered: boolean } = { requireDelivered: true }
+      options: { requireDelivered: boolean; releasePath: 'initial' | 'replay' } = {
+        requireDelivered: true,
+        releasePath: 'replay',
+      }
     ): Promise<Response | null> {
-      const jobResult = await jobsRepo.getByIdempotencyKey(paymentIdentifier);
-      if (!jobResult.ok || !jobResult.value) return null;
+      const protectedUnavailable = (): Response | null =>
+        confidentialityClass === 'BUYER_AUTHORIZED'
+          ? c.json({ error: 'result_not_available' }, 404)
+          : null;
+      let jobResult: Awaited<ReturnType<typeof jobsRepo.getByIdempotencyKey>>;
+      try {
+        jobResult = await jobsRepo.getByIdempotencyKey(paymentIdentifier);
+      } catch (error) {
+        if (confidentialityClass === 'BUYER_AUTHORIZED') return protectedUnavailable();
+        throw error;
+      }
+      if (!jobResult.ok || !jobResult.value) return protectedUnavailable();
       const job = jobResult.value;
-      if (options.requireDelivered && job.current_state !== 'DELIVERED') return null;
-      const cached = await results.getByJobId<CachedResult>(job.id);
-      if (!cached) return null;
+      let protectedBinding: ResultSubjectBindingV1 | null = null;
+      let revokedSubjectRefs: readonly string[] = [];
+      if (confidentialityClass === 'BUYER_AUTHORIZED') {
+        const authorization = config.resultAuthorization;
+        if (!authorization || !verifiedPrincipal) {
+          return c.json({ error: 'authentication_required' }, 401);
+        }
+        try {
+          protectedBinding = await resultAuthorizationRepo.getSubjectBindingByOperation(job.id);
+          if (!protectedBinding) return protectedUnavailable();
+          revokedSubjectRefs = await authorization.revokedSubjectRefs();
+          // Authorize the immutable operation/binding before reading job state,
+          // cached result metadata, R2, or PCC proof material. The operation
+          // scope deliberately excludes finalized artifact fields, so this
+          // probe applies the same owner/revocation/policy checks without
+          // needing to touch the protected result first.
+          const admissionProbe = {
+            schema_version: 'result_resource.v1' as const,
+            operation_id: job.id,
+            result_id: 'authorization-probe',
+            artifact_id: 'authorization-probe',
+            pcc_document_hash: `sha256:${'0'.repeat(64)}`,
+            service_id: job.service_id,
+            service_version: job.service_version,
+            contract_release: job.contract_release,
+            confidentiality_class: 'BUYER_AUTHORIZED' as const,
+            result_binding_id: protectedBinding.binding_id,
+          };
+          const preliminaryDecision = evaluateResultReleaseAuthorization({
+            schema_version: 'result_authorization_context.v1',
+            verified_principal: verifiedPrincipal,
+            result_resource: admissionProbe,
+            subject_binding: protectedBinding,
+            confidentiality_class: 'BUYER_AUTHORIZED',
+            delegation_evidence: null,
+            binding_policy_version: protectedBinding.binding_policy_version,
+            release_policy_version: 'result_release_policy.v1',
+            revoked_subject_refs: revokedSubjectRefs,
+            evaluated_at: nowIso,
+            subject_reference_key: authorization.subjectReferenceKey,
+            authority_context_id: protectedBinding.authority_context_id,
+            policy_evaluation_id: `pe_${crypto.randomUUID()}`,
+          });
+          if (publicResultAuthorizationError(preliminaryDecision.decision)) {
+            return protectedUnavailable();
+          }
+        } catch {
+          return protectedUnavailable();
+        }
+      }
+      if (options.requireDelivered && job.current_state !== 'DELIVERED') {
+        return protectedUnavailable();
+      }
+      let cached: CachedResult | null;
+      try {
+        cached = await results.getByJobId<CachedResult>(job.id);
+      } catch (error) {
+        if (confidentialityClass === 'BUYER_AUTHORIZED') return protectedUnavailable();
+        throw error;
+      }
+      if (!cached) return protectedUnavailable();
       if (
         typeof cached === 'object' &&
         cached !== null &&
@@ -884,17 +1094,125 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
         // reconstruct from it; the caller's own fallback (409
         // `already_consumed_result_missing`, or 202 `processing`) is the
         // correct, honest response here.
-        return null;
+        return protectedUnavailable();
       }
-      const responseBody = await resolveStoredResultBody(cached, config.resultArtifactReader);
-      if (!responseBody) return null;
+      let responseBody: Awaited<ReturnType<typeof resolveStoredResultBody>>;
+      try {
+        responseBody = await resolveStoredResultBody(cached, config.resultArtifactReader);
+      } catch (error) {
+        if (confidentialityClass === 'BUYER_AUTHORIZED') return protectedUnavailable();
+        throw error;
+      }
+      if (!responseBody) return protectedUnavailable();
       if (classifyStoredResultRecord(cached) === SELF_VERIFYING_PCC_VNEXT) {
-        const validationFailure = await validateGovernedVNextPcc(
-          config.serviceId,
-          responseBody,
-          config.pccKeyRegistry
-        );
-        if (validationFailure) return null;
+        let validationFailure: Awaited<ReturnType<typeof validateGovernedVNextPcc>>;
+        try {
+          validationFailure = await validateGovernedVNextPcc(
+            config.serviceId,
+            responseBody,
+            config.pccKeyRegistry
+          );
+        } catch (error) {
+          if (confidentialityClass === 'BUYER_AUTHORIZED') return protectedUnavailable();
+          throw error;
+        }
+        if (validationFailure) return protectedUnavailable();
+      }
+      if (confidentialityClass === 'BUYER_AUTHORIZED') {
+        const authorization = config.resultAuthorization;
+        if (!authorization || !verifiedPrincipal || !protectedBinding) {
+          return c.json({ error: 'authentication_required' }, 401);
+        }
+        try {
+          const subjectBinding = protectedBinding;
+          const cachedRecord = cached as unknown as {
+            result_reference?: { content_hash?: unknown };
+          };
+          const contentHash = cachedRecord.result_reference?.content_hash;
+          const extensions = responseBody.extensions;
+          const proof =
+            extensions && typeof extensions === 'object' && !Array.isArray(extensions)
+              ? (extensions as Record<string, unknown>)['net.siteborne.verification-proof.v1']
+              : null;
+          const pccDocumentHash =
+            proof && typeof proof === 'object' && !Array.isArray(proof)
+              ? (proof as Record<string, unknown>).pcc_document_hash
+              : null;
+          if (
+            typeof contentHash !== 'string' ||
+            !/^sha256:[0-9a-f]{64}$/u.test(contentHash) ||
+            typeof pccDocumentHash !== 'string' ||
+            !/^sha256:[0-9a-f]{64}$/u.test(pccDocumentHash)
+          ) {
+            return c.json({ error: 'result_not_available' }, 404);
+          }
+          let resultResource = await resultAuthorizationRepo.getResultResourceByOperation(job.id);
+          if (!resultResource) {
+            const candidate = {
+              schema_version: 'result_resource.v1' as const,
+              operation_id: job.id,
+              result_id: canonicalOpaqueResultId(job.id),
+              artifact_id: `r2:results/pcc/${contentHash}`,
+              pcc_document_hash: pccDocumentHash,
+              service_id: job.service_id,
+              service_version: job.service_version,
+              contract_release: job.contract_release,
+              confidentiality_class: 'BUYER_AUTHORIZED' as const,
+              result_binding_id: subjectBinding.binding_id,
+            };
+            try {
+              await resultAuthorizationRepo.createResultResource(candidate, nowIso);
+              resultResource = candidate;
+            } catch {
+              resultResource = await resultAuthorizationRepo.getResultResourceByOperation(job.id);
+            }
+          }
+          if (!resultResource) return c.json({ error: 'result_not_available' }, 404);
+          if (
+            resultResource.artifact_id !== `r2:results/pcc/${contentHash}` ||
+            resultResource.pcc_document_hash !== pccDocumentHash
+          ) {
+            return c.json({ error: 'result_not_available' }, 404);
+          }
+          const decision = evaluateResultReleaseAuthorization({
+            schema_version: 'result_authorization_context.v1',
+            verified_principal: verifiedPrincipal,
+            result_resource: resultResource,
+            subject_binding: subjectBinding,
+            confidentiality_class: 'BUYER_AUTHORIZED',
+            delegation_evidence: null,
+            binding_policy_version: subjectBinding.binding_policy_version,
+            release_policy_version: 'result_release_policy.v1',
+            revoked_subject_refs: revokedSubjectRefs,
+            evaluated_at: nowIso,
+            subject_reference_key: authorization.subjectReferenceKey,
+            authority_context_id: subjectBinding.authority_context_id,
+            policy_evaluation_id: `pe_${crypto.randomUUID()}`,
+          });
+          const externalError = publicResultAuthorizationError(decision.decision);
+          await bestEffortAuthorizationAudit(
+            externalError ? 'result_release_denied' : 'result_release_success',
+            {
+              decision: decision.decision,
+              confidentiality_class: 'BUYER_AUTHORIZED',
+              policy_version: decision.policy_version,
+              path: options.releasePath,
+              subject_type: verifiedPrincipal.subject.subject_type,
+              authentication_method: verifiedPrincipal.subject.authentication_method,
+              assurance_level: verifiedPrincipal.subject.assurance_level,
+            }
+          );
+          if (externalError) return c.json({ error: externalError.code }, externalError.status);
+        } catch {
+          await bestEffortAuthorizationAudit('result_release_denied', {
+            decision: 'POLICY_ERROR',
+            confidentiality_class: 'BUYER_AUTHORIZED',
+            policy_version: 'result_release_policy.v1',
+            path: options.releasePath,
+            reason: 'authorization_data_unavailable',
+          });
+          return c.json({ error: 'result_not_available' }, 404);
+        }
       }
       c.header(
         'PAYMENT-RESPONSE',
@@ -1084,6 +1402,59 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
     if (acquireOutcome.status === 'repository_error') {
       return jsonError(c, 500, 'repository_failure', acquireOutcome.reason);
     }
+    if (
+      confidentialityClass === 'BUYER_AUTHORIZED' &&
+      (acquireOutcome.status === 'duplicate_same' ||
+        acquireOutcome.status === 'duplicate_conflict' ||
+        acquireOutcome.status === 'already_consumed' ||
+        acquireOutcome.status === 'expired')
+    ) {
+      // This check precedes any workflow join/recovery or cached-result read.
+      // It also collapses unbound/missing operations for a tuple holder.
+      try {
+        const existingJob = await jobsRepo.getByIdempotencyKey(paymentIdentifier);
+        if (!existingJob.ok || !existingJob.value) {
+          return c.json({ error: 'result_not_available' }, 404);
+        }
+        const existingBinding = await resultAuthorizationRepo.getSubjectBindingByOperation(
+          existingJob.value.id
+        );
+        const authorization = config.resultAuthorization;
+        if (!existingBinding || !authorization || !verifiedPrincipal) {
+          return c.json({ error: 'result_not_available' }, 404);
+        }
+        const probe = {
+          schema_version: 'result_resource.v1' as const,
+          operation_id: existingJob.value.id,
+          result_id: 'authorization-probe',
+          artifact_id: 'authorization-probe',
+          pcc_document_hash: `sha256:${'0'.repeat(64)}`,
+          service_id: existingJob.value.service_id,
+          service_version: existingJob.value.service_version,
+          contract_release: existingJob.value.contract_release,
+          confidentiality_class: 'BUYER_AUTHORIZED' as const,
+          result_binding_id: existingBinding.binding_id,
+        };
+        const decision = evaluateResultReleaseAuthorization({
+          schema_version: 'result_authorization_context.v1',
+          verified_principal: verifiedPrincipal,
+          result_resource: probe,
+          subject_binding: existingBinding,
+          confidentiality_class: 'BUYER_AUTHORIZED',
+          delegation_evidence: null,
+          binding_policy_version: existingBinding.binding_policy_version,
+          release_policy_version: 'result_release_policy.v1',
+          revoked_subject_refs: await authorization.revokedSubjectRefs(),
+          evaluated_at: nowIso,
+          subject_reference_key: authorization.subjectReferenceKey,
+        });
+        if (publicResultAuthorizationError(decision.decision)) {
+          return c.json({ error: 'result_not_available' }, 404);
+        }
+      } catch {
+        return c.json({ error: 'result_not_available' }, 404);
+      }
+    }
     if (acquireOutcome.status === 'expired') {
       return jsonError(c, 402, 'expired_quote', 'payment identifier has expired');
     }
@@ -1120,7 +1491,10 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
           'payment identifier already consumed by a different immutable request binding'
         );
       }
-      const reconstructed = await reconstructFromJob({ requireDelivered: false });
+      const reconstructed = await reconstructFromJob({
+        requireDelivered: false,
+        releasePath: 'replay',
+      });
       if (reconstructed) return reconstructed;
       await audit('payment_replay_rejected', {
         payment_identifier: paymentIdentifier,
@@ -1165,29 +1539,20 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
     // the existing JobState lifecycle (SUN-0200) — never a second state
     // machine.
     // ---------------------------------------------------------------
-    const jobId = crypto.randomUUID();
-    const requestId = crypto.randomUUID();
-    const job: Job = {
-      id: jobId,
-      request_id: requestId,
-      service_id: config.serviceId,
-      service_version: serviceVersionForId(config.serviceId),
-      input_hash: inputHash,
-      input_schema_hash: config.inputSchemaHash,
-      output_schema_hash: config.outputSchemaHash,
-      idempotency_key: paymentIdentifier,
-      contract_release: config.contractRelease,
-      pcc_dependency: config.pccDependency,
-      current_state: 'RECEIVED',
-      created_at: nowIso,
-      updated_at: nowIso,
-      expires_at: stored.quote.expires_at,
-      attempt_count: 1,
-      production_enabled: false,
-    };
-    const createResult = await jobsRepo.create(job);
-    if (!createResult.ok) {
-      return jsonError(c, 500, 'repository_failure', createResult.error.message);
+    if (!admittedSubjectBinding) {
+      const createResult = await jobsRepo.create(job);
+      if (!createResult.ok) {
+        return jsonError(c, 500, 'repository_failure', createResult.error.message);
+      }
+    }
+    if (admittedSubjectBinding && verifiedPrincipal) {
+      await audit('result_subject_bound', {
+        confidentiality_class: 'BUYER_AUTHORIZED',
+        binding_policy_version: admittedSubjectBinding.binding_policy_version,
+        subject_type: verifiedPrincipal.subject.subject_type,
+        authentication_method: verifiedPrincipal.subject.authentication_method,
+        assurance_level: verifiedPrincipal.subject.assurance_level,
+      });
     }
     await audit('job_created', { job_id: jobId, payment_identifier: paymentIdentifier });
 
@@ -1365,7 +1730,10 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
     ): Promise<Response> {
       switch (result.status) {
         case 'settled': {
-          const reconstructed = await reconstructFromJob({ requireDelivered: false });
+          const reconstructed = await reconstructFromJob({
+            requireDelivered: false,
+            releasePath: 'initial',
+          });
           if (reconstructed) return reconstructed;
           return jsonError(
             c,
@@ -1567,20 +1935,7 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
       await transition(jobId, 'PAYMENT_VERIFIED', 'LOCKED', 'RESOURCE_LOCKED');
       await audit('service_execution_started', { job_id: jobId });
 
-      if (config.scheme === 'upto') {
-        // SUN-1221E6R-H2AWI-3: the durable continuation Workflow (H2AWI-2,
-        // frozen) computes its settlement context entirely from the
-        // envelope sealed at handoff time — before the executor (which now
-        // runs INSIDE the Workflow) ever produces a post-execution
-        // actualAmountAtomic/resourceMetrics measurement. `upto` scheme's
-        // authorization-exceeded protection depends on exactly that
-        // post-execution measurement, which the frozen H2AWI-1/H2AWI-2
-        // interfaces have no room for. No route in production today uses
-        // `scheme: 'upto'` (both real paid routes are `exact` — verified
-        // this checkpoint), so this fails closed rather than silently
-        // dropping the overage protection a real `upto` route would need;
-        // extending the Workflow to support it is explicitly out of this
-        // checkpoint's scope (see the evidence report).
+      if (config.scheme === 'upto' && config.serviceId !== 'document_evidence_json.v3') {
         await transition(jobId, 'LOCKED', 'REJECTED', 'QUARANTINE_POLICY');
         return jsonError(
           c,
@@ -1589,7 +1944,10 @@ export function createX402ServiceRoute(app: Hono, config: X402ServiceRouteConfig
           'upto-scheme services are not supported by the durable payment continuation pipeline (SUN-1221E6R-H2AWI-3)'
         );
       }
-
+      // The durable Workflow validates an `upto` executor's measured
+      // `actualAmountAtomic` against this request's authorized maximum
+      // before PCC generation and settlement. Exact-price routes retain
+      // their existing behavior through the same continuation path.
       return await driveDurableContinuation('create_or_join');
     } // end runProtectedExecutionPipeline
 

@@ -11,6 +11,8 @@ import {
 import type { PaymentPayload, SettleResponse } from '@x402/core/types';
 import { describe, expect, it } from 'vitest';
 import { createMcpX402ServiceBoundary, type McpX402RouteHandler } from './x402-mcp-adapter';
+import { consumeVerifiedPrincipal } from '../security/verified-principal-context';
+import type { VerifiedPrincipalEvidence } from '../security/result-authorization';
 
 const FIXTURE_CONTEXT = {
   protocol_version: '2026-07-28' as const,
@@ -99,6 +101,61 @@ describe('x402-mcp-adapter settlement-authority static audit', () => {
 });
 
 describe('createMcpX402ServiceBoundary', () => {
+  const verifiedPrincipal: VerifiedPrincipalEvidence = {
+    verification_status: 'VERIFIED',
+    evidence_type: 'cryptographically_authenticated',
+    verifier_id: 'siteborne.identity-evidence-verifier.v1',
+    subject: {
+      schema_version: 'result_subject.v1',
+      subject_type: 'human',
+      issuer: 'https://identity.siteborne.test',
+      subject_id: 'buyer-1',
+      authentication_method: 'oidc',
+      assurance_level: 'verified_single_factor',
+      authenticated_at: '2026-09-22T12:00:00.000Z',
+      credential_binding: null,
+    },
+  };
+
+  it.each(['document_evidence_json.v3', 'verify_agent_output.v3'] as const)(
+    'injects only the server-owned verified principal for %s before handler dispatch',
+    async (serviceId) => {
+      const handler: McpX402RouteHandler = async (c) => {
+        const principal = consumeVerifiedPrincipal(c.req.raw);
+        return principal
+          ? c.json({ subject_id: principal.subject.subject_id }, 200)
+          : c.json({ error: 'authentication_required' }, 401);
+      };
+      const authenticated = createMcpX402ServiceBoundary(
+        {} as never,
+        { [serviceId]: handler },
+        'https://utility.siteborne.net',
+        verifiedPrincipal
+      );
+      const allowed = await authenticated.execute(
+        serviceId,
+        { client_name: 'attacker', _meta: { principal: 'attacker' } },
+        { ...FIXTURE_CONTEXT, client_name: 'attacker' },
+        undefined
+      );
+      expect(allowed).toMatchObject({ outcome: 'fulfilled', result: { subject_id: 'buyer-1' } });
+
+      const unauthenticated = createMcpX402ServiceBoundary(
+        {} as never,
+        { [serviceId]: handler },
+        'https://utility.siteborne.net'
+      );
+      expect(
+        await unauthenticated.execute(
+          serviceId,
+          { client_name: 'buyer-1', _meta: { principal: 'buyer-1' } },
+          { ...FIXTURE_CONTEXT, client_name: 'buyer-1' },
+          undefined
+        )
+      ).toMatchObject({ outcome: 'rejected', code: 'authentication_required' });
+    }
+  );
+
   it('translates a genuinely unpaid call into an HTTP request with no PAYMENT-SIGNATURE header', async () => {
     let capturedHeader: string | null | undefined;
     const handler: McpX402RouteHandler = async (c) => {
@@ -268,7 +325,13 @@ describe('createMcpX402ServiceBoundary', () => {
   it('a non-200/402 error response is passed through verbatim as rejected, never fabricating new economics', async () => {
     // Simulates the REST route's real 409 duplicate-conflict passthrough.
     const rejectingHandler: McpX402RouteHandler = async (c) =>
-      c.json({ code: 'duplicate_conflict', message: 'a different payload already consumed this identifier' }, 409);
+      c.json(
+        {
+          code: 'duplicate_conflict',
+          message: 'a different payload already consumed this identifier',
+        },
+        409
+      );
     const boundary = createMcpX402ServiceBoundary(
       {} as never,
       { 'company_evidence_graph.v2': rejectingHandler },

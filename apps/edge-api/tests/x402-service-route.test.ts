@@ -328,18 +328,8 @@ describe('x402 HTTP vertical slice (SUN-0700A checkpoint 5)', () => {
     });
   });
 
-  describe('upto scheme is not supported by the durable continuation pipeline (SUN-1221E6R-H2AWI-3)', () => {
-    /** SUN-1221E6R-H2AWI-3: was "402 -> pay -> 200" before this
-     * checkpoint. `document_evidence_json.v1` is the only `upto`-scheme
-     * route this local test-fixture wiring mounts; no REAL production
-     * route uses `upto` (verified via grep this checkpoint -- both real
-     * routes are `exact`). H2AWI-2's frozen `DecryptedContinuationPayload`
-     * has no room for the post-execution `actualAmountAtomic`/
-     * `resourceMetrics` `upto` settlement needs, so the route now fails
-     * closed (500) rather than silently dropping `upto`'s
-     * authorization-exceeded overage protection. See the checkpoint's
-     * evidence report for the full disclosed rationale. */
-    it('402 -> pay -> explicit 500 (upto not supported), never a silent success', async () => {
+  describe('legacy upto scheme remains fail-closed', () => {
+    it('402 -> pay -> explicit 500 without settlement', async () => {
       const challenge = await get402(app, '/v1/document/evidence-json', DOCUMENT_INPUT);
       const res = await payAndRetry(app, '/v1/document/evidence-json', DOCUMENT_INPUT, challenge);
       expect(res.status).toBe(500);
@@ -350,10 +340,6 @@ describe('x402 HTTP vertical slice (SUN-0700A checkpoint 5)', () => {
   });
 
   describe('four-service local route matrix (directive §30)', () => {
-    // SUN-1221E6R-H2AWI-3: `/v1/document/evidence-json` (the only
-    // `upto`-scheme route in this matrix) is intentionally excluded here
-    // -- see the dedicated "upto scheme is not supported" describe block
-    // above for its own, updated expectation.
     const cases: Array<[string, unknown]> = [
       ['/v1/company/evidence-graph', COMPANY_INPUT],
       ['/v1/web/context', WEB_INPUT],
@@ -572,17 +558,7 @@ describe('x402 HTTP vertical slice (SUN-0700A checkpoint 5)', () => {
   });
 
   describe('upto: actual usage exceeding the authorized maximum can never succeed (directive §21)', () => {
-    /** SUN-1221E6R-H2AWI-3: this test's ORIGINAL premise (an `upto`
-     * executor reporting an over-limit actual amount is caught by the
-     * route's own overage gate, 402 `authorization_exceeded`) no longer
-     * applies -- `scheme: 'upto'` is rejected wholesale, before the
-     * executor ever runs, by the new durable-continuation gate (see the
-     * dedicated "upto scheme is not supported" describe block above).
-     * This test still proves something real and load-bearing: an
-     * over-limit `upto` executor output can NEVER silently reach a paid
-     * 200 success, even though the specific rejection mechanism changed
-     * from an amount-comparison gate to a blanket scheme gate. */
-    it('an executor reporting an actual amount above the quote authorized maximum can never reach a paid success (upto is rejected wholesale, not silently clipped)', async () => {
+    it('an executor reporting an actual amount above the quote authorized maximum is rejected before settlement', async () => {
       const overLimitApp = new Hono();
       const overLimitExecutor = async () => ({
         result: {

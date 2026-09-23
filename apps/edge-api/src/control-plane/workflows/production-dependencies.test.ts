@@ -79,6 +79,7 @@ const FOUR_SERVICES = [
   'document_evidence_json.v2',
   'verify_agent_output.v2',
 ];
+const BUYER_V3_SERVICES = ['document_evidence_json.v3', 'verify_agent_output.v3'];
 
 describe('SUN-1221E6R-H2BF4 buildProductionPaidContinuationWorkflowDependencies (real function, unmocked)', () => {
   it('fails closed on an unsupported/unknown service', async () => {
@@ -182,15 +183,31 @@ describe('SUN-1221E6R-H2BF4 buildProductionPaidContinuationWorkflowDependencies 
   // SUN-1222D-PRE-WORKFLOW-DISPATCH-FIX §11 -- registry coherence.
   // ---------------------------------------------------------------------
 
-  it('REGISTRY_COHERENCE: supported service count is exactly 6', () => {
-    expect(__TEST_ONLY_SUPPORTED_SERVICES.size).toBe(6);
+  it('REGISTRY_COHERENCE: supported service count is exactly 8', () => {
+    expect(__TEST_ONLY_SUPPORTED_SERVICES.size).toBe(8);
   });
 
-  it('REGISTRY_COHERENCE: supports the four v2 services and only the two public v3 candidates', () => {
+  it('REGISTRY_COHERENCE: supports the four v2 services and all four governed v3 candidates', () => {
     expect([...__TEST_ONLY_SUPPORTED_SERVICES].sort()).toEqual(
-      [...FOUR_SERVICES, ...PUBLIC_V3_SERVICES].sort()
+      [...FOUR_SERVICES, ...PUBLIC_V3_SERVICES, ...BUYER_V3_SERVICES].sort()
     );
   });
+
+  it.each(BUYER_V3_SERVICES)(
+    'BUYER_V3_WORKFLOW_DISPATCH: %s reaches its governed production composition',
+    async (serviceId) => {
+      const result = await buildProductionPaidContinuationWorkflowDependencies(
+        minimalHostEnv(),
+        serviceId
+      );
+      expect('unavailable' in result && result.unavailable).toBe(true);
+      expect('unavailable' in result && result.reason).toContain(
+        serviceId === 'document_evidence_json.v3'
+          ? 'ARTIFACTS R2 bucket binding is not configured'
+          : 'PAID_RECEIPT_SIGNING_PRIVATE_KEY is missing'
+      );
+    }
+  );
 
   it.each(PUBLIC_V3_SERVICES)(
     'PUBLIC_V3_WORKFLOW_DISPATCH: %s reaches its governed production composition',
@@ -222,14 +239,8 @@ describe('SUN-1221E6R-H2BF4 buildProductionPaidContinuationWorkflowDependencies 
     }
   });
 
-  it('REGISTRY_COHERENCE: no unreleased/Nevermined-fallback service is accidentally supported', () => {
-    for (const other of [
-      'document_evidence_json.v3',
-      'verify_agent_output.v3',
-      'nevermined.v1',
-      'nevermined_fallback',
-      'unreleased_service.v3',
-    ]) {
+  it('REGISTRY_COHERENCE: no unknown/Nevermined-fallback service is accidentally supported', () => {
+    for (const other of ['nevermined.v1', 'nevermined_fallback', 'unreleased_service.v3']) {
       expect(__TEST_ONLY_SUPPORTED_SERVICES.has(other)).toBe(false);
     }
   });

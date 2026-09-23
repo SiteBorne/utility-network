@@ -50,6 +50,30 @@ describe('edge-api /mcp route', () => {
     expect(tools.tools.map((tool) => tool.name).sort()).toEqual([...MCP_TOOL_NAMES].sort());
   });
 
+  it('publishes buyer-result authentication metadata only on the two sensitive v3 tools', async () => {
+    const client = await connect();
+    const tools = await client.listTools();
+    const byName = Object.fromEntries(tools.tools.map((tool) => [tool.name, tool]));
+    const key = 'net.siteborne/security/result-authorization.v1';
+    for (const name of [
+      'siteborne_extract_document_evidence_json_v3_candidate',
+      'siteborne_verify_agent_output_v3_candidate',
+    ]) {
+      expect(byName[name]?._meta?.[key]).toEqual({
+        authorization_classification: 'buyer_authorized',
+        authentication_methods: ['oidc_bearer', 'mutual_tls'],
+        subject_binding: 'issuer_qualified_subject_reference',
+        existence_hiding: true,
+      });
+    }
+    expect(
+      byName.siteborne_build_company_evidence_graph_v3_candidate?._meta?.[key]
+    ).toBeUndefined();
+    expect(
+      byName.siteborne_retrieve_verified_web_context_v3_candidate?._meta?.[key]
+    ).toBeUndefined();
+  });
+
   it('does not expose useful service execution without the paid boundary', async () => {
     // SUN-1222C-MCP-PAYMENT-DESIGN-CORRECTION: the MCP layer now delegates
     // to the real production route function for this service

@@ -121,10 +121,11 @@ function realClock(): InjectedClock {
  */
 export function buildVerifyAgentOutputV2ProductionExecutor(
   signer: Signer,
-  keyRegistry: KeyRegistry
+  keyRegistry: KeyRegistry,
+  serviceId: 'verify_agent_output.v2' | 'verify_agent_output.v3' = 'verify_agent_output.v2'
 ): ServiceExecutor {
   return async (input, ctx) => {
-    const context = buildServiceContext('verify_agent_output.v2', {
+    const context = buildServiceContext(serviceId, {
       job_id: ctx.job_id,
       request_id: ctx.request_id,
       clock: realClock(),
@@ -136,8 +137,8 @@ export function buildVerifyAgentOutputV2ProductionExecutor(
 
     const registry = new ServiceRegistry();
     registry.register({
-      serviceId: 'verify_agent_output.v2',
-      contractRelease: '2.0.0',
+      serviceId,
+      contractRelease: serviceId.endsWith('.v3') ? '3.0.0' : '2.0.0',
       productionEnabled: false,
       service: new VerifyAgentOutputService({ signer, keyRegistry }),
       implementationVersion: '0.1.0',
@@ -146,7 +147,7 @@ export function buildVerifyAgentOutputV2ProductionExecutor(
       implementationStatus: 'local_fixture_verified',
     });
 
-    const result = await executeLocalService(registry, 'verify_agent_output.v2', input, context);
+    const result = await executeLocalService(registry, serviceId, input, context);
     return toExecutorOutcomeResult(result);
   };
 }

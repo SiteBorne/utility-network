@@ -86,6 +86,11 @@ export interface CreateSiteborneMcpOptions {
    * `_meta` key, the tool name, schemas, annotations or the tool count.
    */
   readonly securityMetaByToolName?: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
+  /** Server-owned transport authentication is configured for the two
+   * buyer-authorized v3 tools. This is capability state, never client input. */
+  readonly buyerResultAuthorizationReady?: boolean;
+  /** Verified transport principal for this request, supplied by the server. */
+  readonly buyerResultCallerAuthenticated?: boolean;
 }
 
 export interface SiteborneMcpToolDefinition {

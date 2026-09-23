@@ -236,7 +236,8 @@ export function buildDocumentEvidenceJsonV2ProductionExecutor(
   keyRegistry: KeyRegistry,
   worker: DocumentWorkerBridge,
   edgeApiArtifactStore: EdgeApiArtifactStore,
-  db: D1Database
+  db: D1Database,
+  serviceId: 'document_evidence_json.v2' | 'document_evidence_json.v3' = 'document_evidence_json.v2'
 ): ServiceExecutor {
   return async (rawInput, ctx) => {
     const clock = realClock();
@@ -264,9 +265,9 @@ export function buildDocumentEvidenceJsonV2ProductionExecutor(
         return {
           result: {
             result_class: 'rejected',
-            service_id: 'document_evidence_json.v2',
-            service_version: 'v2',
-            contract_release: '2.0.0',
+            service_id: serviceId,
+            service_version: serviceId.endsWith('.v3') ? 'v3' : 'v2',
+            contract_release: serviceId.endsWith('.v3') ? '3.0.0' : '2.0.0',
             request_id: ctx.request_id,
             job_id: ctx.job_id,
             input_hash:
@@ -330,7 +331,7 @@ export function buildDocumentEvidenceJsonV2ProductionExecutor(
       };
     }
 
-    const context = buildServiceContext('document_evidence_json.v2', {
+    const context = buildServiceContext(serviceId, {
       job_id: ctx.job_id,
       request_id: ctx.request_id,
       clock,
@@ -344,8 +345,8 @@ export function buildDocumentEvidenceJsonV2ProductionExecutor(
 
     const registry = new ServiceRegistry();
     registry.register({
-      serviceId: 'document_evidence_json.v2',
-      contractRelease: '2.0.0',
+      serviceId,
+      contractRelease: serviceId.endsWith('.v3') ? '3.0.0' : '2.0.0',
       productionEnabled: false,
       service: new DocumentEvidenceJsonService({ worker: capturedWorker, signer, keyRegistry }),
       implementationVersion: '0.1.0',
@@ -354,7 +355,7 @@ export function buildDocumentEvidenceJsonV2ProductionExecutor(
       implementationStatus: 'local_fixture_verified',
     });
 
-    const result = await executeLocalService(registry, 'document_evidence_json.v2', input, context);
+    const result = await executeLocalService(registry, serviceId, input, context);
 
     if (result.result_class !== 'success') {
       return toExecutorOutcomeResult(result);

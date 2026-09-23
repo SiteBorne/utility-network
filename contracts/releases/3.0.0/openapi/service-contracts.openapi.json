@@ -144,6 +144,12 @@
         "x-service-id": "document_evidence_json.v3",
         "x-production-enabled": false,
         "x-implementation-status": "local_fixture_verified",
+        "security": [{ "oidcBearer": [] }, { "mutualTLS": [] }],
+        "x-result-authorization": {
+          "policy": "buyer_subject_binding.v1",
+          "required_subject_match": true,
+          "existence_hiding": true
+        },
         "requestBody": {
           "required": true,
           "content": {
@@ -175,6 +181,9 @@
               }
             }
           },
+          "401": {
+            "description": "Caller authentication is required"
+          },
           "402": {
             "description": "Payment required",
             "content": {
@@ -184,6 +193,9 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "Result unavailable or caller is not authorized"
           },
           "500": {
             "description": "Internal server error",
@@ -206,6 +218,12 @@
         "x-service-id": "verify_agent_output.v3",
         "x-production-enabled": false,
         "x-implementation-status": "local_fixture_verified",
+        "security": [{ "oidcBearer": [] }, { "mutualTLS": [] }],
+        "x-result-authorization": {
+          "policy": "buyer_subject_binding.v1",
+          "required_subject_match": true,
+          "existence_hiding": true
+        },
         "requestBody": {
           "required": true,
           "content": {
@@ -237,6 +255,9 @@
               }
             }
           },
+          "401": {
+            "description": "Caller authentication is required"
+          },
           "402": {
             "description": "Payment required",
             "content": {
@@ -246,6 +267,9 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "Result unavailable or caller is not authorized"
           },
           "500": {
             "description": "Internal server error",
@@ -329,6 +353,19 @@
     }
   },
   "components": {
+    "securitySchemes": {
+      "oidcBearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "x-oidc-configured-issuers-only": true,
+        "description": "Configured OIDC issuer. Tokens are verified for issuer, audience, signature, time bounds, and subject before use."
+      },
+      "mutualTLS": {
+        "type": "mutualTLS",
+        "description": "Platform-verified client certificate mapped through the governed SITEBORNE subject registry."
+      }
+    },
     "schemas": {
       "Money": {
         "title": "Decimal Money",

@@ -89,7 +89,8 @@ export async function buildDocumentEvidenceJsonV2CdpProductionRouteConfig(
    * document-evidence-v2-cdp-route.ts`) is the one place that actually
    * constructs `R2ArtifactStoreAdapter` from `c.env.ARTIFACTS`. */
   artifactStore: EdgeApiArtifactStore | undefined,
-  explicitTestEvidenceOverride?: ExplicitTestEvidenceOverride
+  explicitTestEvidenceOverride?: ExplicitTestEvidenceOverride,
+  serviceId: 'document_evidence_json.v2' | 'document_evidence_json.v3' = 'document_evidence_json.v2'
 ): Promise<X402ServiceRouteConfig | ProductionCompositionUnavailable> {
   if (!db) {
     return { unavailable: true, reason: 'no D1 database binding supplied' };
@@ -183,13 +184,14 @@ export async function buildDocumentEvidenceJsonV2CdpProductionRouteConfig(
     registry,
     worker,
     artifactStore,
-    db
+    db,
+    serviceId
   );
 
   const asset = resolvePaymentAsset(network);
 
   return {
-    serviceId: 'document_evidence_json.v2',
+    serviceId,
     scheme: 'upto',
     pricingKey: 'document_evidence_json_max_job',
     rail: 'cdp',
@@ -197,19 +199,18 @@ export async function buildDocumentEvidenceJsonV2CdpProductionRouteConfig(
     asset: asset.address,
     paymentRequirementExtra: { name: asset.name, version: asset.version },
     payTo: env.SELLER_WALLET_ADDRESS,
-    path: '/v2/document/evidence-json',
-    inputSchema: BUNDLED_SERVICE_INPUT_SCHEMAS['document_evidence_json.v2'] as Record<
-      string,
-      unknown
-    >,
-    contractRelease: '2.0.0',
+    path: serviceId.endsWith('.v3') ? '/v3/document/evidence-json' : '/v2/document/evidence-json',
+    inputSchema: BUNDLED_SERVICE_INPUT_SCHEMAS[serviceId] as Record<string, unknown>,
+    contractRelease: serviceId.endsWith('.v3') ? '3.0.0' : '2.0.0',
     // Computed directly from `contracts/releases/2.0.0/schemas/services/
     // document-evidence-*.schema.json` (`shasum -a 256`) -- matches the
     // value `paid-services.ts`'s existing fixture route already declares
     // for this same service ID.
     inputSchemaHash: 'sha256:19e64c92f088ed8b7a45eef561c5426bb59ce5cc3576b85482aded4f620e57ba',
-    outputSchemaHash: 'sha256:df91ed115ae0e29d8f4c211d95462ddd96e9714bc5f5e0ce0b820b370e0d5dde',
-    pccDependency: '1.1.0',
+    outputSchemaHash: serviceId.endsWith('.v3')
+      ? 'sha256:058e6d50796d7adffc5deedd5b96679dcff78d98b77c022c06430885546aeff7'
+      : 'sha256:df91ed115ae0e29d8f4c211d95462ddd96e9714bc5f5e0ce0b820b370e0d5dde',
+    pccDependency: serviceId.endsWith('.v3') ? '2.0.0' : '1.1.0',
     db,
     clock: () => new Date().toISOString(),
     evidenceMode: cdpEvidence.evidenceMode,

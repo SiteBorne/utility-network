@@ -41,6 +41,8 @@ import { importContinuationEnvelopeKey } from '../continuation/envelope';
 import { buildProductionCdpChainReceiptChecker } from '../evidence/chain-receipt-checker';
 import { D1JobsRepository, D1StateEventsRepository } from '../repositories/d1/jobs';
 import { D1PaymentAttemptRepository } from '../repositories/d1/payment-attempts';
+import { D1ResultAuthorizationRepository } from '../repositories/d1/result-authorization';
+import { canonicalOpaqueResultId } from '../security/result-authorization';
 import { D1PaymentFinalizationRepository } from '../repositories/d1/payment-finalization';
 import { hashPaymentObject } from '@siteborne/protocol-x402';
 import type { KeyRegistry } from '@siteborne/verification';
@@ -144,6 +146,23 @@ const ROUTE_CONFIG_BUILDERS: Record<
       },
       env.DB
     ),
+  'verify_agent_output.v3': (env) =>
+    buildVerifyAgentOutputV2CdpProductionRouteConfig(
+      {
+        PAID_RECEIPT_SIGNING_PRIVATE_KEY: env.PAID_RECEIPT_SIGNING_PRIVATE_KEY,
+        PAID_RECEIPT_SIGNING_KEY_ID: env.PAID_RECEIPT_SIGNING_KEY_ID,
+        SELLER_WALLET_ADDRESS: env.SELLER_WALLET_ADDRESS,
+        CDP_API_KEY_ID: env.CDP_API_KEY_ID,
+        CDP_API_KEY_SECRET: env.CDP_API_KEY_SECRET,
+        PAYMENT_ENVIRONMENT: env.PAYMENT_ENVIRONMENT,
+        PRODUCTION_ENABLED: env.PRODUCTION_ENABLED,
+        HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP: env.HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP,
+        PRODUCTION_CDP_CREDENTIALS_APPROVED: env.PRODUCTION_CDP_CREDENTIALS_APPROVED,
+      },
+      env.DB,
+      undefined,
+      'verify_agent_output.v3'
+    ),
   // SUN-1222D-PRE-WORKFLOW-DISPATCH-FIX — genuinely new. Reuses the real
   // `company_evidence_graph.v2` production composition (SUN-1222B-S3R)
   // unmodified; that composition's own MODAL_WEBCTX_*/signing-key gates
@@ -213,6 +232,27 @@ const ROUTE_CONFIG_BUILDERS: Record<
       },
       env.DB,
       env.ARTIFACTS ? new R2ArtifactStoreAdapter(env.ARTIFACTS) : undefined
+    ),
+  'document_evidence_json.v3': (env) =>
+    buildDocumentEvidenceJsonV2CdpProductionRouteConfig(
+      {
+        PAID_RECEIPT_SIGNING_PRIVATE_KEY: env.PAID_RECEIPT_SIGNING_PRIVATE_KEY,
+        PAID_RECEIPT_SIGNING_KEY_ID: env.PAID_RECEIPT_SIGNING_KEY_ID,
+        SELLER_WALLET_ADDRESS: env.SELLER_WALLET_ADDRESS,
+        CDP_API_KEY_ID: env.CDP_API_KEY_ID,
+        CDP_API_KEY_SECRET: env.CDP_API_KEY_SECRET,
+        PAYMENT_ENVIRONMENT: env.PAYMENT_ENVIRONMENT,
+        PRODUCTION_ENABLED: env.PRODUCTION_ENABLED,
+        HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP: env.HUMAN_AUTHORIZED_PRODUCTION_BOOTSTRAP,
+        PRODUCTION_CDP_CREDENTIALS_APPROVED: env.PRODUCTION_CDP_CREDENTIALS_APPROVED,
+        MODAL_DOCWORKER_ENDPOINT_URL: env.MODAL_DOCWORKER_ENDPOINT_URL,
+        MODAL_DOCWORKER_PROXY_KEY: env.MODAL_DOCWORKER_PROXY_KEY,
+        MODAL_DOCWORKER_PROXY_SECRET: env.MODAL_DOCWORKER_PROXY_SECRET,
+      },
+      env.DB,
+      env.ARTIFACTS ? new R2ArtifactStoreAdapter(env.ARTIFACTS, 'documents/') : undefined,
+      undefined,
+      'document_evidence_json.v3'
     ),
 };
 
@@ -489,6 +529,7 @@ export async function buildProductionPaidContinuationWorkflowDependencies(
   const resultReceiptPersistence = new D1ResultReceiptPersistence(
     new X402ServiceResultRepository(env.DB)
   );
+  const resultAuthorizationRepository = new D1ResultAuthorizationRepository(env.DB);
   const resultArtifacts = env.ARTIFACTS
     ? new PccResultArtifactStore(new R2ArtifactStoreAdapter(env.ARTIFACTS, 'results/pcc/'))
     : undefined;
@@ -504,6 +545,29 @@ export async function buildProductionPaidContinuationWorkflowDependencies(
     evidenceMode: 'production',
     executor: routeConfig.executor,
     resultArtifacts,
+    resultAuthorization:
+      routeConfig.serviceId === 'document_evidence_json.v3' ||
+      routeConfig.serviceId === 'verify_agent_output.v3'
+        ? async ({ jobId, contentHash, pccDocumentHash, serviceId }) => {
+            const binding = await resultAuthorizationRepository.getSubjectBindingByOperation(jobId);
+            if (!binding) throw new Error('result_subject_binding_missing');
+            await resultAuthorizationRepository.createResultResource(
+              {
+                schema_version: 'result_resource.v1',
+                operation_id: jobId,
+                result_id: canonicalOpaqueResultId(jobId),
+                artifact_id: `r2:results/pcc/${contentHash}`,
+                pcc_document_hash: pccDocumentHash,
+                service_id: serviceId,
+                service_version: 'v3',
+                contract_release: '3.0.0',
+                confidentiality_class: 'BUYER_AUTHORIZED',
+                result_binding_id: binding.binding_id,
+              },
+              new Date().toISOString()
+            );
+          }
+        : undefined,
     validatePcc: buildExecutorPccValidator(routeConfig.pccKeyRegistry),
     settlement: {
       repository: paymentAttempts,

@@ -58,6 +58,7 @@ import {
   canAdvanceToSettled,
   extendWithSettlement,
   hashPaymentObject,
+  isCanonicalAtomicAmount,
   verifyPaymentServiceLink,
 } from '@siteborne/protocol-x402';
 import type {
@@ -375,6 +376,14 @@ export interface PaidContinuationWorkflowDependencies {
     }): Promise<ExecutorOutcome>;
     read(reference: VNextPccArtifactReference): Promise<Readonly<Record<string, unknown>>>;
   };
+  /** Buyer-authorized Release 3: persist the exact finalized PCC resource
+   * before the Workflow can return a deliverable result. */
+  readonly resultAuthorization?: (input: {
+    readonly jobId: string;
+    readonly serviceId: string;
+    readonly contentHash: string;
+    readonly pccDocumentHash: string;
+  }) => Promise<void>;
   readonly validatePcc: PccValidator;
   readonly settlement: {
     readonly repository: PaymentAttemptSettlementRepository;
@@ -748,6 +757,7 @@ async function runSettlementStep(
   paymentIdentifier: string,
   validBeforeUnix: number,
   decrypted: DecryptedContinuationPayload,
+  actualAmount: string,
   deps: PaidContinuationWorkflowDependencies
 ): Promise<SettleStepOutcome> {
   const repo = deps.settlement.repository;
@@ -809,7 +819,7 @@ async function runSettlementStep(
     settlementEvidence = await deps.settlement.evidenceProvider.settle(
       decrypted.settlementContext,
       decrypted.verificationEvidence,
-      decrypted.actualAmount
+      actualAmount
     );
   } catch {
     // Transport ambiguity: the settle() call itself failed with no
@@ -1022,6 +1032,46 @@ export async function runPaidContinuationWorkflow(
       error_detail: rejectionDetail,
     });
   }
+
+  // `upto` authorizes a ceiling, not a charge. The executor is the sole
+  // source of the measured amount, so validate its canonical atomic-unit
+  // value and ceiling before PCC generation or any settlement-side effect.
+  // Exact-price services preserve their already-authorized amount unchanged.
+  let actualAmount = decrypted.actualAmount;
+  if (decrypted.settlementContext.scheme === 'upto') {
+    const measuredAmount = executorOutcome.actualAmountAtomic;
+    const authorizedMaximum = decrypted.settlementContext.amount;
+    let rejectionCode: string | undefined;
+    if (!measuredAmount || !isCanonicalAtomicAmount(measuredAmount)) {
+      rejectionCode = 'actual_amount_required_for_upto';
+    } else if (
+      !isCanonicalAtomicAmount(authorizedMaximum) ||
+      BigInt(measuredAmount) > BigInt(authorizedMaximum)
+    ) {
+      rejectionCode = 'actual_amount_exceeds_authorized_maximum';
+    }
+    if (rejectionCode) {
+      await transitionJobState(
+        jobId,
+        'QUARANTINED',
+        'EXECUTION_FAILED',
+        deps.persistence.job,
+        rejectionCode
+      );
+      await transitionJobState(
+        jobId,
+        'REJECTED',
+        'QUARANTINE_POLICY',
+        deps.persistence.job,
+        rejectionCode
+      );
+      return terminal('executor_rejected', jobId, { error_code: rejectionCode });
+    }
+    if (measuredAmount === undefined) {
+      throw new Error('unreachable_missing_upto_actual_amount');
+    }
+    actualAmount = measuredAmount;
+  }
   await transitionJobState(jobId, 'VERIFYING', 'EXECUTION_COMPLETED', deps.persistence.job);
   // SUN-1221E6R-H2AWI-3 fix (discovered via real-D1 integration testing,
   // not caught by H2AWI-2's own fake-repository unit tests): the REUSED
@@ -1122,7 +1172,7 @@ export async function runPaidContinuationWorkflow(
 
   // STEP 4 — settle. Zero blind retries (frozen invariant, STEP_CONFIG.SETTLE).
   const settleOutcome = await step.do('settle', STEP_CONFIG.SETTLE, async () =>
-    runSettlementStep(paymentIdentifier, metadata.valid_before_unix, decrypted, deps)
+    runSettlementStep(paymentIdentifier, metadata.valid_before_unix, decrypted, actualAmount, deps)
   );
 
   if (settleOutcome.kind === 'authorization_expired') {
@@ -1294,7 +1344,7 @@ export async function runPaidContinuationWorkflow(
       transaction: settleOutcome.transactionReference ?? 'reconciled:transaction-unavailable',
       network: decrypted.settlementContext.network,
       ...(settleOutcome.payer ? { payer: settleOutcome.payer } : {}),
-      amount: decrypted.actualAmount,
+      amount: actualAmount,
       extra: { link_id: paymentServiceLink.link_id, payment_identifier: paymentIdentifier },
     },
     durableEvidence: {
@@ -1328,6 +1378,43 @@ export async function runPaidContinuationWorkflow(
     });
   }
   void resultStatus;
+
+  if (deps.resultAuthorization) {
+    const contentHash = pccResult.pccReference?.content_hash;
+    const extensions =
+      verificationReceipt && typeof verificationReceipt === 'object'
+        ? (verificationReceipt as { extensions?: Record<string, unknown> }).extensions
+        : undefined;
+    const proof = extensions?.['net.siteborne.verification-proof.v1'];
+    const pccDocumentHash =
+      proof && typeof proof === 'object'
+        ? (proof as { pcc_document_hash?: unknown }).pcc_document_hash
+        : undefined;
+    if (
+      typeof contentHash !== 'string' ||
+      !/^sha256:[a-f0-9]{64}$/u.test(contentHash) ||
+      typeof pccDocumentHash !== 'string' ||
+      !/^sha256:[a-f0-9]{64}$/u.test(pccDocumentHash)
+    ) {
+      return terminal('persistence_failed_after_settlement', jobId, {
+        error_code: 'result_resource_identity_unavailable',
+        settlement_transaction_reference: settleOutcome.transactionReference,
+      });
+    }
+    try {
+      await deps.resultAuthorization({
+        jobId,
+        serviceId: decrypted.settlementContext.service_id,
+        contentHash,
+        pccDocumentHash,
+      });
+    } catch {
+      return terminal('persistence_failed_after_settlement', jobId, {
+        error_code: 'result_resource_binding_failed',
+        settlement_transaction_reference: settleOutcome.transactionReference,
+      });
+    }
+  }
 
   // STEP 6 — persist-receipt-and-finalize. Receipt write + terminal
   // state-machine transition, both idempotent UPSERT-shaped.

@@ -66,6 +66,20 @@ describe('buildVerifyAgentOutputV2CdpProductionRouteConfig', () => {
     expect(result.evidenceMode).toBe('fixture');
   });
 
+  it('keeps the v3 candidate on the governed v2 economic price key', async () => {
+    const result = await buildVerifyAgentOutputV2CdpProductionRouteConfig(
+      fullEnv(),
+      fakeDb(),
+      { evidenceMode: 'fixture' },
+      'verify_agent_output.v3'
+    );
+    expect('unavailable' in result).toBe(false);
+    if ('unavailable' in result) throw new Error('unreachable');
+    expect(result.pricingKey).toBe('verify_agent_output_standard_v2');
+    expect(result.serviceId).toBe('verify_agent_output.v3');
+    expect(result.path).toBe('/v3/verify/agent-output');
+  });
+
   it('returns unavailable, never throws, when the signing key is missing', async () => {
     const env = fullEnv();
     env.PAID_RECEIPT_SIGNING_PRIVATE_KEY = '';

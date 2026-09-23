@@ -114,6 +114,15 @@ export interface Env {
   /** Exact governed selector for the non-default public Release 3 result
    * contract. Absent keeps every v3 execution path closed. */
   RESULT_CONTRACT_RELEASE_SELECTION?: string;
+  /** Local-candidate v3 result authentication authority. These remain
+   * unset in production until a separately authorized activation. */
+  RESULT_AUTH_OIDC_ISSUERS_JSON?: string;
+  RESULT_AUTH_MTLS_REGISTRY_JSON?: string;
+  RESULT_SUBJECT_REFERENCE_KEY?: string;
+  RESULT_SUBJECT_REFERENCE_KEY_VERSION?: string;
+  /** Separate default-off gate for buyer-authorized v3 candidate routes.
+   * The public v3 selector alone can never activate these paths. */
+  BUYER_AUTHORIZED_V3_ROUTE_ENABLED?: string;
   /** SUN-1218 checkpoint X: the route-specific activation gate for
    * `verify_agent_output.v2` / CDP, required IN ADDITION TO
    * `PAID_ROUTES_ENABLED` (both must be the exact literal `'true'`) --

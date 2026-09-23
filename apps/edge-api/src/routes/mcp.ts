@@ -40,12 +40,15 @@ import {
 import { runShadowComparison } from '../control-plane/metadata/shadow-comparison-runner';
 import { selectPrimaryProjection } from '../control-plane/metadata/primary-comparison-selector';
 import { recordMetadataProjectionLifecycle } from '../control-plane/telemetry/metadata-projection-telemetry';
+import { buildResultAuthorizationRuntime } from '../control-plane/security/request-principal';
 import { companyEvidenceGraphV2CdpProductionRoute } from '../control-plane/routes/production-company-evidence-v2-cdp-route';
 import { webContextVerifiedV2CdpProductionRoute } from '../control-plane/routes/production-web-context-v2-cdp-route';
 import { documentEvidenceJsonV2CdpProductionRoute } from '../control-plane/routes/production-document-evidence-v2-cdp-route';
 import { verifyAgentOutputV2CdpProductionRoute } from '../control-plane/routes/production-verify-v2-cdp-route';
 import {
   companyEvidenceGraphV3CandidateRoute,
+  documentEvidenceJsonV3CandidateRoute,
+  verifyAgentOutputV3CandidateRoute,
   webContextVerifiedV3CandidateRoute,
 } from '../control-plane/routes/production-public-v3-candidate-routes';
 
@@ -65,6 +68,8 @@ const MCP_X402_PRODUCTION_HANDLERS: Readonly<
   'verify_agent_output.v2': verifyAgentOutputV2CdpProductionRoute,
   'company_evidence_graph.v3': companyEvidenceGraphV3CandidateRoute,
   'web_context_verified.v3': webContextVerifiedV3CandidateRoute,
+  'document_evidence_json.v3': documentEvidenceJsonV3CandidateRoute,
+  'verify_agent_output.v3': verifyAgentOutputV3CandidateRoute,
 };
 
 const MCP_ALLOWED_HOSTS = [
@@ -79,6 +84,30 @@ const MCP_ALLOWED_HOSTS = [
 // below the Worker's general 10 MiB service-upload ceiling: MCP requests carry
 // JSON-RPC metadata and bounded tool arguments, never document bytes.
 const MCP_MAX_REQUEST_BYTES = 1024 * 1024;
+
+const BUYER_RESULT_AUTHORIZATION_META = {
+  'net.siteborne/security/result-authorization.v1': {
+    authorization_classification: 'buyer_authorized',
+    authentication_methods: ['oidc_bearer', 'mutual_tls'],
+    subject_binding: 'issuer_qualified_subject_reference',
+    existence_hiding: true,
+  },
+} as const;
+
+function resultAwareMcpSecurityMeta(): Record<string, Record<string, unknown>> {
+  const published = getMcpSecurityMetaByToolName();
+  return {
+    ...published,
+    siteborne_extract_document_evidence_json_v3_candidate: {
+      ...published.siteborne_extract_document_evidence_json_v3_candidate,
+      ...BUYER_RESULT_AUTHORIZATION_META,
+    },
+    siteborne_verify_agent_output_v3_candidate: {
+      ...published.siteborne_verify_agent_output_v3_candidate,
+      ...BUYER_RESULT_AUTHORIZATION_META,
+    },
+  };
+}
 
 async function readBoundedMcpRequest(request: Request): Promise<Request | null> {
   if (request.method === 'GET' || request.method === 'HEAD' || request.body === null)
@@ -275,6 +304,15 @@ export async function mcpRoute(context: Context<{ Bindings: Env }>): Promise<Res
   const productionEnabled = Object.values(services).some(
     (service) => service?.production === 'production_enabled'
   );
+  let resultAuthorizationRuntime: ReturnType<typeof buildResultAuthorizationRuntime> = null;
+  try {
+    resultAuthorizationRuntime = buildResultAuthorizationRuntime(context.env);
+  } catch {
+    resultAuthorizationRuntime = null;
+  }
+  const verifiedPrincipal = resultAuthorizationRuntime
+    ? await resultAuthorizationRuntime.authenticate(context.req.raw)
+    : null;
 
   const options: CreateSiteborneMcpOptions = {
     health: { production_ready: false, production_enabled: productionEnabled, services },
@@ -282,7 +320,7 @@ export async function mcpRoute(context: Context<{ Bindings: Env }>): Promise<Res
     allowedOrigins: [...MCP_ALLOWED_HOSTS],
     // PRODUCTION-SECURITY-DECLARATIONS-PUBLICATION-01: additive per-tool
     // security `_meta`, derived from the canonical declaration.
-    securityMetaByToolName: getMcpSecurityMetaByToolName(),
+    securityMetaByToolName: resultAwareMcpSecurityMeta(),
     // SUN-1222C-MCP-PAYMENT-DESIGN-CORRECTION: the real REST route
     // functions decide for themselves (via their own PAID_ROUTES_ENABLED
     // / *_CDP_ROUTE_ENABLED / production-authorization gates) whether to
@@ -293,8 +331,11 @@ export async function mcpRoute(context: Context<{ Bindings: Env }>): Promise<Res
     serviceBoundary: createMcpX402ServiceBoundary(
       context.env,
       MCP_X402_PRODUCTION_HANDLERS,
-      new URL(context.req.raw.url).origin
+      new URL(context.req.raw.url).origin,
+      verifiedPrincipal
     ),
+    buyerResultAuthorizationReady: resultAuthorizationRuntime !== null,
+    buyerResultCallerAuthenticated: verifiedPrincipal !== null,
   };
 
   if (context.env?.RESULT_CONTRACT_RELEASE_SELECTION === '3.0.0-public-candidate') {

@@ -875,7 +875,11 @@ function buildSiteborneMcpHandlers(
           `${serviceId} requires governed release selection 3.0.0-public-candidate`
         );
       }
-      if (RESULT_AUTHORIZATION_BLOCKED_SERVICES.has(serviceId)) {
+      if (
+        RESULT_AUTHORIZATION_BLOCKED_SERVICES.has(serviceId) &&
+        (options.buyerResultAuthorizationReady !== true ||
+          options.buyerResultCallerAuthenticated !== true)
+      ) {
         return errorResult(
           'result_authorization_required',
           `${serviceId} candidate activation is blocked until buyer-authorized result access is enforced`
@@ -922,7 +926,11 @@ function buildSiteborneMcpHandlers(
         `${quoteInput.service_id} requires governed release selection 3.0.0-public-candidate`
       );
     }
-    if (RESULT_AUTHORIZATION_BLOCKED_SERVICES.has(quoteInput.service_id)) {
+    if (
+      RESULT_AUTHORIZATION_BLOCKED_SERVICES.has(quoteInput.service_id) &&
+      (options.buyerResultAuthorizationReady !== true ||
+        options.buyerResultCallerAuthenticated !== true)
+    ) {
       return errorResult(
         'result_authorization_required',
         `${quoteInput.service_id} candidate activation is blocked until buyer-authorized result access is enforced`

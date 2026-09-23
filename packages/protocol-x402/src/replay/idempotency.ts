@@ -43,7 +43,7 @@ export interface AcquirePaymentAttemptInput {
  * attempt — atomic via `repository.acquire()`, then classified by
  * comparing the existing record's binding digest to the new attempt's. */
 export async function acquirePaymentAttempt(
-  repository: PaymentAttemptRepository,
+  repository: Pick<PaymentAttemptRepository, 'acquire'>,
   input: AcquirePaymentAttemptInput
 ): Promise<IdempotencyOutcome> {
   const { binding, nowIso, ttlMs } = input;

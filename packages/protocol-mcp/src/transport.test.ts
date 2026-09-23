@@ -407,6 +407,33 @@ describe('SITEBORNE MCP 2026-07-28 Hono transport', () => {
     }
   );
 
+  it('does not issue buyer-authorized v3 quotes from configuration readiness without a verified caller', async () => {
+    const app = createSiteborneMcpHonoApp({
+      releaseSelection: '3.0.0-public-candidate',
+      buyerResultAuthorizationReady: true,
+      buyerResultCallerAuthenticated: false,
+      quote: {
+        network: 'eip155:84532',
+        asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7c',
+        payee: '0x7f44a2dd237938F18632d4CcA40f4c690295E6E1',
+      },
+      allowedHosts: ['test.local'],
+      allowedOrigins: ['test.local'],
+    });
+    const client = await connectClient(app);
+    clients.push(client);
+    const result = await client.callTool({
+      name: 'siteborne_get_quote',
+      arguments: {
+        service_id: 'verify_agent_output.v3',
+        scheme: 'exact',
+        input: purchasableInputExample('verify_agent_output.v3'),
+      },
+    });
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result.content)).toContain('result_authorization_required');
+  });
+
   // SUN-1222C-MCP-PAYMENT-DESIGN-CORRECTION (Architecture C): end-to-end
   // proof that the official x402-over-MCP wire carriers (verified against
   // the real @x402/mcp@2.25.0 package, not invented) are correctly wired

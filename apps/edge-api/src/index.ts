@@ -32,6 +32,8 @@ import { webContextVerifiedV2CdpProductionRoute } from './control-plane/routes/p
 import { companyEvidenceGraphV2CdpProductionRoute } from './control-plane/routes/production-company-evidence-v2-cdp-route';
 import {
   companyEvidenceGraphV3CandidateRoute,
+  documentEvidenceJsonV3CandidateRoute,
+  verifyAgentOutputV3CandidateRoute,
   webContextVerifiedV3CandidateRoute,
 } from './control-plane/routes/production-public-v3-candidate-routes';
 import { documentEvidenceJsonV2CdpProductionRoute } from './control-plane/routes/production-document-evidence-v2-cdp-route';
@@ -214,6 +216,8 @@ app.post('/v2/web/context', webContextVerifiedV2CdpProductionRoute);
 app.post('/v2/company/evidence-graph', companyEvidenceGraphV2CdpProductionRoute);
 app.post('/v3/company/evidence-graph', companyEvidenceGraphV3CandidateRoute);
 app.post('/v3/web/context', webContextVerifiedV3CandidateRoute);
+app.post('/v3/document/evidence-json', documentEvidenceJsonV3CandidateRoute);
+app.post('/v3/verify/agent-output', verifyAgentOutputV3CandidateRoute);
 
 /**
  * SUN-1222B-S3R — the fourth real, bundle-reachable production
