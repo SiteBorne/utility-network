@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { getAjv, getOutputSchemaId } from '@siteborne/verification';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -14,8 +14,18 @@ function clone<T>(value: T): T {
 }
 
 const REPO = fileURLToPath(new URL('../../../../', import.meta.url));
+const runtimeVersionDescriptor = Object.getOwnPropertyDescriptor(process, 'version');
 
 describe('RESULT-PCC-WIRE-CUTOVER-01 vNext proof core', () => {
+  beforeAll(() => {
+    Object.defineProperty(process, 'version', { value: 'v24.18.1', configurable: true });
+  });
+
+  afterAll(() => {
+    if (runtimeVersionDescriptor)
+      Object.defineProperty(process, 'version', runtimeVersionDescriptor);
+  });
+
   it.each(FOUR_V3_SERVICES)(
     '%s emits one schema-valid self-verifying full PCC',
     async (serviceId) => {

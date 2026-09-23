@@ -8,12 +8,15 @@
  * not affect any other test's real-data parity assertions.
  */
 import { AgentCard } from '@a2a-js/sdk';
+import { SITEBORNE_SERVICE_IDS } from '@siteborne/protocol-a2a';
+import type { projectA2aFromVcm } from '@siteborne/vcm';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const actualVcm = await vi.importActual<typeof import('@siteborne/vcm')>('@siteborne/vcm');
+type VcmModule = { projectA2aFromVcm: typeof projectA2aFromVcm };
+const actualVcm = await vi.importActual<VcmModule>('@siteborne/vcm');
 
 vi.mock('@siteborne/vcm', async () => {
-  const actual = await vi.importActual<typeof import('@siteborne/vcm')>('@siteborne/vcm');
+  const actual = await vi.importActual<VcmModule>('@siteborne/vcm');
   return { ...actual };
 });
 
@@ -43,7 +46,7 @@ describe('A2A metadata shadow_compare -- adversarial VCM behavior never reaches 
     await new Promise((resolve) => setTimeout(resolve, 20));
 
     expect(response.status).toBe(200);
-    expect(card.skills).toHaveLength(8); // real, unaffected by the mutated shadow
+    expect(card.skills).toHaveLength(SITEBORNE_SERVICE_IDS.length); // real, unaffected by the mutated shadow
 
     const lines = [...logSpy.mock.calls, ...errorSpy.mock.calls]
       .map((call) => {
@@ -85,7 +88,7 @@ describe('A2A metadata shadow_compare -- adversarial VCM behavior never reaches 
     await new Promise((resolve) => setTimeout(resolve, 20));
 
     expect(response.status).toBe(200);
-    expect(card.skills).toHaveLength(8);
+    expect(card.skills).toHaveLength(SITEBORNE_SERVICE_IDS.length);
     expect(card.signatures).toHaveLength(1);
 
     spy.mockRestore();
@@ -146,7 +149,7 @@ describe('A2A vcm_primary_compare -- selection and failure boundaries', () => {
     const lines = structuredErrors(errorSpy);
 
     expect(response.status).toBe(200);
-    expect(card.skills).toHaveLength(8);
+    expect(card.skills).toHaveLength(SITEBORNE_SERVICE_IDS.length);
     expect(card.signatures).toHaveLength(1);
     expect(lines.some((line) => line.event === 'metadata_projection_mismatch_total')).toBe(true);
     expect(lines.some((line) => line.event === 'metadata_projection_fallback_total')).toBe(true);
@@ -162,7 +165,7 @@ describe('A2A vcm_primary_compare -- selection and failure boundaries', () => {
     const card = AgentCard.fromJSON(await response.json());
 
     expect(response.status).toBe(200);
-    expect(card.skills).toHaveLength(8);
+    expect(card.skills).toHaveLength(SITEBORNE_SERVICE_IDS.length);
     expect(card.signatures).toHaveLength(1);
   });
 
@@ -177,7 +180,7 @@ describe('A2A vcm_primary_compare -- selection and failure boundaries', () => {
     const card = AgentCard.fromJSON(await response.json());
 
     expect(response.status).toBe(200);
-    expect(card.skills).toHaveLength(8);
+    expect(card.skills).toHaveLength(SITEBORNE_SERVICE_IDS.length);
     expect(card.signatures).toHaveLength(1);
   });
 
@@ -191,7 +194,7 @@ describe('A2A vcm_primary_compare -- selection and failure boundaries', () => {
     const card = AgentCard.fromJSON(await response.json());
 
     expect(response.status).toBe(200);
-    expect(card.skills).toHaveLength(8);
+    expect(card.skills).toHaveLength(SITEBORNE_SERVICE_IDS.length);
     expect(card.signatures).toHaveLength(1);
   });
 
@@ -261,7 +264,7 @@ describe('A2A vcm_primary_compare -- selection and failure boundaries', () => {
     const card = AgentCard.fromJSON(await response.json());
 
     expect(response.status).toBe(200);
-    expect(card.skills).toHaveLength(8);
+    expect(card.skills).toHaveLength(SITEBORNE_SERVICE_IDS.length);
     expect(card.signatures).toHaveLength(1);
   });
 
@@ -270,7 +273,7 @@ describe('A2A vcm_primary_compare -- selection and failure boundaries', () => {
     const card = AgentCard.fromJSON(await response.json());
 
     expect(response.status).toBe(200);
-    expect(card.skills).toHaveLength(8);
+    expect(card.skills).toHaveLength(SITEBORNE_SERVICE_IDS.length);
     expect(card.signatures).toHaveLength(1);
   });
 });

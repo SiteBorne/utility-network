@@ -9,9 +9,9 @@
   "output_schema_uri": "https://utility.siteborne.net/contracts/3.0.0/schemas/services/agent-verification-output.schema.json",
   "output_schema_hash": "sha256:7a164cc8bbd34c95608fcc6e420a36d29844ddfbc6c029439e9f4262cedf8a73",
   "pcc_version": "2.0.0",
-  "pricing_schemes": ["exact", "upto"],
+  "pricing_schemes": ["exact"],
   "base_price": {
-    "amount": "0.019",
+    "amount": "0.017",
     "currency": "USD"
   },
   "maximum_price": {
@@ -22,7 +22,7 @@
   "maximum_input_bytes": 1048576,
   "expected_latency_class": "variable",
   "authorization_classification": "buyer_authorized",
-  "promotion_state": "local_candidate",
+  "promotion_state": "executable_candidate",
   "production_enabled": false,
   "declared_limitations": [
     "Requires deterministic agent behavior for reproduction",

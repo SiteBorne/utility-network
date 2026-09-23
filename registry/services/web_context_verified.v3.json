@@ -9,7 +9,7 @@
   "output_schema_uri": "https://utility.siteborne.net/contracts/3.0.0/schemas/services/web-context-output.schema.json",
   "output_schema_hash": "sha256:34e9ca4c55b071cfaa2f182ecac5d2513a8ec6a4f3c0a6d0cf0b7027eeab1319",
   "pcc_version": "2.0.0",
-  "pricing_schemes": ["exact", "upto"],
+  "pricing_schemes": ["exact"],
   "base_price": {
     "amount": "0.008",
     "currency": "USD"

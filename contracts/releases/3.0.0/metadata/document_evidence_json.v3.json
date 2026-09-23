@@ -9,9 +9,9 @@
   "output_schema_uri": "https://utility.siteborne.net/contracts/3.0.0/schemas/services/document-evidence-output.schema.json",
   "output_schema_hash": "sha256:058e6d50796d7adffc5deedd5b96679dcff78d98b77c022c06430885546aeff7",
   "pcc_version": "2.0.0",
-  "pricing_schemes": ["exact", "upto"],
+  "pricing_schemes": ["upto"],
   "base_price": {
-    "amount": "0.012",
+    "amount": "0.0098",
     "currency": "USD"
   },
   "maximum_price": {
@@ -22,7 +22,7 @@
   "maximum_input_bytes": 10485760,
   "expected_latency_class": "slow",
   "authorization_classification": "buyer_authorized",
-  "promotion_state": "local_candidate",
+  "promotion_state": "executable_candidate",
   "production_enabled": false,
   "declared_limitations": [
     "OCR accuracy varies with document quality",

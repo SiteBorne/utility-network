@@ -8,6 +8,7 @@ import { FIXED_TIME, FOUR_V3_SERVICES, runScenario } from './four-service-scenar
 const EXAMPLES = fileURLToPath(
   new URL('../../../../contracts/releases/3.0.0/examples/', import.meta.url)
 );
+const runtimeVersionDescriptor = Object.getOwnPropertyDescriptor(process, 'version');
 
 async function assertExample(
   filename: string,
@@ -33,12 +34,15 @@ async function assertExample(
 
 describe('Service Contract 3.0.0 governed full-PCC examples', () => {
   beforeAll(() => {
+    Object.defineProperty(process, 'version', { value: 'v24.18.1', configurable: true });
     vi.useFakeTimers();
     vi.setSystemTime(FIXED_TIME);
   });
 
   afterAll(() => {
     vi.useRealTimers();
+    if (runtimeVersionDescriptor)
+      Object.defineProperty(process, 'version', runtimeVersionDescriptor);
   });
 
   it.each(FOUR_V3_SERVICES)('%s fixture is deterministic and self-verifying', async (serviceId) => {

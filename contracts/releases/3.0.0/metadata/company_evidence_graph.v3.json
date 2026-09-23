@@ -17,20 +17,20 @@
   "output_schema_uri": "https://utility.siteborne.net/contracts/3.0.0/schemas/services/company-evidence-output.schema.json",
   "output_schema_hash": "sha256:3567477e8ac4e76a57c6baec7cc6e2fa1aa502fca3087ed3753d2e99de036ae1",
   "pcc_version": "2.0.0",
-  "pricing_schemes": ["exact", "upto"],
+  "pricing_schemes": ["exact"],
   "base_price": {
-    "amount": "0.039",
+    "amount": "0.0312",
     "currency": "USD"
   },
   "maximum_price": {
-    "amount": "0.19",
+    "amount": "0.0312",
     "currency": "USD"
   },
   "execution_mode": "async",
   "maximum_input_bytes": 1048576,
   "expected_latency_class": "variable",
   "authorization_classification": "public",
-  "promotion_state": "local_candidate",
+  "promotion_state": "executable_candidate",
   "production_enabled": false,
   "declared_limitations": [
     "SEC data is cache-only, not real-time",

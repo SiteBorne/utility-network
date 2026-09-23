@@ -9,7 +9,7 @@
   "output_schema_uri": "https://utility.siteborne.net/contracts/3.0.0/schemas/services/agent-verification-output.schema.json",
   "output_schema_hash": "sha256:7a164cc8bbd34c95608fcc6e420a36d29844ddfbc6c029439e9f4262cedf8a73",
   "pcc_version": "2.0.0",
-  "pricing_schemes": ["exact", "upto"],
+  "pricing_schemes": ["exact"],
   "base_price": {
     "amount": "0.017",
     "currency": "USD"
