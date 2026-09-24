@@ -38,3 +38,4 @@ export * from './lifecycle/stage';
 export * from './bazaar';
 export * from './pricing/economic';
 export * from './openapi/paid-operations';
+export * from './openapi/candidate-operations';

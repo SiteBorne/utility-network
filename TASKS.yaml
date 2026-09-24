@@ -121,7 +121,7 @@ tasks:
     acceptance_tests:
       - 'All IONOS mail records recreated in Cloudflare'
       - 'DKIM CNAME records preserved'
-      - 'ops@siteborne.net, security@siteborne.net, startups@siteborne.net, legal@siteborne.net created'
+      - 'ops@siteborne.net, security@alerts.siteborne.net, startups@siteborne.net, legal@siteborne.net created'
     evidence: []
     next_action: 'Deploy static placeholder'
     blocker: 'Requires operator action at Cloudflare'

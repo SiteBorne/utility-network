@@ -71,11 +71,21 @@ describe('registry parity law', () => {
       model.currentStaticUtilityExposures.filter((exposure) => exposure.surface === 'mcp')
     ).toHaveLength(2);
     expect(
-      model.services.every(
-        (service) =>
-          service.releaseProtocolExposureDeclared.a2a === 'planned' &&
-          service.releaseProtocolExposureDeclared.mcp === 'planned'
-      )
+      model.services.every((service) => service.releaseProtocolExposureDeclared.a2a === 'planned')
     ).toBe(true);
+
+    // The four .v3 registry files now declare mcp "tested" (SUN-1219/
+    // metadata-vcm: registry/services/*.v3.json, corrected off "planned"
+    // once proven by the real MCP transport harness -- see
+    // scripts/gates/check-v3-service-parity.ts). The eight .v1/.v2 files
+    // remain declared "planned". The derived currentStaticExposures
+    // counts above (8 mcp / 12 a2a) are unchanged by this edit, which is
+    // exactly the point of this law: current exposure is derived from
+    // real wiring, independent of this declared label.
+    const mcpDeclared = model.services.map(
+      (service) => service.releaseProtocolExposureDeclared.mcp
+    );
+    expect(mcpDeclared.filter((value) => value === 'planned')).toHaveLength(8);
+    expect(mcpDeclared.filter((value) => value === 'tested')).toHaveLength(4);
   });
 });

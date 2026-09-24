@@ -30,6 +30,7 @@ import {
   validateBazaarDeclarationEconomics,
   validateEconomicProjection,
   V2_PAID_SERVICE_IDS,
+  V3_CANDIDATE_SERVICE_IDS,
   REGISTRY_SERVICES,
   type EconomicOfferProjection,
   type PaymentDestination,
@@ -118,7 +119,7 @@ beforeAll(async () => {
   surfaces.a2a = new Map(
     card.capabilities.extensions[0].params.services.map((s) => [s.serviceId, s.economics])
   );
-  // OpenAPI (served; v2 only)
+  // OpenAPI (served; v2 production + v3 Release-3 candidates)
   const openapi = (await (await app.request('/openapi.json', HOST, ENV as never)).json()) as {
     paths: Record<
       string,
@@ -331,7 +332,7 @@ describe('GATE:ECONOMIC_CANONICAL_MODEL', () => {
 
 describe('GATE:ECONOMIC_PROJECTION_PARITY', () => {
   it.each(['a2a', 'vcm', 'bazaar', 'catalog'])(
-    '%s equals the canonical projection for all eight ids (governance ⇄ VCM ⇄ surface)',
+    '%s equals the canonical projection for all twelve ids (governance ⇄ VCM ⇄ surface)',
     (surface) => {
       for (const id of ECONOMIC_SERVICE_IDS) {
         const expected = projectServiceEconomics(id, {
@@ -345,11 +346,11 @@ describe('GATE:ECONOMIC_PROJECTION_PARITY', () => {
       }
     }
   );
-  it.each(['openapi', 'mcp'])(
-    '%s equals the canonical projection for the four v2 ids',
+  it.each(['openapi'])(
+    '%s equals the canonical projection for the four v2 + four v3 candidate ids',
     (surface) => {
-      expect(surfaces[surface].size).toBe(4);
-      for (const id of V2_PAID_SERVICE_IDS) {
+      expect(surfaces[surface].size).toBe(8);
+      for (const id of [...V2_PAID_SERVICE_IDS, ...V3_CANDIDATE_SERVICE_IDS]) {
         const expected = projectServiceEconomics(id, {
           productionEnabled: false,
           destination: DESTINATION,
@@ -361,6 +362,19 @@ describe('GATE:ECONOMIC_PROJECTION_PARITY', () => {
       }
     }
   );
+  it.each(['mcp'])('%s equals the canonical projection for the four v2 ids', (surface) => {
+    expect(surfaces[surface].size).toBe(4);
+    for (const id of V2_PAID_SERVICE_IDS) {
+      const expected = projectServiceEconomics(id, {
+        productionEnabled: false,
+        destination: DESTINATION,
+      });
+      expect(
+        compareEconomicProjections(expected, surfaces[surface].get(id)!),
+        `${surface}/${id}`
+      ).toEqual([]);
+    }
+  });
   it('every pair of surfaces agrees pairwise (no surface is an independent authority)', () => {
     const names = Object.keys(surfaces).filter((n) => !n.startsWith('__'));
     for (const id of V2_PAID_SERVICE_IDS) {

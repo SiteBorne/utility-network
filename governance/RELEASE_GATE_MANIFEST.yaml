@@ -1,0 +1,339 @@
+# SITEBORNE-FINAL-LOCAL-CONVERGENCE-01 — machine-readable release gate
+# manifest for Release 3.0.0 candidate convergence. Each gate resolves to
+# exactly one of: PASS, FAIL, NOT_RUN, EXTERNALLY_VERIFIED_LATER,
+# NOT_VERIFIABLE_IN_THIS_REPO, GENUINELY_NOT_APPLICABLE (see
+# scripts/gates/release-gates-local.ts, which reuses this file as its
+# authoritative gate list).
+#
+# classification legend:
+#   EXISTING_CHECK               — a pre-existing pnpm script proves this
+#   DERIVED_FROM_EXISTING_EVIDENCE — computed from an existing check's output,
+#                                     no separate suite
+#   NEW_CHECK_REQUIRED           — a checker this checkpoint added
+#   EXTERNALLY_VERIFIED_LATER    — real production/public state, deferred
+#   NOT_VERIFIABLE_IN_THIS_REPO  — no in-repo evidence path exists
+#   GENUINELY_NOT_APPLICABLE     — the invariant does not apply to this repo
+version: '1.0.0'
+gates:
+  - name: SECURITY_REPORTING
+    semantic_invariant: 'security.txt is well-formed, unexpired, and its contact matches the canonical identity'
+    canonical_authority: apps/network-site/.well-known/security.txt
+    evidence_source: 'pnpm security:reporting'
+    phase: local_predeployment
+    release_blocking: true
+    classification: EXISTING_CHECK
+
+  - name: V3_PCC_VERSION_CONSISTENT
+    semantic_invariant: 'registry and Release 3 metadata declare the same pcc_version per v3 service'
+    canonical_authority: 'registry/services/*.v3.json, contracts/releases/3.0.0/metadata/*.v3.json'
+    evidence_source: 'pnpm gates:v3-service-parity'
+    phase: local_predeployment
+    release_blocking: true
+    classification: EXISTING_CHECK
+
+  - name: V3_CONTRACT_RELEASE_HASH_CONSISTENT
+    semantic_invariant: 'output schema hash matches across registry, metadata, and CONTRACT_RELEASE.yaml'
+    canonical_authority: contracts/releases/3.0.0/CONTRACT_RELEASE.yaml
+    evidence_source: 'pnpm gates:v3-service-parity'
+    phase: local_predeployment
+    release_blocking: true
+    classification: EXISTING_CHECK
+
+  - name: MCP_V3_DECLARED_STATUS_VS_WIRING
+    semantic_invariant: 'protocols.mcp status matches whether a live candidate route is wired in mcp.ts'
+    canonical_authority: apps/edge-api/src/routes/mcp.ts
+    evidence_source: 'pnpm gates:v3-service-parity'
+    phase: local_predeployment
+    release_blocking: true
+    classification: EXISTING_CHECK
+
+  - name: MCP_V3_REAL_TRANSPORT
+    semantic_invariant: 'all four v3 candidates answer real MCP JSON-RPC transport calls'
+    canonical_authority: apps/edge-api/src/routes/mcp.ts
+    evidence_source: 'npx vitest run apps/edge-api/tests/verify-mcp-v3-candidate-real-transport.test.ts'
+    phase: local_predeployment
+    release_blocking: true
+    classification: EXISTING_CHECK
+
+  - name: OPENAPI_V3_CANDIDATE_PROJECTION
+    semantic_invariant: 'live /openapi.json projects all four v3 candidates with PCC/schema/economic/authorization/candidate-state parity to the frozen Release 3 contract'
+    canonical_authority: contracts/releases/3.0.0/openapi/service-contracts.openapi.json
+    evidence_source: 'pnpm gates:v3-service-parity'
+    phase: local_predeployment
+    release_blocking: true
+    classification: EXISTING_CHECK
+
+  - name: A2A_V3_SERVICE_IDENTITY
+    semantic_invariant: 'all four v3 service ids are declared in SITEBORNE_SERVICE_IDS and reach the Agent Card skill list'
+    canonical_authority: packages/protocol-a2a/src/constants.ts
+    evidence_source: 'pnpm gates:v3-service-parity'
+    phase: local_predeployment
+    release_blocking: true
+    # Implemented and passing today (SITEBORNE-FINAL-LOCAL-CONVERGENCE-01) --
+    # reclassified off the stale NEW_CHECK_REQUIRED provenance label a prior
+    # audit left in place after the checker landed.
+    classification: EXISTING_CHECK
+
+  - name: A2A_RESULT_AUTHORIZATION_PROJECTION_MODEL
+    semantic_invariant: 'result-authorization projection state (projected vs intentionally absent) is machine-determined, never assumed'
+    canonical_authority: packages/vcm/src/projections/types.ts
+    evidence_source: 'pnpm gates:v3-service-parity'
+    phase: local_predeployment
+    release_blocking: false
+    classification: EXISTING_CHECK
+
+  - name: CATALOG_IMPLEMENTATION_CONTRACT
+    semantic_invariant: 'the /catalog route and D1 schema/repository implement the required fields and behavior, independent of real row content'
+    canonical_authority: 'apps/edge-api/src/control-plane/routes/catalog.ts, migrations/0001_control_plane_foundation.sql'
+    evidence_source: 'pnpm gates:v3-service-parity'
+    phase: local_predeployment
+    release_blocking: true
+    classification: EXISTING_CHECK
+
+  - name: CATALOG_HETEROGENEOUS_VERSION_SEMANTICS
+    semantic_invariant: 'each Catalog service entry carries its OWN governed contract_release/pcc_version; the document-level fields describe only the response envelope, never a single false claim across mixed service generations'
+    canonical_authority: 'apps/edge-api/src/control-plane/routes/catalog.ts (resolveCatalogVersionFields), packages/service-runtime/src/pcc/governed-metadata.ts, registry/services/*.json'
+    evidence_source: 'pnpm gates:v3-service-parity; npx vitest run apps/edge-api/src/control-plane/routes/catalog.test.ts'
+    phase: local_predeployment
+    release_blocking: true
+    classification: EXISTING_CHECK
+
+  - name: CATALOG_CONTRACT_RELEASE_PROJECTION
+    semantic_invariant: 'per-service contract_release is projected from getGovernedMetadata, not a hardcoded/global literal'
+    canonical_authority: packages/service-runtime/src/pcc/governed-metadata.ts
+    evidence_source: 'pnpm gates:v3-service-parity'
+    phase: local_predeployment
+    release_blocking: true
+    classification: EXISTING_CHECK
+
+  - name: CATALOG_PCC_VERSION_PROJECTION
+    semantic_invariant: 'per-service pcc_version is projected from the registry entry, not a hardcoded/global literal'
+    canonical_authority: 'registry/services/*.json (RegistryServiceEntry.pcc_version)'
+    evidence_source: 'pnpm gates:v3-service-parity'
+    phase: local_predeployment
+    release_blocking: true
+    classification: EXISTING_CHECK
+
+  - name: CATALOG_RUNTIME_DATA_PARITY
+    semantic_invariant: 'the four real v3 rows exist in deployed D1 with correct version/schema/economics/authorization/candidate-state'
+    canonical_authority: 'deployed D1 services / service_versions tables'
+    evidence_source: NONE_IN_REPO
+    phase: cutover
+    release_blocking: true
+    classification: NOT_VERIFIABLE_IN_THIS_REPO
+
+  - name: MIXED_RELEASE_SWEEP
+    semantic_invariant: 'no v3-scoped artifact resolves to a Release 1/2 schema, PCC version, or default state'
+    canonical_authority: 'registry/services/*.v3.json, contracts/releases/3.0.0/**'
+    evidence_source: 'pnpm gates:v3-service-parity (MIXED_RELEASE_CURRENT_PROJECTIONS / STALE_V2_CURRENT_DEFAULT_REFERENCES)'
+    phase: local_predeployment
+    release_blocking: true
+    classification: DERIVED_FROM_EXISTING_EVIDENCE
+
+  - name: ECONOMIC_PROJECTION_PARITY
+    semantic_invariant: 'base/maximum price is identical across registry, metadata, and frozen OpenAPI contract for every v3 service'
+    canonical_authority: 'contracts/releases/3.0.0/metadata/*.v3.json'
+    evidence_source: 'pnpm gates:v3-service-parity (OPENAPI_V3_ECONOMIC_PARITY)'
+    phase: local_predeployment
+    release_blocking: true
+    classification: DERIVED_FROM_EXISTING_EVIDENCE
+
+  - name: RESULT_AUTHORIZATION_PROJECTION_PARITY
+    semantic_invariant: 'authorization_classification is identical across registry, metadata, and frozen OpenAPI contract for every v3 service (surfaces that project it)'
+    canonical_authority: 'registry/services/*.v3.json'
+    evidence_source: 'pnpm gates:v3-service-parity (OPENAPI_V3_AUTHORIZATION_PARITY)'
+    phase: local_predeployment
+    release_blocking: true
+    classification: DERIVED_FROM_EXISTING_EVIDENCE
+
+  - name: VCM_SUITE
+    semantic_invariant: 'VCM projection/comparator/effective-view logic is internally consistent'
+    canonical_authority: packages/vcm/src
+    evidence_source: 'npx vitest run packages/vcm'
+    phase: local_predeployment
+    release_blocking: true
+    classification: EXISTING_CHECK
+
+  - name: CONTRACTS_RELEASE_VERIFY
+    semantic_invariant: 'the frozen Release 3 contract artifact set is internally consistent'
+    canonical_authority: contracts/releases/3.0.0
+    evidence_source: 'pnpm contracts:release:verify'
+    phase: local_predeployment
+    release_blocking: true
+    classification: EXISTING_CHECK
+
+  - name: PUBLICATION_MANIFEST_CHECK
+    semantic_invariant: 'network-site publication manifest matches the byte content it declares'
+    canonical_authority: governance/NETWORK_SITE_PUBLICATION_MANIFEST.json
+    evidence_source: 'pnpm publication:manifest:check'
+    phase: local_predeployment
+    release_blocking: true
+    classification: EXISTING_CHECK
+
+  - name: SCHEMA_DRIFT
+    semantic_invariant: 'generated input validators match their schema sources'
+    canonical_authority: 'apps/edge-api generated validators'
+    evidence_source: 'pnpm schemas:check'
+    phase: local_predeployment
+    release_blocking: true
+    classification: EXISTING_CHECK
+
+  - name: PRICING_DRIFT
+    semantic_invariant: 'embedded and registry pricing match the canonical economic authority'
+    canonical_authority: packages/protocol-x402/src/pricing
+    evidence_source: 'pnpm pricing:check && pnpm pricing:registry:check'
+    phase: local_predeployment
+    release_blocking: true
+    classification: EXISTING_CHECK
+
+  - name: GOVERNANCE_STATE_TASKS_VALIDATE
+    semantic_invariant: 'governance/state/task declarations are internally consistent'
+    canonical_authority: 'governance/, TASKS.yaml'
+    evidence_source: 'pnpm governance:validate && pnpm state:validate && pnpm tasks:validate'
+    phase: local_predeployment
+    release_blocking: true
+    classification: EXISTING_CHECK
+
+  - name: SECRETS_SCAN
+    semantic_invariant: 'no secret material is committed to the working tree'
+    canonical_authority: N/A
+    evidence_source: 'pnpm secrets:scan'
+    phase: local_predeployment
+    release_blocking: true
+    classification: EXISTING_CHECK
+
+  - name: TYPECHECK_LINT_FORMAT
+    semantic_invariant: 'touched code type-checks, lints, and is formatted (repo-wide format:check has pre-existing unrelated drift across ~350 untouched files, tracked separately — this gate is scoped to files this checkpoint touched)'
+    canonical_authority: N/A
+    evidence_source: 'pnpm typecheck && pnpm lint'
+    phase: local_predeployment
+    release_blocking: true
+    classification: EXISTING_CHECK
+
+  - name: BROAD_TEST_SUITE
+    semantic_invariant: 'the full repository test suite has no candidate-owned or unclassified failures'
+    canonical_authority: N/A
+    evidence_source: 'pnpm release:gates:evidence:broad (validated by scripts/gates/release-gates-local.ts against .release-evidence/BROAD_TEST_SUITE.json, bound to SOURCE_STATE_ID)'
+    phase: local_predeployment
+    release_blocking: true
+    classification: EXISTING_CHECK
+
+  - name: NEGATIVE_FIXTURE_SUITE
+    semantic_invariant: 'every checker above provably detects the drift it claims to detect'
+    canonical_authority: N/A
+    evidence_source: 'pnpm release:gates:evidence:negative (validated by scripts/gates/release-gates-local.ts against .release-evidence/NEGATIVE_FIXTURE_SUITE.json, bound to SOURCE_STATE_ID)'
+    phase: local_predeployment
+    release_blocking: true
+    classification: EXISTING_CHECK
+
+  - name: SECURITY_REPORTING_CONTACT_DELIVERABLE
+    semantic_invariant: 'security@alerts.siteborne.net actually receives and is monitored for mail'
+    canonical_authority: EXTERNAL
+    evidence_source: NONE_IN_REPO
+    phase: cutover
+    release_blocking: true
+    classification: EXTERNALLY_VERIFIED_LATER
+
+  - name: SECURITY_REPORTING_REPLY_PATH
+    semantic_invariant: 'a reply from the security contact address is deliverable back to a reporter'
+    canonical_authority: EXTERNAL
+    evidence_source: NONE_IN_REPO
+    phase: cutover
+    release_blocking: true
+    classification: EXTERNALLY_VERIFIED_LATER
+
+  - name: SECURITY_REPORTING_CONTACT_MONITORED
+    semantic_invariant: 'the security mailbox is actively monitored by a human/on-call process'
+    canonical_authority: EXTERNAL
+    evidence_source: NONE_IN_REPO
+    phase: cutover
+    release_blocking: true
+    classification: EXTERNALLY_VERIFIED_LATER
+
+  - name: PUBLIC_AGENT_CARD_FETCH
+    semantic_invariant: 'the deployed Agent Card is fetchable at its public well-known URL'
+    canonical_authority: EXTERNAL
+    evidence_source: NONE_IN_REPO
+    phase: cutover
+    release_blocking: true
+    classification: EXTERNALLY_VERIFIED_LATER
+
+  - name: PUBLIC_AGENT_CARD_JWS
+    semantic_invariant: 'the deployed Agent Card signature verifies against the published JWKS'
+    canonical_authority: EXTERNAL
+    evidence_source: NONE_IN_REPO
+    phase: cutover
+    release_blocking: true
+    classification: EXTERNALLY_VERIFIED_LATER
+
+  - name: PUBLIC_JWKS_MATCH
+    semantic_invariant: 'the deployed JWKS matches the operator-qualified signing key'
+    canonical_authority: EXTERNAL
+    evidence_source: NONE_IN_REPO
+    phase: cutover
+    release_blocking: true
+    classification: EXTERNALLY_VERIFIED_LATER
+
+  - name: EXTERNAL_MCP_PARITY
+    semantic_invariant: 'the deployed MCP endpoint matches canonical v3 truth'
+    canonical_authority: EXTERNAL
+    evidence_source: NONE_IN_REPO
+    phase: cutover
+    release_blocking: true
+    classification: EXTERNALLY_VERIFIED_LATER
+
+  - name: EXTERNAL_A2A_PARITY
+    semantic_invariant: 'the deployed Agent Card matches canonical v3 truth'
+    canonical_authority: EXTERNAL
+    evidence_source: NONE_IN_REPO
+    phase: cutover
+    release_blocking: true
+    classification: EXTERNALLY_VERIFIED_LATER
+
+  - name: EXTERNAL_OPENAPI_PARITY
+    semantic_invariant: 'the deployed /openapi.json matches canonical v3 truth'
+    canonical_authority: EXTERNAL
+    evidence_source: NONE_IN_REPO
+    phase: cutover
+    release_blocking: true
+    classification: EXTERNALLY_VERIFIED_LATER
+
+  - name: EXTERNAL_CATALOG_PARITY
+    semantic_invariant: 'the deployed /catalog rows for all four v3 services match canonical truth'
+    canonical_authority: EXTERNAL
+    evidence_source: NONE_IN_REPO
+    phase: cutover
+    release_blocking: true
+    classification: EXTERNALLY_VERIFIED_LATER
+
+  - name: PRIMARY_REGISTRY_STATE
+    semantic_invariant: 'the primary external service registry reflects the same v3 candidate state'
+    canonical_authority: EXTERNAL
+    evidence_source: NONE_IN_REPO
+    phase: cutover
+    release_blocking: true
+    classification: EXTERNALLY_VERIFIED_LATER
+
+  - name: PRODUCTION_DEPLOYMENT_STATE
+    semantic_invariant: 'production deployment reflects the frozen candidate SHA'
+    canonical_authority: EXTERNAL
+    evidence_source: NONE_IN_REPO
+    phase: production_activation
+    release_blocking: true
+    classification: EXTERNALLY_VERIFIED_LATER
+
+  - name: PRODUCTION_TRAFFIC_STATE
+    semantic_invariant: 'production traffic is only served once all cutover gates pass'
+    canonical_authority: EXTERNAL
+    evidence_source: NONE_IN_REPO
+    phase: production_activation
+    release_blocking: true
+    classification: EXTERNALLY_VERIFIED_LATER
+
+  - name: SITEBORNE_COM_SECURITY_TXT_SOURCE_VALID
+    semantic_invariant: 'the publicly served siteborne.net security.txt matches this repo source'
+    canonical_authority: EXTERNAL
+    evidence_source: NONE_IN_REPO
+    phase: cutover
+    release_blocking: false
+    classification: NOT_VERIFIABLE_IN_THIS_REPO

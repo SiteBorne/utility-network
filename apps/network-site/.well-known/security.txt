@@ -1,3 +1,5 @@
-Contact: mailto:security@siteborne.net
+Contact: mailto:security@alerts.siteborne.net
 Expires: 2027-08-31T23:59:59Z
 Canonical: https://siteborne.net/.well-known/security.txt
+Policy: https://siteborne.com/security
+Preferred-Languages: en

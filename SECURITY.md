@@ -7,8 +7,12 @@ updates.
 
 ## Reporting a Vulnerability
 
-Report security issues to **security@siteborne.net** or via GitHub Security
-Advisories.
+Report security issues to **security@alerts.siteborne.net** or via GitHub
+Security Advisories.
+
+`alerts.siteborne.net` is an operational communications namespace used for mail
+delivery only; it is not a public product surface. The public/product domain
+topology remains `siteborne.com`, `siteborne.net`, and `utility.siteborne.net`.
 
 Do not disclose vulnerabilities publicly until they have been addressed.
 

@@ -23,6 +23,7 @@ import { Miniflare } from 'miniflare';
 import type { D1Database } from '@cloudflare/workers-types';
 import { Hono } from 'hono';
 import { REGISTRY_SERVICES } from '@siteborne/protocol-x402';
+import { getGovernedMetadata } from '@siteborne/service-runtime';
 import type { Env } from '../config/env';
 import { D1ServicesRepository } from '../repositories/d1/services';
 import { catalogRoute, serviceMetadataRoute } from './catalog';
@@ -134,5 +135,99 @@ describe('catalog/service-detail price overlay (D1 price_usd drift)', () => {
     const body = (await res.json()) as { price_usd: string };
     expect(body.price_usd).toBe(GOVERNED_PRICE);
     expect(body.price_usd).not.toBe(STALE_PRE_FREEZE_PRICE);
+  });
+});
+
+describe('CATALOG-HETEROGENEOUS-VERSION-SEMANTICS-01: per-service contract_release/pcc_version', () => {
+  let tempDir: string;
+  let mf: Miniflare;
+  let db: D1Database;
+
+  beforeAll(async () => {
+    tempDir = mkdtempSync(join(tmpdir(), 'siteborne-catalog-heterogeneous-version-'));
+    mf = new Miniflare({
+      modules: true,
+      script: `export default { async fetch() { return new Response('OK'); } }`,
+      d1Databases: ['DB'],
+      resourcePersistencePath: tempDir,
+    });
+    db = await mf.getD1Database('DB');
+    await runMigrations(db);
+    const repo = new D1ServicesRepository(db);
+    // One real Catalog response listing two DIFFERENT service generations of
+    // the same capability side by side -- the exact shape that makes a
+    // single document-wide contract_release/pcc_version claim provably
+    // false, since v2 and v3 are governed to different values (see
+    // packages/service-runtime/src/pcc/governed-metadata.ts's V2_RELEASE vs
+    // V3_RELEASE, and each registry file's own `pcc_version`).
+    for (const serviceId of ['company_evidence_graph.v2', 'company_evidence_graph.v3'] as const) {
+      const entry = REGISTRY_SERVICES[serviceId];
+      const result = await repo.create({
+        service_id: serviceId,
+        version: entry.service_version,
+        title: entry.title,
+        description: entry.description,
+        input_schema: entry.input_schema_uri,
+        output_schema: entry.output_schema_uri,
+        price_usd: entry.maximum_price.amount,
+        production_enabled: false,
+        production_ready: false,
+        protocol_status: 'preproduction',
+      });
+      expect(result.ok).toBe(true);
+    }
+  });
+
+  afterAll(async () => {
+    await mf.dispose();
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('sanity: v2 and v3 are governed to different contract_release and pcc_version', () => {
+    const v2 = getGovernedMetadata('company_evidence_graph.v2');
+    const v3 = getGovernedMetadata('company_evidence_graph.v3');
+    expect(v2.contractRelease).not.toBe(v3.contractRelease);
+    expect(REGISTRY_SERVICES['company_evidence_graph.v2'].pcc_version).not.toBe(
+      REGISTRY_SERVICES['company_evidence_graph.v3'].pcc_version
+    );
+  });
+
+  it('GET /catalog gives each service its OWN contract_release and pcc_version, not one shared value', async () => {
+    const app = appWithRoutes();
+    const res = await app.request('/catalog', {}, { DB: db } as unknown as Env);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      services: Array<{ service_id: string; contract_release?: string; pcc_version?: string }>;
+      contract_release: string;
+      pcc_version: string;
+    };
+
+    const v2Entry = body.services.find((s) => s.service_id === 'company_evidence_graph.v2');
+    const v3Entry = body.services.find((s) => s.service_id === 'company_evidence_graph.v3');
+    expect(v2Entry).toBeDefined();
+    expect(v3Entry).toBeDefined();
+
+    const v2Governed = getGovernedMetadata('company_evidence_graph.v2');
+    const v3Governed = getGovernedMetadata('company_evidence_graph.v3');
+
+    // This is the fixture that fails against the old flat-global behavior:
+    // before this fix, neither entry carried a contract_release/pcc_version
+    // field at all, and the only values present anywhere in the response
+    // were the single document-level '1.0.0'/'1.0.0' literals -- which would
+    // have silently equalled v2's real value here (masking the defect for a
+    // v1/v2-only response) while being flatly wrong for v3.
+    expect(v2Entry?.contract_release).toBe(v2Governed.contractRelease);
+    expect(v3Entry?.contract_release).toBe(v3Governed.contractRelease);
+    expect(v2Entry?.contract_release).not.toBe(v3Entry?.contract_release);
+
+    expect(v2Entry?.pcc_version).toBe(REGISTRY_SERVICES['company_evidence_graph.v2'].pcc_version);
+    expect(v3Entry?.pcc_version).toBe(REGISTRY_SERVICES['company_evidence_graph.v3'].pcc_version);
+    expect(v2Entry?.pcc_version).not.toBe(v3Entry?.pcc_version);
+
+    // The document-level fields remain present (non-breaking) but now
+    // describe only the response envelope itself, never claimed as either
+    // service's own contract_release/pcc_version.
+    expect(body.contract_release).toBe('1.0.0');
+    expect(body.pcc_version).toBe('1.0.0');
   });
 });

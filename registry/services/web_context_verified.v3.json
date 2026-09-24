@@ -32,7 +32,7 @@
   ],
   "protocols": {
     "x402": "planned",
-    "mcp": "planned",
+    "mcp": "tested",
     "a2a": "planned",
     "nevermined": "planned",
     "agentverse": "planned",

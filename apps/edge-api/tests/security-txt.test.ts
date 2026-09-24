@@ -3,8 +3,10 @@ import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 import { app } from '../src/index';
 
-const EXPECTED_CONTACT = 'mailto:security@siteborne.net';
+const EXPECTED_CONTACT = 'mailto:security@alerts.siteborne.net';
+const STALE_CONTACT = 'mailto:security@siteborne.net';
 const EXPECTED_EXPIRES = '2027-08-31T23:59:59Z';
+const EXPECTED_POLICY = 'https://siteborne.com/security';
 
 function fields(body: string, name: string): string[] {
   return body
@@ -22,9 +24,12 @@ function expectRfc9116Document(body: string, canonical: string) {
   expect(Number.isNaN(Date.parse(EXPECTED_EXPIRES))).toBe(false);
   expect(Date.parse(EXPECTED_EXPIRES)).toBeGreaterThan(Date.now());
   expect(fields(body, 'Canonical')).toEqual([canonical]);
-  expect(fields(body, 'Policy')).toEqual([]);
+  expect(fields(body, 'Policy')).toEqual([EXPECTED_POLICY]);
   expect(fields(body, 'Encryption')).toEqual([]);
   expect(body).not.toMatch(/PRIVATE_KEY|API_KEY|SECRET|token=/i);
+  // Regression: the retired security contact must never reappear on a
+  // current/generated surface.
+  expect(body).not.toContain(STALE_CONTACT);
 }
 
 describe('RFC 9116 security.txt', () => {
@@ -80,8 +85,11 @@ describe('RFC 9116 security.txt', () => {
 
   it('uses the security contact explicitly authorized by the repository policy', async () => {
     const policy = await readFile(new URL('../../../SECURITY.md', import.meta.url), 'utf8');
-    expect(policy).toContain('Report security issues to **security@siteborne.net**');
+    expect(policy).toContain('Report security issues to **security@alerts.siteborne.net**');
     expect(policy).not.toContain('This is pre-production software');
     expect(policy).not.toContain('(once domain configured)');
+    // Regression: the retired security contact must not reappear in the
+    // current repository security policy.
+    expect(policy).not.toContain(STALE_CONTACT.replace('mailto:', ''));
   });
 });

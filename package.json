@@ -108,7 +108,13 @@
     "security:schemathesis": "tsx scripts/security/run-schemathesis.ts",
     "security:chaos": "tsx scripts/security/run-chaos.ts",
     "security:load": "tsx scripts/security/run-load.ts",
-    "security:release": "pnpm security:semgrep && pnpm security:osv && pnpm security:trivy && pnpm security:schemathesis && pnpm security:chaos && pnpm security:load && pnpm test:worker-runtime",
+    "security:reporting": "tsx scripts/security/check-security-reporting.ts",
+    "gates:v3-service-parity": "tsx scripts/gates/check-v3-service-parity.ts",
+    "release:gates:local": "tsx scripts/gates/release-gates-local.ts",
+    "release:gates:evidence:broad": "tsx scripts/gates/release-gates-evidence.ts broad",
+    "release:gates:evidence:negative": "tsx scripts/gates/release-gates-evidence.ts negative",
+    "release:public-expectation-manifest": "tsx scripts/gates/generate-public-expectation-manifest.ts",
+    "security:release": "pnpm security:semgrep && pnpm security:osv && pnpm security:trivy && pnpm security:schemathesis && pnpm security:chaos && pnpm security:load && pnpm security:reporting && pnpm test:worker-runtime",
     "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm pcc:generate:check && pnpm services:generate:check && pnpm openapi:generate:check && pnpm schemas:check && pnpm pricing:check && pnpm python:test:pcc && pnpm python:test:modal && pnpm governance:validate && pnpm state:validate && pnpm tasks:validate && pnpm contracts:baseline:verify && pnpm contracts:compat:check && pnpm contracts:release:verify && pnpm migrations:verify && pnpm d1:test && pnpm control-plane:test && pnpm control-plane:check && pnpm adapters:check && pnpm document-worker:check && pnpm document-worker:fixtures:verify && pnpm verification:check && pnpm services-runtime:check && pnpm x402:check && pnpm mcp:check && pnpm a2a:check && pnpm nevermined:check && pnpm secrets:scan"
   },
   "devDependencies": {

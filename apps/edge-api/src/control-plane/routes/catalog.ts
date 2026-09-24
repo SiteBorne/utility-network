@@ -21,11 +21,13 @@ import {
   V2_PAID_SERVICE_IDS,
   buildEconomicOffer,
   buildV2PaidOpenApiOperations,
+  buildV3CandidateOpenApiOperations,
   isEconomicServiceId,
   projectServiceEconomics,
   type EconomicOfferProjection,
   type SiteborneServiceId,
 } from '@siteborne/protocol-x402';
+import { getGovernedMetadata, type ServiceId as GovernedServiceId } from '@siteborne/service-runtime';
 
 interface DiscoveryServiceLike {
   service_id: string;
@@ -127,6 +129,25 @@ function overlayEffectiveDiscoveryStatus<T extends DiscoveryServiceLike>(
   };
 }
 
+/** CATALOG-HETEROGENEOUS-VERSION-SEMANTICS-01: the per-SERVICE
+ * contract_release/pcc_version pair for one catalog entry, resolved from the
+ * two existing governed authorities (never a second hand-typed version
+ * table): `getGovernedMetadata` (service-runtime's CONTRACT_RELEASE.yaml
+ * projection, already used for PCC receipts) for contract_release, and
+ * `REGISTRY_SERVICES[id].pcc_version` (the frozen registry's own field,
+ * already used by the OpenAPI v3 candidate generator) for pcc_version.
+ * Returns `undefined` for a service_id outside the canonical registry --
+ * consistent with this route's existing "unknown service_id returned exactly
+ * as D1 has it" behavior, never a fabricated value. */
+function resolveCatalogVersionFields(
+  serviceId: string
+): { contract_release: string; pcc_version: string } | undefined {
+  const registryEntry = REGISTRY_SERVICES[serviceId as SiteborneServiceId];
+  if (!registryEntry) return undefined;
+  const { contractRelease } = getGovernedMetadata(registryEntry.service_id as GovernedServiceId);
+  return { contract_release: contractRelease, pcc_version: registryEntry.pcc_version };
+}
+
 export const catalogRoute = new Hono<{ Bindings: Env }>();
 
 const EconomicsProjectionSchema = z
@@ -204,11 +225,36 @@ const ServiceCatalogEntrySchema = z.object({
   input_schema_ref: z.string(),
   output_schema_ref: z.string(),
   security: CatalogSecurityBlockSchema.optional(),
+  // CATALOG-HETEROGENEOUS-VERSION-SEMANTICS-01: per-SERVICE facts, one pair
+  // per entry, never a single value for the whole document -- a v1, v2 and
+  // v3 identity of the same capability each have their own governed
+  // contract_release (contracts/releases/<release>/CONTRACT_RELEASE.yaml via
+  // `getGovernedMetadata`) and pcc_version (the PCC wire format the
+  // service's receipts are signed against, `REGISTRY_SERVICES[id].pcc_version`
+  // -- see packages/vcm/src/versions.ts's `PccWireVersion` doc comment).
+  // Optional only for a service_id absent from the canonical registry (never
+  // true today, see REGISTRY_SERVICES), consistent with this route's existing
+  // "unknown service_id returned exactly as D1 has it" behavior.
+  contract_release: z.string().optional(),
+  pcc_version: z.string().optional(),
 });
 
 const CatalogResponseSchema = z.object({
   services: z.array(ServiceCatalogEntrySchema),
   security_declaration: z.record(z.unknown()).optional(),
+  // CATALOG-HETEROGENEOUS-VERSION-SEMANTICS-01: these two describe the
+  // /catalog response DOCUMENT/ENVELOPE itself (this endpoint's own wire
+  // shape), not any served service -- a Catalog response is heterogeneous by
+  // construction (it can list v1, v2 and v3 identities of the same
+  // capability side by side, each with its own contract_release/pcc_version,
+  // see each entry's own fields above), so no single value here could ever
+  // truthfully describe "the" service contract release or PCC version.
+  // CATALOG_ENVELOPE_VERSION_AUTHORITY=NONE (pre-existing): no governed
+  // document-envelope-version concept exists elsewhere in the repository, so
+  // this checkpoint does not invent one -- these two literals are frozen at
+  // their historical value and are never read as service-scoped truth by any
+  // known consumer (see the equivalent field on `/schemas`, which is the same
+  // document-envelope concept for that endpoint).
   contract_release: z.string(),
   pcc_version: z.string(),
   generated_at: z.string().datetime({ offset: true }),
@@ -259,7 +305,8 @@ catalogRoute.get('/', async (c) => {
   const response = {
     services: services.map((service) => {
       const security = getCatalogSecurity(service.service_id);
-      return security ? { ...service, security } : service;
+      const versionFields = resolveCatalogVersionFields(service.service_id);
+      return { ...service, ...versionFields, ...(security ? { security } : {}) };
     }),
     security_declaration: { ...getSecurityPublication().ref },
     contract_release: '1.0.0',
@@ -417,6 +464,16 @@ openapiRoute.get('/openapi.json', async (c) => {
     ),
     securityOperationExtensions: getOpenApiSecurityOperationExtensions(V2_PAID_SERVICE_IDS),
   });
+  // SITEBORNE-OPENAPI-V3-CANDIDATE-01: the four Release 3 `.v3` candidate
+  // operations, projected into the SAME live document as the v2 paid
+  // operations. Each is machine-distinguishable from a live v2 operation by
+  // `x-siteborne-economics.contract_role` ("candidate", never "current") and
+  // `x-siteborne-candidate-state` (promotion_state/production_enabled read
+  // straight from the governed registry entry) -- never by omission or a
+  // separate undocumented flag.
+  const candidate = buildV3CandidateOpenApiOperations({
+    destination: env ? resolvePublicPaymentDestination(env) : null,
+  });
   const openapi = {
     // 3.1.0: the frozen service input schemas are JSON Schema 2020-12.
     openapi: '3.1.0',
@@ -440,6 +497,7 @@ openapiRoute.get('/openapi.json', async (c) => {
     servers: [{ url: `${baseUrl}`, description: 'Current environment' }],
     paths: {
       ...paid.paths,
+      ...candidate.paths,
       '/health': {
         get: {
           summary: 'Health check',
@@ -559,6 +617,7 @@ openapiRoute.get('/openapi.json', async (c) => {
     components: {
       schemas: {
         ...paid.schemas,
+        ...candidate.schemas,
         HealthResponse: {
           type: 'object',
           properties: {
@@ -614,6 +673,16 @@ openapiRoute.get('/openapi.json', async (c) => {
                   protocol_status: { type: 'string', enum: ['preproduction', 'production'] },
                   input_schema_ref: { type: 'string' },
                   output_schema_ref: { type: 'string' },
+                  contract_release: {
+                    type: 'string',
+                    description:
+                      "This SERVICE's own governed contract release (contracts/releases/<release>/CONTRACT_RELEASE.yaml) -- distinct from, and may differ from, the document-level contract_release below, since one Catalog response can list multiple service generations side by side.",
+                  },
+                  pcc_version: {
+                    type: 'string',
+                    description:
+                      "This SERVICE's own PCC wire format version -- distinct from, and may differ from, the document-level pcc_version below.",
+                  },
                 },
                 required: [
                   'service_id',
@@ -629,8 +698,16 @@ openapiRoute.get('/openapi.json', async (c) => {
                 ],
               },
             },
-            contract_release: { type: 'string' },
-            pcc_version: { type: 'string' },
+            contract_release: {
+              type: 'string',
+              description:
+                'The /catalog response DOCUMENT/ENVELOPE version -- NOT a claim about any served service (a single response can list multiple service generations side by side, each with its own contract_release; see services[].contract_release).',
+            },
+            pcc_version: {
+              type: 'string',
+              description:
+                'The /catalog response DOCUMENT/ENVELOPE version -- NOT a claim about any served service; see services[].pcc_version.',
+            },
             generated_at: { type: 'string', format: 'date-time' },
           },
           required: ['services', 'contract_release', 'pcc_version', 'generated_at'],

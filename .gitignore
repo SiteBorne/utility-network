@@ -2,6 +2,10 @@
 node_modules
 .pnpm-store
 
+# Local dynamic-gate execution evidence (scripts/gates/release-gates-evidence.ts) —
+# ephemeral, bound to a SOURCE_STATE_ID, never committed as proof that tests ran.
+.release-evidence/
+
 # Build outputs
 dist
 build
