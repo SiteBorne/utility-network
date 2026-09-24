@@ -11,12 +11,16 @@
  * suite, vs ~3.8s isolated) is consistent with this oversubscription rather
  * than the test itself being slow.
  *
- * DIAGNOSTIC_ONLY measurement (12-file Miniflare/D1-heavy batch, 12-core
- * host, the previously-failing test included) showed the exact test's setup
- * at 16104ms under the default full-core profile vs 14381ms bounded to half
- * the cores (maxThreads=6) — a real, measurable reduction, not a guess.
- * Bounding to half the host's logical CPUs leaves headroom for the OS and
- * any concurrently running processes without meaningfully slowing the run.
+ * `maxThreads=6` (half the host's logical CPUs) was the first fix tried and
+ * looked sufficient in a 12-file diagnostic slice, but a full 381+ file
+ * broad-suite run at maxThreads=6 still reproduced the same class of
+ * failure (reconcile-payment-attempts D1/Miniflare setup timeout, plus
+ * scripts/gates/evidence/source-state.test.ts) — the smaller diagnostic
+ * slice didn't reproduce the contention the full suite creates. A full-suite
+ * run at maxThreads=2 passed cleanly (383 files, 4794 tests, 0 failures,
+ * 248.85s), so this is now the canonical bound. It is a larger concurrency
+ * cut than the file-count alone would suggest necessary, which is why it's
+ * measured against the full suite rather than a representative slice.
  *
  * This profile is a fixed literal, not derived from the running host's CPU
  * count: the canonical qualification configuration must be one explicit,
@@ -32,7 +36,7 @@ export interface ExecutionProfile {
 
 export const CANONICAL_EXECUTION_PROFILE: ExecutionProfile = {
   pool: 'threads',
-  maxThreads: 6,
+  maxThreads: 2,
   minThreads: 1,
   fileParallelism: true,
 };

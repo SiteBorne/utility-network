@@ -112,6 +112,7 @@ import {
   type PaymentRequirements,
 } from '@siteborne/protocol-x402';
 import { hasAllRequiredCredentials } from '../../../../scripts/first-paid-e2e';
+import { findImportSpecifierMatches } from './support/grep-import-proof';
 
 // ---------------------------------------------------------------------------
 // §9/§4/§5/§10 — frozen, non-negotiable economic and routing constants.
@@ -1215,19 +1216,12 @@ describe('SUN-1220J first-paid-e2e local client (unit, always run)', () => {
     expect(fsMatch.test('runFirstPaidE2E, validateChallengeAgainstExpectations')).toBe(false);
   });
 
-  it('AA. no Worker import path exists from src/ to this file (grep proof)', async () => {
-    const { execFileSync } = await import('node:child_process');
-    const repoRoot = new URL('../../../../', import.meta.url).pathname;
-    let matches = '';
-    try {
-      matches = execFileSync('grep', ['-rl', 'first-paid-e2e-local', 'apps/edge-api/src'], {
-        cwd: repoRoot,
-        encoding: 'utf-8',
-      });
-    } catch (err: unknown) {
-      // grep exits 1 when it finds nothing — that is the PASS case here.
-      matches = (err as { stdout?: string }).stdout ?? '';
-    }
+  it('AA. no Worker import path exists from src/ to this file (grep proof)', () => {
+    const matches = findImportSpecifierMatches(
+      new URL('../../../../', import.meta.url),
+      'apps/edge-api/src',
+      'first-paid-e2e-local'
+    );
     expect(matches.trim()).toBe('');
   });
 
