@@ -7,7 +7,7 @@
     "dev": "turbo run dev",
     "build": "turbo run build",
     "test": "vitest run",
-    "test:release-gate": "vitest run --maxWorkers=2",
+    "test:release-gate": "tsx scripts/gates/release-gates-evidence.ts broad",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "format": "prettier --write .",
