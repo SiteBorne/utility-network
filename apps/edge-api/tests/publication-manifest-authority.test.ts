@@ -31,17 +31,17 @@ type PublicationManifest = {
 const sha256 = (bytes: Buffer): string => createHash('sha256').update(bytes).digest('hex');
 
 describe('network-site publication manifest authority', () => {
-  it('maps exactly 22 siteborne.net artifacts without treating the frozen utility PCC id as a second target', () => {
+  it('maps exactly 24 siteborne.net artifacts without treating the frozen utility PCC id as a second target', () => {
     expect(existsSync(MANIFEST_PATH), MANIFEST_PATH).toBe(true);
     const manifest = JSON.parse(readFileSync(MANIFEST_PATH, 'utf8')) as PublicationManifest;
 
     expect(manifest.version).toBe(1);
     expect(manifest.hash_domain).toBe('RAW_BYTES');
-    expect(manifest.artifacts).toHaveLength(22);
+    expect(manifest.artifacts).toHaveLength(24);
     expect(manifest.artifacts.map(({ canonical_url }) => canonical_url)).toEqual(
       [...manifest.artifacts.map(({ canonical_url }) => canonical_url)].sort()
     );
-    expect(new Set(manifest.artifacts.map(({ canonical_url }) => canonical_url)).size).toBe(22);
+    expect(new Set(manifest.artifacts.map(({ canonical_url }) => canonical_url)).size).toBe(24);
     expect(
       manifest.artifacts.every(({ canonical_url }) =>
         canonical_url.startsWith('https://siteborne.net/')
@@ -84,6 +84,8 @@ describe('network-site publication manifest authority', () => {
         expect(() => JSON.parse(published.toString('utf8')), artifact.canonical_url).not.toThrow();
       } else if (artifact.publication_path.endsWith('.txt')) {
         expect(artifact.content_type, artifact.canonical_url).toBe('text/plain; charset=utf-8');
+      } else if (artifact.publication_path.endsWith('.xml')) {
+        expect(artifact.content_type, artifact.canonical_url).toBe('application/xml; charset=utf-8');
       } else {
         expect(artifact.content_type, artifact.canonical_url).toBe('text/html; charset=utf-8');
       }
@@ -104,6 +106,8 @@ describe('network-site publication manifest authority', () => {
     expect(headers).toMatch(
       /\/extensions\/a2a\/x402\/v1\s+Content-Type: text\/html; charset=utf-8/
     );
+    expect(headers).toMatch(/\/sitemap\.xml\s+Content-Type: application\/xml; charset=utf-8/);
+    expect(headers).toMatch(/\/llms\.txt\s+Content-Type: text\/plain; charset=utf-8/);
 
     for (const artifact of manifest.artifacts) {
       const pathname = new URL(artifact.canonical_url).pathname;

@@ -1,0 +1,34 @@
+# SITEBORNE Utility Network
+
+> Machine-first network identity for the SITEBORNE Utility Network. This
+> domain (siteborne.net) is network/developer/discovery authority; it
+> publishes contracts, schemas, and documentation, and performs no service
+> execution.
+
+## Domain authority
+
+- siteborne.com — human/product authority (company, services, portfolio)
+- siteborne.net — network/developer/discovery authority (this site)
+- utility.siteborne.net — runtime/machine authority (execution: x402, MCP, A2A, OpenAPI)
+
+## Core standard
+
+Proof-Carrying Context (PCC) v1.0.0 — every paid result includes normalized
+facts, source evidence, timestamps, freshness metadata, completeness
+measurements, input/output hashes, provenance, verification results, and an
+Ed25519 signed receipt.
+
+## Protocol discovery
+
+- OpenAPI: https://utility.siteborne.net/openapi.json
+- Agent Card (A2A): https://utility.siteborne.net/.well-known/agent-card.json
+- JWKS (trust): https://utility.siteborne.net/.well-known/jwks.json
+- MCP registry auth: https://utility.siteborne.net/.well-known/mcp-registry-auth
+- Security reporting: https://utility.siteborne.net/.well-known/security.txt
+- Schemas: https://siteborne.net/schemas/
+- A2A extension docs: https://siteborne.net/docs/a2a
+- x402 extension: https://siteborne.net/extensions/a2a/x402/v1
+
+## Security
+
+Contact: mailto:security@alerts.siteborne.net

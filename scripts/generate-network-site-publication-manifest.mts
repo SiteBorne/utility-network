@@ -59,6 +59,8 @@ const artifacts: PublicationArtifact[] = walk(SITE)
     const publicationPath = `apps/network-site/${relativePath}`;
     const isSchema = relativePath.startsWith('schemas/') && relativePath.endsWith('.json');
     const isSecurity = relativePath === '.well-known/security.txt';
+    const isSitemap = relativePath === 'sitemap.xml';
+    const isLlmsTxt = relativePath === 'llms.txt';
     const canonicalPath =
       relativePath === 'index.html'
         ? '/'
@@ -76,9 +78,11 @@ const artifacts: PublicationArtifact[] = walk(SITE)
       publication_path: publicationPath,
       content_type: isSchema
         ? 'application/schema+json; charset=utf-8'
-        : isSecurity
+        : isSecurity || isLlmsTxt
           ? 'text/plain; charset=utf-8'
-          : 'text/html; charset=utf-8',
+          : isSitemap
+            ? 'application/xml; charset=utf-8'
+            : 'text/html; charset=utf-8',
       raw_byte_sha256: sha256(bytes),
       size: bytes.length,
       authority_source: isSchema ? 'contracts/CONTRACT_RELEASE.yaml' : publicationPath,
@@ -99,9 +103,9 @@ const manifest = `${JSON.stringify(
   2
 )}\n`;
 
-if (artifacts.length !== 22) {
+if (artifacts.length !== 24) {
   throw new Error(
-    `publication manifest must contain exactly 22 artifacts, found ${artifacts.length}`
+    `publication manifest must contain exactly 24 artifacts, found ${artifacts.length}`
   );
 }
 if (artifacts.some(({ canonical_url }) => canonical_url === UTILITY_PCC_ID)) {
