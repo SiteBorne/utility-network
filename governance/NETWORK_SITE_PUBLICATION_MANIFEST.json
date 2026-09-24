@@ -47,6 +47,17 @@
       "identity_rule": "raw_bytes"
     },
     {
+      "canonical_url": "https://siteborne.net/llms.txt",
+      "source_path": "apps/network-site/llms.txt",
+      "publication_path": "apps/network-site/llms.txt",
+      "content_type": "text/plain; charset=utf-8",
+      "raw_byte_sha256": "b59bd51caf04b128218b80053c7cbf8627db16d44dd7b3b19614c1fca0e304da",
+      "size": 1384,
+      "authority_source": "apps/network-site/llms.txt",
+      "contract_version": "2.0.0",
+      "identity_rule": "raw_bytes"
+    },
+    {
       "canonical_url": "https://siteborne.net/schemas/common/async-job.schema.json",
       "source_path": "contracts/releases/2.0.0/schemas/common/async-job.schema.json",
       "publication_path": "apps/network-site/schemas/common/async-job.schema.json",
@@ -260,6 +271,17 @@
       "authority_source": "contracts/CONTRACT_RELEASE.yaml",
       "contract_version": "2.0.0",
       "schema_id": "https://siteborne.net/schemas/services/web-context-output.schema.json",
+      "identity_rule": "raw_bytes"
+    },
+    {
+      "canonical_url": "https://siteborne.net/sitemap.xml",
+      "source_path": "apps/network-site/sitemap.xml",
+      "publication_path": "apps/network-site/sitemap.xml",
+      "content_type": "application/xml; charset=utf-8",
+      "raw_byte_sha256": "a5689a5d99a5565d8d0617285f7895fd80fbdfc5eb23ba706e6edb38f8fdcf7d",
+      "size": 305,
+      "authority_source": "apps/network-site/sitemap.xml",
+      "contract_version": "2.0.0",
       "identity_rule": "raw_bytes"
     }
   ]
