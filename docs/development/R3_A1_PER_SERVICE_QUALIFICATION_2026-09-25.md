@@ -396,3 +396,52 @@ A0_RUNTIME_INVALID_PATH_PROOF = PARTIAL (unchanged) — no new direct runtime ev
 3. All items in the original report's §10 not specifically addressed above (pricing 3-way cross-check, `AGENT_CARD_SIGNING_PRIVATE_KEY` binding, `.v3` failure-scenario test coverage) remain open — not in scope for this reconciliation pass.
 
 ---
+
+## 13. Correction: §62/§206 "Agent Card SEMANTIC_DRIFT" claim superseded (R3-A1-PROJECTION-SEMANTICS-CLOSURE-21B)
+
+The earlier finding that "the Agent Card advertises 12 skills including 4 `.v1` skills that are unconditionally unroutable in production" (§62, §206) was classified `SEMANTIC_DRIFT` under the mistaken premise that all protocol projections must share identical membership with `/catalog`/`/openapi.json`. That premise is incorrect and is retracted.
+
+**The correct model, already implemented and tested in `00763a9`** (not a new change — verified only, `RUNTIME_CODE_CHANGED=NO`):
+
+- **Execution surfaces** (mounted routes, `/catalog`, `/openapi.json`) publish only the 8 currently-executable identities (4× `.v2` + 4× `.v3`). `CATALOG_SERVICE_IDS = [...V2_PAID_SERVICE_IDS, ...V3_CANDIDATE_SERVICE_IDS]` (`apps/edge-api/src/control-plane/routes/catalog.ts:169-171`).
+- **Discovery/compatibility surfaces** (A2A Agent Card, VCM, Bazaar) intentionally publish the full 12-identity canonical set (`packages/protocol-a2a/src/constants.ts:SITEBORNE_SERVICE_IDS`), including the 4 `.v1` identities, for historical/compat attestation.
+- **Invariant is `EXECUTION_SET ⊆ DISCOVERY_SET`, not `AGENT_CARD_SET == EXECUTION_SET`.** This is documented in-repo at `apps/edge-api/tests/economic-parity-gates.test.ts:346-352` (`CATALOG-ROUTE-PARITY-01` comment) and enforced by `GATE:ECONOMIC_PROJECTION_PARITY`.
+- Each `.v1` identity was independently re-verified this pass: `ROUTABLE=NO` (`/v1/*` hard-404s, `apps/edge-api/src/index.ts:173`), `CATALOG_EXECUTABLE=NO`, `OPENAPI_EXECUTABLE=NO`, `production_enabled=false` (`registry/services/*.v1.json`), `DISCOVERY_PUBLISHED=YES`, classified `compat_not_served` (`apps/edge-api/tests/canonical-url-projection.test.ts:131`). No projection presents `.v1` as callable, production-ready, production-enabled, or settlement-capable.
+- `apps/edge-api/tests/economic-parity-gates.test.ts` and `apps/edge-api/tests/canonical-url-projection.test.ts` re-run this pass: 33/33 passed.
+
+```
+EXECUTION_IDENTITY_COUNT=8
+DISCOVERY_IDENTITY_COUNT=12
+COMPAT_ONLY_IDENTITY_COUNT=4
+COMPAT_ONLY_IDENTITIES=company_evidence_graph.v1, web_context_verified.v1, document_evidence_json.v1, verify_agent_output.v1
+
+EXECUTION_SET_PARITY=PASS
+DISCOVERY_COMPAT_MODEL=PASS
+EXECUTION_SUBSET_OF_DISCOVERY=YES
+COMPAT_ONLY_NONROUTABLE=PASS
+COMPAT_ONLY_NON_ECONOMIC=PASS
+ECONOMIC_PROJECTION_PARITY_GATE=PASS
+CANONICAL_URL_COMPAT_CLASSIFICATION=PASS
+A2A_MEMBERSHIP_CHANGE_REQUIRED=NO
+
+RUNTIME_CODE_CHANGED=NO
+AGENT_CARD_MEMBERSHIP_CHANGED=NO
+SIGNING_CODE_CHANGED=NO
+CANONICALIZATION_CHANGED=NO
+TESTS_CHANGED=NO
+DOCS_CHANGED=YES (this section)
+
+CATALOG_ROUTE_PARITY=PASS
+CATALOG_OPENAPI_PARITY=PASS
+DISCOVERY_EXECUTION_MEMBERSHIP_DIFFERENCE=INTENTIONAL
+OVERALL_PROTOCOL_PARITY=PASS
+```
+
+**Corrected language for §62/§206:** `.v1` routes are dead/unserved as execution surfaces (by design, since SUN-1218 checkpoint X); `.v1` identities remain intentionally published on discovery/compatibility surfaces for historical attestation. This is deliberate architecture, not catalog-style drift — unlike the pre-fix `/catalog` bug (§0–§12), which was unintentional D1 seed drift with no corresponding design rationale anywhere in the codebase.
+
+An unrelated, still-open observation from this pass (not part of this closure, not previously flagged): the root `GET /` handler (`apps/edge-api/src/index.ts:276-281`) publishes only the 4 `.v1` ids under a `services` field, which is itself stale relative to both the execution and discovery sets. Not in scope for R3-A1-PROJECTION-SEMANTICS-CLOSURE-21B.
+
+PRODUCTION_MUTATIONS_PERFORMED=NO
+CLOUDFLARE_MUTATIONS_PERFORMED=NO
+
+---
