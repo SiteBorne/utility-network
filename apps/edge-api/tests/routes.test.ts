@@ -9,6 +9,7 @@ import { healthRoute } from '../src/routes/health';
 import { readinessRoute } from '../src/routes/readiness';
 import { InMemoryServicesRepository } from '../src/control-plane/repositories/in-memory';
 import { ServiceMetadata } from '../src/control-plane/types';
+import { CATALOG_SERVICE_IDS } from '../src/control-plane/routes/catalog';
 
 describe('Control Plane Routes', () => {
   let app: Hono;
@@ -29,9 +30,15 @@ describe('Control Plane Routes', () => {
   });
 
   it('GET /catalog returns service catalog', async () => {
+    // CATALOG-ROUTE-PARITY-01: `/catalog`'s list membership is
+    // `CATALOG_SERVICE_IDS` (the real mounted `/v2/...`/`/v3/...` routes),
+    // never "every row the repository happens to contain" -- a `.v1` row
+    // (this test's prior fixture) no longer surfaces at all, since every
+    // `/v1/*` path 404s. Seed a real routable `.v2` id instead, and prove
+    // the repository is still consulted via its own `title`.
     const service: ServiceMetadata = {
-      service_id: 'company_evidence_graph.v1',
-      version: '1.0.0',
+      service_id: 'company_evidence_graph.v2',
+      version: '2.0.0',
       title: 'Company Evidence Graph',
       description: 'Verify company evidence',
       price_usd: '0.039',
@@ -46,8 +53,12 @@ describe('Control Plane Routes', () => {
     const res = await app.request('/catalog');
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.services.length).toBe(1);
-    expect(body.services[0].service_id).toBe('company_evidence_graph.v1');
+    expect(body.services.length).toBe(CATALOG_SERVICE_IDS.length);
+    const entry = body.services.find(
+      (s: { service_id: string }) => s.service_id === 'company_evidence_graph.v2'
+    );
+    expect(entry).toBeDefined();
+    expect(entry.title).toBe('Company Evidence Graph');
     expect(body.contract_release).toBe('1.0.0');
     expect(body.pcc_version).toBe('1.0.0');
   });

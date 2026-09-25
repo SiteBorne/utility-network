@@ -19,6 +19,7 @@ import {
   REGISTRY_SERVICES,
   ECONOMIC_SERVICE_IDS,
   V2_PAID_SERVICE_IDS,
+  V3_CANDIDATE_SERVICE_IDS,
   buildEconomicOffer,
   buildV2PaidOpenApiOperations,
   buildV3CandidateOpenApiOperations,
@@ -146,6 +147,56 @@ function resolveCatalogVersionFields(
   if (!registryEntry) return undefined;
   const { contractRelease } = getGovernedMetadata(registryEntry.service_id as GovernedServiceId);
   return { contract_release: contractRelease, pcc_version: registryEntry.pcc_version };
+}
+
+/** CATALOG-ROUTE-PARITY-01: the ordered set of service_ids `/catalog`
+ * lists, derived from the same two canonical route-id lists this file
+ * already uses to generate `/openapi.json` (`V2_PAID_SERVICE_IDS`,
+ * `V3_CANDIDATE_SERVICE_IDS`) — never a third, separately hand-maintained
+ * list. These two id lists are themselves the ground truth for what
+ * `index.ts` actually mounts: every `.v2` id here has a real
+ * `app.post('/v2/...', ...)` registration, and every `.v3` id has a real
+ * `app.post('/v3/...', ...)` registration (SITEBORNE-OPENAPI-V3-CANDIDATE-01).
+ *
+ * `.v1` identities are deliberately EXCLUDED: `index.ts` hard-404s every
+ * `/v1/*` path (`app.all('/v1/*', (c) => c.notFound())`), so a `.v1`
+ * catalog entry would advertise a route that cannot ever be reached —
+ * previously true (an out-of-band D1 seed predating this checkpoint had
+ * carried stale `.v1` rows forward), fixed by no longer treating the raw
+ * D1 `services` table as this route's list-membership authority (see
+ * `catalogRoute.get('/')`'s own comment below).
+ */
+export const CATALOG_SERVICE_IDS: readonly SiteborneServiceId[] = [
+  ...V2_PAID_SERVICE_IDS,
+  ...V3_CANDIDATE_SERVICE_IDS,
+];
+
+/** The catalog-entry shape for a service that has no row (yet) in the D1
+ * `services` table — e.g. a `.v3` candidate identity, which no seeding
+ * path has ever inserted (see `paid-services.ts`'s `seedServices`, whose
+ * only caller is the test-only `buildPaidServicesApp`; the real
+ * production entrypoint in `index.ts` performs no D1 seeding at all).
+ * Never invents an economic fact: `price_usd` is the governed registry
+ * price (immediately re-derived by `overlayEffectiveDiscoveryStatus`'s
+ * own economics projection for every economic service id), and
+ * `production_enabled`/`production_ready`/`protocol_status` are the same
+ * safe defaults `seedServices` itself inserts for a brand-new row. */
+function defaultCatalogServiceMetadata(serviceId: SiteborneServiceId): DiscoveryServiceLike & {
+  version: string;
+  title: string;
+  description: string;
+} {
+  const entry = REGISTRY_SERVICES[serviceId];
+  return {
+    service_id: serviceId,
+    version: entry.service_version,
+    title: entry.title,
+    description: entry.description,
+    price_usd: entry.maximum_price.amount,
+    production_enabled: false,
+    production_ready: false,
+    protocol_status: 'preproduction',
+  };
 }
 
 export const catalogRoute = new Hono<{ Bindings: Env }>();
@@ -276,31 +327,48 @@ catalogRoute.get('/', async (c) => {
   }
 
   const hasDb = Boolean(c.env?.DB);
-  const services = result.value.map((s) =>
-    overlayEffectiveDiscoveryStatus(
+
+  // CATALOG-ROUTE-PARITY-01: list membership comes from `CATALOG_SERVICE_IDS`
+  // (the real mounted `/v2/...`/`/v3/...` route set), never from "every row
+  // the D1 `services` table happens to contain" -- the raw table can drift
+  // (a stale `.v1` row from an out-of-band seed, or simply lack a row for a
+  // service that was never seeded, e.g. every `.v3` candidate). A D1 row IS
+  // still consulted, per listed service_id, for the fields it actually owns
+  // (title/description/price/production flags) whenever one exists; a
+  // listed service_id with no row falls back to the governed registry
+  // default (`defaultCatalogServiceMetadata`) rather than being silently
+  // omitted or fabricated as already-enabled.
+  const byServiceId = new Map(result.value.map((s) => [s.service_id, s]));
+  const services = CATALOG_SERVICE_IDS.map((serviceId) => {
+    const stored = byServiceId.get(serviceId);
+    const base = stored
+      ? {
+          service_id: stored.service_id,
+          version: stored.version,
+          title: stored.title,
+          description: stored.description,
+          price_usd: stored.price_usd,
+          production_enabled: stored.production_enabled,
+          production_ready: stored.production_ready,
+          protocol_status: stored.protocol_status,
+        }
+      : defaultCatalogServiceMetadata(serviceId);
+
+    return overlayEffectiveDiscoveryStatus(
       {
-        service_id: s.service_id,
-        version: s.version,
-        title: s.title,
-        description: s.description,
-        price_usd: s.price_usd,
-        production_enabled: s.production_enabled,
-        production_ready: s.production_ready,
-        protocol_status: s.protocol_status,
+        ...base,
         // Canonical schema URIs (the schemas' own $id, published from
         // apps/network-site). The former `/schemas/<id>/input` paths are not
         // served by any route.
         input_schema_ref:
-          REGISTRY_SERVICES[s.service_id as SiteborneServiceId]?.input_schema_uri ??
-          `/schemas/${s.service_id}/input`,
+          REGISTRY_SERVICES[serviceId]?.input_schema_uri ?? `/schemas/${serviceId}/input`,
         output_schema_ref:
-          REGISTRY_SERVICES[s.service_id as SiteborneServiceId]?.output_schema_uri ??
-          `/schemas/${s.service_id}/output`,
+          REGISTRY_SERVICES[serviceId]?.output_schema_uri ?? `/schemas/${serviceId}/output`,
       },
       c.env,
       hasDb
-    )
-  );
+    );
+  });
 
   const response = {
     services: services.map((service) => {

@@ -39,9 +39,16 @@ const WEB_CONTEXT_V2_ROW = {
   protocol_status: 'preproduction',
 };
 
+// CATALOG-ROUTE-PARITY-01: this "unrelated other service" row must be a
+// service_id `/catalog` actually lists (`company_evidence_graph.v2`, a real
+// mounted `/v2/company/evidence-graph` route) -- a `.v1` id like the prior
+// `company_evidence_graph.v1` no longer surfaces in `/catalog` at all, since
+// every `/v1/*` path 404s. This still proves the isolation property the
+// test below asserts: the two active services' gates never flip a third,
+// independently-gated service's discovery state.
 const OTHER_ROW = {
-  id: 'company_evidence_graph.v1',
-  version: '1.0.0',
+  id: 'company_evidence_graph.v2',
+  version: '2.0.0',
   title: 'Company Evidence Graph',
   description: 'Verify company evidence',
   input_schema: 'schema',
@@ -217,10 +224,10 @@ describe('SUN-1221C — multi-service /catalog truthfulness', () => {
     expect(findService(body, 'web_context_verified.v2').production_enabled).toBe(false);
   });
 
-  it('the remaining registered-inactive service (company_evidence_graph.v1) is never affected by either flag', async () => {
+  it('the remaining registered-inactive service (company_evidence_graph.v2) is never affected by either flag', async () => {
     const db = createFakeD1();
     const { body } = await getCatalog(db, BOTH_ACTIVE_ENV);
-    expect(findService(body, 'company_evidence_graph.v1').production_enabled).toBe(false);
+    expect(findService(body, 'company_evidence_graph.v2').production_enabled).toBe(false);
   });
 
   it('known-good-equivalent (all flags off) -> both services inactive', async () => {

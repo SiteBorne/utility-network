@@ -34,9 +34,17 @@ const VERIFY_V2_ROW = {
   protocol_status: 'preproduction',
 };
 
+// CATALOG-ROUTE-PARITY-01: this "unrelated other service" row must be a
+// service_id `/catalog` actually lists (`company_evidence_graph.v2`, a real
+// mounted `/v2/company/evidence-graph` route) -- a `.v1` id like the prior
+// `company_evidence_graph.v1` no longer surfaces in `/catalog` at all, since
+// every `/v1/*` path 404s. `company_evidence_graph.v2` has its own,
+// independent EFFECTIVE_DISCOVERY_RESOLVERS entry, so it still proves the
+// same isolation property this test asserts: `verify_agent_output.v2`'s
+// gates never flip a different service's discovery state.
 const OTHER_ROW = {
-  id: 'company_evidence_graph.v1',
-  version: '1.0.0',
+  id: 'company_evidence_graph.v2',
+  version: '2.0.0',
   title: 'Company Evidence Graph',
   description: 'Verify company evidence',
   input_schema: 'schema',
@@ -233,7 +241,7 @@ describe('SUN-1220P2 — /catalog discovery truthfulness for verify_agent_output
 
   it('P (other-route isolation): other paid service rows are never flipped by verify_agent_output.v2 gates', async () => {
     const { body } = await getCatalog(createFakeD1(), CANDIDATE_EQUIVALENT_ENV);
-    const other = findService(body, 'company_evidence_graph.v1');
+    const other = findService(body, 'company_evidence_graph.v2');
     expect(other.production_enabled).toBe(false);
     expect(other.protocol_status).toBe('preproduction');
   });

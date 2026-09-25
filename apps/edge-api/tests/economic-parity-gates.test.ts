@@ -331,7 +331,7 @@ describe('GATE:ECONOMIC_CANONICAL_MODEL', () => {
 });
 
 describe('GATE:ECONOMIC_PROJECTION_PARITY', () => {
-  it.each(['a2a', 'vcm', 'bazaar', 'catalog'])(
+  it.each(['a2a', 'vcm', 'bazaar'])(
     '%s equals the canonical projection for all twelve ids (governance ⇄ VCM ⇄ surface)',
     (surface) => {
       for (const id of ECONOMIC_SERVICE_IDS) {
@@ -346,7 +346,15 @@ describe('GATE:ECONOMIC_PROJECTION_PARITY', () => {
       }
     }
   );
-  it.each(['openapi'])(
+  // CATALOG-ROUTE-PARITY-01: `/catalog` is grouped with `openapi`, not with
+  // `a2a`/`vcm`/`bazaar` above -- those three are discovery-only surfaces
+  // that deliberately declare all twelve identities (including the four
+  // dead `.v1` ones, for historical/compat discovery purposes), while
+  // `/catalog` and `/openapi.json` both now describe only the eight
+  // services with a real, reachable mounted route (`V2_PAID_SERVICE_IDS` +
+  // `V3_CANDIDATE_SERVICE_IDS`). A `.v1` catalog entry would advertise a
+  // route index.ts hard-404s.
+  it.each(['openapi', 'catalog'])(
     '%s equals the canonical projection for the four v2 + four v3 candidate ids',
     (surface) => {
       expect(surfaces[surface].size).toBe(8);
