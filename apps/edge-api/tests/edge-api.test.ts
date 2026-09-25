@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { app } from '../src/index';
 import { validateHealthResponse, validateReadinessResponse } from '@siteborne/contracts';
+import { SITEBORNE_SERVICE_IDS } from '@siteborne/protocol-a2a';
 
 describe('apps/edge-api - foundation endpoints', () => {
   describe('GET /', () => {
@@ -19,7 +20,7 @@ describe('apps/edge-api - foundation endpoints', () => {
       expect(json.status).toBe('not_ready');
       expect(String(json.status)).not.toMatch(/foundation|preproduction/);
       expect(Array.isArray(json.services)).toBe(true);
-      expect((json.services as unknown[]).length).toBe(4);
+      expect(json.services).toEqual(SITEBORNE_SERVICE_IDS);
     });
   });
 

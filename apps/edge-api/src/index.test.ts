@@ -9,6 +9,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { app } from './index';
+import { SITEBORNE_SERVICE_IDS } from '@siteborne/protocol-a2a';
 import type { Env } from './control-plane/config/env';
 
 function baseEnv(overrides: Partial<Env> = {}): Env {
