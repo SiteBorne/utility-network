@@ -276,6 +276,66 @@ describe('result authorization D1 persistence', () => {
     }
   });
 
+  it('persists a subject revocation and reports it in the revoked set', async () => {
+    const subjectRef = `k1:${'9'.repeat(64)}`;
+    expect(await repository.isSubjectRevoked(subjectRef)).toBe(false);
+    expect(await repository.revokedSubjectRefs()).not.toContain(subjectRef);
+
+    expect(
+      await repository.revokeSubject(subjectRef, {
+        revokedAt: '2026-09-23T00:00:00.000Z',
+        reasonCode: 'compromised_credential',
+        revokingAuthority: 'siteborne:security-operations',
+      })
+    ).toBe('revoked');
+    expect(await repository.isSubjectRevoked(subjectRef)).toBe(true);
+    expect(await repository.revokedSubjectRefs()).toContain(subjectRef);
+  });
+
+  it('is idempotent: a repeated revoke of the same subject is a no-op', async () => {
+    const subjectRef = `k1:${'8'.repeat(64)}`;
+    expect(
+      await repository.revokeSubject(subjectRef, { revokedAt: '2026-09-23T00:00:00.000Z' })
+    ).toBe('revoked');
+    expect(
+      await repository.revokeSubject(subjectRef, {
+        revokedAt: '2099-01-01T00:00:00.000Z',
+        reasonCode: 'different_second_call',
+      })
+    ).toBe('already_revoked');
+    const row = await db
+      .prepare('SELECT revoked_at, reason_code FROM result_subject_revocations WHERE subject_ref = ?')
+      .bind(subjectRef)
+      .first<{ revoked_at: string; reason_code: string | null }>();
+    // First-write-wins: the second, later "revoke" of an already-revoked
+    // subject changes no state -- same semantic outcome as a single call.
+    expect(row?.revoked_at).toBe('2026-09-23T00:00:00.000Z');
+    expect(row?.reason_code).toBeNull();
+    expect(
+      await repository
+        .revokedSubjectRefs()
+        .then((refs) => refs.filter((ref) => ref === subjectRef).length)
+    ).toBe(1);
+  });
+
+  it('stores no raw credential, token, or payer identity for a revocation', async () => {
+    const rows = await db.prepare('PRAGMA table_info(result_subject_revocations)').all();
+    const columns = rows.results.map((row) => String((row as { name: unknown }).name));
+    expect(columns).toEqual(['subject_ref', 'revoked_at', 'reason_code', 'revoking_authority']);
+  });
+
+  it('fails closed: a repository failure surfaces as a thrown error, never an empty revoked list', async () => {
+    const failingDb = {
+      prepare: () => ({
+        all: async () => ({ success: false, results: [] }),
+      }),
+    } as unknown as D1Database;
+    const failingRepository = new D1ResultAuthorizationRepository(failingDb);
+    await expect(failingRepository.revokedSubjectRefs()).rejects.toThrow(
+      'result_subject_revocation_lookup_failed'
+    );
+  });
+
   it('applies cleanly as an additive upgrade from the preceding local schema', async () => {
     const upgradeDirectory = mkdtempSync(join(tmpdir(), 'siteborne-result-auth-upgrade-'));
     const upgrade = new Miniflare({
@@ -305,6 +365,42 @@ describe('result authorization D1 persistence', () => {
         'result_resources',
         'result_subject_bindings',
       ]);
+    } finally {
+      await upgrade.dispose();
+      rmSync(upgradeDirectory, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  it('applies the revocation migration cleanly as an additive upgrade', async () => {
+    const upgradeDirectory = mkdtempSync(join(tmpdir(), 'siteborne-result-auth-revocation-upgrade-'));
+    const upgrade = new Miniflare({
+      modules: true,
+      script: `export default { async fetch() { return new Response('OK'); } }`,
+      d1Databases: ['DB'],
+      resourcePersistencePath: upgradeDirectory,
+    });
+    try {
+      const upgradeDb = await upgrade.getD1Database('DB');
+      await upgradeDb.exec('PRAGMA foreign_keys = ON');
+      await runMigrations(upgradeDb, (name) => name !== '0012_result_subject_revocation.sql');
+      expect(
+        await upgradeDb
+          .prepare(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'result_subject_revocations'"
+          )
+          .first()
+      ).toBeNull();
+      await runMigrations(upgradeDb, (name) => name === '0012_result_subject_revocation.sql');
+      expect(
+        await upgradeDb
+          .prepare(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'result_subject_revocations'"
+          )
+          .first()
+      ).toBeTruthy();
+      // Idempotent/re-runnable: applying the same migration again must not
+      // error (`CREATE TABLE IF NOT EXISTS`).
+      await runMigrations(upgradeDb, (name) => name === '0012_result_subject_revocation.sql');
     } finally {
       await upgrade.dispose();
       rmSync(upgradeDirectory, { recursive: true, force: true });

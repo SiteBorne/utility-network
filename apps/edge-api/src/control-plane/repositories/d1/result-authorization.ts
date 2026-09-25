@@ -48,6 +48,14 @@ function sameResource(left: ResultResourceV1, right: ResultResourceV1): boolean 
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
+export interface RevokeSubjectInput {
+  readonly revokedAt: string;
+  readonly reasonCode?: string;
+  readonly revokingAuthority?: string;
+}
+
+export type RevokeSubjectOutcome = 'revoked' | 'already_revoked';
+
 export class D1ResultAuthorizationRepository {
   constructor(private readonly db: D1Database) {}
 
@@ -260,5 +268,49 @@ export class D1ResultAuthorizationRepository {
       .all();
     if (!result.success || result.results.length !== 1) return null;
     return resourceFromRow(result.results[0] as Record<string, unknown>);
+  }
+
+  /** Persists a subject revocation. Idempotent: a subject already revoked
+   * keeps its original `revoked_at`/reason/authority -- a repeated revoke
+   * of the same subject reference is a no-op, never a duplicate row and
+   * never a second, later revocation timestamp. This repository is the
+   * sole revocation authority; there is no parallel in-memory list. */
+  async revokeSubject(
+    subjectRef: string,
+    input: RevokeSubjectInput
+  ): Promise<RevokeSubjectOutcome> {
+    const result = await this.db
+      .prepare(
+        `INSERT INTO result_subject_revocations (
+          subject_ref, revoked_at, reason_code, revoking_authority
+        ) VALUES (?, ?, ?, ?)
+        ON CONFLICT (subject_ref) DO NOTHING`
+      )
+      .bind(subjectRef, input.revokedAt, input.reasonCode ?? null, input.revokingAuthority ?? null)
+      .run();
+    if (!result.success) throw new Error('result_subject_revocation_write_failed');
+    return (result.meta?.changes ?? 0) > 0 ? 'revoked' : 'already_revoked';
+  }
+
+  async isSubjectRevoked(subjectRef: string): Promise<boolean> {
+    const result = await this.db
+      .prepare('SELECT 1 FROM result_subject_revocations WHERE subject_ref = ?')
+      .bind(subjectRef)
+      .all();
+    if (!result.success) throw new Error('result_subject_revocation_lookup_failed');
+    return result.results.length > 0;
+  }
+
+  /** The full currently-revoked subject-reference set. This is the sole,
+   * persisted authority `buildResultAuthorizationRuntime` wires into the
+   * release evaluator's `revoked_subject_refs` input -- a repository
+   * failure here MUST throw, never resolve to `[]`, so every caller
+   * (both the HTTP and MCP result-release paths) fails BUYER_AUTHORIZED
+   * release closed rather than silently treating "lookup failed" as
+   * "nothing is revoked". */
+  async revokedSubjectRefs(): Promise<readonly string[]> {
+    const result = await this.db.prepare('SELECT subject_ref FROM result_subject_revocations').all();
+    if (!result.success) throw new Error('result_subject_revocation_lookup_failed');
+    return result.results.map((row) => String((row as Record<string, unknown>).subject_ref));
   }
 }

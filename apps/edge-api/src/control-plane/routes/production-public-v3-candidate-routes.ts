@@ -18,6 +18,7 @@ import { createX402ServiceRoute, type X402ServiceRouteConfig } from './x402-serv
 import { productionServiceExecutorUnavailable } from './production-paid-services';
 import { buildResultAuthorizationRuntime } from '../security/request-principal';
 import { consumeVerifiedPrincipal } from '../security/verified-principal-context';
+import { D1ResultAuthorizationRepository } from '../repositories/d1/result-authorization';
 
 const RELEASE_SELECTION = '3.0.0-public-candidate';
 
@@ -52,7 +53,10 @@ function configureBuyerAuthorization(
 ): X402ServiceRouteConfig | { unavailable: true; reason: string } {
   let runtime: ReturnType<typeof buildResultAuthorizationRuntime>;
   try {
-    runtime = buildResultAuthorizationRuntime(env);
+    const revocationRepository = new D1ResultAuthorizationRepository(env.DB);
+    runtime = buildResultAuthorizationRuntime(env, () =>
+      revocationRepository.revokedSubjectRefs()
+    );
   } catch (error) {
     return {
       unavailable: true,

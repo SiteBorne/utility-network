@@ -41,6 +41,7 @@ import { runShadowComparison } from '../control-plane/metadata/shadow-comparison
 import { selectPrimaryProjection } from '../control-plane/metadata/primary-comparison-selector';
 import { recordMetadataProjectionLifecycle } from '../control-plane/telemetry/metadata-projection-telemetry';
 import { buildResultAuthorizationRuntime } from '../control-plane/security/request-principal';
+import { D1ResultAuthorizationRepository } from '../control-plane/repositories/d1/result-authorization';
 import { companyEvidenceGraphV2CdpProductionRoute } from '../control-plane/routes/production-company-evidence-v2-cdp-route';
 import { webContextVerifiedV2CdpProductionRoute } from '../control-plane/routes/production-web-context-v2-cdp-route';
 import { documentEvidenceJsonV2CdpProductionRoute } from '../control-plane/routes/production-document-evidence-v2-cdp-route';
@@ -306,7 +307,19 @@ export async function mcpRoute(context: Context<{ Bindings: Env }>): Promise<Res
   );
   let resultAuthorizationRuntime: ReturnType<typeof buildResultAuthorizationRuntime> = null;
   try {
-    resultAuthorizationRuntime = buildResultAuthorizationRuntime(context.env);
+    // Same persisted revocation authority as the HTTP result-release
+    // routes (`production-public-v3-candidate-routes.ts`'s
+    // `configureBuyerAuthorization`) -- no protocol-specific revocation
+    // logic. The MCP boundary forwards each service call to that same
+    // underlying route handler (`createMcpX402ServiceBoundary`), which
+    // builds its own runtime instance for the actual release decision;
+    // this one governs MCP-transport authentication only, but it must
+    // not keep a stale empty stub either.
+    const revocationRepository = hasDb ? new D1ResultAuthorizationRepository(context.env.DB) : null;
+    resultAuthorizationRuntime = buildResultAuthorizationRuntime(
+      context.env,
+      revocationRepository ? () => revocationRepository.revokedSubjectRefs() : undefined
+    );
   } catch {
     resultAuthorizationRuntime = null;
   }
