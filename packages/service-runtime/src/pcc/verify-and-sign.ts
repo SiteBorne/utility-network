@@ -87,9 +87,11 @@ export interface VerifyAndSignResult<TExtensionKey extends string, TExtension> {
    * Detached from the frozen semantic snapshot: mutating it cannot change the
    * proof-bearing state in `artifact`. */
   finalExtension: TExtension;
-  /** The internal finalized-result artifact. Absent only when the runtime
-   * receipt self-verification failed (no proof-bearing state is produced for
-   * a result whose receipt does not verify). Never serialized onto a response. */
+  /** The internal finalized-result artifact. Absent when the runtime receipt
+   * self-verification failed, or when the finalized result failed its own
+   * registered output schema (no proof-bearing state is produced for a
+   * result whose receipt doesn't verify or whose schema rejects it). Never
+   * serialized onto a response. */
   artifact?: InternalResultArtifact<TExtensionKey, TExtension>;
 }
 
@@ -221,11 +223,11 @@ export async function verifyAndSign<TExtensionKey extends string, TExtension>(
     if (!vnextCheck.valid) artifact = undefined;
   }
 
-  const deliveredDocument =
+  const preSchemaDocument =
     artifact?.artifactVersion === 2
       ? (artifact.wireBody as unknown as PccDocument<TExtensionKey, TExtension>)
       : finalized;
-  const schemaId = getOutputSchemaId(deliveredDocument.contract.service_id);
+  const schemaId = getOutputSchemaId(preSchemaDocument.contract.service_id);
   let schemaValidAfterFinalization = false;
   let schemaErrors: string[] = [];
   if (schemaId) {
@@ -243,12 +245,37 @@ export async function verifyAndSign<TExtensionKey extends string, TExtension>(
       (getPrecompiledOutputValidator(schemaId) as ValidateFunction | undefined) ??
       getAjv().getSchema(schemaId);
     if (validate) {
-      schemaValidAfterFinalization = Boolean(validate(deliveredDocument));
+      schemaValidAfterFinalization = Boolean(validate(preSchemaDocument));
       schemaErrors = (validate.errors ?? []).map(
         (e) => `${e.instancePath || '(root)'} ${e.message ?? 'invalid'}`
       );
     }
   }
+
+  // Fail-closed finalization gate: a result that fails its own registered
+  // output schema must never be delivered as a validly signed/passing
+  // result, mirroring the receipt self-verification boundary above (a
+  // service can never derive `success` off proof-bearing state built over
+  // semantics its own schema rejects). Services with no registered output
+  // schema (schemaId falsy) are unaffected — this only gates delivery once
+  // a schema was actually checked and failed.
+  const schemaGateFailed = Boolean(schemaId) && !schemaValidAfterFinalization;
+  if (schemaGateFailed) {
+    artifact = undefined;
+  }
+  const deliveredDocument = schemaGateFailed
+    ? {
+        ...finalized,
+        verification: {
+          ...finalized.verification,
+          decision: 'fail' as const,
+          deterministic_failures: [
+            ...finalized.verification.deterministic_failures,
+            `final_schema_validation_failed: ${schemaErrors.join('; ') || 'unknown'}`,
+          ],
+        },
+      }
+    : preSchemaDocument;
 
   return {
     document: deliveredDocument,
