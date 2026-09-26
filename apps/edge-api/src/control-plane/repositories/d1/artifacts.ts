@@ -23,8 +23,8 @@ export class D1ArtifactsRepository implements ArtifactsRepository {
       const stmt = this.db.prepare(`
         INSERT INTO job_artifacts (
           id, content_hash, media_type, byte_length, created_at, expires_at,
-          authorization_class, retention_class, job_id, artifact_type
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          authorization_class, retention_class, job_id, artifact_type, storage_key
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
       const result = await stmt
         .bind(
@@ -37,7 +37,8 @@ export class D1ArtifactsRepository implements ArtifactsRepository {
           artifact.authorization_class,
           artifact.retention_class,
           artifact.job_id ?? null,
-          artifact.artifact_type
+          artifact.artifact_type,
+          artifact.storage_key ?? null
         )
         .run();
 
@@ -113,11 +114,52 @@ export class D1ArtifactsRepository implements ArtifactsRepository {
       // non-live (absent or already passed) — a dedup-refreshed row must
       // never be reclaimed while its buyer-facing expiry is still in the
       // future, even if `created_at` alone would otherwise qualify it.
+      // Rows already 'reclaiming' are included unconditionally so a claim
+      // whose holder crashed is resumed by the next sweep.
       const stmt = this.db.prepare(
-        `SELECT * FROM job_artifacts WHERE created_at < ? AND (expires_at IS NULL OR expires_at <= ?)`
+        `SELECT * FROM job_artifacts
+         WHERE reclaim_state = 'reclaiming'
+            OR (reclaim_state IS NULL AND created_at < ? AND (expires_at IS NULL OR expires_at <= ?))`
       );
       const result = await stmt.bind(olderThanIso, nowIso).all();
       return toRepositoryResponse(result, mapArtifactRecord);
+    } catch (e) {
+      return err('DATABASE_ERROR', e instanceof Error ? e.message : 'Unknown error');
+    }
+  }
+
+  async claimForReclamation(
+    id: string,
+    olderThanIso: string,
+    nowIso: string,
+    claimedAtIso: string
+  ): Promise<RepositoryResponse<boolean>> {
+    try {
+      const result = await this.db
+        .prepare(
+          `UPDATE job_artifacts SET reclaim_state = 'reclaiming', reclaim_claimed_at = ?
+           WHERE id = ? AND reclaim_state IS NULL AND created_at < ?
+             AND (expires_at IS NULL OR expires_at <= ?)`
+        )
+        .bind(claimedAtIso, id, olderThanIso, nowIso)
+        .run();
+      const failure = getD1Failure(result);
+      if (failure) return err('DATABASE_ERROR', failure);
+      return ok(result.meta.changes > 0);
+    } catch (e) {
+      return err('DATABASE_ERROR', e instanceof Error ? e.message : 'Unknown error');
+    }
+  }
+
+  async deleteReclaimed(id: string): Promise<RepositoryResponse<boolean>> {
+    try {
+      const result = await this.db
+        .prepare(`DELETE FROM job_artifacts WHERE id = ? AND reclaim_state = 'reclaiming'`)
+        .bind(id)
+        .run();
+      const failure = getD1Failure(result);
+      if (failure) return err('DATABASE_ERROR', failure);
+      return ok(result.meta.changes > 0);
     } catch (e) {
       return err('DATABASE_ERROR', e instanceof Error ? e.message : 'Unknown error');
     }
@@ -128,7 +170,11 @@ export class D1ArtifactsRepository implements ArtifactsRepository {
     expiresAt: string
   ): Promise<RepositoryResponse<ArtifactRecord | null>> {
     try {
-      const stmt = this.db.prepare(`UPDATE job_artifacts SET expires_at = ? WHERE id = ?`);
+      // Never renews a row claimed for reclamation: once claimed, its bytes
+      // may already be deleted.
+      const stmt = this.db.prepare(
+        `UPDATE job_artifacts SET expires_at = ? WHERE id = ? AND reclaim_state IS NULL`
+      );
       const result = await stmt.bind(expiresAt, id).run();
 
       const failure = getD1Failure(result);
@@ -136,8 +182,8 @@ export class D1ArtifactsRepository implements ArtifactsRepository {
         return err('DATABASE_ERROR', failure);
       }
       if (result.meta.changes === 0) {
-        // Row is gone (e.g. a concurrent physical reclamation pass) --
-        // not a failure this caller needs to react to.
+        // Row is gone or claimed by a concurrent physical reclamation
+        // pass -- not a failure this caller needs to react to.
         return ok(null);
       }
 

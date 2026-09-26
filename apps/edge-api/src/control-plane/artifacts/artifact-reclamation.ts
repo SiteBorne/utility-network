@@ -66,6 +66,11 @@ export interface ArtifactReclamationResult {
    * identifiers for `storage-alert-sweep.ts`'s payload, never full row
    * metadata and never every failure (only a diagnostic sample). */
   r2_delete_failure_content_hashes: string[];
+  /** R3-A3-ARTIFACT-RECLAIM-OWNERSHIP-34 — a D1 claim or final-delete call
+   * failed for this many artifacts. Each such row is either still
+   * unclaimed (retried next pass) or stays 'reclaiming' and is resumed next
+   * pass; counted so it is never silently dropped. */
+  metadata_failures: number;
 }
 
 /**
@@ -101,23 +106,51 @@ export async function reclaimStaleArtifacts(
     // Fail closed: a listing failure reclaims nothing this pass rather
     // than guessing at a partial/stale list. Never throws past this
     // function's own boundary.
-    return { reclaimed: 0, r2_delete_failures: 0, r2_delete_failure_content_hashes: [] };
+    return {
+      reclaimed: 0,
+      r2_delete_failures: 0,
+      r2_delete_failure_content_hashes: [],
+      metadata_failures: 0,
+    };
   }
 
   let reclaimed = 0;
   let r2DeleteFailures = 0;
+  let metadataFailures = 0;
   const r2DeleteFailureContentHashes: string[] = [];
 
   for (const record of listed.value) {
+    // R3-A3-ARTIFACT-RECLAIM-OWNERSHIP-34 (A3-CRON-GAP-1): the listed
+    // snapshot is only a candidate. Deletion authority comes from an atomic
+    // claim against CURRENT D1 state, so a dedup `refreshExpiry` landing
+    // after listing makes the claim lose and the renewed artifact survives.
+    // A row already 'reclaiming' was claimed by a pass that crashed or is
+    // still running; resuming it is safe because a claimed row is never
+    // renewed and its R2 object (`artifactObjectName`) is never reused by a
+    // later row -- every row minted since migration 0013 owns its own key.
+    if (record.reclaim_state !== 'reclaiming') {
+      const claimed = await deps.artifactsRepository.claimForReclamation(
+        record.id,
+        cutoffIso,
+        nowIso,
+        nowIso
+      );
+      if (!claimed.ok) {
+        metadataFailures += 1;
+        continue;
+      }
+      if (!claimed.value) continue;
+    }
+
     try {
       // Idempotent by construction (both `ArtifactStore` implementations'
       // own `deleteByContentHash` return `false`, never throw, when the
       // object is already gone) -- a missing object is a normal, expected
       // outcome here, not a failure.
-      await deps.artifactStore.deleteByContentHash(record.content_hash);
+      await deps.artifactStore.deleteForArtifact(record);
     } catch {
-      // A genuine R2 outage/error. Leave the D1 row alone -- the next
-      // pass will retry both the R2 delete and the D1 delete together.
+      // A genuine R2 outage/error. Leave the D1 row claimed -- the next
+      // pass resumes both the R2 delete and the D1 delete together.
       r2DeleteFailures += 1;
       if (r2DeleteFailureContentHashes.length < MAX_REPORTED_FAILURE_CONTENT_HASHES) {
         r2DeleteFailureContentHashes.push(record.content_hash);
@@ -125,7 +158,7 @@ export async function reclaimStaleArtifacts(
       continue;
     }
 
-    const deleted = await deps.artifactsRepository.delete(record.id);
+    const deleted = await deps.artifactsRepository.deleteReclaimed(record.id);
     // `deleted.ok && deleted.value === false` means the D1 row was
     // already gone (a concurrent reclamation pass, or the row was
     // deleted some other way) -- not an error, just nothing new to
@@ -136,6 +169,8 @@ export async function reclaimStaleArtifacts(
     // harmlessly.
     if (deleted.ok && deleted.value) {
       reclaimed += 1;
+    } else if (!deleted.ok) {
+      metadataFailures += 1;
     }
   }
 
@@ -143,5 +178,6 @@ export async function reclaimStaleArtifacts(
     reclaimed,
     r2_delete_failures: r2DeleteFailures,
     r2_delete_failure_content_hashes: r2DeleteFailureContentHashes,
+    metadata_failures: metadataFailures,
   };
 }

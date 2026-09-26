@@ -361,6 +361,19 @@ export async function reclaimStaleArtifactsScheduled(
       })
     );
   }
+  if (result.metadata_failures > 0) {
+    // R3-A3-ARTIFACT-RECLAIM-OWNERSHIP-34: a failed D1 claim/final delete
+    // leaves the row unclaimed or 'reclaiming' for the next pass to resume;
+    // surfaced, never silently dropped.
+    console.error(
+      JSON.stringify({
+        event: 'siteborne.artifact_reclamation.metadata_failures',
+        reclaimed: result.reclaimed,
+        metadata_failures: result.metadata_failures,
+        observed_at: nowIso,
+      })
+    );
+  }
   const receiver = env.STORAGE_ALERT_RECEIVER;
   const pathToken = env.STORAGE_ALERT_PATH_TOKEN;
   if (receiver && pathToken) {

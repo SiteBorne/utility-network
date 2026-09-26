@@ -15,6 +15,25 @@ import type { ArtifactRecord } from '../types';
  */
 export const DOCUMENT_ARTIFACT_KEY_PREFIX = 'artifacts/';
 
+/**
+ * R3-A3-ARTIFACT-RECLAIM-OWNERSHIP-34 — the object name (relative to a
+ * store's prefix) holding `artifact`'s bytes. Legacy records (no
+ * `storage_key`) share the content-addressed name `<sha256 hex>`; records
+ * minted since migration 0013 own a per-row name, so reclaiming one row can
+ * never delete bytes a later row with the same content hash depends on.
+ */
+export function artifactObjectName(
+  artifact: Pick<ArtifactRecord, 'content_hash' | 'storage_key'>
+): string {
+  return artifact.storage_key ?? artifact.content_hash.replace('sha256:', '');
+}
+
+/** Per-row object name for a newly minted artifact row (see
+ * `artifactObjectName`). `id` is always server-generated, never buyer input. */
+export function perArtifactStorageKey(contentHash: string, id: string): string {
+  return `${contentHash.replace('sha256:', '')}/${id}`;
+}
+
 export async function computeHash(content: Uint8Array): Promise<string> {
   const hashBuffer = await crypto.subtle.digest('SHA-256', content);
   const hashArray = Array.from(new Uint8Array(hashBuffer));
@@ -24,6 +43,9 @@ export async function computeHash(content: Uint8Array): Promise<string> {
 
 export class InMemoryArtifactStore implements ArtifactStore {
   private store = new Map<string, ArtifactRecord & { content: Uint8Array }>();
+  /** Per-row objects (records carrying `storage_key`), keyed by
+   * `artifactObjectName` — mirrors the R2 adapter's distinct keys. */
+  private objects = new Map<string, Uint8Array>();
 
   async put(artifact: ArtifactRecord, content: Uint8Array): Promise<ArtifactRecord> {
     if (this.store.has(artifact.id)) {
@@ -41,6 +63,16 @@ export class InMemoryArtifactStore implements ArtifactStore {
       throw new Error(
         `Content hash mismatch: expected ${artifact.content_hash}, got ${computedHash}`
       );
+    }
+
+    if (artifact.storage_key) {
+      // Per-row object: never shares the content-hash index with any
+      // other row (see `artifactObjectName`).
+      if (!this.objects.has(artifact.storage_key)) {
+        this.objects.set(artifact.storage_key, content);
+        this.store.set(artifact.id, { ...artifact, content });
+      }
+      return artifact;
     }
 
     const existing = this.store.get(artifact.content_hash);
@@ -105,6 +137,24 @@ export class InMemoryArtifactStore implements ArtifactStore {
     return true;
   }
 
+  async getContentForArtifact(
+    artifact: Pick<ArtifactRecord, 'content_hash' | 'storage_key'>
+  ): Promise<Uint8Array | null> {
+    if (artifact.storage_key) return this.objects.get(artifact.storage_key) ?? null;
+    return this.getContentByContentHash(artifact.content_hash);
+  }
+
+  async deleteForArtifact(
+    artifact: Pick<ArtifactRecord, 'id' | 'content_hash' | 'storage_key'>
+  ): Promise<boolean> {
+    if (artifact.storage_key) {
+      const record = this.store.get(artifact.id);
+      if (record?.storage_key === artifact.storage_key) this.store.delete(artifact.id);
+      return this.objects.delete(artifact.storage_key);
+    }
+    return this.deleteByContentHash(artifact.content_hash);
+  }
+
   async exists(id: string): Promise<boolean> {
     return this.store.has(id);
   }
@@ -122,6 +172,7 @@ export class InMemoryArtifactStore implements ArtifactStore {
 
   clear(): void {
     this.store.clear();
+    this.objects.clear();
   }
 }
 
@@ -134,8 +185,8 @@ export class R2ArtifactStoreAdapter implements ArtifactStore {
     this.prefix = prefix;
   }
 
-  private getKey(artifact: ArtifactRecord): string {
-    return `${this.prefix}${artifact.content_hash.replace('sha256:', '')}`;
+  private getKey(artifact: Pick<ArtifactRecord, 'content_hash' | 'storage_key'>): string {
+    return `${this.prefix}${artifactObjectName(artifact)}`;
   }
 
   async put(artifact: ArtifactRecord, content: Uint8Array): Promise<ArtifactRecord> {
@@ -251,6 +302,25 @@ export class R2ArtifactStoreAdapter implements ArtifactStore {
     return true;
   }
 
+  async getContentForArtifact(
+    artifact: Pick<ArtifactRecord, 'content_hash' | 'storage_key'>
+  ): Promise<Uint8Array | null> {
+    const object = await this.bucket.get(this.getKey(artifact));
+    if (!object) return null;
+    return new Uint8Array(await object.arrayBuffer());
+  }
+
+  /** Idempotent: a missing object is `false`, never a throw. */
+  async deleteForArtifact(
+    artifact: Pick<ArtifactRecord, 'id' | 'content_hash' | 'storage_key'>
+  ): Promise<boolean> {
+    const key = this.getKey(artifact);
+    const object = await this.bucket.head(key);
+    if (!object) return false;
+    await this.bucket.delete(key);
+    return true;
+  }
+
   async exists(id: string): Promise<boolean> {
     const object = await this.bucket.head(id);
     return object !== null;
@@ -273,6 +343,16 @@ export interface ArtifactStore {
   delete(id: string): Promise<boolean>;
   /** SUN-1222C0 addition — see both implementations' own doc comments. */
   deleteByContentHash(hash: string): Promise<boolean>;
+  /** R3-A3-ARTIFACT-RECLAIM-OWNERSHIP-34 — read/delete the object backing
+   * one D1 artifact row (`artifactObjectName`). Buyer-upload resolution and
+   * physical reclamation must use these, never the hash-keyed variants,
+   * so they honor per-row `storage_key`s. */
+  getContentForArtifact(
+    artifact: Pick<ArtifactRecord, 'content_hash' | 'storage_key'>
+  ): Promise<Uint8Array | null>;
+  deleteForArtifact(
+    artifact: Pick<ArtifactRecord, 'id' | 'content_hash' | 'storage_key'>
+  ): Promise<boolean>;
   exists(id: string): Promise<boolean>;
   existsByContentHash(hash: string): Promise<boolean>;
 }

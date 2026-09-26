@@ -283,13 +283,12 @@ async function seedStaleArtifact(
 }
 
 describe('A3 cron recovery ownership: reclaimStaleArtifacts', () => {
-  // KNOWN GAP (A3-CRON-GAP-1): eligibility is checked only at listing time.
-  // A dedup `refreshExpiry` landing after `listReclaimable` but before the
-  // R2/D1 deletes renews the row for a buyer, then reclamation deletes the
-  // bytes and the row unconditionally. No economic effect (the executor
-  // rejects the missing upload before settlement), but a live upload_id is
-  // destroyed. `it.fails` flips to a failure once the race is fixed.
-  it.fails('a dedup refresh between listing and delete must keep the renewed artifact and its bytes', async () => {
+  // A3-CRON-GAP-1 (closed by R3-A3-ARTIFACT-RECLAIM-OWNERSHIP-34): a dedup
+  // `refreshExpiry` landing after `listReclaimable` used to be followed by
+  // unconditional R2/D1 deletes of the renewed row. Deletion now requires an
+  // atomic claim against current D1 state, which the renewal makes lose.
+  // Full matrix: `artifact-reclaim-ownership-a3.test.ts`.
+  it('a dedup refresh between listing and delete must keep the renewed artifact and its bytes', async () => {
     const store = new InMemoryArtifactStore();
     const inner = new InMemoryArtifactsRepository();
     const record = await seedStaleArtifact(store, inner, 'art-renewed');

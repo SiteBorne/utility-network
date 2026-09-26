@@ -992,8 +992,11 @@ describe('document artifact R2 key-namespace convergence (upload route <-> v3 re
       } as unknown as Env
     );
     expect(uploadRes.status).toBe(201);
-    const uploaded = (await uploadRes.json()) as { content_hash: string };
+    const uploaded = (await uploadRes.json()) as { content_hash: string; upload_id: string };
     expect(uploaded.content_hash).toMatch(/^sha256:[0-9a-f]{64}$/);
+    const row = await new D1ArtifactsRepository(db).getById(uploaded.upload_id);
+    const record = row.ok ? row.value : null;
+    expect(record?.content_hash).toBe(uploaded.content_hash);
 
     // 2. The REAL v3 read path's OWN key construction (the exact same
     // `R2ArtifactStoreAdapter`/`DOCUMENT_ARTIFACT_KEY_PREFIX` pair
@@ -1001,9 +1004,10 @@ describe('document artifact R2 key-namespace convergence (upload route <-> v3 re
     // and `production-public-v3-candidate-routes.ts`'s
     // `documentEvidenceJsonV3CandidateRoute` now both construct) — this is
     // exactly what the production executor's `resolveUploadReference`
-    // calls internally via `getContentByContentHash`.
+    // calls internally via `getContentForArtifact(record)` (the D1 row's
+    // own object, R3-A3-ARTIFACT-RECLAIM-OWNERSHIP-34).
     const readSideStore = new R2ArtifactStoreAdapter(r2, DOCUMENT_ARTIFACT_KEY_PREFIX);
-    const resolved = await readSideStore.getContentByContentHash(uploaded.content_hash);
+    const resolved = await readSideStore.getContentForArtifact(record!);
     expect(resolved).not.toBeNull();
     expect(new TextDecoder().decode(resolved!)).toBe(new TextDecoder().decode(bytes));
 
@@ -1016,7 +1020,7 @@ describe('document artifact R2 key-namespace convergence (upload route <-> v3 re
     // that convergence onto the ONE shared constant is what makes
     // resolution succeed.
     const staleMismatchedStore = new R2ArtifactStoreAdapter(r2, 'documents/');
-    const notResolved = await staleMismatchedStore.getContentByContentHash(uploaded.content_hash);
+    const notResolved = await staleMismatchedStore.getContentForArtifact(record!);
     expect(notResolved).toBeNull();
     expect(DOCUMENT_ARTIFACT_KEY_PREFIX).not.toBe('documents/');
   });

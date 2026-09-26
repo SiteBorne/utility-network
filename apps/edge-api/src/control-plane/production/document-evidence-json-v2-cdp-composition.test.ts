@@ -119,6 +119,12 @@ function inMemoryArtifactStoreStandin(): ArtifactStore {
     async deleteByContentHash() {
       return false;
     },
+    async getContentForArtifact() {
+      return null;
+    },
+    async deleteForArtifact() {
+      return false;
+    },
     async exists(id: string) {
       return store.has(id);
     },

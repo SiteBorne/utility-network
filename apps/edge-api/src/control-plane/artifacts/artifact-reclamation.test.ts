@@ -83,7 +83,7 @@ describe('reclaimStaleArtifacts', () => {
 
     const result = await reclaimStaleArtifacts(deps(store, repo));
 
-    expect(result).toEqual({ reclaimed: 1, r2_delete_failures: 0, r2_delete_failure_content_hashes: [] });
+    expect(result).toEqual({ reclaimed: 1, r2_delete_failures: 0, r2_delete_failure_content_hashes: [], metadata_failures: 0 });
     expect(await store.getContentByContentHash(old.content_hash)).toBeNull();
     expect(await getValue(repo, old.id)).toBeNull();
   });
@@ -100,7 +100,7 @@ describe('reclaimStaleArtifacts', () => {
 
     const result = await reclaimStaleArtifacts(deps(store, repo));
 
-    expect(result).toEqual({ reclaimed: 0, r2_delete_failures: 0, r2_delete_failure_content_hashes: [] });
+    expect(result).toEqual({ reclaimed: 0, r2_delete_failures: 0, r2_delete_failure_content_hashes: [], metadata_failures: 0 });
     expect(await store.getContentByContentHash(fresh.content_hash)).not.toBeNull();
     expect(await getValue(repo, fresh.id)).not.toBeNull();
   });
@@ -118,8 +118,8 @@ describe('reclaimStaleArtifacts', () => {
     const first = await reclaimStaleArtifacts(deps(store, repo));
     const second = await reclaimStaleArtifacts(deps(store, repo));
 
-    expect(first).toEqual({ reclaimed: 1, r2_delete_failures: 0, r2_delete_failure_content_hashes: [] });
-    expect(second).toEqual({ reclaimed: 0, r2_delete_failures: 0, r2_delete_failure_content_hashes: [] });
+    expect(first).toEqual({ reclaimed: 1, r2_delete_failures: 0, r2_delete_failure_content_hashes: [], metadata_failures: 0 });
+    expect(second).toEqual({ reclaimed: 0, r2_delete_failures: 0, r2_delete_failure_content_hashes: [], metadata_failures: 0 });
   });
 
   it('is idempotent: an R2 object already missing (e.g. a previous partial pass) is treated as a normal no-op, not a failure -- the D1 row is still reclaimed', async () => {
@@ -137,7 +137,7 @@ describe('reclaimStaleArtifacts', () => {
 
     const result = await reclaimStaleArtifacts(deps(store, repo));
 
-    expect(result).toEqual({ reclaimed: 1, r2_delete_failures: 0, r2_delete_failure_content_hashes: [] });
+    expect(result).toEqual({ reclaimed: 1, r2_delete_failures: 0, r2_delete_failure_content_hashes: [], metadata_failures: 0 });
     expect(await getValue(repo, old.id)).toBeNull();
   });
 
@@ -158,6 +158,8 @@ describe('reclaimStaleArtifacts', () => {
       getContentByContentHash: (h) => store.getContentByContentHash(h),
       delete: (id) => store.delete(id),
       deleteByContentHash: vi.fn().mockRejectedValue(new Error('simulated R2 outage')),
+      getContentForArtifact: (a) => store.getContentForArtifact(a),
+      deleteForArtifact: vi.fn().mockRejectedValue(new Error('simulated R2 outage')),
       exists: (id) => store.exists(id),
       existsByContentHash: (h) => store.existsByContentHash(h),
     };
@@ -168,6 +170,7 @@ describe('reclaimStaleArtifacts', () => {
       reclaimed: 0,
       r2_delete_failures: 1,
       r2_delete_failure_content_hashes: [old.content_hash],
+      metadata_failures: 0,
     });
     // The D1 row must survive -- never deleted when the R2 delete threw.
     expect(await getValue(repo, old.id)).not.toBeNull();
@@ -190,14 +193,17 @@ describe('reclaimStaleArtifacts', () => {
       deleteExpired: () => repo.deleteExpired(),
       listReclaimable: (iso: string, now: string) => repo.listReclaimable(iso, now),
       refreshExpiry: (id, expiresAt) => repo.refreshExpiry(id, expiresAt),
+      claimForReclamation: (id, olderThan, now, at) =>
+        repo.claimForReclamation(id, olderThan, now, at),
       // The row is already gone by the time this reclamation pass tries
       // to delete it (a concurrent pass beat it to the punch).
       delete: async () => ({ ok: true, value: false }),
+      deleteReclaimed: async () => ({ ok: true, value: false }),
     };
 
     const result = await reclaimStaleArtifacts(deps(store, racingRepo));
 
-    expect(result).toEqual({ reclaimed: 0, r2_delete_failures: 0, r2_delete_failure_content_hashes: [] });
+    expect(result).toEqual({ reclaimed: 0, r2_delete_failures: 0, r2_delete_failure_content_hashes: [], metadata_failures: 0 });
   });
 
   it('SUN-1222C-LOCAL-CLOSURE-R2 §2: retains an old-enough (created_at) artifact whose expires_at was refreshed into the future (a dedup-refresh hit) -- the exact "still validly referenced" case', async () => {
@@ -217,7 +223,7 @@ describe('reclaimStaleArtifacts', () => {
 
     const result = await reclaimStaleArtifacts(deps(store, repo));
 
-    expect(result).toEqual({ reclaimed: 0, r2_delete_failures: 0, r2_delete_failure_content_hashes: [] });
+    expect(result).toEqual({ reclaimed: 0, r2_delete_failures: 0, r2_delete_failure_content_hashes: [], metadata_failures: 0 });
     expect(await store.getContentByContentHash(old.content_hash)).not.toBeNull();
     expect(await getValue(repo, old.id)).not.toBeNull();
   });
@@ -242,7 +248,7 @@ describe('reclaimStaleArtifacts', () => {
     const later = new Date(Date.parse(refreshed) + 1000).toISOString();
     const result = await reclaimStaleArtifacts(deps(store, repo, later));
 
-    expect(result).toEqual({ reclaimed: 1, r2_delete_failures: 0, r2_delete_failure_content_hashes: [] });
+    expect(result).toEqual({ reclaimed: 1, r2_delete_failures: 0, r2_delete_failure_content_hashes: [], metadata_failures: 0 });
     expect(await getValue(repo, old.id)).toBeNull();
   });
 
@@ -256,6 +262,8 @@ describe('reclaimStaleArtifacts', () => {
       delete: async () => ({ ok: true, value: false }),
       deleteExpired: async () => ({ ok: true, value: 0 }),
       refreshExpiry: async () => ({ ok: true, value: null }),
+      claimForReclamation: async () => ({ ok: true, value: false }),
+      deleteReclaimed: async () => ({ ok: true, value: false }),
       listReclaimable: async () => ({
         ok: false,
         error: { code: 'DATABASE_ERROR', message: 'down' },
@@ -266,6 +274,7 @@ describe('reclaimStaleArtifacts', () => {
       reclaimed: 0,
       r2_delete_failures: 0,
       r2_delete_failure_content_hashes: [],
+      metadata_failures: 0,
     });
   });
 });

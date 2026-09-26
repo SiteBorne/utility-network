@@ -305,6 +305,14 @@ export class InMemoryIdempotencyRepository implements IdempotencyRepository {
   }
 }
 
+function isClaimable(artifact: ArtifactRecord, olderThanIso: string, nowIso: string): boolean {
+  return (
+    artifact.reclaim_state === undefined &&
+    artifact.created_at < olderThanIso &&
+    (!artifact.expires_at || artifact.expires_at <= nowIso)
+  );
+}
+
 export class InMemoryArtifactsRepository implements ArtifactsRepository {
   private store = new InMemoryStore<ArtifactRecord>();
   private byContentHash = new Map<string, string>();
@@ -377,12 +385,29 @@ export class InMemoryArtifactsRepository implements ArtifactsRepository {
   ): ReturnType<ArtifactsRepository['listReclaimable']> {
     const matches: ArtifactRecord[] = [];
     for (const [, artifact] of this.store.entries()) {
-      const notLiveExpiry = !artifact.expires_at || artifact.expires_at <= nowIso;
-      if (artifact.created_at < olderThanIso && notLiveExpiry) {
+      if (artifact.reclaim_state === 'reclaiming' || isClaimable(artifact, olderThanIso, nowIso)) {
         matches.push(artifact);
       }
     }
     return ok(matches);
+  }
+
+  async claimForReclamation(
+    id: string,
+    olderThanIso: string,
+    nowIso: string,
+    _claimedAtIso: string
+  ): ReturnType<ArtifactsRepository['claimForReclamation']> {
+    const artifact = await this.store.get(id);
+    if (!artifact || !isClaimable(artifact, olderThanIso, nowIso)) return ok(false);
+    await this.store.update(id, (item) => ({ ...item, reclaim_state: 'reclaiming' as const }));
+    return ok(true);
+  }
+
+  async deleteReclaimed(id: string): ReturnType<ArtifactsRepository['deleteReclaimed']> {
+    const artifact = await this.store.get(id);
+    if (!artifact || artifact.reclaim_state !== 'reclaiming') return ok(false);
+    return this.delete(id);
   }
 
   async refreshExpiry(
@@ -390,7 +415,7 @@ export class InMemoryArtifactsRepository implements ArtifactsRepository {
     expiresAt: string
   ): ReturnType<ArtifactsRepository['refreshExpiry']> {
     const artifact = await this.store.get(id);
-    if (!artifact) return ok(null);
+    if (!artifact || artifact.reclaim_state === 'reclaiming') return ok(null);
     const updated = await this.store.update(id, (item) => ({ ...item, expires_at: expiresAt }));
     return ok(updated);
   }

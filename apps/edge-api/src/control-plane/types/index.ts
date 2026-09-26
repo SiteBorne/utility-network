@@ -192,6 +192,13 @@ export const ArtifactRecordSchema = z.object({
   retention_class: z.enum(['ephemeral', 'standard', 'archival']),
   job_id: z.string().uuid().optional(),
   artifact_type: z.enum(['input', 'output', 'intermediate', 'receipt', 'audit']),
+  /** Per-artifact R2 object name within the store's prefix (migration
+   * 0013). Absent on legacy rows, which use the shared content-addressed
+   * key `<sha256 hex>`. */
+  storage_key: z.string().optional(),
+  /** Present only once physical reclamation has claimed the row
+   * (migration 0013); a claimed row is never live again. */
+  reclaim_state: z.literal('reclaiming').optional(),
 });
 export type ArtifactRecord = z.infer<typeof ArtifactRecordSchema>;
 

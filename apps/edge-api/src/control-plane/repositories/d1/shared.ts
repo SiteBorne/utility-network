@@ -114,6 +114,8 @@ export function mapArtifactRecord(row: Record<string, unknown>): ArtifactRecord 
     retention_class: row.retention_class as ArtifactRecord['retention_class'],
     job_id: row.job_id as string | undefined,
     artifact_type: row.artifact_type as ArtifactRecord['artifact_type'],
+    storage_key: (row.storage_key as string | null | undefined) ?? undefined,
+    reclaim_state: (row.reclaim_state as ArtifactRecord['reclaim_state'] | null) ?? undefined,
   };
 }
 

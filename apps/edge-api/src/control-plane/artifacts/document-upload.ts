@@ -29,7 +29,7 @@
  * request actually executes. This module's job ends at: is this container
  * plausibly what it claims to be, and is it within the frozen size bound.
  */
-import type { ArtifactStore } from './store';
+import { perArtifactStorageKey, type ArtifactStore } from './store';
 import type { ArtifactsRepository } from '../repositories/interfaces';
 import type { ArtifactRecord } from '../types';
 
@@ -165,6 +165,21 @@ async function dedupedResponse(
   existing: ArtifactRecord,
   deps: DocumentUploadDeps
 ): Promise<DocumentUploadResult> {
+  // R3-A3-ARTIFACT-RECLAIM-OWNERSHIP-34: a row claimed for physical
+  // reclamation is never handed out -- its bytes may already be gone. The
+  // row disappears once reclamation finishes, after which a retry mints a
+  // fresh row with its own R2 object.
+  if (existing.reclaim_state === 'reclaiming') {
+    return {
+      ok: false,
+      code: 'expired_dedupe_refresh_failed',
+      message:
+        'an existing upload for this content hash is being reclaimed and cannot be reused; ' +
+        'retry this upload',
+      retryable: true,
+    };
+  }
+
   const nowIso = deps.nowIso();
   const stale = !existing.expires_at || Date.parse(existing.expires_at) <= Date.parse(nowIso);
 
@@ -288,6 +303,10 @@ export async function storeDocumentUpload(
     authorization_class: 'buyer_authorized',
     retention_class: 'ephemeral',
     artifact_type: 'input',
+    // R3-A3-ARTIFACT-RECLAIM-OWNERSHIP-34: this row's bytes live under its
+    // own R2 key, never shared with an earlier (possibly still being
+    // reclaimed) row for the same content hash.
+    storage_key: perArtifactStorageKey(contentHash, id),
   };
 
   try {
@@ -307,6 +326,9 @@ export async function storeDocumentUpload(
     // specific, expected race by re-reading rather than surfacing a
     // storage failure for a perfectly successful upload.
     if (created.error.code === 'DUPLICATE_ARTIFACT') {
+      // Our per-row object is referenced by no row; nothing else can use
+      // its key, so removing it is always safe (best effort).
+      await deps.artifactStore.deleteForArtifact(record).catch(() => false);
       const raced = await deps.artifactsRepository.getByContentHash(contentHash);
       if (raced.ok && raced.value) {
         return dedupedResponse(raced.value, deps);

@@ -89,7 +89,9 @@ export interface ArtifactsRepository {
   deleteExpired(): Promise<RepositoryResponse<number>>;
   /** SUN-1222C0 — physical reclamation's own read: every artifact record
    * created strictly before `olderThanIso` AND whose `expires_at` is
-   * either absent or already `<= nowIso`.
+   * either absent or already `<= nowIso`, PLUS every row already in
+   * 'reclaiming' regardless of age/expiry (R3-A3-ARTIFACT-RECLAIM-
+   * OWNERSHIP-34: resumes a claim whose holder crashed mid-reclamation).
    *
    * SUN-1222C-DOCUMENT-ARTIFACT-LOCAL-CLOSURE-R2 §2 — the `expires_at`
    * half of this condition is load-bearing, not redundant with
@@ -114,6 +116,23 @@ export interface ArtifactsRepository {
     olderThanIso: string,
     nowIso: string
   ): Promise<RepositoryResponse<ArtifactRecord[]>>;
+  /** R3-A3-ARTIFACT-RECLAIM-OWNERSHIP-34 — `listReclaimable` is only
+   * candidate discovery; a listed snapshot never authorizes deletion.
+   * Atomically claims `id` for physical reclamation iff, against CURRENT
+   * persisted state, it is unclaimed, `created_at < olderThanIso`, and its
+   * `expires_at` is absent or `<= nowIso`. `true` = this caller now holds
+   * reclaim authority; `false` = lost (renewed, deleted, or already
+   * claimed). A claim never expires and is never reverted: the row only
+   * leaves 'reclaiming' by being deleted (`deleteReclaimed`). */
+  claimForReclamation(
+    id: string,
+    olderThanIso: string,
+    nowIso: string,
+    claimedAtIso: string
+  ): Promise<RepositoryResponse<boolean>>;
+  /** Idempotent, CAS-guarded final metadata delete: removes `id` only while
+   * it is in 'reclaiming'. `false` = already gone. */
+  deleteReclaimed(id: string): Promise<RepositoryResponse<boolean>>;
   /** SUN-1222C-document-artifact-production-closure — extends a still-live
    * or already-past-TTL artifact's `expires_at` in place, without touching
    * `content_hash`, `id`, or the underlying R2 object. Closes the
@@ -122,9 +141,10 @@ export interface ArtifactsRepository {
    * reclamation runs on a much longer, separate horizon — see
    * `../artifacts/artifact-reclamation.ts`) must never hand a buyer back
    * an `upload_id` that is dead on arrival at `resolveUploadReference`.
-   * Returns the row unchanged (not an error) if `id` no longer exists —
-   * a concurrent physical reclamation pass winning that race is a normal,
-   * expected outcome, not a failure the caller needs to react to. */
+   * Returns `null` (not an error) if `id` no longer exists OR has been
+   * claimed for reclamation (R3-A3-ARTIFACT-RECLAIM-OWNERSHIP-34: a
+   * 'reclaiming' row is never renewed) — a concurrent physical reclamation
+   * pass winning that race is a normal, expected outcome. */
   refreshExpiry(id: string, expiresAt: string): Promise<RepositoryResponse<ArtifactRecord | null>>;
 }
 

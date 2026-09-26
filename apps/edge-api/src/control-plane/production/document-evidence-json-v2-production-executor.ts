@@ -191,6 +191,9 @@ async function resolveUploadReference(
   if (!record) {
     return { rejected: `no artifact was found for upload_id "${uploadId}"` };
   }
+  if (record.reclaim_state === 'reclaiming') {
+    return { rejected: `artifact "${uploadId}" is being reclaimed` };
+  }
   if (record.expires_at && new Date(record.expires_at).getTime() <= nowMs) {
     return { rejected: `artifact "${uploadId}" expired at ${record.expires_at}` };
   }
@@ -222,7 +225,7 @@ async function resolveUploadReference(
     return { rejected: `stored artifact has an unsupported media type "${record.media_type}"` };
   }
 
-  const bytes = await edgeApiArtifactStore.getContentByContentHash(record.content_hash);
+  const bytes = await edgeApiArtifactStore.getContentForArtifact(record);
   if (!bytes) {
     return {
       rejected: `artifact "${uploadId}" metadata exists but its content is missing from storage`,

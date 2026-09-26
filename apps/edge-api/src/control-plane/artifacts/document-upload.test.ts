@@ -321,6 +321,8 @@ describe('storeDocumentUpload — adversarial matrix', () => {
         delete: async () => ({ ok: true as const, value: false }),
         deleteExpired: async () => ({ ok: true as const, value: 0 }),
         listReclaimable: async () => ({ ok: true as const, value: [] }),
+        claimForReclamation: async () => ({ ok: true as const, value: false }),
+        deleteReclaimed: async () => ({ ok: true as const, value: false }),
         // Simulates a genuine repository fault during the refresh attempt.
         refreshExpiry: async () => ({
           ok: false as const,
@@ -364,6 +366,8 @@ describe('storeDocumentUpload — adversarial matrix', () => {
         delete: async () => ({ ok: true as const, value: false }),
         deleteExpired: async () => ({ ok: true as const, value: 0 }),
         listReclaimable: async () => ({ ok: true as const, value: [] }),
+        claimForReclamation: async () => ({ ok: true as const, value: false }),
+        deleteReclaimed: async () => ({ ok: true as const, value: false }),
         // `ok: true, value: null` -- the documented "row is gone" outcome.
         refreshExpiry: async () => ({ ok: true as const, value: null }),
       },
@@ -392,6 +396,8 @@ describe('storeDocumentUpload — adversarial matrix', () => {
       delete: (id) => deps.__repo.delete(id),
       deleteExpired: () => deps.__repo.deleteExpired(),
       listReclaimable: (a, b) => deps.__repo.listReclaimable(a, b),
+      claimForReclamation: (id, a, b, at) => deps.__repo.claimForReclamation(id, a, b, at),
+      deleteReclaimed: (id) => deps.__repo.deleteReclaimed(id),
       refreshExpiry: async (id, expiresAt) => {
         refreshCalls += 1;
         if (refreshCalls === 1) {
@@ -489,6 +495,9 @@ describe('storeDocumentUpload — adversarial matrix', () => {
       listReclaimable: (olderThanIso: string, nowIso: string) =>
         realRepo.listReclaimable(olderThanIso, nowIso),
       refreshExpiry: (id: string, expiresAt: string) => realRepo.refreshExpiry(id, expiresAt),
+      claimForReclamation: (id: string, a: string, b: string, at: string) =>
+        realRepo.claimForReclamation(id, a, b, at),
+      deleteReclaimed: (id: string) => realRepo.deleteReclaimed(id),
     };
     const deps = freshDeps({ artifactsRepository: racingRepo, randomId: () => 'never-used-id' });
     const result = await storeDocumentUpload(bytes, 'application/pdf', deps);
@@ -510,6 +519,8 @@ describe('storeDocumentUpload — adversarial matrix', () => {
         getContentByContentHash: async () => null,
         delete: async () => false,
         deleteByContentHash: async () => false,
+        getContentForArtifact: async () => null,
+        deleteForArtifact: async () => false,
         exists: async () => false,
         existsByContentHash: async () => false,
       },
@@ -535,6 +546,8 @@ describe('storeDocumentUpload — adversarial matrix', () => {
         delete: async () => ({ ok: true as const, value: false }),
         deleteExpired: async () => ({ ok: true as const, value: 0 }),
         listReclaimable: async () => ({ ok: true as const, value: [] }),
+        claimForReclamation: async () => ({ ok: true as const, value: false }),
+        deleteReclaimed: async () => ({ ok: true as const, value: false }),
         refreshExpiry: async () => ({ ok: true as const, value: null }),
       },
     });
