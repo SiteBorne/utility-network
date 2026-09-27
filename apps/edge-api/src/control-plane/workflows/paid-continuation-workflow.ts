@@ -488,6 +488,14 @@ function errorCode(e: unknown): string {
 // reaching an HTTP response, not the primary sanitization boundary.
 const ERROR_DETAIL_MAX_LENGTH = 500;
 
+// R3-A3-WORKFLOW-ACTIVATION-DIAGNOSTIC-49 — a constant that tells you which
+// implementation a new Workflow instance actually ran. It is attached only to
+// the open-envelope failure terminal result, as `error_detail`, so it shows up
+// solely in the Cloudflare instance output. It never reaches an HTTP response
+// (see x402-service.ts) or D1: the job-state evidence_ref written on that path
+// still carries only `errorCode(e)`. It carries no authority; nothing reads it back.
+const WORKFLOW_ACTIVATION_DIAGNOSTIC_MARKER = 'a3_workflow_activation_diagnostic_01';
+
 function boundedDetail(detail: string): string {
   return detail.length > ERROR_DETAIL_MAX_LENGTH
     ? `${detail.slice(0, ERROR_DETAIL_MAX_LENGTH)}…(truncated)`
@@ -932,7 +940,10 @@ export async function runPaidContinuationWorkflow(
       deps.persistence.job,
       boundedDetail(errorCode(e))
     );
-    return terminal('workflow_internal_error', jobId, { error_code: errorCode(e) });
+    return terminal('workflow_internal_error', jobId, {
+      error_code: errorCode(e),
+      error_detail: WORKFLOW_ACTIVATION_DIAGNOSTIC_MARKER,
+    });
   }
 
   // STEP 1 — check-authorization-expiry. `validBefore === now` is treated
