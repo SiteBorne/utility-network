@@ -221,7 +221,8 @@ function getOrCreateSettlementRow(paymentIdentifier: string): FakeSettlementRow 
   let row = settlementStore.get(paymentIdentifier);
   if (!row) {
     row = {
-      lifecycleStage: 'executed',
+      // Real pre-execution stage (commitVerifiedWithIntent leaves `verified`).
+      lifecycleStage: 'verified',
       settlementTransactionReference: null,
       settlementOutcomeKind: null,
       cdpFacilitatorSettleAttemptCount: 0,
@@ -242,8 +243,8 @@ vi.mock('../src/control-plane/repositories/d1/payment-attempts', () => ({
       return { status: 'transitioned' };
     },
     async getSettlementRecoveryRecord(paymentIdentifier: string) {
-      const row = settlementStore.get(paymentIdentifier);
-      if (!row) return null;
+      // The real row exists from `acquired` onward, before any Workflow run.
+      const row = getOrCreateSettlementRow(paymentIdentifier);
       return {
         lifecycleStage: row.lifecycleStage,
         neverminedDelegationId: null,
@@ -317,6 +318,20 @@ vi.mock('../src/control-plane/repositories/d1/payment-finalization', () => ({
   })),
 }));
 
+// R3-A3-PROVIDER-EXECUTION-AUTHORITY-41 adds the owner-intent repository's
+// provider dispatch claim to the real production dependency graph. Same CAS
+// semantics as D1WorkflowOwnerIntentRepository.claimProviderDispatch.
+const providerDispatchClaims = new Set<string>();
+vi.mock('../src/control-plane/repositories/d1/workflow-owner-intents', () => ({
+  D1WorkflowOwnerIntentRepository: vi.fn().mockImplementation(() => ({
+    async claimProviderDispatch(paymentIdentifier: string) {
+      if (providerDispatchClaims.has(paymentIdentifier)) return 'already_dispatched';
+      providerDispatchClaims.add(paymentIdentifier);
+      return 'claimed';
+    },
+  })),
+}));
+
 const FOUR_SERVICES = [
   'company_evidence_graph.v2',
   'web_context_verified.v2',
@@ -354,6 +369,7 @@ describe('SUN-1222D-PRE-WORKFLOW-DISPATCH-FIX §18 -- real orchestration seam, a
     jobsStore.clear();
     resultsStore.clear();
     settlementStore.clear();
+    providerDispatchClaims.clear();
     settleMock.mockClear();
     for (const key of Object.keys(executorCallCounts)) executorCallCounts[key].count = 0;
     jobsStore.set(TEST_JOB_ID, { id: TEST_JOB_ID, current_state: 'LOCKED', attempt_count: 1 });

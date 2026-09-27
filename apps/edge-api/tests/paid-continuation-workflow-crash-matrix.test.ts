@@ -326,11 +326,13 @@ describe('paid-continuation-workflow — crash/restart determinism matrix (H2AWI
     const secondResult = await runPaidContinuationWorkflow({ payload: input }, secondStep, deps);
 
     expect(firstResult.status).toBe('settled');
-    expect(secondResult.status).toBe('settled'); // second run observes the already-settled outcome
     expect(deps.settle).toHaveBeenCalledTimes(1); // settle() reached exactly once across BOTH runs
-    expect(secondResult.settlement_transaction_reference).toBe(
-      firstResult.settlement_transaction_reference
-    );
+    // R3-A3-PROVIDER-EXECUTION-AUTHORITY-41: the second instance is now also
+    // fenced BEFORE the provider (it previously re-ran the executor and then
+    // observed the settled outcome). Provider spend is single as well.
+    expect(deps.executor).toHaveBeenCalledTimes(1);
+    expect(secondResult.status).toBe('workflow_internal_error');
+    expect(secondResult.error_code).toBe('provider_replay_fenced:settled');
   });
 
   it('case 11: executor timeout at the declared step boundary — reports executor_timeout deterministically, no real wait, never hangs', async () => {

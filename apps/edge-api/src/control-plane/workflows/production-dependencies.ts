@@ -42,6 +42,7 @@ import { buildProductionCdpChainReceiptChecker } from '../evidence/chain-receipt
 import { D1JobsRepository, D1StateEventsRepository } from '../repositories/d1/jobs';
 import { D1PaymentAttemptRepository } from '../repositories/d1/payment-attempts';
 import { D1PaymentFinalizationRepository } from '../repositories/d1/payment-finalization';
+import { D1WorkflowOwnerIntentRepository } from '../repositories/d1/workflow-owner-intents';
 import { X402ServiceResultRepository } from '../repositories/d1/x402-quotes';
 import { receiptPersistenceIdempotencyKey } from '../continuation/idempotency-keys';
 import type {
@@ -381,6 +382,7 @@ export async function buildProductionPaidContinuationWorkflowDependencies(
     new X402ServiceResultRepository(env.DB)
   );
   const finalizationPersistence = new D1PaymentFinalizationRepository(env.DB);
+  const ownerIntents = new D1WorkflowOwnerIntentRepository(env.DB);
   const chainReceiptChecker = buildProductionCdpChainReceiptChecker({
     productionRpcUrl: env.BASE_RPC_URL,
     preproductionRpcUrl: env.BASE_SEPOLIA_RPC_URL,
@@ -391,6 +393,10 @@ export async function buildProductionPaidContinuationWorkflowDependencies(
     clock: () => Math.floor(Date.now() / 1000),
     evidenceMode: 'production',
     executor: routeConfig.executor,
+    providerDispatch: {
+      claim: (paymentIdentifier, nowIso) =>
+        ownerIntents.claimProviderDispatch(paymentIdentifier, nowIso),
+    },
     validatePcc: validateExecutorPcc,
     settlement: {
       repository: paymentAttempts,

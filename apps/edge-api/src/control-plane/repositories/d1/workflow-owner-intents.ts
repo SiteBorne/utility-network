@@ -85,6 +85,28 @@ export class D1WorkflowOwnerIntentRepository {
     }
   }
 
+  /** R3-A3-PROVIDER-EXECUTION-AUTHORITY-41 — the one provider dispatch this
+   * payment may make. CAS on `provider_dispatched_at IS NULL`: the first
+   * caller wins and the claim never expires or reopens. */
+  async claimProviderDispatch(
+    paymentIdentifier: string,
+    nowIso: string
+  ): Promise<'claimed' | 'already_dispatched' | 'missing'> {
+    const result = await this.db
+      .prepare(
+        `UPDATE payment_workflow_owner_intents SET provider_dispatched_at = ?
+         WHERE payment_identifier = ? AND provider_dispatched_at IS NULL`
+      )
+      .bind(nowIso, paymentIdentifier)
+      .run();
+    const failure = getD1Failure(result);
+    if (failure) throw new Error(failure);
+    if (result.meta.changes > 0) return 'claimed';
+    return (await this.getByPaymentIdentifier(paymentIdentifier))
+      ? 'already_dispatched'
+      : 'missing';
+  }
+
   async getByPaymentIdentifier(paymentIdentifier: string): Promise<WorkflowOwnerIntent | null> {
     const row = await this.db
       .prepare(`SELECT * FROM payment_workflow_owner_intents WHERE payment_identifier = ?`)
