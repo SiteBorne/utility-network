@@ -874,7 +874,11 @@ describe('paid-continuation-workflow — settlement step (H2AWI-2d)', () => {
     });
     deps.reconciliationChecker.mockResolvedValue('SETTLED');
     const input = await sealTestInput(metadata, { key: deps.envelopeKey });
-    const step = new FakeWorkflowStep();
+    const step = new FakeWorkflowStep(
+      // Engine resume: invoke-executor is replayed from its memo (A3-41 fences a
+      // memo-less re-dispatch at any stage past `verified`).
+      new Map<string, unknown>([['invoke-executor', buildSuccessfulExecutorOutcome()]])
+    );
 
     const result = await runPaidContinuationWorkflow({ payload: input }, step, deps);
 
@@ -902,7 +906,10 @@ describe('paid-continuation-workflow — settlement step (H2AWI-2d)', () => {
     // before executor work, then the authorization expired before this
     // resumed settlement step examined durable state.
     const step = new FakeWorkflowStep(
-      new Map([['check-authorization-expiry', { expired: false }]])
+      new Map<string, unknown>([
+        ['check-authorization-expiry', { expired: false }],
+        ['invoke-executor', buildSuccessfulExecutorOutcome()],
+      ])
     );
     const result = await runPaidContinuationWorkflow({ payload: input }, step, deps);
 
@@ -943,7 +950,11 @@ describe('paid-continuation-workflow — result/receipt persistence + terminal t
     // re-running the whole happy path against the same job/result state.
     const metadata = buildTestMetadata();
     const input = await sealTestInput(metadata, { key: deps.envelopeKey });
-    const step = new FakeWorkflowStep();
+    const step = new FakeWorkflowStep(
+      // Engine resume: invoke-executor is replayed from its memo (A3-41 fences a
+      // memo-less re-dispatch at any stage past `verified`).
+      new Map<string, unknown>([['invoke-executor', buildSuccessfulExecutorOutcome()]])
+    );
     // Reset settlement row back to 'settled_external' won't re-trigger
     // settle (already covered elsewhere); here we only care that a second
     // finalize attempt against the terminal job never throws and never

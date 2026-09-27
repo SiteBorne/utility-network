@@ -59,12 +59,17 @@ describe('Model C Workflow outcome and settlement finalization', () => {
       },
     });
     const input = await sealTestInput(buildTestMetadata(), { key: deps.envelopeKey });
+    // A genuine engine resume: the executor step is replayed from its memo
+    // (settled_external is only reachable after invoke-executor completed).
     const result = await runPaidContinuationWorkflow(
       { payload: input },
-      new FakeWorkflowStep(),
+      new FakeWorkflowStep(
+        new Map<string, unknown>([['invoke-executor', buildSuccessfulExecutorOutcome()]])
+      ),
       deps
     );
     expect(result.status).toBe('settled');
+    expect(deps.executor).not.toHaveBeenCalled();
     expect(deps.settle).not.toHaveBeenCalled();
     expect(deps.settlementRepository.rows.get(TEST_PAYMENT_IDENTIFIER)?.lifecycleStage).toBe(
       'settled'

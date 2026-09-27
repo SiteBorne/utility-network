@@ -495,6 +495,17 @@ export class FakeWorkflowFinalizationPersistence {
   constructor(private readonly settlementRepository: FakeSettlementRepository) {}
 }
 
+/** Mirrors the D1 CAS on `payment_workflow_owner_intents.provider_dispatched_at
+ * IS NULL`: first claim per payment_identifier wins, forever. */
+export class FakeProviderDispatchAuthority {
+  readonly claims = new Set<string>();
+  async claim(paymentIdentifier: string): Promise<'claimed' | 'already_dispatched'> {
+    if (this.claims.has(paymentIdentifier)) return 'already_dispatched';
+    this.claims.add(paymentIdentifier);
+    return 'claimed';
+  }
+}
+
 // -----------------------------------------------------------------------
 // Full dependency bundle
 // -----------------------------------------------------------------------
@@ -504,6 +515,7 @@ export interface TestDependencyBundle extends PaidContinuationWorkflowDependenci
   readonly resultReceiptPersistence: FakeResultReceiptPersistence;
   readonly jobPersistence: FakeJobStatePersistence;
   readonly finalizationPersistence: FakeWorkflowFinalizationPersistence;
+  readonly providerDispatch: FakeProviderDispatchAuthority;
   readonly settle: ReturnType<typeof vi.fn>;
   readonly reconciliationChecker: ReturnType<typeof vi.fn>;
 }
@@ -521,7 +533,9 @@ export async function buildTestDependencies(
 ): Promise<TestDependencyBundle> {
   const settlementRepository = new FakeSettlementRepository();
   settlementRepository.seed(TEST_PAYMENT_IDENTIFIER, {
-    lifecycleStage: 'executed',
+    // The real pre-execution stage: `commitVerifiedWithIntent` leaves the row
+    // at `verified`; the Workflow itself advances it to `executed`.
+    lifecycleStage: 'verified',
     ...overrides.seedSettlement,
   });
 
@@ -555,6 +569,7 @@ export async function buildTestDependencies(
     clock: overrides.clock ?? (() => 0),
     evidenceMode: 'fixture',
     executor: overrides.executor ?? fakeExecutor(buildSuccessfulExecutorOutcome()),
+    providerDispatch: new FakeProviderDispatchAuthority(),
     validatePcc:
       overrides.validatePcc ??
       ((outcome) =>

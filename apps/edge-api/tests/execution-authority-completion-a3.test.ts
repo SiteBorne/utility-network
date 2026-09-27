@@ -13,13 +13,10 @@
  *   route never re-runs the executor   -> x402-workflow-integration.test.ts
  *   artifact reclaim fence             -> artifact-reclaim-ownership-a3.test.ts
  *
- * The one real remaining gap (A3-EXEC-FENCE-1) is reproduced below as a
- * controlled RED via `it.fails`: `invoke-executor` performs no durable
- * current-authority check before provider invocation, so a whole-instance
- * replay (manual Workflow restart, or any re-creation of the deterministic
- * instance) re-spends provider cost for a payment that is already settled.
- * Settlement and result release stay single-owner; only provider spend
- * duplicates.
+ * A3-EXEC-FENCE-1 (whole-instance replay re-spending provider cost) was
+ * reproduced here as an it.fails RED and is closed by
+ * R3-A3-PROVIDER-EXECUTION-AUTHORITY-41; see
+ * provider-execution-authority-a3.test.ts for the in-flight ambiguity race.
  */
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
@@ -144,18 +141,38 @@ describe('A3-40 PCC and result authorization carry no execution, commit, or sett
 });
 
 describe('A3-40 execution success is necessary but never sufficient for settlement', () => {
-  it('a successful executor does not settle when the payment attempt is not in the executed stage (settlement CAS is the commit authority)', async () => {
+  it('an attempt that never reached verified can neither execute nor settle (A3-41: the provider fence now stops it before execution)', async () => {
     const metadata = buildTestMetadata();
-    // 'acquired' cannot reach 'executed' via verified->executed, so the
-    // pre-settle CAS must refuse and settle() must never be reached.
     const deps = await buildTestDependencies({ seedSettlement: { lifecycleStage: 'acquired' } });
+    const input = await sealTestInput(metadata, { key: deps.envelopeKey });
+
+    const result = await runPaidContinuationWorkflow({ payload: input }, new FakeWorkflowStep(), deps);
+
+    expect(deps.executor).not.toHaveBeenCalled();
+    expect(deps.settle).not.toHaveBeenCalled();
+    expect(result.error_code).toBe('provider_replay_fenced:acquired');
+    expect(deps.resultReceiptPersistence.results.size).toBe(0);
+  });
+
+  it('execution success alone never settles: an executed attempt whose pre-settle CAS is refused never reaches settle()', async () => {
+    const metadata = buildTestMetadata();
+    // The executor succeeds, but the row is pushed off `executed` before the
+    // settlement CAS: settle() must never be reached.
+    const deps = await buildTestDependencies();
+    const repo = deps.settlementRepository;
+    const original = repo.transitionLifecycleStage.bind(repo);
+    repo.transitionLifecycleStage = async (id, from, to) => {
+      const r = await original(id, from, to);
+      repo.rows.get(id)!.lifecycleStage = 'settlement_failed';
+      return r;
+    };
     const input = await sealTestInput(metadata, { key: deps.envelopeKey });
 
     const result = await runPaidContinuationWorkflow({ payload: input }, new FakeWorkflowStep(), deps);
 
     expect(deps.executor).toHaveBeenCalledTimes(1);
     expect(deps.settle).not.toHaveBeenCalled();
-    expect(result.status).toBe('settlement_ambiguous');
+    expect(result.status).toBe('settlement_rejected');
     expect(deps.resultReceiptPersistence.results.size).toBe(0);
   });
 
@@ -174,8 +191,8 @@ describe('A3-40 execution success is necessary but never sufficient for settleme
   });
 });
 
-describe('A3-40 retry policy bounds: executor retries are bounded, settlement is never retried', () => {
-  it('invoke-executor declares at most 2 retries and settle declares 0', async () => {
+describe('A3-40 retry policy bounds: neither provider dispatch nor settlement is ever retried', () => {
+  it('invoke-executor and settle both declare 0 retries (A3-41: providers are not idempotent)', async () => {
     const metadata = buildTestMetadata();
     const deps = await buildTestDependencies();
     const input = await sealTestInput(metadata, { key: deps.envelopeKey });
@@ -184,7 +201,7 @@ describe('A3-40 retry policy bounds: executor retries are bounded, settlement is
     await runPaidContinuationWorkflow({ payload: input }, step, deps);
 
     const byName = new Map(step.calls.map((c) => [c.name, c.config]));
-    expect(byName.get('invoke-executor')?.retries?.limit).toBe(2);
+    expect(byName.get('invoke-executor')?.retries?.limit).toBe(0);
     expect(byName.get('settle')?.retries?.limit).toBe(0);
   });
 });
@@ -209,7 +226,8 @@ describe('A3-40 stale replay: result release stays first-writer, settlement stay
     const replay = await runPaidContinuationWorkflow({ payload: input }, new FakeWorkflowStep(), deps);
 
     expect(first.status).toBe('settled');
-    expect(replay.status).toBe('settled');
+    expect(replay.error_code).toBe('provider_replay_fenced:settled');
+    expect(executor).toHaveBeenCalledTimes(1); // A3-41: the stale output is never even produced
     expect(deps.settle).toHaveBeenCalledTimes(1);
     expect(deps.resultReceiptPersistence.results.get(TEST_JOB_ID)).toBe(released);
     expect(deps.settlementRepository.rows.get(TEST_PAYMENT_IDENTIFIER)?.lifecycleStage).toBe(
@@ -218,12 +236,10 @@ describe('A3-40 stale replay: result release stays first-writer, settlement stay
   });
 });
 
-describe('A3-EXEC-FENCE-1 (controlled RED): provider invocation has no current-authority fence', () => {
-  // Expected to FAIL today. The assertion states the required invariant —
-  // a Workflow run for a payment whose attempt already left the pre-execution
-  // stage must not invoke the provider again — and the current runtime
-  // violates it: invoke-executor runs before any D1 read of payment state.
-  it.fails(
+describe('A3-EXEC-FENCE-1 (closed by A3-41): provider invocation is fenced on current authority', () => {
+  // Formerly an it.fails RED. invoke-executor now reads canonical payment
+  // state and the durable dispatch claim before any provider call.
+  it(
     'a whole-instance replay for an already-settled payment must not invoke the provider a second time',
     async () => {
       const metadata = buildTestMetadata();
@@ -241,7 +257,7 @@ describe('A3-EXEC-FENCE-1 (controlled RED): provider invocation has no current-a
     }
   );
 
-  it('control: the gap is exactly one extra provider invocation per replay, with no second settlement', async () => {
+  it('control: replay adds neither a provider invocation nor a settlement', async () => {
     const metadata = buildTestMetadata();
     const deps = await buildTestDependencies();
     const input = await sealTestInput(metadata, { key: deps.envelopeKey });
@@ -249,7 +265,7 @@ describe('A3-EXEC-FENCE-1 (controlled RED): provider invocation has no current-a
     await runPaidContinuationWorkflow({ payload: input }, new FakeWorkflowStep(), deps);
     await runPaidContinuationWorkflow({ payload: input }, new FakeWorkflowStep(), deps);
 
-    expect(deps.executor).toHaveBeenCalledTimes(2);
+    expect(deps.executor).toHaveBeenCalledTimes(1);
     expect(deps.settle).toHaveBeenCalledTimes(1);
   });
 });

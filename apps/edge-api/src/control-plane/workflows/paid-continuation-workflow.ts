@@ -354,6 +354,19 @@ export interface WorkflowFinalizationPersistence {
   finalizeSettled(paymentIdentifier: string, now: string): Promise<void>;
 }
 
+/** R3-A3-PROVIDER-EXECUTION-AUTHORITY-41 — durable, never-expiring claim on
+ * the ONE provider dispatch a logical operation (payment_identifier) may
+ * make. No SITEBORNE provider accepts an idempotency key or supports lookup
+ * of a prior request, so a claim that is already taken means a dispatch may
+ * already have happened: the caller must never redispatch. Production:
+ * `payment_workflow_owner_intents.provider_dispatched_at` (CAS on NULL). */
+export interface ProviderDispatchAuthority {
+  claim(
+    paymentIdentifier: string,
+    nowIso: string
+  ): Promise<'claimed' | 'already_dispatched' | 'missing'>;
+}
+
 export interface PaidContinuationWorkflowDependencies {
   /** Imported once by the caller (never read from `env` inside
    * `openContinuationEnvelope` itself — H2AWI-1's own boundary). */
@@ -366,6 +379,7 @@ export interface PaidContinuationWorkflowDependencies {
    * fixtures explicitly supply `fixture`. */
   readonly evidenceMode: PaymentEvidenceMode;
   readonly executor: ServiceExecutor;
+  readonly providerDispatch: ProviderDispatchAuthority;
   /** Existing private R2 result storage. Required whenever the executor
    * produces a SELF_VERIFYING_PCC_VNEXT representation; unused for legacy. */
   readonly resultArtifacts?: {
@@ -412,10 +426,11 @@ export interface PaidContinuationWorkflowDependencies {
 const STEP_CONFIG = {
   OPEN_ENVELOPE: { retries: { limit: 0, delay: '1 second' }, timeout: '10 seconds' },
   CHECK_AUTHORIZATION_EXPIRY: { retries: { limit: 0, delay: '1 second' }, timeout: '5 seconds' },
-  INVOKE_EXECUTOR: {
-    retries: { limit: 2, delay: '5 seconds', backoff: 'exponential' },
-    timeout: '40 seconds',
-  },
+  // R3-A3-PROVIDER-EXECUTION-AUTHORITY-41: zero engine retries. Providers
+  // are not idempotent, so a retry after a timeout/throw could re-spend on a
+  // request that is still running or already succeeded. A failed/timed-out
+  // attempt ends the run unsettled (buyer never charged) instead.
+  INVOKE_EXECUTOR: { retries: { limit: 0, delay: '5 seconds' }, timeout: '40 seconds' },
   GENERATE_PCC: { retries: { limit: 1, delay: '2 seconds' }, timeout: '10 seconds' },
   // FROZEN INVARIANT: zero blind retries on settlement. See
   // `paid-continuation-workflow.test.ts`'s dedicated mutation-sensitive
@@ -430,6 +445,43 @@ const STEP_CONFIG = {
     timeout: '10 seconds',
   },
 } as const;
+
+const REPLAY_FENCED_PREFIX = 'provider_replay_fenced:';
+/** A prior dispatch claim exists but no durable completion: the provider may
+ * have run. Never redispatched; ends the run as an unsettled provider
+ * failure through the existing executor-timeout path. */
+const PROVIDER_ATTEMPT_AMBIGUOUS = 'provider_attempt_ambiguous';
+
+/** Only a `verified` attempt may reach the provider; every other stage is
+ * fenced. `verified -> executed` happens only after the invoke-executor step
+ * returns, and a genuine engine resume replays that step from its memo
+ * without re-entering it, so a fresh evaluation at any later stage can only
+ * come from a memo-less replay (operator restart or a re-created instance).
+ * Settlement stages therefore never authorize a provider re-execution: a
+ * paid-but-undelivered replay surfaces for reconciliation rather than
+ * re-spending (and re-executing could not reproduce the settled output). */
+function providerDispatchAllowed(stage: string): boolean {
+  return stage === 'verified';
+}
+
+/** Thrown from inside the invoke-executor step. The Workflows engine may
+ * surface a step failure as a plain Error carrying only the message, so the
+ * catch site also matches on the message prefix. */
+class ProviderReplayFencedError extends Error {
+  constructor(readonly stage: string) {
+    super(`${REPLAY_FENCED_PREFIX}${stage}`);
+  }
+}
+
+function isReplayFencedMessage(e: unknown): boolean {
+  return e instanceof Error && e.message.startsWith(REPLAY_FENCED_PREFIX);
+}
+
+function replayFencedStage(e: unknown): string {
+  return e instanceof ProviderReplayFencedError
+    ? e.stage
+    : (e as Error).message.slice(REPLAY_FENCED_PREFIX.length);
+}
 
 // ---------------------------------------------------------------------
 // Terminal-result helper
@@ -457,6 +509,8 @@ function terminal(
 
 function errorCode(e: unknown): string {
   if (e instanceof EnvelopeOpenError) return e.code;
+  if (e instanceof Error && e.message === PROVIDER_ATTEMPT_AMBIGUOUS)
+    return PROVIDER_ATTEMPT_AMBIGUOUS;
   if (e instanceof Error) return e.name || 'error';
   return 'unknown_error';
 }
@@ -944,6 +998,23 @@ export async function runPaidContinuationWorkflow(
   let executorOutcome: ExecutorOutcome;
   try {
     executorOutcome = await step.do('invoke-executor', STEP_CONFIG.INVOKE_EXECUTOR, async () => {
+      // R3-A3-PROVIDER-EXECUTION-AUTHORITY-41: both fences live INSIDE this
+      // step so a legitimate resume (step memoized) never re-reads them.
+      // (A) Replay fence on canonical payment state; see providerDispatchPolicy.
+      const record =
+        await deps.settlement.repository.getSettlementRecoveryRecord(paymentIdentifier);
+      const currentStage = record?.lifecycleStage ?? 'missing';
+      if (!providerDispatchAllowed(currentStage)) {
+        throw new ProviderReplayFencedError(currentStage);
+      }
+      // (B) In-flight ambiguity fence: at most one dispatch per operation.
+      // The stage alone cannot see an in-flight attempt (still `verified`).
+      const claim = await deps.providerDispatch.claim(
+        paymentIdentifier,
+        new Date(deps.clock() * 1000).toISOString()
+      );
+      if (claim === 'missing') throw new ProviderReplayFencedError('no_owner_intent');
+      if (claim === 'already_dispatched') throw new Error(PROVIDER_ATTEMPT_AMBIGUOUS);
       const outcome = await deps.executor(decrypted.executorInput, {
         job_id: jobId,
         request_id: input.request_id,
@@ -958,6 +1029,13 @@ export async function runPaidContinuationWorkflow(
       });
     });
   } catch (e) {
+    if (e instanceof ProviderReplayFencedError || isReplayFencedMessage(e)) {
+      // Already past the only stage execution is authorized from: no
+      // provider call, and no durable write merely to skip it.
+      return terminal('workflow_internal_error', jobId, {
+        error_code: `provider_replay_fenced:${replayFencedStage(e)}`,
+      });
+    }
     const preparationCode = e instanceof Error ? e.message : errorCode(e);
     if (
       preparationCode === 'vnext_result_artifact_store_unavailable' ||

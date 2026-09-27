@@ -44,6 +44,7 @@ import { D1PaymentAttemptRepository } from '../repositories/d1/payment-attempts'
 import { D1ResultAuthorizationRepository } from '../repositories/d1/result-authorization';
 import { canonicalOpaqueResultId } from '../security/result-authorization';
 import { D1PaymentFinalizationRepository } from '../repositories/d1/payment-finalization';
+import { D1WorkflowOwnerIntentRepository } from '../repositories/d1/workflow-owner-intents';
 import { hashPaymentObject } from '@siteborne/protocol-x402';
 import type { KeyRegistry } from '@siteborne/verification';
 import { X402ServiceResultRepository } from '../repositories/d1/x402-quotes';
@@ -538,6 +539,7 @@ export async function buildProductionPaidContinuationWorkflowDependencies(
     ? new PccResultArtifactStore(new R2ArtifactStoreAdapter(env.ARTIFACTS, 'results/pcc/'))
     : undefined;
   const finalizationPersistence = new D1PaymentFinalizationRepository(env.DB);
+  const ownerIntents = new D1WorkflowOwnerIntentRepository(env.DB);
   const chainReceiptChecker = buildProductionCdpChainReceiptChecker({
     productionRpcUrl: env.BASE_RPC_URL,
     preproductionRpcUrl: env.BASE_SEPOLIA_RPC_URL,
@@ -548,6 +550,10 @@ export async function buildProductionPaidContinuationWorkflowDependencies(
     clock: () => Math.floor(Date.now() / 1000),
     evidenceMode: 'production',
     executor: routeConfig.executor,
+    providerDispatch: {
+      claim: (paymentIdentifier, nowIso) =>
+        ownerIntents.claimProviderDispatch(paymentIdentifier, nowIso),
+    },
     resultArtifacts,
     resultAuthorization:
       routeConfig.serviceId === 'document_evidence_json.v3' ||

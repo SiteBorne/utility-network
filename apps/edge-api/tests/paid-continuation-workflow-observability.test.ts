@@ -21,6 +21,7 @@ import { fileURLToPath } from 'node:url';
 import { runPaidContinuationWorkflow } from '../src/control-plane/workflows/paid-continuation-workflow';
 import { FakeWorkflowStep } from './support/fake-workflow-step';
 import {
+  buildSuccessfulExecutorOutcome,
   buildTestDependencies,
   buildTestMetadata,
   sealTestInput,
@@ -40,7 +41,11 @@ async function runToAmbiguous() {
     seedSettlement: { lifecycleStage: 'settlement_pending', settlementTransactionReference: null },
   });
   const input = await sealTestInput(metadata, { key: deps.envelopeKey });
-  const step = new FakeWorkflowStep();
+  const step = new FakeWorkflowStep(
+    // Engine resume: invoke-executor is replayed from its memo (A3-41 fences a
+    // memo-less re-dispatch at any stage past `verified`).
+    new Map<string, unknown>([['invoke-executor', buildSuccessfulExecutorOutcome()]])
+  );
   const result = await runPaidContinuationWorkflow({ payload: input }, step, deps);
   return { result, deps };
 }
@@ -80,7 +85,11 @@ describe('paid-continuation-workflow — ambiguous-settlement operator escalatio
     // mutates the one existing `payment_identifier` row).
     const secondMetadata = buildTestMetadata();
     const secondInput = await sealTestInput(secondMetadata, { key: first.deps.envelopeKey });
-    const secondStep = new FakeWorkflowStep();
+    const secondStep = new FakeWorkflowStep(
+      // Engine resume: invoke-executor is replayed from its memo (A3-41 fences a
+      // memo-less re-dispatch at any stage past `verified`).
+      new Map<string, unknown>([['invoke-executor', buildSuccessfulExecutorOutcome()]])
+    );
     const second = await runPaidContinuationWorkflow(
       { payload: secondInput },
       secondStep,

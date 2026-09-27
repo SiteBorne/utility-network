@@ -71,6 +71,7 @@ function fakeDeps(): PaidContinuationWorkflowDependencies {
     clock: () => 1_000_000,
     evidenceMode: 'production',
     executor: vi.fn() as never,
+    providerDispatch: {} as never,
     validatePcc: vi.fn() as never,
     settlement: { repository: {} as never, evidenceProvider: {} as never },
     reconciliation: { checker: vi.fn() as never, network: 'eip155:8453' },

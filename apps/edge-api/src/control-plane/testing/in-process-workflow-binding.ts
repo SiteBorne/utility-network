@@ -46,6 +46,7 @@ import {
   type NeverminedPaymentResponse,
 } from '@siteborne/protocol-nevermined';
 import { D1PaymentAttemptRepository } from '../repositories/d1/payment-attempts';
+import { D1WorkflowOwnerIntentRepository } from '../repositories/d1/workflow-owner-intents';
 import { D1JobsRepository, D1StateEventsRepository } from '../repositories/d1/jobs';
 import { X402ServiceResultRepository } from '../repositories/d1/x402-quotes';
 import {
@@ -171,6 +172,13 @@ export function createInProcessWorkflowBinding(
         clock: options.clock ?? (() => Math.floor(Date.now() / 1000)),
         evidenceMode: options.evidenceMode ?? 'fixture',
         executor: recordingExecutor,
+        providerDispatch: {
+          claim: (paymentIdentifier, nowIso) =>
+            new D1WorkflowOwnerIntentRepository(options.db).claimProviderDispatch(
+              paymentIdentifier,
+              nowIso
+            ),
+        },
         validatePcc: (outcome) => ({ valid: true, pcc: outcome.result.verification }),
         settlement: {
           repository: paymentAttempts,

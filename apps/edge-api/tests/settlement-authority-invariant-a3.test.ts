@@ -139,7 +139,8 @@ describe('A3 gap 1: cross-payment settlement isolation (race 12)', () => {
       lifecycleStage: 'settlement_pending',
       settlementTransactionReference: null,
     });
-    deps.settlementRepository.seed(PAYMENT_B, { lifecycleStage: 'executed' });
+    // A fresh payment's real pre-execution stage (commitVerifiedWithIntent).
+    deps.settlementRepository.seed(PAYMENT_B, { lifecycleStage: 'verified' });
     deps.jobPersistence.seed({ id: JOB_A, current_state: 'LOCKED', attempt_number: 1 });
     deps.jobPersistence.seed({ id: JOB_B, current_state: 'LOCKED', attempt_number: 1 });
 
