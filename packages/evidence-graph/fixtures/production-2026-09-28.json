@@ -1,0 +1,310 @@
+{
+  "description": "R3-A4 production provenance evidence captured 2026-09-28T16:07:09Z by read-only GETs (versions/{id}?include=modules, scripts/{name}/deployments) plus clean reproducible wrangler dry-run builds. Operator annotations are carried for audit only.",
+  "captured_at": "2026-09-28T16:07:09Z",
+  "records": [
+    {
+      "schema_version": 1,
+      "environment": "production",
+      "deployment_unit": "siteborne-utility-edge",
+      "captured_at": "2026-09-28T16:07:09Z",
+      "actor": "capture-deployment-provenance.mts@meta4ickal",
+      "record_type": "SourceRecord",
+      "evidence_source": "git:https://github.com/SiteBorne/utility-network.git",
+      "proof": {
+        "binding": "CRYPTOGRAPHICALLY_BOUND",
+        "methods": ["REPRODUCED"]
+      },
+      "parent_ids": [],
+      "source_repository": "https://github.com/SiteBorne/utility-network.git",
+      "source_commit": "19477db8fefcac98102cc3417713e0bd54969b26",
+      "source_ref": "HEAD",
+      "reachable_from_protected_ref": true,
+      "record_id": "ev:f2023497c9fdd2ba20e1a3d5f948143d27b34ecbf0e161ae67baa0cda1f3e2e0"
+    },
+    {
+      "schema_version": 1,
+      "environment": "production",
+      "deployment_unit": "siteborne-utility-edge",
+      "captured_at": "2026-09-28T16:07:09Z",
+      "actor": "capture-deployment-provenance.mts@meta4ickal",
+      "record_type": "BuildRecord",
+      "evidence_source": "local-build:wrangler deploy --dry-run --outdir <outdir> --config wrangler.toml",
+      "proof": {
+        "binding": "CRYPTOGRAPHICALLY_BOUND",
+        "methods": ["REPRODUCED"]
+      },
+      "parent_ids": ["ev:f2023497c9fdd2ba20e1a3d5f948143d27b34ecbf0e161ae67baa0cda1f3e2e0"],
+      "source_commit": "19477db8fefcac98102cc3417713e0bd54969b26",
+      "source_dirty": false,
+      "toolchain": {
+        "node": "v26.10.0",
+        "wrangler": "4.119.0",
+        "package_manager": "pnpm@9.0.0",
+        "lockfile_sha256": "a133c0a4690f7724dc28b64ef0a5a585d52ca471e225f7db32e156e2c54acd81"
+      },
+      "build_command": "wrangler deploy --dry-run --outdir <outdir> --config wrangler.toml",
+      "config_path": "wrangler.toml",
+      "main_module": "index.js",
+      "artifact_sha256": "a7159424ff57e0480688efa975e95c0028c34de0a596c8a3e9378637021ee81f",
+      "module_set_digest": "8486c649ebf754cc2f9c9110a3df82db0843e6c4452c78cd7d300815ac129ba8",
+      "record_id": "ev:a0c94a1050d891058284f5369a5856ef1f57f8cf45b08e0405ce47a76f52b5f3"
+    },
+    {
+      "schema_version": 1,
+      "environment": "production",
+      "deployment_unit": "siteborne-utility-edge",
+      "captured_at": "2026-09-28T16:07:09Z",
+      "actor": "capture-deployment-provenance.mts@meta4ickal",
+      "record_type": "ArtifactRecord",
+      "evidence_source": "sha256(local build output)",
+      "proof": {
+        "binding": "CRYPTOGRAPHICALLY_BOUND",
+        "methods": ["REPRODUCED"]
+      },
+      "parent_ids": ["ev:a0c94a1050d891058284f5369a5856ef1f57f8cf45b08e0405ce47a76f52b5f3"],
+      "main_module": "index.js",
+      "artifact_sha256": "a7159424ff57e0480688efa975e95c0028c34de0a596c8a3e9378637021ee81f",
+      "module_set_digest": "8486c649ebf754cc2f9c9110a3df82db0843e6c4452c78cd7d300815ac129ba8",
+      "modules": [
+        {
+          "name": "index.js",
+          "sha256": "a7159424ff57e0480688efa975e95c0028c34de0a596c8a3e9378637021ee81f",
+          "size": 5526665
+        }
+      ],
+      "record_id": "ev:600da34e78b03b8dc5dc93cb20361a4ad620dee3eca92e0a2edf139dd2fb92c1"
+    },
+    {
+      "schema_version": 1,
+      "environment": "production",
+      "deployment_unit": "siteborne-utility-edge",
+      "captured_at": "2026-09-28T16:07:09Z",
+      "actor": "capture-deployment-provenance.mts@meta4ickal",
+      "record_type": "PlatformVersionRecord",
+      "evidence_source": "GET /accounts/{account}/workers/workers/siteborne-utility-edge/versions/5705e934-3598-4541-a776-b9dc4908e121?include=modules",
+      "proof": {
+        "binding": "PLATFORM_ATTESTED",
+        "methods": ["PLATFORM_API_READ"]
+      },
+      "parent_ids": ["ev:600da34e78b03b8dc5dc93cb20361a4ad620dee3eca92e0a2edf139dd2fb92c1"],
+      "platform": "cloudflare-workers",
+      "platform_version_id": "5705e934-3598-4541-a776-b9dc4908e121",
+      "platform_version_number": 113,
+      "platform_created_on": "2026-09-26T16:02:01.663073Z",
+      "main_module": "index.js",
+      "platform_modules": [
+        {
+          "name": "index.js",
+          "sha256": "a7159424ff57e0480688efa975e95c0028c34de0a596c8a3e9378637021ee81f",
+          "size": 5526665
+        }
+      ],
+      "platform_module_set_digest": "8486c649ebf754cc2f9c9110a3df82db0843e6c4452c78cd7d300815ac129ba8",
+      "operator_annotations": {
+        "message": "R3 A3 artifact reclaim ownership: exact source 19477db8fefcac98102cc3417713e0bd54969b26",
+        "tag": "release-3-a3-artifact-reclaim-ownership-01"
+      },
+      "record_id": "ev:dac1f04fb3c75ea3180308adf11f6f845fb6511eaa3f51d71f4e056a41e64e5f"
+    },
+    {
+      "schema_version": 1,
+      "environment": "production",
+      "deployment_unit": "siteborne-utility-edge",
+      "captured_at": "2026-09-28T16:07:09Z",
+      "actor": "capture-deployment-provenance.mts@meta4ickal",
+      "record_type": "DeploymentRecord",
+      "evidence_source": "GET /accounts/{account}/workers/scripts/siteborne-utility-edge/deployments",
+      "proof": {
+        "binding": "PLATFORM_ATTESTED",
+        "methods": ["PLATFORM_API_READ"]
+      },
+      "parent_ids": ["ev:dac1f04fb3c75ea3180308adf11f6f845fb6511eaa3f51d71f4e056a41e64e5f"],
+      "platform": "cloudflare-workers",
+      "platform_deployment_id": "23507e3d-0790-4142-becb-7a4e8b5fb5ca",
+      "platform_created_on": "2026-09-26T23:01:32.302242Z",
+      "strategy": "percentage",
+      "traffic": [
+        {
+          "version_id": "5705e934-3598-4541-a776-b9dc4908e121",
+          "percentage": 100
+        }
+      ],
+      "operator_annotations": {
+        "message": "R3 A3 artifact reclaim ownership: single-version cutover, exact source 19477db8fefcac98102cc3417713e0bd54969b26"
+      },
+      "record_id": "ev:1e1b9b225e9ac414d43cee6be5aa60d06949f60266182b75ec25d85aa8c6ad4e"
+    },
+    {
+      "schema_version": 1,
+      "environment": "production",
+      "deployment_unit": "siteborne-utility-edge",
+      "captured_at": "2026-09-28T16:07:09Z",
+      "actor": "capture-deployment-provenance.mts@meta4ickal",
+      "record_type": "RuntimeObservationRecord",
+      "evidence_source": "GET /accounts/{account}/workers/scripts/siteborne-utility-edge/deployments (latest by created_on)",
+      "proof": {
+        "binding": "PLATFORM_ATTESTED",
+        "methods": ["PLATFORM_API_READ"]
+      },
+      "parent_ids": ["ev:1e1b9b225e9ac414d43cee6be5aa60d06949f60266182b75ec25d85aa8c6ad4e"],
+      "observation_kind": "PLATFORM_ACTIVE_DEPLOYMENT",
+      "observed_at": "2026-09-28T16:07:09Z",
+      "observed_deployment_id": "23507e3d-0790-4142-becb-7a4e8b5fb5ca",
+      "observed_version_id": "5705e934-3598-4541-a776-b9dc4908e121",
+      "observed_traffic_percentage": 100,
+      "record_id": "ev:2675ae5f70b739304df5a113e98bfe072995c207e03f7222f4e6cf1e52c966c3"
+    },
+    {
+      "schema_version": 1,
+      "environment": "production",
+      "deployment_unit": "siteborne-paid-continuation-runtime",
+      "captured_at": "2026-09-28T16:07:09Z",
+      "actor": "capture-deployment-provenance.mts@meta4ickal",
+      "record_type": "SourceRecord",
+      "evidence_source": "git:https://github.com/SiteBorne/utility-network.git",
+      "proof": {
+        "binding": "CRYPTOGRAPHICALLY_BOUND",
+        "methods": ["REPRODUCED"]
+      },
+      "parent_ids": [],
+      "source_repository": "https://github.com/SiteBorne/utility-network.git",
+      "source_commit": "d939f3b276e631c490ed7a5df47b8065d54ece04",
+      "source_ref": "a3-host-provider-authority-backport",
+      "reachable_from_protected_ref": true,
+      "record_id": "ev:897d6e28763a66db0bdc381978fcda3dec1b4ca7c016b81461602b4f073a688f"
+    },
+    {
+      "schema_version": 1,
+      "environment": "production",
+      "deployment_unit": "siteborne-paid-continuation-runtime",
+      "captured_at": "2026-09-28T16:07:09Z",
+      "actor": "capture-deployment-provenance.mts@meta4ickal",
+      "record_type": "BuildRecord",
+      "evidence_source": "local-build:wrangler deploy --dry-run --outdir <outdir> --config wrangler.paid-continuation-runtime.toml",
+      "proof": {
+        "binding": "CRYPTOGRAPHICALLY_BOUND",
+        "methods": ["REPRODUCED"]
+      },
+      "parent_ids": ["ev:897d6e28763a66db0bdc381978fcda3dec1b4ca7c016b81461602b4f073a688f"],
+      "source_commit": "d939f3b276e631c490ed7a5df47b8065d54ece04",
+      "source_dirty": false,
+      "toolchain": {
+        "node": "v26.10.0",
+        "wrangler": "4.119.0",
+        "package_manager": "pnpm@9.0.0",
+        "lockfile_sha256": "98128e72e712c705104477ee274613b7d303d01e2a3e6643051e2016a8aa699a"
+      },
+      "build_command": "wrangler deploy --dry-run --outdir <outdir> --config wrangler.paid-continuation-runtime.toml",
+      "config_path": "wrangler.paid-continuation-runtime.toml",
+      "main_module": "workflow-host-entrypoint.js",
+      "artifact_sha256": "6562d5f9203b20ba55db9905d624838a54154b046d08a783347f883e4101949d",
+      "module_set_digest": "6d0d6ed72c5b3e3426a215e88ff8be6d9e0a59b2f8bd8dc9e84c63e6b9189c41",
+      "record_id": "ev:7ca9073369990b5928c07eaee1fc6b36c8d43be0c7af753251e92d4a78af5290"
+    },
+    {
+      "schema_version": 1,
+      "environment": "production",
+      "deployment_unit": "siteborne-paid-continuation-runtime",
+      "captured_at": "2026-09-28T16:07:09Z",
+      "actor": "capture-deployment-provenance.mts@meta4ickal",
+      "record_type": "ArtifactRecord",
+      "evidence_source": "sha256(local build output)",
+      "proof": {
+        "binding": "CRYPTOGRAPHICALLY_BOUND",
+        "methods": ["REPRODUCED"]
+      },
+      "parent_ids": ["ev:7ca9073369990b5928c07eaee1fc6b36c8d43be0c7af753251e92d4a78af5290"],
+      "main_module": "workflow-host-entrypoint.js",
+      "artifact_sha256": "6562d5f9203b20ba55db9905d624838a54154b046d08a783347f883e4101949d",
+      "module_set_digest": "6d0d6ed72c5b3e3426a215e88ff8be6d9e0a59b2f8bd8dc9e84c63e6b9189c41",
+      "modules": [
+        {
+          "name": "workflow-host-entrypoint.js",
+          "sha256": "6562d5f9203b20ba55db9905d624838a54154b046d08a783347f883e4101949d",
+          "size": 3243057
+        }
+      ],
+      "record_id": "ev:7f98f9c03188cd9c9c9d9fa606d7ebf76e9f8cacec9d477a0e0dd7b319d66921"
+    },
+    {
+      "schema_version": 1,
+      "environment": "production",
+      "deployment_unit": "siteborne-paid-continuation-runtime",
+      "captured_at": "2026-09-28T16:07:09Z",
+      "actor": "capture-deployment-provenance.mts@meta4ickal",
+      "record_type": "PlatformVersionRecord",
+      "evidence_source": "GET /accounts/{account}/workers/workers/siteborne-paid-continuation-runtime/versions/639db8bc-6458-4bbc-a2ea-93abfb7c12f4?include=modules",
+      "proof": {
+        "binding": "PLATFORM_ATTESTED",
+        "methods": ["PLATFORM_API_READ"]
+      },
+      "parent_ids": ["ev:7f98f9c03188cd9c9c9d9fa606d7ebf76e9f8cacec9d477a0e0dd7b319d66921"],
+      "platform": "cloudflare-workers",
+      "platform_version_id": "639db8bc-6458-4bbc-a2ea-93abfb7c12f4",
+      "platform_version_number": 21,
+      "platform_created_on": "2026-09-27T15:27:44.628588Z",
+      "main_module": "workflow-host-entrypoint.js",
+      "platform_modules": [
+        {
+          "name": "workflow-host-entrypoint.js",
+          "sha256": "6562d5f9203b20ba55db9905d624838a54154b046d08a783347f883e4101949d",
+          "size": 3243057
+        }
+      ],
+      "platform_module_set_digest": "6d0d6ed72c5b3e3426a215e88ff8be6d9e0a59b2f8bd8dc9e84c63e6b9189c41",
+      "operator_annotations": {
+        "message": "A3 provider dispatch authority host candidate. HOST_FIX_COMMIT=d939f3b276e631c490ed7a5df47b8065d54ece04 BACKPORT_BASE=3ed1b1e410ab17478c344befd4bd24cf2009710b A3_REFERENCE_FIX=8ce99ca39d5c20c0dbcc606c16fcbb2938475982",
+        "tag": "release-3-a3-provider-dispatch-authority-01"
+      },
+      "record_id": "ev:ac3beb2c72155aa51204c220d2493332cc786c58492e75c5f1b2f1557fe9e5f1"
+    },
+    {
+      "schema_version": 1,
+      "environment": "production",
+      "deployment_unit": "siteborne-paid-continuation-runtime",
+      "captured_at": "2026-09-28T16:07:09Z",
+      "actor": "capture-deployment-provenance.mts@meta4ickal",
+      "record_type": "DeploymentRecord",
+      "evidence_source": "GET /accounts/{account}/workers/scripts/siteborne-paid-continuation-runtime/deployments",
+      "proof": {
+        "binding": "PLATFORM_ATTESTED",
+        "methods": ["PLATFORM_API_READ"]
+      },
+      "parent_ids": ["ev:ac3beb2c72155aa51204c220d2493332cc786c58492e75c5f1b2f1557fe9e5f1"],
+      "platform": "cloudflare-workers",
+      "platform_deployment_id": "9b08ccc2-886b-4087-ad7f-73b6abf6553c",
+      "platform_created_on": "2026-09-28T14:35:57.262027Z",
+      "strategy": "percentage",
+      "traffic": [
+        {
+          "version_id": "639db8bc-6458-4bbc-a2ea-93abfb7c12f4",
+          "percentage": 100
+        }
+      ],
+      "operator_annotations": {
+        "message": "R3-A3-52D restore canonical A3 runtime after diagnostic-v2 probe; source d939f3b276e631c490ed7a5df47b8065d54ece04"
+      },
+      "record_id": "ev:92bebb84e68c07b9c5f56bc350ad83b381dd17c721783e05e7e47d1d995c742f"
+    },
+    {
+      "schema_version": 1,
+      "environment": "production",
+      "deployment_unit": "siteborne-paid-continuation-runtime",
+      "captured_at": "2026-09-28T16:07:09Z",
+      "actor": "capture-deployment-provenance.mts@meta4ickal",
+      "record_type": "RuntimeObservationRecord",
+      "evidence_source": "GET /accounts/{account}/workers/scripts/siteborne-paid-continuation-runtime/deployments (latest by created_on)",
+      "proof": {
+        "binding": "PLATFORM_ATTESTED",
+        "methods": ["PLATFORM_API_READ"]
+      },
+      "parent_ids": ["ev:92bebb84e68c07b9c5f56bc350ad83b381dd17c721783e05e7e47d1d995c742f"],
+      "observation_kind": "PLATFORM_ACTIVE_DEPLOYMENT",
+      "observed_at": "2026-09-28T16:07:09Z",
+      "observed_deployment_id": "9b08ccc2-886b-4087-ad7f-73b6abf6553c",
+      "observed_version_id": "639db8bc-6458-4bbc-a2ea-93abfb7c12f4",
+      "observed_traffic_percentage": 100,
+      "record_id": "ev:0753a3f7653e1a47c96dcd0705355381c66a4a7ca179945f4723c1796a08af6e"
+    }
+  ]
+}

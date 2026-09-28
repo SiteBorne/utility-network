@@ -37,6 +37,7 @@ export default defineConfig({
       '@siteborne/service-runtime': path.resolve(__dirname, 'packages/service-runtime/src'),
       '@siteborne/pricing': path.resolve(__dirname, 'packages/pricing/src'),
       '@siteborne/vcm': path.resolve(__dirname, 'packages/vcm/src'),
+      '@siteborne/evidence-graph': path.resolve(__dirname, 'packages/evidence-graph/src'),
       '@siteborne/policy': path.resolve(__dirname, 'packages/policy/src'),
       '@siteborne/test-fixtures': path.resolve(__dirname, 'packages/test-fixtures/src'),
       '@siteborne/protocol-x402': path.resolve(__dirname, 'packages/protocol-x402/src'),

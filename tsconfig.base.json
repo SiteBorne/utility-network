@@ -29,6 +29,7 @@
       "@siteborne/protocol-nevermined": ["packages/protocol-nevermined/src"],
       "@siteborne/pricing": ["packages/pricing/src"],
       "@siteborne/vcm": ["packages/vcm/src"],
+      "@siteborne/evidence-graph": ["packages/evidence-graph/src"],
       "@siteborne/policy": ["packages/policy/src"],
       "@siteborne/telemetry": ["packages/telemetry/src"],
       "@siteborne/test-fixtures": ["packages/test-fixtures/src"]

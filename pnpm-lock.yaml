@@ -186,6 +186,12 @@ importers:
         specifier: ^2.5.0
         version: 2.7.0
 
+  packages/evidence-graph:
+    dependencies:
+      '@siteborne/pcc-schema':
+        specifier: workspace:*
+        version: link:../pcc-schema
+
   packages/knowledge-graph: {}
 
   packages/mcp-server:

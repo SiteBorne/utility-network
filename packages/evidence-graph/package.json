@@ -1,0 +1,17 @@
+{
+  "name": "@siteborne/evidence-graph",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Constitutional SITEBORNE Evidence Graph and deployment provenance records (R3-A4). Authority-neutral: evidence informs decisions but never grants execution, result-release, settlement, payment, or secret authority. Not wired into any runtime path yet.",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "test": "vitest run",
+    "lint": "eslint src/",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@siteborne/pcc-schema": "workspace:*"
+  }
+}
