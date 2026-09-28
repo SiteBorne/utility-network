@@ -202,7 +202,9 @@ describe('A3-49 activation probe: effect boundary (holds on old and new runtime)
     const { result, names, fetchCalls } = await runProbeThroughRealEntrypoint();
     expect(result.status).toBe('workflow_internal_error');
     expect(result.job_id).toBe('a3-activation-probe-job-01');
-    expect(names).toEqual(['open-envelope']);
+    // A3-51A: the constant diagnostic step precedes open-envelope on the
+    // diagnostic-v2 runtime (see workflow-activation-diagnostic-a3-51a.test.ts).
+    expect(names).toEqual(['a3-activation-diagnostic', 'open-envelope']);
     expect(fetchCalls).toBe(0);
   });
 

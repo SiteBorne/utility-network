@@ -496,6 +496,20 @@ const ERROR_DETAIL_MAX_LENGTH = 500;
 // still carries only `errorCode(e)`. It carries no authority; nothing reads it back.
 const WORKFLOW_ACTIVATION_DIAGNOSTIC_MARKER = 'a3_workflow_activation_diagnostic_01';
 
+// R3-A3-WORKFLOW-ACTIVATION-OBSERVABILITY-RESOLUTION-51A — the same signal as
+// the marker above, but as a completed step's scalar string output, which the
+// Cloudflare REST step-output endpoint returns directly (a run() object output
+// has no documented REST encoding). The callback is a constant: no env, D1,
+// secret, provider, payment, settlement, or network access. It runs before
+// dependency construction and before open-envelope, so it precedes every
+// effect. Not `sensitive`, so the output is not redacted.
+export const WORKFLOW_ACTIVATION_DIAGNOSTIC_STEP = 'a3-activation-diagnostic';
+export const WORKFLOW_ACTIVATION_DIAGNOSTIC_STEP_MARKER = 'a3_workflow_activation_diagnostic_02';
+const WORKFLOW_ACTIVATION_DIAGNOSTIC_STEP_CONFIG = {
+  retries: { limit: 0, delay: '1 second' },
+  timeout: '5 seconds',
+} as const;
+
 function boundedDetail(detail: string): string {
   return detail.length > ERROR_DETAIL_MAX_LENGTH
     ? `${detail.slice(0, ERROR_DETAIL_MAX_LENGTH)}…(truncated)`
@@ -1404,6 +1418,11 @@ export class PaidContinuationWorkflow extends WorkflowEntrypoint<
     event: PaidContinuationWorkflowEvent,
     step: PaidContinuationWorkflowStep
   ): Promise<WorkflowContinuationResult> {
+    await step.do(
+      WORKFLOW_ACTIVATION_DIAGNOSTIC_STEP,
+      WORKFLOW_ACTIVATION_DIAGNOSTIC_STEP_CONFIG,
+      async () => WORKFLOW_ACTIVATION_DIAGNOSTIC_STEP_MARKER
+    );
     const deps = await buildProductionPaidContinuationWorkflowDependencies(
       this.env,
       event.payload.metadata.service
