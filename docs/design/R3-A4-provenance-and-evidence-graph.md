@@ -155,57 +155,16 @@ The toolchain in each BuildRecord is the _reproduction_ toolchain (node
 v26.10.0, wrangler 4.119.0). The release-time toolchain was not recorded; the
 byte-identical output shows it was equivalent for these bundles.
 
-## 8. Storage design (Phase 9) — design only, NOT applied
+## 8. Storage (Phase 9) — materialized as migration 0015 by R3-A4-55
 
-`EVIDENCE_SCHEMA_CHANGE_REQUIRED=YES` before any production Evidence Graph
-writes. The draft is proposed as `0015_evidence_graph.sql` and is deliberately
-**not** placed in `migrations/`:
-
-```sql
-CREATE TABLE evidence_nodes (
-  node_id      TEXT PRIMARY KEY CHECK (node_id LIKE 'ev:%'),
-  node_type    TEXT NOT NULL,
-  environment  TEXT NOT NULL,
-  subject_key  TEXT NOT NULL,
-  recorded_at  TEXT NOT NULL,
-  binding      TEXT NOT NULL,
-  methods_json TEXT NOT NULL,
-  body_jcs     TEXT NOT NULL,          -- canonical JSON; node_id = sha256(body_jcs)
-  inserted_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
-);
-CREATE INDEX evidence_nodes_subject ON evidence_nodes(node_type, subject_key);
-
-CREATE TABLE evidence_edges (
-  edge_id     TEXT PRIMARY KEY CHECK (edge_id LIKE 'ev:%'),
-  edge_type   TEXT NOT NULL,
-  from_id     TEXT NOT NULL REFERENCES evidence_nodes(node_id),
-  to_id       TEXT NOT NULL REFERENCES evidence_nodes(node_id),
-  recorded_at TEXT NOT NULL,
-  body_jcs    TEXT NOT NULL
-);
-CREATE INDEX evidence_edges_from ON evidence_edges(from_id, edge_type);
-CREATE INDEX evidence_edges_to   ON evidence_edges(to_id, edge_type);
-
--- append-only
-CREATE TRIGGER evidence_nodes_no_update BEFORE UPDATE ON evidence_nodes
-  BEGIN SELECT RAISE(ABORT, 'evidence is append-only'); END;
-CREATE TRIGGER evidence_nodes_no_delete BEFORE DELETE ON evidence_nodes
-  BEGIN SELECT RAISE(ABORT, 'evidence is append-only'); END;
-CREATE TRIGGER evidence_edges_no_update BEFORE UPDATE ON evidence_edges
-  BEGIN SELECT RAISE(ABORT, 'evidence is append-only'); END;
-CREATE TRIGGER evidence_edges_no_delete BEFORE DELETE ON evidence_edges
-  BEGIN SELECT RAISE(ABORT, 'evidence is append-only'); END;
-```
-
-- No column holds a status, permit, or flag that any authority path reads. No
-  foreign keys _into_ control-plane tables; subjects are opaque keys.
-- Rollback model: purely additive. Old runtimes never reference these tables;
-  rollback = stop writing (drop is optional and destroys evidence, so it needs
-  separate authorization).
-- Compatibility: forward and backward compatible with edge 5705e934 and host
-  639db8bc; no existing table changes.
-- Alternative for provenance-only records: an append-only R2 prefix of sealed
-  JSON (content-addressed keys), which needs no migration.
+`migrations/0015_evidence_graph.sql` (not applied to production). Two
+append-only, content-addressed tables, `evidence_nodes` and `evidence_edges`.
+Projected columns are CHECKed against the canonical body (`json_extract`),
+`authority` is pinned to `'NONE'`, UPDATE/DELETE raise, a different body under
+an existing id raises (`evidence_*_conflict` triggers), and edges must reference
+existing nodes (trigger plus foreign key). Identical re-inserts are no-ops via
+`INSERT ... ON CONFLICT(id) DO NOTHING`. Writer/reader: `d1-store.ts`. See
+`docs/reports/R3-A4-55-provenance-evidence-production-qualification.md`.
 
 ## 9. Query contract (Phase 10)
 

@@ -109,7 +109,7 @@ async function migrate(db: D1Database): Promise<void> {
     .filter((name) => name.endsWith('.sql'))
     .sort()) {
     const statements = readFileSync(join(MIGRATIONS_DIR, file), 'utf8')
-      .split(';')
+      .split(/;(?!\s*END\b)/)
       .map((raw) =>
         raw
           .split('\n')

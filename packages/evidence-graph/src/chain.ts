@@ -37,7 +37,13 @@ export type ChainStatus =
   | 'COMPLETE_CRYPTOGRAPHIC'
   | 'COMPLETE_PLATFORM_ATTESTED'
   | 'PARTIAL'
-  | 'UNKNOWN';
+  | 'UNKNOWN'
+  /**
+   * Evidence disagrees with itself or with the expectation (R3-A4-55): e.g.
+   * the platform says version A is deployed while the running code reports
+   * B. Never repaired silently; outranks every other status.
+   */
+  | 'CONFLICT';
 
 export type FindingCode =
   | 'RECORD_ID_MISMATCH'
@@ -54,7 +60,16 @@ export type FindingCode =
   | 'DEPLOYMENT_MISMATCH'
   | 'MISSING_RUNTIME_OBSERVATION'
   | 'STALE_RUNTIME_OBSERVATION'
-  | 'CONFLICTING_EVIDENCE';
+  | 'CONFLICTING_EVIDENCE'
+  /** Running code reported a version no recorded deployment routes traffic to. */
+  | 'RUNTIME_SELF_REPORT_CONFLICT';
+
+/** Findings that make the whole chain CONFLICT rather than PARTIAL. */
+export const CONFLICT_FINDINGS: readonly FindingCode[] = [
+  'CONFLICTING_EVIDENCE',
+  'PLATFORM_VERSION_MISMATCH',
+  'RUNTIME_SELF_REPORT_CONFLICT',
+];
 
 export interface Finding {
   readonly code: FindingCode;
@@ -179,6 +194,19 @@ export async function evaluateProvenanceChain(
     }
   }
 
+  if (
+    observation &&
+    observation.observation_kind === 'RUNTIME_SELF_REPORT' &&
+    observation.reported_deployment_unit !== observation.deployment_unit
+  ) {
+    add(
+      'RUNTIME_SELF_REPORT_CONFLICT',
+      `queried ${observation.deployment_unit}, running code reports ${String(observation.reported_deployment_unit)}`,
+      [observation.record_id]
+    );
+    observation = null;
+  }
+
   const runningVersion = observation?.observed_version_id ?? null;
   if (observation && expect.platform_version_id && runningVersion !== expect.platform_version_id) {
     add(
@@ -196,7 +224,17 @@ export async function evaluateProvenanceChain(
       ? deployments.filter((d) => d.platform_deployment_id === observation!.observed_deployment_id)
       : deployments.filter((d) => d.traffic.some((t) => t.version_id === runningVersion));
     const distinct = new Set(candidates.map((d) => d.platform_deployment_id));
-    if (candidates.length === 0) {
+    if (
+      candidates.length === 0 &&
+      observation.observation_kind === 'RUNTIME_SELF_REPORT' &&
+      deployments.length > 0
+    ) {
+      add(
+        'RUNTIME_SELF_REPORT_CONFLICT',
+        `running code reports ${runningVersion}; no recorded deployment routes traffic to it`,
+        [observation.record_id, ...deployments.map((d) => d.record_id)]
+      );
+    } else if (candidates.length === 0) {
       add('MISSING_DEPLOYMENT', 'no deployment record matches the runtime observation', [
         observation.record_id,
       ]);
@@ -364,6 +402,7 @@ export async function evaluateProvenanceChain(
 
 function classify(links: Record<ChainLink, LinkResult>, findings: readonly Finding[]): ChainStatus {
   const bindings = CHAIN_LINKS.map((l) => links[l].binding);
+  if (findings.some((f) => CONFLICT_FINDINGS.includes(f.code))) return 'CONFLICT';
   if (bindings.every((b) => b === 'UNKNOWN')) return 'UNKNOWN';
   if (findings.length > 0 || bindings.includes('UNKNOWN')) return 'PARTIAL';
   const weakest = weakestBinding(bindings);

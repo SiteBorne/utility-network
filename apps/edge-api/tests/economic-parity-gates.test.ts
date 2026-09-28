@@ -88,7 +88,7 @@ function migrate(db: D1Database) {
     .reduce(async (prev, file) => {
       await prev;
       const stmts = readFileSync(join(dir, file), 'utf-8')
-        .split(';')
+        .split(/;(?!\s*END\b)/)
         .map((r) =>
           r
             .split('\n')

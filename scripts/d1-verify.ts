@@ -17,7 +17,7 @@ async function runMigrations(db: any) {
     console.log(`Applying migration: ${file}`);
     try {
       // Split by semicolon and execute each statement, removing comment lines
-      const rawStatements = sql.split(';');
+      const rawStatements = sql.split(/;(?!\s*END\b)/);
       const statements: string[] = [];
 
       for (const raw of rawStatements) {

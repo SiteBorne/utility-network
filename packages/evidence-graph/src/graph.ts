@@ -103,6 +103,16 @@ export class EvidenceGraph {
     this.edges.set(edge.edge_id, edge);
   }
 
+  /** Every node, in insertion order (for persistence). */
+  allNodes(): EvidenceNode[] {
+    return [...this.nodes.values()];
+  }
+
+  /** Every edge, in insertion order (for persistence). */
+  allEdges(): EvidenceEdge[] {
+    return [...this.edges.values()];
+  }
+
   node(id: string): EvidenceNode | undefined {
     return this.nodes.get(id);
   }

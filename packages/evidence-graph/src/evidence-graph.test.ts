@@ -214,7 +214,8 @@ describe('provenance-chain completeness', () => {
       { ...EXPECT, platform_version_id: V2 },
       T_OPTS
     );
-    expect(r.status).toBe('PARTIAL');
+    // R3-A4-55: evidence contradicting the expectation is CONFLICT, not PARTIAL.
+    expect(r.status).toBe('CONFLICT');
     expect(r.findings.map((f) => f.code)).toContain('PLATFORM_VERSION_MISMATCH');
   });
 
@@ -276,7 +277,7 @@ describe('provenance-chain completeness', () => {
     } as never);
     const r = await evaluateProvenanceChain([...recs, other], EXPECT, T_OPTS);
     expect(r.findings.map((f) => f.code)).toContain('CONFLICTING_EVIDENCE');
-    expect(r.status).not.toMatch(/^COMPLETE/);
+    expect(r.status).toBe('CONFLICT');
   });
 
   it('one commit built to two digests -> CONFLICTING_EVIDENCE (non-reproducible)', async () => {
@@ -285,7 +286,7 @@ describe('provenance-chain completeness', () => {
     const rebuilt = await reseal(build, { artifact_sha256: B, module_set_digest: B } as never);
     const r = await evaluateProvenanceChain([...recs, rebuilt], EXPECT, T_OPTS);
     expect(r.findings.map((f) => f.code)).toContain('CONFLICTING_EVIDENCE');
-    expect(r.status).toBe('PARTIAL');
+    expect(r.status).toBe('CONFLICT');
   });
 
   it('dirty-tree build cannot bind source to artifact', async () => {

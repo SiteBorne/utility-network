@@ -158,7 +158,7 @@ export async function runMigrationsFromDir(db: D1Database, dir: string): Promise
   for (const file of files) {
     const sql = readFileSync(join(dir, file), 'utf-8');
     const statements = sql
-      .split(';')
+      .split(/;(?!\s*END\b)/)
       .map((raw) =>
         raw
           .split('\n')

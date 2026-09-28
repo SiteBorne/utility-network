@@ -68,7 +68,7 @@ describe('operator command entrypoint', () => {
 
 function migrationStatements(file: string): string[] {
   return readFileSync(resolve(MIGRATIONS, file), 'utf8')
-    .split(';')
+    .split(/;(?!\s*END\b)/)
     .map((raw) =>
       raw
         .split('\n')

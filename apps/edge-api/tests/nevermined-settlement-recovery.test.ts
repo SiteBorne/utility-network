@@ -349,7 +349,7 @@ async function runMigrations(db: D1Database): Promise<void> {
   for (const file of files) {
     const sql = readFileSync(join(migrationsDir, file), 'utf-8');
     const statements = sql
-      .split(';')
+      .split(/;(?!\s*END\b)/)
       .map((raw) =>
         raw
           .split('\n')

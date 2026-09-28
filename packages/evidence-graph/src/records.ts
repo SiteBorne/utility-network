@@ -13,6 +13,7 @@
  */
 import { GIT_SHA_RE, SHA256_HEX_RE, hashCanonical } from './canonical';
 import { BINDING_LEVELS, PROOF_METHODS, type ProofLevel } from './proof';
+import { TOOLCHAIN_PROVENANCE, type ToolchainProvenance } from './toolchain';
 
 export const PROVENANCE_RECORD_SCHEMA_VERSION = 1 as const;
 
@@ -83,6 +84,11 @@ export interface BuildRecord extends RecordBase<'BuildRecord'> {
   readonly main_module: string;
   readonly artifact_sha256: string;
   readonly module_set_digest: string;
+  /**
+   * R3-A4-55: whether `toolchain` is what produced the release or a later
+   * rebuild. Absent on records captured before this field existed.
+   */
+  readonly toolchain_provenance?: ToolchainProvenance;
 }
 
 export interface ArtifactRecord extends RecordBase<'ArtifactRecord'> {
@@ -132,6 +138,21 @@ export interface RuntimeObservationRecord extends RecordBase<'RuntimeObservation
   readonly observed_deployment_id: string | null;
   readonly observed_version_id: string;
   readonly observed_traffic_percentage: number | null;
+  /**
+   * RUNTIME_SELF_REPORT only (R3-A4-55). Where the running code reported
+   * itself (e.g. `GET /health#runtime`, a Workers Logs event name). Absent on
+   * platform-read observations, so their record ids are unchanged.
+   */
+  readonly observation_surface?: string;
+  /** RUNTIME_SELF_REPORT only: deployment unit the running code named. */
+  readonly reported_deployment_unit?: string;
+  /** RUNTIME_SELF_REPORT only: CF_VERSION_METADATA.timestamp as reported. */
+  readonly observed_version_timestamp?: string | null;
+  /**
+   * RUNTIME_SELF_REPORT only: CF_VERSION_METADATA.tag. Operator-chosen text,
+   * audit only, never read when classifying a link.
+   */
+  readonly operator_annotations?: OperatorAnnotations;
 }
 
 export type ProvenanceRecord =
@@ -227,6 +248,11 @@ export function validateRecord(r: ProvenanceRecord): string[] {
       hex(r.module_set_digest, 'module_set_digest');
       if (!r.toolchain?.node || !r.toolchain?.wrangler) e.push('toolchain');
       if (!r.build_command) e.push('build_command');
+      if (
+        r.toolchain_provenance !== undefined &&
+        !(TOOLCHAIN_PROVENANCE as readonly string[]).includes(r.toolchain_provenance)
+      )
+        e.push('toolchain_provenance');
       break;
     case 'ArtifactRecord':
       hex(r.artifact_sha256, 'artifact_sha256');
@@ -250,6 +276,11 @@ export function validateRecord(r: ProvenanceRecord): string[] {
     case 'RuntimeObservationRecord':
       if (!ISO_RE.test(r.observed_at)) e.push('observed_at');
       if (!UUID_RE.test(r.observed_version_id)) e.push('observed_version_id');
+      if (r.observation_kind === 'RUNTIME_SELF_REPORT') {
+        if (!r.observation_surface) e.push('observation_surface');
+        if (!r.reported_deployment_unit) e.push('reported_deployment_unit');
+        if (r.observed_deployment_id !== null) e.push('observed_deployment_id');
+      }
       break;
   }
   return e;

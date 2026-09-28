@@ -58,7 +58,7 @@ function runMigrations(db: D1Database): Promise<void> {
     await prev;
     const sql = readFileSync(join(MIGRATIONS_DIR, file), 'utf-8');
     for (const stmt of sql
-      .split(';')
+      .split(/;(?!\s*END\b)/)
       .map((raw) =>
         raw
           .split('\n')

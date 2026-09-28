@@ -124,3 +124,90 @@ export function importsControlPlane(sourceText: string): boolean {
       s === 'cloudflare:workers'
   );
 }
+
+// ---------------------------------------------------------------------------
+// R3-A4-55: runtime observation and release capture boundaries.
+//
+//  F6. The platform version-metadata binding (CF_VERSION_METADATA) is read
+//      only by the runtime observation module, the Env type and the health
+//      route. No authority module reads it, so a version id can never gate
+//      provider dispatch, result release, settlement or payment.
+//  F7. Authority modules may reach the observation module only through the
+//      void, non-throwing emitter (`emitRuntimeVersionEvent`); never through
+//      a function that returns the report.
+//  F8. The runtime observation module imports nothing.
+//  F9. Release capture tooling issues no mutating HTTP method and imports no
+//      control-plane, payment or runtime code, so it cannot mint payment,
+//      result or settlement authority.
+// ---------------------------------------------------------------------------
+
+export const RUNTIME_OBSERVATION_MODULE = 'apps/edge-api/src/runtime-observation.ts';
+
+export const VERSION_METADATA_READERS = [
+  RUNTIME_OBSERVATION_MODULE,
+  'apps/edge-api/src/control-plane/config/env.ts',
+  'apps/edge-api/src/routes/health.ts',
+] as const;
+
+export interface BoundaryViolation {
+  readonly rule: 'F6' | 'F7' | 'F8' | 'F9';
+  readonly file: string;
+  readonly detail: string;
+}
+
+/** F6-F8 over a set of runtime source files (path relative to repo root -> text). */
+export function checkRuntimeObservationBoundary(
+  files: ReadonlyMap<string, string>
+): BoundaryViolation[] {
+  const out: BoundaryViolation[] = [];
+  for (const [file, text] of files) {
+    if (
+      text.includes('CF_VERSION_METADATA') &&
+      !(VERSION_METADATA_READERS as readonly string[]).includes(file)
+    ) {
+      out.push({
+        rule: 'F6',
+        file,
+        detail: 'reads CF_VERSION_METADATA outside the observation surface',
+      });
+    }
+    if ((AUTHORITY_MODULES as readonly string[]).includes(file)) {
+      const observes = importSpecifiers(text).some((s) => /(^|\/)runtime-observation$/.test(s));
+      const returningUse = /\b(runtimeVersionReport|RuntimeVersionReport)\b/.test(text);
+      if (observes && returningUse) {
+        out.push({ rule: 'F7', file, detail: 'authority module uses the returning report API' });
+      }
+    }
+    if (file === RUNTIME_OBSERVATION_MODULE && importSpecifiers(text).length > 0) {
+      out.push({ rule: 'F8', file, detail: 'observation module must import nothing' });
+    }
+  }
+  return out;
+}
+
+const MUTATING_HTTP_RE = /method\s*:\s*['"`](POST|PUT|PATCH|DELETE)['"`]/i;
+/** Wrangler subcommands that mutate Cloudflare state when passed as argv tokens. */
+const MUTATING_WRANGLER_TOKENS_RE =
+  /['"`](versions|secret|triggers|execute|migrations|rollback|delete|put)['"`]/;
+/** A `deploy` argv token is allowed only inside an argv array that also says --dry-run. */
+function hasNonDryRunDeploy(text: string): boolean {
+  for (const m of text.matchAll(/\[[^\]]*['"`]deploy['"`][^\]]*\]/g)) {
+    if (!m[0].includes("'--dry-run'") && !m[0].includes('"--dry-run"')) return true;
+  }
+  return false;
+}
+
+/** F9 over release capture tooling source. */
+export function checkReleaseCaptureBoundary(file: string, text: string): BoundaryViolation[] {
+  const out: BoundaryViolation[] = [];
+  if (MUTATING_HTTP_RE.test(text)) {
+    out.push({ rule: 'F9', file, detail: 'issues a mutating HTTP method' });
+  }
+  if (MUTATING_WRANGLER_TOKENS_RE.test(text) || hasNonDryRunDeploy(text)) {
+    out.push({ rule: 'F9', file, detail: 'invokes a mutating wrangler command' });
+  }
+  if (importsControlPlane(text)) {
+    out.push({ rule: 'F9', file, detail: 'imports control-plane/payment/runtime code' });
+  }
+  return out;
+}
