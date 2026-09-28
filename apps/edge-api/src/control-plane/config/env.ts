@@ -4,6 +4,7 @@ import type {
   Workflow,
 } from '@cloudflare/workers-types';
 import type { WorkflowContinuationInput } from '../continuation/types';
+import type { VersionMetadataBinding } from '../../runtime-observation';
 
 export interface Env {
   DB: CloudflareD1Database;
@@ -14,6 +15,10 @@ export interface Env {
   AI: Ai;
   BROWSER: BrowserBinding;
   ENVIRONMENT: string;
+  /** R3-A4-55: platform-injected executing Worker version (`[version_metadata]`
+   * in `wrangler.toml`). Observation only -- reported by `GET /health`, never
+   * read by any authority path. Optional so tests/older configs omit it. */
+  CF_VERSION_METADATA?: VersionMetadataBinding;
   LOG_LEVEL: string;
   PCC_VERSION: string;
   SELLER_WALLET_ADDRESS: string;

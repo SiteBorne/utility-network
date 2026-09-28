@@ -26,11 +26,22 @@ export const PromotionStateSchema = z.enum([
 ]);
 export type PromotionState = z.infer<typeof PromotionStateSchema>;
 
+/** R3-A4-55: executing Worker version as reported by the platform binding. */
+export const RuntimeVersionReportSchema = z
+  .object({
+    deployment_unit: z.string().min(1),
+    platform_version_id: z.string().uuid(),
+    platform_version_tag: z.string().nullable(),
+    platform_version_timestamp: z.string().nullable(),
+  })
+  .strict();
+
 export const HealthResponseSchema = z.object({
   status: z.literal('ok'),
   timestamp: ISO8601DateSchema,
   version: z.string(),
   uptime_seconds: z.number().nonnegative(),
+  runtime: RuntimeVersionReportSchema.optional(),
 });
 export type HealthResponse = z.infer<typeof HealthResponseSchema>;
 

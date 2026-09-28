@@ -28,7 +28,10 @@ import {
   type EconomicOfferProjection,
   type SiteborneServiceId,
 } from '@siteborne/protocol-x402';
-import { getGovernedMetadata, type ServiceId as GovernedServiceId } from '@siteborne/service-runtime';
+import {
+  getGovernedMetadata,
+  type ServiceId as GovernedServiceId,
+} from '@siteborne/service-runtime';
 
 interface DiscoveryServiceLike {
   service_id: string;
@@ -693,6 +696,24 @@ openapiRoute.get('/openapi.json', async (c) => {
             timestamp: { type: 'string', format: 'date-time' },
             version: { type: 'string' },
             uptime_seconds: { type: 'integer', minimum: 0 },
+            runtime: {
+              type: 'object',
+              description:
+                'Executing Worker version, from the platform version-metadata binding. Provenance evidence only.',
+              properties: {
+                deployment_unit: { type: 'string' },
+                platform_version_id: { type: 'string', format: 'uuid' },
+                platform_version_tag: { type: ['string', 'null'] },
+                platform_version_timestamp: { type: ['string', 'null'] },
+              },
+              required: [
+                'deployment_unit',
+                'platform_version_id',
+                'platform_version_tag',
+                'platform_version_timestamp',
+              ],
+              additionalProperties: false,
+            },
           },
           required: ['status', 'timestamp', 'version', 'uptime_seconds'],
         },
