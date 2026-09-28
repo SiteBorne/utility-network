@@ -75,6 +75,7 @@ import type { ServiceExecutor, ExecutorOutcome } from '../routes/x402-service';
 import type { D1PaymentAttemptRepository } from '../repositories/d1/payment-attempts';
 import type { Env } from '../config/env';
 import { buildProductionPaidContinuationWorkflowDependencies } from './production-dependencies';
+import { emitRuntimeVersionEvent } from '../../runtime-observation';
 
 // ---------------------------------------------------------------------
 // SUN-1221E6R-H2BF4 — minimum-privilege host env type.
@@ -1393,6 +1394,10 @@ export class PaidContinuationWorkflow extends WorkflowEntrypoint<
     event: PaidContinuationWorkflowEvent,
     step: PaidContinuationWorkflowStep
   ): Promise<WorkflowContinuationResult> {
+    // R3-A4-55: observation only. Logs the executing Worker version (the
+    // platform version-metadata binding) to Workers Logs. Returns nothing,
+    // never throws, adds no step, and changes no ordering, retry or authority.
+    emitRuntimeVersionEvent(this.env, 'siteborne-paid-continuation-runtime');
     const deps = await buildProductionPaidContinuationWorkflowDependencies(
       this.env,
       event.payload.metadata.service

@@ -149,5 +149,14 @@ name = "siteborne-paid-continuation"
 binding = "PAID_CONTINUATION_WORKFLOW"
 class_name = "PaidContinuationWorkflow"
 
+# R3-A4-55: platform-injected version metadata (id, tag, timestamp) of the
+# Worker version actually executing. Read only by
+# `apps/edge-api/src/runtime-observation.ts`, which logs it once per
+# Workflow run() as the `siteborne.runtime_version` Workers Logs event.
+# Provenance evidence only: never read by provider dispatch, settlement,
+# result release or payment code.
+[version_metadata]
+binding = "CF_VERSION_METADATA"
+
 [observability]
 enabled = true
