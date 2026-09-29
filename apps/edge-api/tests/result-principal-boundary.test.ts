@@ -31,8 +31,9 @@ describe('shared REST/MCP/A2A verified-principal boundary', () => {
           certPresented: '1',
           certRevoked: '0',
           certVerified: 'SUCCESS',
-          certFingerprintSHA256: 'AA:BB',
+          certFingerprintSHA256: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
           certIssuerDN: 'CN=SITEBORNE Test CA',
+          certIssuerSKI: 'DD5C89ACBD3C82530BE5B31AF77C52E5C281B6D4',
         },
       },
     });
@@ -40,8 +41,8 @@ describe('shared REST/MCP/A2A verified-principal boundary', () => {
       oidcIssuers: [],
       mtlsRegistry: [
         {
-          issuer_dn: 'CN=SITEBORNE Test CA',
-          certificate_sha256: 'aabb',
+          issuer_ski: 'DD5C89ACBD3C82530BE5B31AF77C52E5C281B6D4',
+          certificate_sha256: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
           issuer: 'siteborne:mtls:workloads',
           subject_id: 'agent-1',
           subject_type: 'agent',

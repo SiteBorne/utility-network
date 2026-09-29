@@ -32,6 +32,11 @@ export type MtlsCallerState = 'not_presented' | 'valid' | 'invalid' | 'revoked' 
  * certificate/key material is never captured here or anywhere downstream. */
 export interface MtlsCallerIdentity {
   readonly fingerprintSha256: string;
+  /** Subject Key Identifier of the certificate's direct issuer, exactly as
+   * reported by Cloudflare (`certIssuerSKI`). This -- not the DN -- is the
+   * CA binding used for authorization; see `normalizeIssuerSki`. */
+  readonly issuerSKI: string;
+  /** Informational/audit only. Formatting-sensitive; never an authority. */
   readonly issuerDN: string;
 }
 
@@ -67,6 +72,7 @@ export function deriveMtlsCallerContext(tlsClientAuth: TlsClientAuth): MtlsCalle
       state: 'valid',
       identity: {
         fingerprintSha256: tlsClientAuth.certFingerprintSHA256,
+        issuerSKI: tlsClientAuth.certIssuerSKI,
         issuerDN: tlsClientAuth.certIssuerDN,
       },
     };

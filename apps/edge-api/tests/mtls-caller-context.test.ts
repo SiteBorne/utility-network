@@ -95,6 +95,7 @@ describe('deriveMtlsCallerContext', () => {
     expect(context.identity).toEqual({
       fingerprintSha256:
         'acf77cf37b4156a2708e34c4eb755f9b5dbbe5ebb55adfec8f11493438d19e6ad3f157f81fa3b98278453d5652b0c1fd1d71e5695ae4d709803a4d3f39de9dea',
+      issuerSKI: 'AA:AF:7E:02:3D:FA:A6:F1:3C:84:8E:AD:EE:38:98:EC:D9:32:32:D4',
       issuerDN: 'CN=SITEBORNE Trusted CA, O=SITEBORNE',
     });
   });
@@ -154,7 +155,7 @@ describe('deriveMtlsCallerContext', () => {
 describe('evaluateMtlsAuthorization', () => {
   const valid: MtlsCallerContext = {
     state: 'valid',
-    identity: { fingerprintSha256: 'abc', issuerDN: 'CN=Test' },
+    identity: { fingerprintSha256: 'abc', issuerSKI: 'DD5C89ACBD3C82530BE5B31AF77C52E5C281B6D4', issuerDN: 'CN=Test' },
   };
   const notPresented: MtlsCallerContext = { state: 'not_presented', identity: null };
   const invalid: MtlsCallerContext = { state: 'invalid', identity: null };

@@ -1,5 +1,9 @@
 import { deriveMtlsCallerContext } from './mtls-caller-context';
-import { mapVerifiedMtlsPrincipal, type MtlsPrincipalRegistryRecord } from './mtls-principal';
+import {
+  mapVerifiedMtlsPrincipal,
+  validateMtlsPrincipalRegistry,
+  type MtlsPrincipalRegistryRecord,
+} from './mtls-principal';
 import { createOidcPrincipalVerifier, type OidcIssuerConfiguration } from './oidc-principal';
 import type { SubjectReferenceKey, VerifiedPrincipalEvidence } from './result-authorization';
 
@@ -85,9 +89,8 @@ export function buildResultAuthorizationRuntime(
       environment.RESULT_AUTH_OIDC_ISSUERS_JSON,
       'result_auth_oidc_issuers'
     ),
-    mtlsRegistry: parseArray<MtlsPrincipalRegistryRecord>(
-      environment.RESULT_AUTH_MTLS_REGISTRY_JSON,
-      'result_auth_mtls_registry'
+    mtlsRegistry: validateMtlsPrincipalRegistry(
+      parseArray<unknown>(environment.RESULT_AUTH_MTLS_REGISTRY_JSON, 'result_auth_mtls_registry')
     ),
   };
   return {

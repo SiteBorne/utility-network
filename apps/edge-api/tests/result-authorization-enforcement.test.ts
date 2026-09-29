@@ -254,12 +254,16 @@ describe('verified mTLS principal registry boundary', () => {
     const mapped = mapVerifiedMtlsPrincipal(
       {
         state: 'valid',
-        identity: { fingerprintSha256: 'AA:BB', issuerDN: 'CN=SITEBORNE Test CA' },
+        identity: {
+          fingerprintSha256: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+          issuerSKI: 'DD5C89ACBD3C82530BE5B31AF77C52E5C281B6D4',
+          issuerDN: 'CN=SITEBORNE Test CA',
+        },
       },
       [
         {
-          issuer_dn: 'CN=SITEBORNE Test CA',
-          certificate_sha256: 'aabb',
+          issuer_ski: 'DD5C89ACBD3C82530BE5B31AF77C52E5C281B6D4',
+          certificate_sha256: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
           issuer: 'siteborne:mtls:workloads',
           subject_id: 'workload-1',
           subject_type: 'workload',
@@ -274,7 +278,11 @@ describe('verified mTLS principal registry boundary', () => {
       mapVerifiedMtlsPrincipal(
         {
           state: 'valid',
-          identity: { fingerprintSha256: 'CC:DD', issuerDN: 'CN=SITEBORNE Test CA' },
+          identity: {
+            fingerprintSha256: 'CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC',
+            issuerSKI: 'DD5C89ACBD3C82530BE5B31AF77C52E5C281B6D4',
+            issuerDN: 'CN=SITEBORNE Test CA',
+          },
         },
         [],
         NOW
