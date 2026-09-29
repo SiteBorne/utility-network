@@ -936,6 +936,30 @@ export async function runPaidContinuationWorkflow(
     return terminal('workflow_internal_error', jobId, { error_code: errorCode(e) });
   }
 
+  // R3-57A: EDGE/HOST environment coherence. The envelope's network is what
+  // the EDGE quoted under ITS payment environment; `deps.reconciliation.network`
+  // is what THIS host resolved under its own gates. If they differ (or the
+  // sealed settlement context disagrees with the AAD-bound metadata), refuse
+  // before any state advance, provider dispatch or settlement. Fail closed;
+  // the mismatching values are never echoed.
+  const hostNetwork: string = deps.reconciliation.network;
+  if (
+    metadata.network !== hostNetwork ||
+    decrypted.settlementContext.network !== hostNetwork ||
+    decrypted.settlementContext.network !== metadata.network
+  ) {
+    await transitionJobState(
+      jobId,
+      'REJECTED',
+      'VALIDATION_FAILED',
+      deps.persistence.job,
+      boundedDetail('environment_network_mismatch')
+    );
+    return terminal('workflow_internal_error', jobId, {
+      error_code: 'environment_network_mismatch',
+    });
+  }
+
   // STEP 1 — check-authorization-expiry. `validBefore === now` is treated
   // as EXPIRED (fail-closed), never valid.
   const expiryCheck = await step.do(
