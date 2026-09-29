@@ -92,7 +92,7 @@ export const RAVI_P_FIELD_AVAILABILITY: Readonly<Record<string, RaviPAvailabilit
   assurance_result: 'DERIVABLE',
   pcc_available: 'DERIVABLE',
   economic_cost_atomic: 'DERIVABLE', // price charged: payment_attempts.amount / settlement evidence
-  normalized_cogs: 'PLANNED', // migration 0016 ledger (local), provider cost not exposed by any executor
+  normalized_cogs: 'PLANNED', // migration 0016 ledger (no runtime writer), provider cost not exposed by any executor
   cash_cogs: 'PLANNED',
   credit_benefit: 'PLANNED', // only derivable once both operands are observed
   settlement_outcome: 'DERIVABLE',
