@@ -2,7 +2,7 @@
 -- Append-only economic observation ledger. LOCAL ONLY until separately
 -- authorized for production.
 --
--- Additive only: one new table, one index, five triggers. No existing table,
+-- Additive only: one new table, one index, three triggers. No existing table,
 -- column, index or trigger is touched. No runtime reads or writes it yet.
 --
 -- Unknown stays unknown: every amount column is nullable and NULL means "not
@@ -39,6 +39,8 @@ CREATE TABLE IF NOT EXISTS economic_observations (
   normalized_cogs_atomic TEXT CHECK (normalized_cogs_atomic IS NULL OR normalized_cogs_atomic GLOB '[0-9]*' AND normalized_cogs_atomic NOT GLOB '*[^0-9]*'),
   cash_cogs_atomic TEXT CHECK (cash_cogs_atomic IS NULL OR cash_cogs_atomic GLOB '[0-9]*' AND cash_cogs_atomic NOT GLOB '*[^0-9]*'),
   credit_benefit_atomic TEXT CHECK (credit_benefit_atomic IS NULL OR credit_benefit_atomic GLOB '[0-9]*' AND credit_benefit_atomic NOT GLOB '*[^0-9]*'),
+  observation_kind TEXT NOT NULL CHECK (observation_kind IN ('PRE_EXECUTION_BOUND', 'POST_EXECUTION_ACTUAL', 'REVENUE', 'ESTIMATE', 'UNKNOWN')),
+  bound_atomic TEXT CHECK (bound_atomic IS NULL OR bound_atomic GLOB '[0-9]*' AND bound_atomic NOT GLOB '*[^0-9]*'),
   observed_at TEXT NOT NULL,
   authority TEXT NOT NULL CHECK (authority = 'NONE'),
   body_jcs TEXT NOT NULL CHECK (
@@ -48,9 +50,18 @@ CREATE TABLE IF NOT EXISTS economic_observations (
     AND json_extract(body_jcs, '$.currency') = currency
     AND json_extract(body_jcs, '$.observed_at') = observed_at
     AND json_extract(body_jcs, '$.authority') = 'NONE'
+    AND json_extract(body_jcs, '$.observation_kind') = observation_kind
     AND json_extract(body_jcs, '$.observation_id') IS NULL
   ),
   inserted_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  -- Kind gates columns: an estimate or unknown never fills an observed-cost column,
+  -- a bound is never an actual, and revenue is only revenue.
+  CHECK (
+    (observation_kind = 'PRE_EXECUTION_BOUND' AND revenue_atomic IS NULL AND normalized_cogs_atomic IS NULL AND cash_cogs_atomic IS NULL AND credit_benefit_atomic IS NULL)
+    OR (observation_kind = 'POST_EXECUTION_ACTUAL' AND bound_atomic IS NULL AND revenue_atomic IS NULL)
+    OR (observation_kind = 'REVENUE' AND bound_atomic IS NULL AND normalized_cogs_atomic IS NULL AND cash_cogs_atomic IS NULL AND credit_benefit_atomic IS NULL)
+    OR (observation_kind IN ('ESTIMATE', 'UNKNOWN') AND bound_atomic IS NULL AND revenue_atomic IS NULL AND normalized_cogs_atomic IS NULL AND cash_cogs_atomic IS NULL AND credit_benefit_atomic IS NULL)
+  ),
   CHECK (
     credit_benefit_atomic IS NULL
     OR (normalized_cogs_atomic IS NOT NULL AND cash_cogs_atomic IS NOT NULL

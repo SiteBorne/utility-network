@@ -32,7 +32,21 @@ export const ECONOMIC_FIELDS = [
 ] as const;
 export type EconomicField = (typeof ECONOMIC_FIELDS)[number];
 
+export const OBSERVATION_KINDS = [
+  'PRE_EXECUTION_BOUND',
+  'POST_EXECUTION_ACTUAL',
+  'REVENUE',
+  'ESTIMATE',
+  'UNKNOWN',
+] as const;
+export type ObservationKind = (typeof OBSERVATION_KINDS)[number];
+
 export interface EconomicObservationInput {
+  readonly kind: ObservationKind;
+  /** Pre-execution provider-cost bound (PRE_EXECUTION_BOUND only). */
+  readonly bound?: EconomicQuantity;
+  /** Free-form estimate label; an ESTIMATE never carries an amount column. */
+  readonly estimate_note?: string;
   readonly payment_identifier: string;
   readonly service_id?: string;
   readonly provider_id?: string;
@@ -99,13 +113,36 @@ export async function buildEconomicObservation(
   NONEMPTY(input.execution_id, 'execution_id');
   NONEMPTY(input.platform_version_id, 'platform_version_id');
 
+  if (!OBSERVATION_KINDS.includes(input.kind)) throw new Error('economic: unknown observation kind');
+  const k = input.kind;
+  const has = (q?: EconomicQuantity): boolean => !!q && q.value !== null;
+  const only = (allowed: readonly string[]): void => {
+    const present: Record<string, boolean> = {
+      bound: has(input.bound),
+      revenue: has(input.revenue),
+      normalized_cogs: has(input.normalized_cogs),
+      cash_cogs: has(input.cash_cogs),
+    };
+    for (const [f, on] of Object.entries(present)) {
+      if (on && !allowed.includes(f)) throw new Error(`economic: ${f} is not allowed on a ${k} observation`);
+    }
+  };
+  if (k === 'PRE_EXECUTION_BOUND') only(['bound']);
+  else if (k === 'POST_EXECUTION_ACTUAL') only(['normalized_cogs', 'cash_cogs']);
+  else if (k === 'REVENUE') only(['revenue']);
+  else only([]);
+  if (k === 'PRE_EXECUTION_BOUND' && input.bound?.value !== null && input.bound?.quality === 'ESTIMATE_ONLY') {
+    throw new Error('economic: a pre-execution bound may not be an estimate');
+  }
+  const bound = checkQuantity('bound', input.bound ?? UNKNOWN);
   const revenue = checkQuantity('revenue', input.revenue ?? UNKNOWN);
   const normalized = checkQuantity('normalized_cogs', input.normalized_cogs ?? UNKNOWN);
   const cash = checkQuantity('cash_cogs', input.cash_cogs ?? UNKNOWN);
   const credit = deriveCreditBenefit(normalized, cash);
 
   const body = {
-    schema: 'economic_observation.v1',
+    schema: 'economic_observation.v2',
+    observation_kind: k,
     authority: 'NONE',
     payment_identifier: input.payment_identifier,
     service_id: input.service_id ?? null,
@@ -115,6 +152,8 @@ export async function buildEconomicObservation(
     platform_version_id: input.platform_version_id ?? null,
     currency: input.currency,
     observed_at: input.observed_at,
+    bound,
+    estimate_note: k === 'ESTIMATE' ? (input.estimate_note ?? null) : null,
     revenue,
     normalized_cogs: normalized,
     cash_cogs: cash,
@@ -135,6 +174,8 @@ export async function buildEconomicObservation(
       environment: body.environment,
       platform_version_id: body.platform_version_id,
       currency: body.currency,
+      observation_kind: k,
+      bound_atomic: bound.value,
       revenue_atomic: revenue.value,
       normalized_cogs_atomic: normalized.value,
       cash_cogs_atomic: cash.value,
