@@ -7,7 +7,8 @@
  * usage: tsx --tsconfig tsconfig.base.json scripts/release/check-evidence-firewall.mts --root <checkout>
  */
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
-import { join, relative, resolve } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   AUTHORITY_MODULES,
   checkReleaseCaptureBoundary,
@@ -16,8 +17,11 @@ import {
   type BoundaryViolation,
 } from '../../packages/evidence-graph/src/index.ts';
 
+// R3-57A: default root is the repo containing this script, never the cwd, so
+// the check cannot silently scan an empty tree when invoked from elsewhere.
+const scriptRepoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const i = process.argv.indexOf('--root');
-const root = resolve(i > 0 ? process.argv[i + 1] : '.');
+const root = resolve(i > 0 ? process.argv[i + 1] : scriptRepoRoot);
 
 function walk(dir: string, keep: (p: string) => boolean): string[] {
   if (!existsSync(dir)) return [];
@@ -51,6 +55,13 @@ for (const p of walk(
 }
 
 const authorityPresent = AUTHORITY_MODULES.filter((m) => runtime.has(m));
+// R3-57A: fail closed on a vacuous run.
+if (runtime.size === 0) {
+  violations.push({ rule: 'F4', file: root, detail: 'vacuous: runtime_files_checked=0' });
+}
+if (authorityPresent.length === 0) {
+  violations.push({ rule: 'F4', file: root, detail: 'vacuous: authority_modules_present=0' });
+}
 process.stdout.write(
   `${JSON.stringify(
     {

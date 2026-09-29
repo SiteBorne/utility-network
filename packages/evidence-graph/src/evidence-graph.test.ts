@@ -592,6 +592,7 @@ describe('authority firewall', () => {
       'graph',
       'capture',
       'ravi-p',
+      'economics',
       'canonical',
       'index',
     ];
@@ -615,5 +616,14 @@ describe('authority firewall', () => {
       /^(dispatch|settle|release|grant|authorize|mint|issue|approve|capture|pay)/i.test(n)
     );
     expect(offending).toEqual([]);
+  });
+});
+
+describe('R3-57A RAVI-P availability map', () => {
+  it('classifies exactly the required evidence fields', async () => {
+    const { RAVI_P_REQUIRED_EVIDENCE_FIELDS, RAVI_P_FIELD_AVAILABILITY } = await import('./ravi-p');
+    expect(Object.keys(RAVI_P_FIELD_AVAILABILITY).sort()).toEqual(
+      RAVI_P_REQUIRED_EVIDENCE_FIELDS.map((f) => f.field).sort()
+    );
   });
 });

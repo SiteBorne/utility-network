@@ -382,7 +382,7 @@ export async function evaluateProvenanceChain(
             [source.record_id]
           );
         } else {
-          if (source.reachable_from_protected_ref === false) {
+          if (source.reachable_from_protected_ref === false || source.remote_reachable === false) {
             add('SOURCE_NOT_REACHABLE', `commit ${source.source_commit} not on a protected ref`, [
               source.record_id,
             ]);

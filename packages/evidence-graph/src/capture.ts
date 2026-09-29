@@ -33,6 +33,8 @@ export interface CaptureInput {
     readonly commit: string;
     readonly ref: string | null;
     readonly reachable_from_protected_ref: boolean | null;
+    readonly remote_reachable?: boolean;
+    readonly approved_release_ref?: boolean | null;
   };
   readonly build: {
     readonly dirty: boolean;
@@ -130,6 +132,10 @@ export async function recordSourceStage(
     source_commit: s.commit,
     source_ref: s.ref,
     reachable_from_protected_ref: s.reachable_from_protected_ref,
+    ...(s.remote_reachable === undefined ? {} : { remote_reachable: s.remote_reachable }),
+    ...(s.approved_release_ref === undefined
+      ? {}
+      : { approved_release_ref: s.approved_release_ref }),
   });
 }
 

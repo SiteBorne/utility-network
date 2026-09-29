@@ -48,6 +48,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { classifySourceRef } from './source-ref-tiers.mts';
 import {
   EvidenceGraph,
   buildCommandIdentity,
@@ -169,7 +170,14 @@ async function stageLocal(): Promise<void> {
     repository: git(['config', '--get', 'remote.origin.url']),
     commit,
     ref: args.get('source-ref') ?? git(['rev-parse', '--abbrev-ref', 'HEAD']),
-    reachable_from_protected_ref: git(['branch', '-r', '--contains', commit]).length > 0,
+    ...(() => {
+      const t = classifySourceRef(commit, root, git(['config', '--get', 'remote.origin.url']));
+      return {
+        reachable_from_protected_ref: t.protected_ref,
+        remote_reachable: t.remote_reachable,
+        approved_release_ref: t.approved_release_ref,
+      };
+    })(),
   });
   writeStage('A-source', { context, records: [source] });
 

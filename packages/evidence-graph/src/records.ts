@@ -64,6 +64,9 @@ export interface SourceRecord extends RecordBase<'SourceRecord'> {
   readonly source_ref: string | null;
   /** Commit is an ancestor of a protected remote branch (not a loose object). */
   readonly reachable_from_protected_ref: boolean | null;
+  /** R3-57A: separate tiers. Absent on records written before 57A. */
+  readonly remote_reachable?: boolean;
+  readonly approved_release_ref?: boolean | null;
 }
 
 export interface Toolchain {

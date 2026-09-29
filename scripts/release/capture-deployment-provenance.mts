@@ -22,6 +22,7 @@ import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { classifySourceRef } from './source-ref-tiers.mts';
 import {
   buildProvenanceRecords,
   evaluateProvenanceChain,
@@ -82,8 +83,8 @@ async function cf(path: string): Promise<unknown> {
 
 const commit = git(['rev-parse', 'HEAD']);
 const dirty = git(['status', '--porcelain']).length > 0;
-const pushedRefs = git(['branch', '-r', '--contains', commit]);
 const repository = git(['config', '--get', 'remote.origin.url']);
+const refTiers = classifySourceRef(commit, buildRoot, repository);
 const lockfile = (() => {
   try {
     return sha256(execFileSync('git', ['-C', buildRoot, 'show', `${commit}:pnpm-lock.yaml`]));
@@ -134,7 +135,9 @@ const records = await buildProvenanceRecords({
     repository,
     commit,
     ref: git(['rev-parse', '--abbrev-ref', 'HEAD']),
-    reachable_from_protected_ref: pushedRefs.length > 0,
+    reachable_from_protected_ref: refTiers.protected_ref,
+    remote_reachable: refTiers.remote_reachable,
+    approved_release_ref: refTiers.approved_release_ref,
   },
   build: {
     dirty,

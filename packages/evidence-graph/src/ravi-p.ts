@@ -68,3 +68,34 @@ export const RAVI_P_REQUIRED_EVIDENCE_FIELDS: readonly EvidenceFieldSpec[] = Obj
     description: 'COMPLETE_*/PARTIAL/UNKNOWN of the executing deployment',
   },
 ] as const);
+
+/**
+ * R3-57A: what the system can supply today, per field. Honest, not aspirational:
+ *  CAPTURED  a writer persists it as evidence now
+ *  DERIVABLE recoverable from existing control-plane tables/records, not yet written as evidence
+ *  PLANNED   a durable place exists or is designed, but no writer populates it
+ *  ABSENT    neither captured nor recoverable
+ * No routing or scoring consumes these. Any score built on them is advisory.
+ */
+export type RaviPAvailability = 'CAPTURED' | 'DERIVABLE' | 'PLANNED' | 'ABSENT';
+
+export const RAVI_P_FIELD_AVAILABILITY: Readonly<Record<string, RaviPAvailability>> = Object.freeze({
+  provider_id: 'PLANNED',
+  contract_key: 'DERIVABLE', // service id/version on job and payment rows
+  contract_class: 'PLANNED',
+  environment: 'CAPTURED', // every evidence node carries it
+  platform_version_id: 'CAPTURED', // runtime observation + deployment records
+  latency_ms: 'ABSENT',
+  quality_outcome: 'DERIVABLE', // PCC verification result
+  failure_class: 'DERIVABLE', // job state-event reason codes
+  policy_fit: 'ABSENT',
+  assurance_result: 'DERIVABLE',
+  pcc_available: 'DERIVABLE',
+  economic_cost_atomic: 'DERIVABLE', // price charged: payment_attempts.amount / settlement evidence
+  normalized_cogs: 'PLANNED', // migration 0016 ledger (local), provider cost not exposed by any executor
+  cash_cogs: 'PLANNED',
+  credit_benefit: 'PLANNED', // only derivable once both operands are observed
+  settlement_outcome: 'DERIVABLE',
+  reconciliation_outcome: 'DERIVABLE',
+  provenance_chain_status: 'CAPTURED',
+});
